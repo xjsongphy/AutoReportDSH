@@ -1,10 +1,11 @@
-# AutoReportDSH — Design Plan (rev 4)
+# AutoReportDSH — Design Plan (rev 5)
 
 Migrate the AutoReportCLI physics-report workflow into a DeepSeek Harness (`dsh`) plugin.
 The scope contract is `../autoreportcli/docs/own-features.md`: preserve AutoReport-owned
 domain semantics while reusing DSH infrastructure wherever its contract is equivalent.
 
-This revision incorporates the Rev 3 architecture review. The key boundary is:
+This revision incorporates the Rev 3 architecture review plus a source-backed review of
+`../autoreportcli`, `../deepseek-harness`, and `../codex`. The key boundary is:
 
 ```text
 DSH owns runtime mechanics.
@@ -48,8 +49,18 @@ AutoReportDSH owns report semantics and policy.
   isolation and refuses execution when network denial cannot be established.
 - No arbitrary agent graphs, MCP, account login, hosted services, browser automation, image
   understanding, or general coding-agent product surface is added.
+- `send_to_agent` is acknowledgement-only. AutoReportCLI’s blocking wait for
+  `success | blocked | timeout` is not reproduced as a tool RPC. Main receives specialist
+  outcomes through DSH next-step `reportFrom()` messages and `subagent-settled` notices.
+  Main prompts must be rewritten for this protocol; timeout is a durable delegation phase,
+  not a tool-return status.
+- The MinerU / `mineru-open-api` skill path is omitted in v1. Default network denial would
+  conflict with it; restoring it is a later explicit network-policy change.
+- Agent-editable manifest descriptions/notes are omitted. Manifests are derived projections
+  of `autoreport/artifact` events, not a model-facing annotation store.
 
-No existing community dsh plugin covers this physics-report domain.
+No existing community dsh plugin covers this physics-report domain. `dsh-overleaf` and
+similar UI/LaTeX helpers are not substitutes for the five-role workflow.
 
 ## 2. Architecture
 
@@ -126,9 +137,11 @@ not mounted alongside the AutoReport contribution. The overlay must patch/disabl
 an unstructured `report("done")` bypass beside `report_workflow(...)`.
 
 The overlay adds the preset directory to the `agent-presets` row. Because a patch replaces a
-row’s entire config, it must merge the existing resolved `roots` array rather than replace
-it. The implementation follows the verified profile-boot pattern in
-`deepseek-harness/apps/cli/src/profile-boot.ts:159-165` and includes a roster test. The
+row’s entire config, it must **concat** the plugin root onto the already-resolved `roots`
+array. Do not copy `deepseek-harness/apps/cli/src/profile-boot.ts:159-165`: that snippet
+replaces `roots` with a singleton shipped path and relies on `includeUserRoot` to append
+`$DSH_HOME`. Copying it with the AutoReport path would drop DSH’s shipped `standard` roster.
+The required smoke is: after overlay, both `standard` and `autoreport-main` resolve. The
 plugin does not change the deployment default preset; users select `autoreport-main`.
 
 ### 2.2 Fixed roles and explicit execution policy
@@ -165,7 +178,7 @@ interface ReportExecutionPolicy {
 | MAIN | user session | workspace | workspace | `Outline/` |
 | THEORY | one continuable child | `Theory/` | workspace | `Theory/` |
 | DATA_ANALYSIS | one continuable child | `Data/` | workspace | `Data/Processed/` |
-| PLOTTING | one continuable child | `Plots/` | workspace | `Plots/Fig/`, `Plots/Scripts/` |
+| PLOTTING | one continuable child | `Plots/` | workspace | `Plots/` |
 | REPORT | one continuable child | `Report/` | workspace | `Report/` |
 
 Every report process has `network: 'deny'` and a private temporary area. `cwd` controls
@@ -283,7 +296,25 @@ service and SessionEventMap extension whose snapshots are authoritative:
 - `autoreport/artifact` — complete artifact snapshot emitted by the runtime observer.
 
 Events are append-only durable facts and projections fold them from the session log under
-DSH’s `SessionEventMap` and model-visible-is-logged rules. The report task tool exposes
+DSH’s `SessionEventMap` and model-visible-is-logged rules.
+
+**Persistence gate (P0).** `KNOWN_SESSION_EVENT_TYPES` is generated from the DSH repo only.
+Out-of-tree plugin types are excluded by construction; a registration surface is deferred.
+`Session.append(type, data)` currently writes `{ type, seq, time, data }` and does **not**
+set `ignorable`. DSH’s version-mechanism note says writers do not yet set `ignorable`, and
+`Session.append` gains that surface with its first consumer. AutoReportDSH is that consumer:
+
+1. Extend or wrap append so every `autoreport/*` record is written with `ignorable: true`.
+2. Fold those events in-plugin from the retained log. Stock DSH may skip interpreting them
+   but must not refuse the session.
+3. Keyless cold `sessionPersistence.load` of a log that contains `autoreport/*` events is
+   mandatory: with the plugin mounted (projection recovers state) and without it (stock DSH
+   opens the session). Live in-memory folding is not a substitute.
+
+Without this marker, both stock DSH **and AutoReportDSH** refuse the session on resume
+(`SessionFormatUnsupportedError`), because the unknown-type guard uses the in-repo set.
+
+The report task tool exposes
 fixed-workflow operations:
 
 ```text
@@ -311,8 +342,13 @@ stock observation policy owns those single-slot decisions.
 
 Unrestricted shell tools are not mounted in the AutoReport preset. All model-requested
 process execution goes through `report_exec`, whose resolved `ReportExecutionPolicy` is
-passed to an isolation backend. The backend enforces writable roots and network denial at
-the process boundary, not by inspecting shell text or relying on persona instructions.
+passed to an isolation backend. File-effect confinement reuses `ctx.sandbox.confine()`
+when a single writable root can be expressed as that call’s `workspaceRoot`. Network
+denial is an additional wrapper (bubblewrap `--unshare-net` / Seatbelt network deny);
+DSH sandbox vocabulary does not include network. Multi-root roles (none in v1 after
+Plotting writes `Plots/`) must not invent a second file-sandbox if `confine()` suffices.
+The backend enforces writable roots and network denial at the process boundary, not by
+inspecting shell text or relying on persona instructions.
 
 ### 2.8 `report_exec` over `ctx.subprocess`
 
@@ -367,12 +403,14 @@ preserves that behavior at the domain boundary: the first admitted report workfl
 calls idempotent `ensureInitialized()`. `/report-init` remains an explicit idempotent
 recovery/reinitialization command registered through `ctx.commands`.
 
-Initialization creates:
+Initialization creates AutoReportCLI’s `REQUIRED_DIRS` (`loader.rs`):
 
 ```text
 Data/
+Data/Processed/
 References/
 Theory/
+Plots/
 Plots/Fig/
 Plots/Scripts/
 Report/
@@ -469,8 +507,11 @@ Validated plugin configuration:
 - Role write matrix across filesystem, edit, delete, patch, compile, and execution tools.
 - Explicit `cwd`/readable/writable policy resolution.
 - Artifact filtering, bounded traversal, symlink handling, and external manifest projection.
-- Create-missing-only materialization, model-route resolution, and config validation.
+- Create-missing-only materialization, including `Data/Processed/` and the full
+  `REQUIRED_DIRS` set, model-route resolution, and config validation.
+- Cold load of a session log containing `autoreport/*` events, with and without the plugin.
 - Unsupported-platform network fail-closed behavior.
+- Process-mediated write of `Data/<raw>` via Data Analysis `report_exec` is denied.
 
 ### Keyless assembled smokes
 
@@ -509,11 +550,12 @@ never accept a model’s textual claim as evidence.
 | `compile-manifests` | Report-only compiler, automatic artifact observer, AutoReport filtering, external manifest projection | execution-policy, workspace-assets, workflow-state |
 | `integration-e2e` | assembled keyless smokes, OpenRouter configuration/e2e, acceptance gates | all previous |
 
-Merge order is `scaffold` → parallel `workflow-state`/`execution-policy`/`workspace-assets` →
-`roles-delegation` and `compile-manifests` → `integration-e2e`. The coordinator merges each
-branch after focused tests pass. Integration points are role binding between
-workflow-state/execution-policy/roles-delegation and artifact paths between
-workspace-assets/compile-manifests.
+Merge order is `scaffold` → parallel `workflow-state`/`workspace-assets` → `execution-policy`
+and `roles-delegation` → `compile-manifests` → `integration-e2e`. `execution-policy` is
+**not** parallel with `workflow-state`: the mutation guard reads the role table. The
+coordinator merges each branch after focused tests pass. Integration points are role
+binding between workflow-state/execution-policy/roles-delegation and artifact paths
+between workspace-assets/compile-manifests.
 
 ## 5. Risks and gates
 
@@ -534,4 +576,8 @@ workspace-assets/compile-manifests.
 8. **DSH pre-release churn**: pin the harness checkout used for development and update only
    through focused compatibility changes.
 9. **Prompt migration**: retain AutoReport quality gates while translating Rust-CLI tool names
-   and generic coordination instructions to DSH report tools.
+   and generic coordination instructions to DSH report tools. Main must not wait inside
+   `send_to_agent` for `success | blocked | timeout`.
+10. **Plugin session events**: `autoreport/*` records must be written with `ignorable: true`
+    (requires the DSH append surface the version-mechanism note deferred to its first user).
+    Cold resume is a release blocker.
