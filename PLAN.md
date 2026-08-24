@@ -49,11 +49,12 @@ AutoReportDSH owns report semantics and policy.
   isolation and refuses execution when network denial cannot be established.
 - No arbitrary agent graphs, MCP, account login, hosted services, browser automation, image
   understanding, or general coding-agent product surface is added.
-- `send_to_agent` is acknowledgement-only. AutoReportCLI’s blocking wait for
-  `success | blocked | timeout` is not reproduced as a tool RPC. Main receives specialist
-  outcomes through DSH next-step `reportFrom()` messages and `subagent-settled` notices.
-  Main prompts must be rewritten for this protocol; timeout is a durable delegation phase,
-  not a tool-return status.
+- `send_to_agent` supports explicit `wait: false | true`. The default remains
+  compatibility-oriented blocking behavior: after DSH accepts the message, the tool may
+  wait on the AutoReport delegation projection for `success | blocked | timeout` without
+  waiting for the parent’s next model step. `wait: false` returns the DSH acceptance
+  acknowledgement immediately. The waiter is a local synchronization aid; durable
+  delegation state remains authoritative and DSH still owns child lifecycle and transport.
 - The MinerU / `mineru-open-api` skill path is omitted in v1. Default network denial would
   conflict with it; restoring it is a later explicit network-policy change.
 - Agent-editable manifest descriptions/notes are omitted. Manifests are derived projections
@@ -72,7 +73,9 @@ One out-of-tree Cordis plugin package is loaded as a patch overlay over stock `w
 ```text
 AutoReportDSH/
 ├── package.json
-├── cordis.yml                         # plugin rows + merged preset-root overlay
+├── cordis.yml                         # plugin rows and global report-router overlay
+├── scripts/
+│   └── install-user-preset.ts         # materializes the preset under $DSH_HOME/.agent-presets
 ├── src/
 │   ├── index.ts                       # host-plane registration and lifecycle
 │   ├── config.ts                      # validated report/execution/model configuration
@@ -94,7 +97,7 @@ AutoReportDSH/
 │   ├── policy/
 │   │   ├── tool-guard.ts               # actual role mutation enforcement
 │   │   └── execution-isolation.ts      # root/network isolation over ctx.subprocess
-│   └── skills.ts                       # preset-scoped bundled skill registration
+│   └── skills-preset.ts                # preset-scoped bundled skill registration
 ├── presets/
 │   └── autoreport-main/agent.cordis.yml
 ├── resources/
@@ -136,13 +139,18 @@ not mounted alongside the AutoReport contribution. The overlay must patch/disabl
 `tool-subagent-report` row and install the AutoReport child setup in its place. This prevents
 an unstructured `report("done")` bypass beside `report_workflow(...)`.
 
-The overlay adds the preset directory to the `agent-presets` row. Because a patch replaces a
-row’s entire config, it must **concat** the plugin root onto the already-resolved `roots`
-array. Do not copy `deepseek-harness/apps/cli/src/profile-boot.ts:159-165`: that snippet
-replaces `roots` with a singleton shipped path and relies on `includeUserRoot` to append
-`$DSH_HOME`. Copying it with the AutoReport path would drop DSH’s shipped `standard` roster.
-The required smoke is: after overlay, both `standard` and `autoreport-main` resolve. The
-plugin does not change the deployment default preset; users select `autoreport-main`.
+The preset is installed into DSH’s existing writable user preset root:
+`$DSH_HOME/.agent-presets/autoreport-main/`. The install script copies the preset
+composition and static resources before the profile starts; it is idempotent and fails
+loudly if the deployment disables `includeUserRoot`. No `agent-presets.roots` patch or
+launcher-owned roots concat is required. The required smoke is: after installation, both
+shipped `standard` and user `autoreport-main` resolve. The plugin does not change the
+deployment default preset; users select `autoreport-main`.
+
+If package installation cannot run the materializer, the documented explicit command is
+`autoreportdsh install-preset`; runtime boot must not silently create a preset after the
+roster has already been discovered. This uses DSH’s existing user-root discovery contract
+rather than introducing a new preset-root contribution seam.
 
 ### 2.2 Fixed roles and explicit execution policy
 
@@ -212,14 +220,23 @@ child becomes executable
 interface RoleBinding {
   role: SpecialistRole
   childSessionId: SessionId
-  phase: 'reserved' | 'active' | 'failed'
+  parentSessionId: SessionId
+  workflowId: string
 }
+
+type ProvisioningState = 'reserved' | 'active' | 'failed'
 ```
 
-The synchronous `RoleRegistry` is updated before `startContinuable()`. A failed start is
-marked `failed`; a successful accepted start is marked `active`. The guard permits only an
-active binding, and unknown/unbound agents fail closed. Resume uses the same durable child
-id and registry projection.
+Authorization identity is separate from provisioning state. A reserved binding is already
+valid for authorization: the synchronous `RoleRegistry` contains the exact child id,
+parent-session id, and workflow id before `startContinuable()` begins materialization. The
+guard requires the live child identity plus that parent/workflow relationship; it does not
+wait for `phase === 'active'`. A failed start transitions provisioning to `failed` and
+revokes the registry entry. A successful acceptance transitions provisioning to `active`.
+Resume uses the same durable child id and reconstructs the registry before any follow-up.
+
+This ordering is mandatory because `startContinuable()` may materialize, publish, and begin
+the child’s first turn before returning `{ childId, messageId }` to the caller.
 
 ### 2.4 Thin constrained communication over DSH continuations
 
@@ -242,17 +259,50 @@ The tool:
    pre-bound child, using `startContinuable({ childId })` on first dispatch and `followup()`
    thereafter.
 3. Records the accepted DSH `MessageId` as transport evidence in the delegation snapshot.
-4. Returns an accepted-message acknowledgement. It never waits for child completion.
+4. Returns an accepted-message acknowledgement when `wait: false`. With `wait: true`,
+   it waits on an in-process waiter keyed by `(task_id, delegation_revision)` while the
+   durable delegation projection remains authoritative. The waiter is resolved by the
+   child report/settlement observer, not by waiting for the parent’s next model step. A
+   bounded timeout produces a durable timeout phase and a tool error/result; it does not
+   create another queue or transport path.
+
+The model-facing request has explicit wait semantics:
+
+```ts
+send_to_agent({
+  task_id,
+  role,
+  prompt,
+  wait?: boolean,       // default true for AutoReport compatibility
+  timeout_ms?: number,
+})
+```
 
 The authoritative domain identity is `(task_id, delegation_revision)`; a separate
 `delegation_id` may be used as its opaque durable key. DSH `MessageId` is recorded but is
-not used as the domain attempt identity.
+not used as the domain attempt identity. After process restart, state recovers from the
+session projection; an in-flight local waiter is not durable.
 
 ### 2.5 Replacement structured child report
 
-The stock child-facing `report` tool is not mounted. The AutoReport child setup registers
-only `report_workflow`, following the same `registerContinuableSetup()` → child-scoped
-`tools.register()` → `ctx.subagents.reportFrom()` pattern as DSH’s stock adapter.
+The stock child-facing `report` setup is replaced by one global routing setup, not a
+preset-local setup. DSH’s continuable setup registry is host-plane and shared by all
+presets. The router performs:
+
+```text
+continuable child created
+        ↓
+RoleRegistry lookup
+        ├── AutoReport specialist → report_workflow
+        └── ordinary DSH child   → stock report
+```
+
+The stock `@deepseek-ai/dsh-tool-subagent-report` row is disabled/replaced so it does not
+register a second setup. The AutoReport router reuses DSH’s exported stock
+`installReportTool` for ordinary children rather than reimplementing generic reporting.
+AutoReport specialists receive only `report_workflow`, following the same
+`registerContinuableSetup()` → child-scoped `tools.register()` →
+`ctx.subagents.reportFrom()` pattern as DSH’s stock adapter.
 
 Its validated envelope is:
 
@@ -288,7 +338,8 @@ service and SessionEventMap extension whose snapshots are authoritative:
 
 - `autoreport/workflow` — selected workspace, language, model policy, initialization state,
   and schema version;
-- `autoreport/role-binding` — pre-provisioned role-to-child identity and phase;
+- `autoreport/role-binding` — pre-provisioned role-to-child identity, parent/workflow
+  lineage, authorization validity, and provisioning state;
 - `autoreport/task` — complete task snapshot: stable id, subject, role, dependencies,
   status, revision, blocked reason, and workspace scopes;
 - `autoreport/delegation` — complete delegation snapshot: task id, delegation revision,
@@ -299,20 +350,28 @@ Events are append-only durable facts and projections fold them from the session 
 DSH’s `SessionEventMap` and model-visible-is-logged rules.
 
 **Persistence gate (P0).** `KNOWN_SESSION_EVENT_TYPES` is generated from the DSH repo only.
-Out-of-tree plugin types are excluded by construction; a registration surface is deferred.
-`Session.append(type, data)` currently writes `{ type, seq, time, data }` and does **not**
-set `ignorable`. DSH’s version-mechanism note says writers do not yet set `ignorable`, and
-`Session.append` gains that surface with its first consumer. AutoReportDSH is that consumer:
+Out-of-tree plugin types are excluded by construction. AutoReport records must be
+unknown-but-ignorable to stock readers, while the AutoReport plugin folds them when present.
 
-1. Extend or wrap append so every `autoreport/*` record is written with `ignorable: true`.
-2. Fold those events in-plugin from the retained log. Stock DSH may skip interpreting them
-   but must not refuse the session.
-3. Keyless cold `sessionPersistence.load` of a log that contains `autoreport/*` events is
-   mandatory: with the plugin mounted (projection recovers state) and without it (stock DSH
-   opens the session). Live in-memory folding is not a substitute.
+This requires a small first-party DSH compatibility patch before `workflow-state`:
 
-Without this marker, both stock DSH **and AutoReportDSH** refuse the session on resume
-(`SessionFormatUnsupportedError`), because the unknown-type guard uses the in-repo set.
+```ts
+session.append(type, data, { ignorable: true })
+```
+
+The supported append API must preserve the existing official path: snapshot and validate the
+data, assign `seq`/`time`, publish `session/event`, and persist through normal backends. The
+patch adds an append-options type/overload carrying `ignorable?: true` alongside existing
+surface metadata where applicable, copies the marker onto the resulting `SessionEvent`, and
+adds direct writer tests. AutoReport must not monkey-patch `Session.prototype`, construct
+events externally, write directly to persistence, or maintain a parallel event log.
+
+AutoReport writes every `autoreport/*` event through this explicit seam. Keyless cold
+`sessionPersistence.load` of a log containing those events is mandatory: with the plugin
+mounted, projections recover state; without it, stock DSH opens the session while ignoring
+unknown ignorable events. Live in-memory folding is not a substitute. The DSH compatibility
+change is a prerequisite branch/repository change and its pinned version is recorded by
+AutoReportDSH.
 
 The report task tool exposes
 fixed-workflow operations:
@@ -502,27 +561,32 @@ Validated plugin configuration:
 - Fixed role/task/delegation protocol validation, including stale revision rejection.
 - Role-binding reservation, synchronous registry updates, start failure, and resume.
 - Parent→child `startContinuable`/`followup` acknowledgement semantics.
-- Replacement `report_workflow` schema and absence of stock `report` in child catalogs.
+- Replacement `report_workflow` schema for AutoReport specialists, stock `report` fallback
+  for ordinary DSH children, and no duplicate setup registration.
 - Duplicate, malformed, missing, and stale report handling.
 - Role write matrix across filesystem, edit, delete, patch, compile, and execution tools.
 - Explicit `cwd`/readable/writable policy resolution.
 - Artifact filtering, bounded traversal, symlink handling, and external manifest projection.
 - Create-missing-only materialization, including `Data/Processed/` and the full
   `REQUIRED_DIRS` set, model-route resolution, and config validation.
-- Cold load of a session log containing `autoreport/*` events, with and without the plugin.
+- Cold load of a session log containing `autoreport/*` events, with and without the plugin;
+  plugin-present folding recovers task/role/artifact state and stock DSH skips unknown
+  ignorable records safely.
+- Direct `Session.append(..., { ignorable: true })` writer/persistence tests from the DSH
+  compatibility patch.
 - Unsupported-platform network fail-closed behavior.
 - Process-mediated write of `Data/<raw>` via Data Analysis `report_exec` is denied.
 
 ### Keyless assembled smokes
 
-- Boot the real Loader composition with the preset-root merge.
-- Verify the original preset roster remains present.
+- Install the preset under `$DSH_HOME/.agent-presets` before booting the real Loader
+  composition; verify the original shipped roster remains present.
 - Select `autoreport-main`; verify Main tools and absence of generic delegation, shell,
   compile, and stock report tools.
 - Provision a child before `startContinuable`; verify role guard authorization from the
   first child tool call.
-- Verify child persona, replacement `report_workflow`, recursion restriction, and stale
-  delegation report rejection.
+- Verify child persona, role-routed `report_workflow`, ordinary-child stock-report fallback,
+  recursion restriction, and stale delegation report rejection.
 - Verify AutoReport skills are visible only inside the preset scope.
 - Run the first report turn and `/report-init` in a temporary workspace; verify idempotent
   initialization and every resource.
@@ -542,42 +606,46 @@ never accept a model’s textual claim as evidence.
 
 | Branch | Content | Depends on |
 |---|---|---|
-| `scaffold` | package, plugin rows, preset-root merge, stock-report replacement wiring, README, test harness | — |
-| `workflow-state` | role table, role reservation/registry, SessionEventMap events/projections, task tool, revision protocol | scaffold |
-| `roles-delegation` | Main preset, fixed personas, thin `send_to_agent`, continuable child setup, replacement report tool | scaffold, workflow-state |
+| `dsh-ignorable-append` | First-party DSH append-options seam, `ignorable:true` writer/persistence tests, pinned dependency update | — |
+| `scaffold` | package, plugin rows, user-preset installer, global report-router wiring, README, test harness | dsh-ignorable-append |
+| `workflow-state` | role reservation/registry, SessionEventMap events/projections, task tool, revision protocol, local waiters | scaffold |
+| `roles-delegation` | Main preset, fixed personas, thin `send_to_agent` with wait modes, continuable report router | scaffold, workflow-state |
 | `execution-policy` | actual mutation guard, explicit execution policy, `report_exec` over ctx.subprocess, Linux/macOS network isolation and smokes | scaffold, workflow-state |
 | `workspace-assets` | startup `ensureInitialized`, `/report-init`, resource materializer, bundled assets and preset-scoped skills | scaffold |
 | `compile-manifests` | Report-only compiler, automatic artifact observer, AutoReport filtering, external manifest projection | execution-policy, workspace-assets, workflow-state |
-| `integration-e2e` | assembled keyless smokes, OpenRouter configuration/e2e, acceptance gates | all previous |
+| `integration-e2e` | assembled keyless smokes, cold-load tests, OpenRouter configuration/e2e, acceptance gates | all previous |
 
-Merge order is `scaffold` → parallel `workflow-state`/`workspace-assets` → `execution-policy`
-and `roles-delegation` → `compile-manifests` → `integration-e2e`. `execution-policy` is
-**not** parallel with `workflow-state`: the mutation guard reads the role table. The
-coordinator merges each branch after focused tests pass. Integration points are role
-binding between workflow-state/execution-policy/roles-delegation and artifact paths
-between workspace-assets/compile-manifests.
+Merge order is `dsh-ignorable-append` → `scaffold` → parallel `workflow-state`/
+`workspace-assets` → `execution-policy` and `roles-delegation` → `compile-manifests` →
+`integration-e2e`. `execution-policy` is not parallel with `workflow-state`: the mutation
+guard reads the role table. The coordinator merges each branch after focused tests pass.
+Integration points are role binding between workflow-state/execution-policy/roles-delegation,
+report routing between workflow-state/roles-delegation, and artifact paths between
+workspace-assets/compile-manifests.
 
 ## 5. Risks and gates
 
-1. **Reserved child lifecycle**: role-binding reservation, registry update, and
-   `startContinuable({ childId })` must remain one fail-closed provisioning protocol.
-2. **Report correlation**: every report must carry task id and delegation revision; stale
+1. **Append compatibility**: the DSH `Session.append(..., { ignorable: true })` patch is a
+   prerequisite; cold-load tests with and without the plugin must pass before domain work.
+2. **Reserved child lifecycle**: role-binding reservation and synchronous registry update
+   must authorize the child before its first tool call; failed provisioning must revoke it.
+3. **Report correlation**: every report must carry task id and delegation revision; stale
    reports must be retained as evidence without changing current task state.
-3. **Stock report replacement**: profile composition must not register the generic report
-   setup alongside `report_workflow`; a keyless child catalog test is mandatory.
-4. **Out-of-tree preset resolution**: verify module resolution inside external
-   `agent.cordis.yml`; use the profile resolver manifest or explicit module paths as required.
-5. **OS execution isolation**: no platform is declared supported until writable roots and
-   localhost network denial are keylessly demonstrated. Unsupported environments fail closed.
-6. **Tectonic cache behavior**: no compiler may widen network policy; missing local resources
+4. **Global report routing**: exactly one child-report router must select AutoReport or stock
+   reporting by pre-provisioned role; a keyless child catalog test must prove no bypass or
+   duplicate registration.
+5. **User preset installation**: materialize under `$DSH_HOME/.agent-presets` before roster
+   discovery; do not rely on a dynamic roots concat or late runtime write.
+6. **OS execution isolation**: no platform is supported until writable roots and localhost
+   network denial are keylessly demonstrated. Unsupported environments fail closed.
+7. **Tectonic cache behavior**: no compiler may widen network policy; missing local resources
    cause failure.
-7. **Manifest completeness**: filesystem and process-mediated writes need separate tests;
+8. **Manifest completeness**: filesystem and process-mediated writes need separate tests;
    unknown process changes must be represented as unknown, never omitted.
-8. **DSH pre-release churn**: pin the harness checkout used for development and update only
+9. **DSH pre-release churn**: pin the harness checkout used for development and update only
    through focused compatibility changes.
-9. **Prompt migration**: retain AutoReport quality gates while translating Rust-CLI tool names
-   and generic coordination instructions to DSH report tools. Main must not wait inside
-   `send_to_agent` for `success | blocked | timeout`.
-10. **Plugin session events**: `autoreport/*` records must be written with `ignorable: true`
-    (requires the DSH append surface the version-mechanism note deferred to its first user).
-    Cold resume is a release blocker.
+10. **Blocking delegation**: `wait:true` must wait on AutoReport delegation state, not the
+    parent’s next model step; timeout and settlement wake the local waiter without another
+    message queue.
+11. **Prompt migration**: retain AutoReport quality gates while translating Rust-CLI tool
+    names and generic coordination instructions to DSH report tools.
