@@ -55,6 +55,11 @@ AutoReportDSH owns report semantics and policy.
   waiting for the parent’s next model step. `wait: false` returns the DSH acceptance
   acknowledgement immediately. The waiter is a local synchronization aid; durable
   delegation state remains authoritative and DSH still owns child lifecycle and transport.
+- Workflow continuity comes only from durable task/delegation state plus the workspace
+  files themselves. There is no agent memory layer (no memory store, semantic retrieval, or
+  conversation reconstruction), no workspace-to-prompt injection at resume (no automatic
+  scan/summarize/inject), and no requirement to preserve prior reasoning. A recreated or
+  compacted agent recovers from: task state + workspace state + role ownership.
 - The MinerU / `mineru-open-api` skill path is omitted in v1. Default network denial would
   conflict with it; restoring it is a later explicit network-policy change.
 - Agent-editable manifest descriptions/notes are omitted. Manifests are derived projections
@@ -340,10 +345,14 @@ service and SessionEventMap extension whose snapshots are authoritative:
   and schema version;
 - `autoreport/role-binding` — pre-provisioned role-to-child identity, parent/workflow
   lineage, authorization validity, and provisioning state;
-- `autoreport/task` — complete task snapshot: stable id, subject, role, dependencies,
-  status, revision, blocked reason, and workspace scopes;
+- `autoreport/task` — complete task snapshot: stable id, subject, owning role,
+  dependencies, status, revision, blocked reason, workspace scopes, and a bounded
+  step checklist (`steps: { description, done }[]`) answering “what work remains”;
 - `autoreport/delegation` — complete delegation snapshot: task id, delegation revision,
-  role, child session, accepted message id, phase, and latest report outcome;
+  role, child session, accepted message id, durable phase, and latest report outcome.
+  Durable phases are at least `dispatched`, `waiting_for_child`, `completed`, `blocked`,
+  `failed`, `timed_out`, `stale`, and `cancelled`. The snapshot records WHY something
+  waits; it never serializes an in-memory waiter.
 - `autoreport/artifact` — complete artifact snapshot emitted by the runtime observer.
 
 Events are append-only durable facts and projections fold them from the session log under
@@ -372,6 +381,41 @@ mounted, projections recover state; without it, stock DSH opens the session whil
 unknown ignorable events. Live in-memory folding is not a substitute. The DSH compatibility
 change is a prerequisite branch/repository change and its pinned version is recorded by
 AutoReportDSH.
+
+**Persistence and recovery rule.** The authoritative inputs for continuing unfinished work
+are exactly:
+
+```text
+autoreport/* durable state  +  existing workspace files  +  role ownership
+        ↓
+continue work
+```
+
+LLM conversation history is not authoritative task storage. Recovery must not depend on
+previous messages, compacted summaries, or hidden context, and AutoReportDSH must not add a
+memory layer or auto-scan/summarize the workspace into prompts. A recreated agent inspects
+workspace files through its normal tools.
+
+Concrete consequences:
+
+- **Compaction**: DSH compaction shadows surface content; the append-only log (including
+  every `autoreport/*` fact) is untouched. Folding replays the full log, so task, role, and
+  artifact projections survive compaction unchanged. No reconstruction from summaries is
+  attempted or needed.
+- **Report receipts**: DSH delivers each child report into the parent session log as a
+  durable `subagent-report` message; the observer folds it into a delegation snapshot.
+  Recovery folds both, so outcomes that arrived while Main was down reappear as state.
+- **Child recreation (rebind)**: if a role’s cold resume fails unrecoverably (for example
+  DSH `NOT_RESUMABLE`), the workflow may rebind: reserve a NEW caller-reserved child id,
+  append a role-binding supersede event (old binding → `failed`/replaced, new reservation
+  installed), and swap the synchronous registry atomically. The old child id loses
+  authorization immediately; the new child is authorized before materialization. Unfinished
+  tasks continue under new delegation revisions addressed to the same role — the new child
+  needs no part of the old conversation.
+- **Process restart**: fold rebuilds RoleRegistry and workflow state before any follow-up;
+  delegations interrupted mid-flight resurface with their durable phases. In-process
+  `wait:true` waiters are gone and are not reconstructed; Main re-dispatches with a new
+  revision when needed.
 
 The report task tool exposes
 fixed-workflow operations:
@@ -577,6 +621,20 @@ Validated plugin configuration:
 - Unsupported-platform network fail-closed behavior.
 - Process-mediated write of `Data/<raw>` via Data Analysis `report_exec` is denied.
 
+Recovery acceptance (keyless):
+
+- **Compaction safety** — populate task/checklist state on a long-running specialist task,
+  trigger compaction, verify task/role/artifact projections are unchanged and the agent can
+  continue remaining steps from state + workspace only.
+- **Child recreation safety** — produce intermediate files under a running delegation,
+  force the child unresumable, rebind the role to a new reserved child id, and verify: same
+  role assignment, same unfinished task, old child id denied by the guard, new child
+  authorized before first tool call, work continues correctly.
+- **No hidden recovery dependency** — recover with surface messages removed/shadowed (and a
+  fresh child seeded only with role + task briefing) and verify continuation succeeds using
+  only `autoreport/*` state plus workspace files; no memory store, injected summary, or
+  conversation reconstruction exists anywhere in the flow.
+
 ### Keyless assembled smokes
 
 - Install the preset under `$DSH_HOME/.agent-presets` before booting the real Loader
@@ -646,6 +704,9 @@ workspace-assets/compile-manifests.
    through focused compatibility changes.
 10. **Blocking delegation**: `wait:true` must wait on AutoReport delegation state, not the
     parent’s next model step; timeout and settlement wake the local waiter without another
-    message queue.
-11. **Prompt migration**: retain AutoReport quality gates while translating Rust-CLI tool
+    message queue. Waiters are never persisted; durable phases answer why work is waiting.
+11. **Recovery inputs**: continuation after compaction/recreation/restart may read only
+    `autoreport/*` projections plus workspace files via normal tools; any design drift toward
+    memory layers or prompt-injected summaries is rejected in review.
+12. **Prompt migration**: retain AutoReport quality gates while translating Rust-CLI tool
     names and generic coordination instructions to DSH report tools.
