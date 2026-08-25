@@ -9,43 +9,43 @@ importers:
   .:
     dependencies:
       '@deepseek-ai/cordis':
-        specifier: link:/Users/xjsongphy/Develop/deepseek-harness/../deepseek-harness/vendor/cordis
+        specifier: link:/Users/xjsongphy/Develop/deepseek-harness/vendor/cordis
         version: link:../../../../../../../Users/xjsongphy/Develop/deepseek-harness/vendor/cordis
       '@deepseek-ai/dsh-agent':
-        specifier: link:/Users/xjsongphy/Develop/deepseek-harness/../deepseek-harness/packages/core/agent
+        specifier: link:/Users/xjsongphy/Develop/deepseek-harness/packages/core/agent
         version: link:../../../../../../../Users/xjsongphy/Develop/deepseek-harness/packages/core/agent
       '@deepseek-ai/dsh-brand':
-        specifier: link:/Users/xjsongphy/Develop/deepseek-harness/../deepseek-harness/packages/util/brand
+        specifier: link:/Users/xjsongphy/Develop/deepseek-harness/packages/util/brand
         version: link:../../../../../../../Users/xjsongphy/Develop/deepseek-harness/packages/util/brand
       '@deepseek-ai/dsh-commands':
-        specifier: link:/Users/xjsongphy/Develop/deepseek-harness/../deepseek-harness/packages/interaction/commands
+        specifier: link:/Users/xjsongphy/Develop/deepseek-harness/packages/interaction/commands
         version: link:../../../../../../../Users/xjsongphy/Develop/deepseek-harness/packages/interaction/commands
       '@deepseek-ai/dsh-home-paths':
-        specifier: link:/Users/xjsongphy/Develop/deepseek-harness/../deepseek-harness/packages/util/home-paths
+        specifier: link:/Users/xjsongphy/Develop/deepseek-harness/packages/util/home-paths
         version: link:../../../../../../../Users/xjsongphy/Develop/deepseek-harness/packages/util/home-paths
       '@deepseek-ai/dsh-llm':
-        specifier: link:/Users/xjsongphy/Develop/deepseek-harness/../deepseek-harness/packages/llm/llm
+        specifier: link:/Users/xjsongphy/Develop/deepseek-harness/packages/llm/llm
         version: link:../../../../../../../Users/xjsongphy/Develop/deepseek-harness/packages/llm/llm
       '@deepseek-ai/dsh-session':
-        specifier: link:/Users/xjsongphy/Develop/deepseek-harness/../deepseek-harness/packages/core/session
+        specifier: link:/Users/xjsongphy/Develop/deepseek-harness/packages/core/session
         version: link:../../../../../../../Users/xjsongphy/Develop/deepseek-harness/packages/core/session
       '@deepseek-ai/dsh-skill':
-        specifier: link:/Users/xjsongphy/Develop/deepseek-harness/../deepseek-harness/packages/skill/skill
+        specifier: link:/Users/xjsongphy/Develop/deepseek-harness/packages/skill/skill
         version: link:../../../../../../../Users/xjsongphy/Develop/deepseek-harness/packages/skill/skill
       '@deepseek-ai/dsh-subagent':
-        specifier: link:/Users/xjsongphy/Develop/deepseek-harness/../deepseek-harness/packages/subagent/subagent
+        specifier: link:/Users/xjsongphy/Develop/deepseek-harness/packages/subagent/subagent
         version: link:../../../../../../../Users/xjsongphy/Develop/deepseek-harness/packages/subagent/subagent
       '@deepseek-ai/dsh-subprocess':
-        specifier: link:/Users/xjsongphy/Develop/deepseek-harness/../deepseek-harness/packages/subprocess/subprocess
+        specifier: link:/Users/xjsongphy/Develop/deepseek-harness/packages/subprocess/subprocess
         version: link:../../../../../../../Users/xjsongphy/Develop/deepseek-harness/packages/subprocess/subprocess
       '@deepseek-ai/dsh-system-prompt':
-        specifier: link:/Users/xjsongphy/Develop/deepseek-harness/../deepseek-harness/packages/core/system-prompt
+        specifier: link:/Users/xjsongphy/Develop/deepseek-harness/packages/core/system-prompt
         version: link:../../../../../../../Users/xjsongphy/Develop/deepseek-harness/packages/core/system-prompt
       '@deepseek-ai/dsh-tools':
-        specifier: link:/Users/xjsongphy/Develop/deepseek-harness/../deepseek-harness/packages/core/tools
+        specifier: link:/Users/xjsongphy/Develop/deepseek-harness/packages/core/tools
         version: link:../../../../../../../Users/xjsongphy/Develop/deepseek-harness/packages/core/tools
       '@deepseek-ai/schemastery':
-        specifier: link:/Users/xjsongphy/Develop/deepseek-harness/../deepseek-harness/vendor/schemastery
+        specifier: link:/Users/xjsongphy/Develop/deepseek-harness/vendor/schemastery
         version: link:../../../../../../../Users/xjsongphy/Develop/deepseek-harness/vendor/schemastery
     devDependencies:
       '@types/node':

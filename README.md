@@ -9,11 +9,12 @@ child reports, role authorization, execution isolation, workspace initialization
 semantics, manifest projection, templates, compilation, domain skills. The full architecture
 lives in [PLAN.md](PLAN.md).
 
-## Status: scaffold phase
+## Status: workspace-assets phase
 
-The package loads as an out-of-tree cordis plugin; domain phases land next per PLAN.md §4:
-`workflow-state`, `roles-delegation`, `execution-policy`, `workspace-assets`,
-`compile-manifests`, `integration-e2e`.
+The package loads as an out-of-tree cordis plugin; domain phases land per PLAN.md §4:
+`workflow-state`, `roles-delegation`, `execution-policy`, `compile-manifests`,
+`integration-e2e`. Workspace initialization, bundled report assets, the `/report-init`
+command factory, and preset-scoped bundled skills are implemented.
 
 ## Quickstart
 
@@ -40,8 +41,27 @@ package.json               link: dependencies into the local harness checkout
 cordis.template.yml        patch-overlay source (renders cordis.overlay.generated.yml)
 presets/autoreport-main/   Main agent-preset composition (placeholder until roles-delegation)
 scripts/install-user-preset.ts
-src/index.ts               host-plane plugin entry
-resources/                 personas/templates/skills land here in later phases
+src/index.ts               host-plane plugin entry (registration wiring lands in integration)
+src/workspace/             init.ts (layout + materializer), command.ts (/report-init), skill-loader.ts
+src/skills-preset.ts       preset-scoped registration of resources/skills/*.md
+resources/                 bundled assets copied from ../autoreportcli/templates (see table below)
 docs/dependencies.md       pinned harness commit + dependency wiring notes
 tests/                     vitest unit tests + smokes
 ```
+
+## Bundled resources
+
+All files are copied verbatim from `../autoreportcli/templates/` with license headers kept;
+`materializeResources()` installs them create-missing-only and never overwrites user files.
+
+| Path | Source | Role |
+|---|---|---|
+| `resources/latex/templates/main.tex` | `templates/latex/templates/main.tex` | LaTeX entry template |
+| `resources/latex/themes/mpltx.cls` | `templates/latex/themes/mpltx.cls` | LaTeX theme class |
+| `resources/typst/templates/main.typ` | `templates/typst/templates/main.typ` | Typst entry template |
+| `resources/typst/templates/mplts.typ` | `templates/typst/templates/mplts.typ` | Typst theme (entry-side copy) |
+| `resources/typst/templates/american-physics-society.csl` | `templates/typst/templates/…csl` | Citation style |
+| `resources/typst/templates/bibli.bib` | `templates/typst/templates/bibli.bib` | Seed bibliography |
+| `resources/typst/themes/mplts.typ` | `templates/typst/themes/mplts.typ` | Typst theme (theme-side copy; currently byte-identical to the templates copy — both kept to preserve upstream layout) |
+| `resources/skills/*.md` | adapted from `templates/external/skills/*.md` + new | Preset-scoped runtime skills |
+| `resources/report-languages/{latex,typst}.md` | adapted from `templates/report-languages/*` | Language guidance (not runtime skills) |
