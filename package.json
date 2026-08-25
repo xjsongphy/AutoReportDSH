@@ -15,19 +15,19 @@
     "install:preset": "tsx scripts/install-user-preset.ts"
   },
   "dependencies": {
-    "@deepseek-ai/cordis": "link:../deepseek-harness/vendor/cordis",
-    "@deepseek-ai/dsh-agent": "link:../deepseek-harness/packages/core/agent",
-    "@deepseek-ai/dsh-brand": "link:../deepseek-harness/packages/util/brand",
-    "@deepseek-ai/dsh-commands": "link:../deepseek-harness/packages/interaction/commands",
-    "@deepseek-ai/dsh-home-paths": "link:../deepseek-harness/packages/util/home-paths",
-    "@deepseek-ai/dsh-llm": "link:../deepseek-harness/packages/llm/llm",
-    "@deepseek-ai/dsh-session": "link:../deepseek-harness/packages/core/session",
-    "@deepseek-ai/dsh-skill": "link:../deepseek-harness/packages/skill/skill",
-    "@deepseek-ai/dsh-subagent": "link:../deepseek-harness/packages/subagent/subagent",
-    "@deepseek-ai/dsh-subprocess": "link:../deepseek-harness/packages/subprocess/subprocess",
-    "@deepseek-ai/dsh-system-prompt": "link:../deepseek-harness/packages/core/system-prompt",
-    "@deepseek-ai/dsh-tools": "link:../deepseek-harness/packages/core/tools",
-    "@deepseek-ai/schemastery": "link:../deepseek-harness/vendor/schemastery"
+    "@deepseek-ai/cordis": "link:/Users/xjsongphy/Develop/deepseek-harness/../deepseek-harness/vendor/cordis",
+    "@deepseek-ai/dsh-agent": "link:/Users/xjsongphy/Develop/deepseek-harness/../deepseek-harness/packages/core/agent",
+    "@deepseek-ai/dsh-brand": "link:/Users/xjsongphy/Develop/deepseek-harness/../deepseek-harness/packages/util/brand",
+    "@deepseek-ai/dsh-commands": "link:/Users/xjsongphy/Develop/deepseek-harness/../deepseek-harness/packages/interaction/commands",
+    "@deepseek-ai/dsh-home-paths": "link:/Users/xjsongphy/Develop/deepseek-harness/../deepseek-harness/packages/util/home-paths",
+    "@deepseek-ai/dsh-llm": "link:/Users/xjsongphy/Develop/deepseek-harness/../deepseek-harness/packages/llm/llm",
+    "@deepseek-ai/dsh-session": "link:/Users/xjsongphy/Develop/deepseek-harness/../deepseek-harness/packages/core/session",
+    "@deepseek-ai/dsh-skill": "link:/Users/xjsongphy/Develop/deepseek-harness/../deepseek-harness/packages/skill/skill",
+    "@deepseek-ai/dsh-subagent": "link:/Users/xjsongphy/Develop/deepseek-harness/../deepseek-harness/packages/subagent/subagent",
+    "@deepseek-ai/dsh-subprocess": "link:/Users/xjsongphy/Develop/deepseek-harness/../deepseek-harness/packages/subprocess/subprocess",
+    "@deepseek-ai/dsh-system-prompt": "link:/Users/xjsongphy/Develop/deepseek-harness/../deepseek-harness/packages/core/system-prompt",
+    "@deepseek-ai/dsh-tools": "link:/Users/xjsongphy/Develop/deepseek-harness/../deepseek-harness/packages/core/tools",
+    "@deepseek-ai/schemastery": "link:/Users/xjsongphy/Develop/deepseek-harness/../deepseek-harness/vendor/schemastery"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
