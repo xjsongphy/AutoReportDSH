@@ -1,0 +1,11 @@
+# The `autoreport-main` agent preset (PLACEHOLDER).
+#
+# Scaffold phase: this placeholder exists so install-user-preset.ts is
+# testable end to end. The roles-delegation phase replaces it with the real
+# Main composition derived from the shipped `standard` preset (see PLAN.md
+# 2.1): MAIN persona, send_to_agent + report_task rows, no generic delegation,
+# no unrestricted shell, no stock report tool.
+- id: persona
+  name: '@deepseek-ai/dsh-persona'
+  config:
+    text: PLACEHOLDER_MAIN_PERSONA
