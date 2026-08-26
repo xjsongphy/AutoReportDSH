@@ -2,12 +2,19 @@
 #
 # install-user-preset.ts renders cordis.overlay.generated.yml from this file,
 # replacing the __AUTOREPORT_ENTRY__ token in the row below with the absolute
-# built plugin entry (dist/src/index.js). Usage after rendering and installing:
+# built host entry (dist/src/host.js) and __AUTOREPORT_REPORT_ROUTER__ with the
+# global child-report router. Usage after rendering and installing:
 #
 #   pnpm dsh web --patch ./cordis.overlay.generated.yml
 #
-# Later phases extend the generated overlay here (report-router wiring); see
-# PLAN.md 2.1 and 2.5.
+# The stock child-report setup is global. Replace it with one router that
+# preserves stock reporting for ordinary children and installs report_workflow
+# only for pre-bound AutoReport specialists.
+- id: tool-subagent-report
+  disabled: true
+
 - insert:
     - id: autoreportdsh-host
       name: '__AUTOREPORT_ENTRY__'
+    - id: autoreportdsh-report-router
+      name: '__AUTOREPORT_REPORT_ROUTER__'

@@ -1,11 +1,61 @@
-# The `autoreport-main` agent preset (PLACEHOLDER).
-#
-# Scaffold phase: this placeholder exists so install-user-preset.ts is
-# testable end to end. The roles-delegation phase replaces it with the real
-# Main composition derived from the shipped `standard` preset (see PLAN.md
-# 2.1): MAIN persona, send_to_agent + report_task rows, no generic delegation,
-# no unrestricted shell, no stock report tool.
+# AutoReport Main: a fixed physics-report coordinator preset.
+# Absolute plugin paths and persona text are rendered by install-user-preset.ts.
+
 - id: persona
   name: '@deepseek-ai/dsh-persona'
   config:
-    text: PLACEHOLDER_MAIN_PERSONA
+    text: |
+      __AUTOREPORT_MAIN_PERSONA__
+
+- id: agent-instructions
+  name: '@deepseek-ai/dsh-agent-instructions'
+  config:
+    maxBytes: 65536
+
+# Filesystem reads and Main's Outline writes; AutoReport guards enforce scope.
+- id: tool-fs
+  name: '@deepseek-ai/dsh-tool-fs'
+
+- id: tool-fs-search
+  name: '@deepseek-ai/dsh-tool-fs-search'
+  config:
+    sampleOverCapGlobResults: false
+
+# Project and bundled report skills live in this preset's registry layer.
+- id: skill-filesystem
+  name: '@deepseek-ai/dsh-skill-filesystem'
+
+- id: autoreport-skills
+  name: '__AUTOREPORT_SKILLS_PRESET__'
+
+- id: tool-skill
+  name: '@deepseek-ai/dsh-tool-skill'
+
+# Local compaction survives because workflow state is log-only and durable.
+- id: compaction
+  name: cordis:group
+  group: true
+  isolate:
+    compaction: true
+    toolResultPruner: true
+  config:
+    - id: compaction-basic
+      name: '@deepseek-ai/dsh-compaction-basic'
+    - id: command-compact
+      name: '@deepseek-ai/dsh-command-compact'
+    - id: tool-result-pruner
+      name: '@deepseek-ai/dsh-compaction-tool-result-pruner'
+      config:
+        thresholdChars: 8192
+        headChars: 4096
+        tailChars: 1024
+
+# Fixed report-domain coordination; no generic subagent/workflow/ralph tools.
+- id: autoreport-send-to-agent
+  name: '__AUTOREPORT_SEND_TO_AGENT__'
+
+- id: autoreport-report-task
+  name: '__AUTOREPORT_REPORT_TASK__'
+
+- id: tool-ask-user
+  name: '@deepseek-ai/dsh-tool-ask-user'

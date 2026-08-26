@@ -9,7 +9,7 @@
  *
  * Idempotent: our own files are overwritten in place; foreign files inside an
  * existing preset directory are never removed. Run after `pnpm run build` so
- * dist/index.js exists for the overlay.
+ * dist/src/host.js exists for the overlay.
  *
  * @module autoreportdsh/install-user-preset
  */
@@ -23,13 +23,23 @@ const PRESET_SOURCE_DIR = 'presets/autoreport-main'
 const USER_PRESET_ROOT = '.agent-presets'
 const TEMPLATE_FILE = 'cordis.template.yml'
 const GENERATED_OVERLAY_FILE = 'cordis.overlay.generated.yml'
+const MAIN_PERSONA_FILE = 'resources/personas/main_agent.md'
+
+function pluginEntry(repoRoot: string, modulePath: string): string {
+  return join(repoRoot, 'dist', 'src', ...modulePath.split('/'))
+}
+
+function indentYamlBlock(value: string, spaces: number): string {
+  const indent = ' '.repeat(spaces)
+  return value.trimEnd().split('\n').map(line => `${indent}${line}`).join('\n')
+}
 
 export interface InstallOptions {
   /** Harness home override (test seam); defaults to DSH's own resolution. */
   home?: string
   /** Repository root override (test seam); defaults to this package root. */
   repoRoot?: string
-  /** Built plugin entry override; defaults to `<repoRoot>/dist/index.js`. */
+  /** Built host entry override; defaults to `<repoRoot>/dist/src/host.js`. */
   entry?: string
 }
 
@@ -59,9 +69,8 @@ function mergeCopy(sourceDir: string, targetDir: string): void {
 export function install(options: InstallOptions = {}): { presetDir: string; overlayFile: string; entry: string } {
   const repoRoot = options.repoRoot !== undefined ? resolve(options.repoRoot) : resolve(dirname(fileURLToPath(import.meta.url)), '..')
   const home = options.home !== undefined ? resolve(options.home) : resolveDshHome()
-  // rootDir is the repo root, so tsc preserves src/: the plugin entry lands at
-  // dist/src/index.js.
-  const entry = options.entry !== undefined ? resolve(options.entry) : join(repoRoot, 'dist', 'src', 'index.js')
+  // rootDir is the repo root, so tsc preserves src/.
+  const entry = options.entry !== undefined ? resolve(options.entry) : join(repoRoot, 'dist', 'src', 'host.js')
 
   if (!isAbsolute(entry) || !existsSync(entry)) {
     throw new Error(`autoreportdsh: built plugin entry not found at ${entry}; run \`pnpm run build\` first`)
@@ -75,6 +84,14 @@ export function install(options: InstallOptions = {}): { presetDir: string; over
   const presetDir = join(home, USER_PRESET_ROOT, 'autoreport-main')
   try {
     mergeCopy(sourceDir, presetDir)
+    const compositionTemplate = readFileSync(join(sourceDir, 'agent.cordis.yml'), 'utf8')
+    const mainPersona = readFileSync(join(repoRoot, MAIN_PERSONA_FILE), 'utf8')
+    const composition = compositionTemplate
+      .replace('__AUTOREPORT_MAIN_PERSONA__', indentYamlBlock(mainPersona, 6).trimStart())
+      .replaceAll('__AUTOREPORT_SEND_TO_AGENT__', pluginEntry(repoRoot, 'tools/send-to-agent.js'))
+      .replaceAll('__AUTOREPORT_REPORT_TASK__', pluginEntry(repoRoot, 'tools/report-task.js'))
+      .replaceAll('__AUTOREPORT_SKILLS_PRESET__', pluginEntry(repoRoot, 'skills-preset.js'))
+    writeFileSync(join(presetDir, 'agent.cordis.yml'), composition)
   } catch (error: unknown) {
     throw new Error(`autoreportdsh: failed to materialize preset under ${presetDir}: ${String(error)}`)
   }
@@ -88,7 +105,10 @@ export function install(options: InstallOptions = {}): { presetDir: string; over
   }
 
   const overlayFile = join(repoRoot, GENERATED_OVERLAY_FILE)
-  writeFileSync(overlayFile, template.replaceAll('__AUTOREPORT_ENTRY__', entry))
+  const reportRouter = pluginEntry(repoRoot, 'tools/report-router.js')
+  writeFileSync(overlayFile, template
+    .replaceAll('__AUTOREPORT_ENTRY__', entry)
+    .replaceAll('__AUTOREPORT_REPORT_ROUTER__', reportRouter))
 
   return { presetDir, overlayFile, entry }
 }
