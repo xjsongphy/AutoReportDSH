@@ -130,8 +130,13 @@ export default class AutoReportWorkflowRuntime extends Service {
     foldArtifact(event, caller, state, {
       sessionId,
       currentDelegationKey: childId => this.currentDelegationKey(childId),
-      commit: (ownerId, snapshot) => {
-        const owner = this.mainSessions.get(ownerId)
+      commit: (observedId, snapshot) => {
+        // Artifacts are facts of the OWNING workflow session (PLAN §2.11):
+        // Main's own mutations land on Main; a specialist child's land on its
+        // binding's parent session.
+        const owner = observedId === sessionId && caller.role === 'MAIN'
+          ? this.mainSessions.get(sessionId)
+          : this.workflowForChild(sessionId as SessionId)?.session
         if (owner === undefined) return
         this.commit(owner, 'autoreport/artifact', snapshot)
       },

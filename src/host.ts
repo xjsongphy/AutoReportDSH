@@ -68,9 +68,10 @@ export function apply(ctx: Context, config: Partial<Config> = {}, options: Runti
       ...(resolved.workspaceRoot === undefined ? {} : { workspaceRoot: resolved.workspaceRoot }),
       // External project settings live under the harness home, keyed by the
       // invoked workspace root — never inside the experiment workspace.
+      // The runtime's settingsHome override (tests/isolated homes) applies.
       projectStore: root => ({
-        load: () => loadProjectSettings(undefined, workspaceIdForRoot(root)),
-        save: next => saveProjectSettings(undefined, workspaceIdForRoot(root), next),
+        load: () => loadProjectSettings(options.settingsHome, workspaceIdForRoot(root)),
+        save: next => saveProjectSettings(options.settingsHome, workspaceIdForRoot(root), next),
       }),
     })
     commands.register({
