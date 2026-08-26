@@ -104,6 +104,14 @@ describe('send_to_agent', () => {
       message_id: 'msg-start',
     })
     expect(subagents.startContinuable).toHaveBeenCalledOnce()
+    const startSpec = subagents.startContinuable.mock.calls[0]?.[0] as {
+      request?: { toolFilter?: { deny?: readonly string[] } }
+    }
+    // DSH applies this inherited-tool restriction in the child's creation
+    // window; the role guard remains the execution authority.
+    expect(startSpec.request?.toolFilter).toEqual({
+      deny: ['send_to_agent', 'report_task', 'ask_user_question'],
+    })
     expect(roleRegistry.lookup('child-theory')?.binding.provisioning).toBe('active')
     expect(state.currentDelegation('task-1')?.phase).toBe('waiting_for_child')
     expect(state.currentDelegation('task-1')?.acceptedMessageId).toBe('msg-start')
