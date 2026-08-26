@@ -21,6 +21,8 @@ export interface RoleGuardOptions {
   readonly registry: RoleRegistry
   /** Main session identity; Main is not a child role binding. */
   readonly mainSessionId?: SessionId | undefined
+  /** Alternate Main identity check for multiple live parent sessions. */
+  readonly isMainSession?: ((sessionId: SessionId) => boolean) | undefined
   /** Optional explicit workspace root, otherwise each session's immutable cwd. */
   readonly workspaceRoot?: string | undefined
 }
@@ -146,7 +148,10 @@ function resolveRole(exec: Readonly<ToolExecution>, options: RoleGuardOptions): 
   const configuredRoot = options.workspaceRoot ?? session.header.cwd
   if (configuredRoot === undefined) return undefined
   const workspaceRoot = canonicalPath(configuredRoot)
-  if (options.mainSessionId !== undefined && session.id === options.mainSessionId) {
+  if (
+    (options.mainSessionId !== undefined && session.id === options.mainSessionId)
+    || options.isMainSession?.(session.id) === true
+  ) {
     return { role: 'MAIN', policy: rolePolicy('MAIN'), workspaceRoot }
   }
   const entry = options.registry.lookup(session.id)

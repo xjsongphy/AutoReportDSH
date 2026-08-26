@@ -77,6 +77,17 @@ describe('AutoReport role tool guard', () => {
     expect(guard(execution('report_exec', { argv: ['python'] }, main))).toContain('cannot execute')
   })
 
+  it('identifies Main through isMainSession for multiple parent sessions', () => {
+    const root = workspace()
+    const main = agent('main', root)
+    const guard = createRoleToolGuard({
+      registry: new RoleRegistry(),
+      isMainSession: id => id === main.id,
+    })
+    expect(guard(execution('write', { file_path: 'Outline/report.md' }, main))).toBeUndefined()
+    expect(guard(execution('write', { file_path: 'Theory/notes.md' }, main))).toContain('Outline')
+  })
+
   it('authorizes compile_report only for REPORT', () => {
     const root = workspace()
     const registry = new RoleRegistry()
