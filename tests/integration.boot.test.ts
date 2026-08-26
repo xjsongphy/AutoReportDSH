@@ -63,6 +63,7 @@ describe.skipIf(skipReason !== undefined)('integration: installer CLI against a 
     const run = spawnSync(process.execPath, [
       '--import', 'tsx',
       INSTALLER,
+      '--',
       '--home', home,
       '--repo-root', REPO_ROOT,
     ], { cwd: REPO_ROOT, encoding: 'utf8', timeout: 120_000 })
@@ -89,6 +90,7 @@ describe.skipIf(skipReason !== undefined)('integration: installer CLI against a 
     const rerun = spawnSync(process.execPath, [
       '--import', 'tsx',
       INSTALLER,
+      '--',
       '--home', home,
       '--repo-root', REPO_ROOT,
     ], { cwd: REPO_ROOT, encoding: 'utf8', timeout: 120_000 })

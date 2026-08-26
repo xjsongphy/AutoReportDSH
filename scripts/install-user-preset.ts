@@ -116,6 +116,8 @@ function main(argv: readonly string[]): void {
   const options: InstallOptions = {}
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]
+    // pnpm forwards this conventional script-argument delimiter to Node.
+    if (arg === '--') continue
     if (arg === '--home') {
       const value = argv[++i]
       if (value === undefined) throw new Error('autoreportdsh: --home requires a value')
