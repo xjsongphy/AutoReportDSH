@@ -5,6 +5,12 @@
  * but this guard still denies them if composition drifts. Filesystem targets are
  * canonicalized through the closest existing ancestor so a workspace symlink
  * cannot escape a role's writable roots.
+ *
+ * Coexistence: only AutoReport-owned sessions are restricted — a MAIN root is
+ * one actually running the `autoreport-main` preset (or explicitly wired as
+ * Main), and a specialist child is one bound in the RoleRegistry. Every other
+ * caller passes through untouched so stock DSH sessions keep their native
+ * policy when the overlay is loaded.
  * @module
  */
 
@@ -12,6 +18,7 @@ import { existsSync, realpathSync } from 'node:fs'
 import { basename, dirname, isAbsolute, relative, resolve, sep } from 'node:path'
 import type { SessionId } from '@deepseek-ai/dsh-session'
 import type { ToolExecution, ToolGuard } from '@deepseek-ai/dsh-tools'
+import { AUTOREPORT_MAIN_PRESET, resolveAgentPreset } from '../membership.js'
 import { rolePolicy, type AutoReportRole, type ReportRolePolicy } from '../roles.js'
 import type { RoleRegistry } from '../workflow/role-registry.js'
 
@@ -153,22 +160,43 @@ function contained(root: string, candidate: string): boolean {
   return rel === '' || (rel !== '..' && !rel.startsWith(`..${sep}`) && !isAbsolute(rel))
 }
 
-function resolveRole(exec: Readonly<ToolExecution>, options: RoleGuardOptions): ResolvedRole | undefined {
+/**
+ * Sentinel resolution: the calling session never selected AutoReport (an
+ * ordinary root, an ordinary DSH continuable child, or an agentless call).
+ * The guard must NOT restrict it — "unknown to AutoReport" means "not our
+ * session", not "invalid AutoReport session".
+ */
+const FOREIGN = 'foreign'
+
+function resolveRole(
+  exec: Readonly<ToolExecution>,
+  options: RoleGuardOptions,
+): ResolvedRole | typeof FOREIGN | undefined {
   const session = exec.agent?.session
-  if (session === undefined) return undefined
+  if (session === undefined) return FOREIGN
   const configuredRoot = options.workspaceRoot ?? session.header.cwd
-  if (configuredRoot === undefined) return undefined
-  const workspaceRoot = canonicalPath(configuredRoot)
-  if (
-    (options.mainSessionId !== undefined && session.id === options.mainSessionId)
-    || options.isMainSession?.(session.id) === true
-  ) {
-    return { role: 'MAIN', policy: rolePolicy('MAIN'), workspaceRoot }
-  }
+
+  // A synchronous RoleRegistry binding is the authoritative specialist
+  // identity: `send_to_agent` reserves the child BEFORE publishing it, so a
+  // bound child is fail-closed from its very first tool call onward.
   const entry = options.registry.lookup(session.id)
-  return entry === undefined
-    ? undefined
-    : { role: entry.binding.role, policy: entry.policy, workspaceRoot }
+  if (entry !== undefined) {
+    if (configuredRoot === undefined) return undefined
+    return { role: entry.binding.role, policy: entry.policy, workspaceRoot: canonicalPath(configuredRoot) }
+  }
+  // Unbound continuable child: an ordinary DSH child (stock report tool,
+  // stock write policy) that this global overlay must leave untouched.
+  if (session.header.parentSession !== undefined) return FOREIGN
+
+  // Top-level session: MAIN when explicitly wired (single-parent hosts and
+  // tests) or when the session actually runs the AutoReport Main preset
+  // (header value or a later logged preset selection). Any other root is a
+  // stock DSH session whose native behavior must be preserved.
+  const explicitMain = (options.mainSessionId !== undefined && session.id === options.mainSessionId)
+    || options.isMainSession?.(session.id) === true
+  if (!explicitMain && resolveAgentPreset(session) !== AUTOREPORT_MAIN_PRESET) return FOREIGN
+  if (configuredRoot === undefined) return undefined
+  return { role: 'MAIN', policy: rolePolicy('MAIN'), workspaceRoot: canonicalPath(configuredRoot) }
 }
 
 function targetDenial(target: string, resolved: ResolvedRole): string | undefined {
@@ -196,6 +224,8 @@ export function createRoleToolGuard(options: RoleGuardOptions): ToolGuard {
     if (!protectedCall) return undefined
 
     const resolved = resolveRole(exec, options)
+    // Not an AutoReport-owned session: preserve stock DSH policy untouched.
+    if (resolved === FOREIGN) return undefined
     if (resolved === undefined) return `AutoReport denied ${exec.name}: calling agent has no valid role binding`
 
     if (call.kind === 'unrestricted-exec') {

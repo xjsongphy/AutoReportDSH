@@ -2,6 +2,7 @@ import { Service, type Context } from '@deepseek-ai/cordis'
 import type { Session, SessionEvent, SessionEventMap, SessionEventType, SessionId } from '@deepseek-ai/dsh-session'
 import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
 import type { Config } from './config.js'
+import { AUTOREPORT_MAIN_PRESET, isAutoReportMainSession } from './membership.js'
 import { renderManifest, writeManifests } from './artifacts/manifest.js'
 import { emptyArtifactFoldState, foldArtifact, type ArtifactCaller, type ArtifactFoldState } from './artifacts/observer.js'
 import { AUTOREPORT_SCHEMA_VERSION, type WorkflowMetaSnapshot } from './workflow/events.js'
@@ -79,9 +80,13 @@ export default class AutoReportWorkflowRuntime extends Service {
     this.settingsHome = options.settingsHome
     this.manifestHome = options.manifestHome
     ctx.on('session/event', (session, event) => {
+      // Coexistence gate (PLAN.md compatibility invariant): sessions that did
+      // not select AutoReport stay stock — no state, no initialization, no
+      // observation. "Unknown" means "not our session", never "invalid one".
+      if (!this.ownsSession(session)) return
       // Artifact facts come from BOTH planes: Main's own Outline writes and
-      // specialist children's role-scoped mutations. Fold every stream; the
-      // caller resolution below decides who is authorized to have produced.
+      // specialist children's role-scoped mutations. Fold every owned stream;
+      // the caller resolution below decides who is authorized to have produced.
       this.foldArtifacts(session, event)
       // Continuable children have a parent; AutoReport workflow facts live only on Main.
       if (session.header.parentSession !== undefined) return
@@ -190,6 +195,21 @@ export default class AutoReportWorkflowRuntime extends Service {
   }
 
   /**
+   * Whether one observed session belongs to this deployment: a top-level
+   * session actually running the `autoreport-main` preset, or a continuable
+   * child bound in the RoleRegistry (reserved before its publication).
+   * Everything else — ordinary roots, ordinary DSH continuable children — is
+   * foreign, and foreign sessions must keep their stock behavior untouched.
+   * @param session - any session surfaced on the context event stream.
+   */
+  ownsSession(session: Session): boolean {
+    if (session.header.parentSession !== undefined) {
+      return this.roleRegistry.lookup(session.id) !== undefined
+    }
+    return isAutoReportMainSession(session)
+  }
+
+  /**
    * Resolve or cold-fold the live projection for one Main Session.
    * @param session - durable Main Session.
    * @returns parent-local projection and waiter registry.
@@ -197,6 +217,12 @@ export default class AutoReportWorkflowRuntime extends Service {
   forSession(session: Session): ParentWorkflowRuntime {
     if (session.header.parentSession !== undefined) {
       throw new Error(`AutoReport workflow state is owned by Main; refused child session ${session.id}`)
+    }
+    if (!isAutoReportMainSession(session)) {
+      throw new Error(
+        `AutoReport workflow state requires the '${AUTOREPORT_MAIN_PRESET}' preset`
+        + `; refused foreign root session ${session.id}`,
+      )
     }
     const existing = this.parents.get(session.id)
     if (existing !== undefined) return existing
@@ -269,6 +295,9 @@ export default class AutoReportWorkflowRuntime extends Service {
    * @param session - Main session whose cwd (or configured root) is the experiment workspace.
    */
   maybeInitialize(session: Session): void {
+    // The explicit /report-init recovery path may invoke this from any root;
+    // initialization itself stays preset-gated so stock sessions are untouched.
+    if (!isAutoReportMainSession(session)) return
     const live = this.forSession(session)
     if (live.state.projection().meta?.initialized === true) return
     const root = this.config.workspaceRoot ?? session.header.cwd

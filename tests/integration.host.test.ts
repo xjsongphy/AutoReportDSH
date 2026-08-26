@@ -26,6 +26,7 @@ import { Session, SessionId, type SessionEvent } from '@deepseek-ai/dsh-session'
 import type { Config } from '../src/config.js'
 import { apply as applyHost } from '../src/host.js'
 import AutoReportWorkflowRuntime from '../src/runtime.js'
+import { AUTOREPORT_MAIN_PRESET } from '../src/membership.js'
 import { REQUIRED_DIRS } from '../src/workspace/init.js'
 import { resolveWorkflowSettings, saveProjectSettings, workspaceIdForRoot } from '../src/settings.js'
 import { AUTOREPORT_SCHEMA_VERSION, type RoleBindingSnapshot } from '../src/workflow/events.js'
@@ -191,6 +192,9 @@ async function assemble(options: { projectLanguage?: 'latex' | 'typst' } = {}): 
     id: SessionId('it-main'),
     createdAt: Date.now(),
     cwd: workspaceRoot,
+    // Membership contract: the overlay owns ONLY sessions composed from this
+    // preset; everything else stays stock DSH.
+    agentPreset: AUTOREPORT_MAIN_PRESET,
   })
   const mainAgent = { id: SessionId('it-main'), session: mainSession } as Agent
 
@@ -274,13 +278,18 @@ function publish(
   return event
 }
 
-/** Deliver the first user turn so the workflow initializes. */
-function admitFirstTurn(assembled: Assembled): void {
+/** Deliver one plain human text message to any root session on the context. */
+function userTurn(ctx: Context, session: Session, text: string): SessionEvent {
   const message = createUserMessage({
-    content: [{ type: 'text', text: 'start the physics report' }],
+    content: [{ type: 'text', text }],
     source: { kind: 'user' },
   })
-  publish(assembled.ctx, assembled.mainSession, 'user/message', message, { surfaceOp: 'append' })
+  return publish(ctx, session, 'user/message', message, { surfaceOp: 'append' })
+}
+
+/** Deliver the first user turn so the workflow initializes. */
+function admitFirstTurn(assembled: Assembled): void {
+  userTurn(assembled.ctx, assembled.mainSession, 'start the physics report')
 }
 
 describe('integration: assembled host (real context)', () => {
@@ -478,6 +487,76 @@ describe('integration: assembled host (real context)', () => {
     // The durable snapshot NEVER adopts the later project change (PLAN §2.14).
     const after = assembled.runtime.forSession(assembled.mainSession).state.projection().meta?.settings
     expect(after).toEqual(before)
+  })
+
+  it('stock-session-is-untouched: a standard session in a loaded deployment keeps stock behavior', async () => {
+    const assembled = await assemble()
+    const ctx = assembled.ctx
+
+    // A fixture unrestricted shell tool, as stock presets mount and AutoReport
+    // presets omit: its fate is the sharpest coexistence signal.
+    ctx.tools.register(defineTool({
+      name: 'bash',
+      description: 'fixture unrestricted executor',
+      parameters: { command: { type: 'string', required: true } },
+      output: {
+        schema: { type: 'object', additionalProperties: true, properties: {} },
+        render: () => [{ type: 'text', text: 'ran' }],
+      },
+      async execute() { return { ran: true } },
+    }))
+
+    // An ordinary top-level DSH session — no agentPreset — in the SAME loaded
+    // deployment, with its own cwd OUTSIDE the experiment workspace.
+    const stockCwd = makeTemp('autoreport-it-stock-')
+    const stockSession = Session.create(SessionId('it-stock'), undefined, {
+      version: 0,
+      id: SessionId('it-stock'),
+      createdAt: Date.now(),
+      cwd: stockCwd,
+    })
+    const stockAgent = { id: stockSession.id, session: stockSession } as Agent
+
+    // Ordinary first user turn.
+    userTurn(ctx, stockSession, 'just answer my question')
+
+    expect(assembled.runtime.isMainSession(stockSession.id)).toBe(false)
+    expect(assembled.runtime.ownsSession(stockSession)).toBe(false)
+    expect(stockSession.events.some(event => event.type.startsWith('autoreport/'))).toBe(false)
+    for (const dir of REQUIRED_DIRS) expect(existsSync(join(stockCwd, dir))).toBe(false)
+    // Not even the configured experiment workspace was touched by the stock turn.
+    for (const dir of REQUIRED_DIRS) expect(existsSync(join(assembled.workspaceRoot, dir))).toBe(false)
+
+    // Stock write policy: arbitrary locations stay writable through the REAL
+    // guarded pipeline — the global role guard must pass foreign callers through.
+    const freeWrite = await execute(ctx, 'write', {
+      file_path: join(stockCwd, 'notes.txt'),
+      content: 'stock DSH writes wherever it likes',
+    }, stockAgent, stockSession)
+    expect(freeWrite.isError).toBe(false)
+    expect(existsSync(join(stockCwd, 'notes.txt'))).toBe(true)
+
+    // Stock shell policy: the unrestricted executor stays available.
+    const shell = await execute(ctx, 'bash', { command: 'true' }, stockAgent, stockSession)
+    expect(shell.isError).toBe(false)
+
+    // Coexistence both ways: the autoreport-main session still initializes on
+    // ITS first turn, and the guard still restricts it to Outline writes.
+    admitFirstTurn(assembled)
+    for (const dir of REQUIRED_DIRS) expect(existsSync(join(assembled.workspaceRoot, dir))).toBe(true)
+    const mainWrite = await execute(ctx, 'write', {
+      file_path: join(assembled.workspaceRoot, 'Report', 'main.tex'),
+      content: 'forbidden for MAIN',
+    }, assembled.mainAgent, assembled.mainSession)
+    expect(mainWrite.isError).toBe(true)
+    expect(mainWrite.text).toContain('Outline')
+    const outlineWrite = await execute(ctx, 'write', {
+      file_path: join(assembled.workspaceRoot, 'Outline', 'plan.md'),
+      content: 'allowed for MAIN',
+    }, assembled.mainAgent, assembled.mainSession)
+    expect(outlineWrite.isError).toBe(false)
+
+    await ctx.fiber?.dispose()
   })
 })
 
