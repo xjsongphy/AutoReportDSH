@@ -152,6 +152,11 @@ describe.skipIf(reason !== undefined)('integration: OpenRouter headless boot (re
       expect(logs.length).toBeGreaterThanOrEqual(1)
       const transcript = readFileSync(join(sessionsDir, logs[0]!), 'utf8')
       expect(transcript).toContain('"assistant/message"')
+
+      // Coexistence gate: this session never selected the autoreport-main
+      // preset, so the loaded AutoReport overlay must have left it entirely
+      // stock — no workflow initialization, no role bindings, no artifacts.
+      expect(transcript).not.toContain('"autoreport/')
     } finally {
       rmSync(runDir, { recursive: true, force: true })
     }
