@@ -9,26 +9,46 @@ child reports, role authorization, execution isolation, workspace initialization
 semantics, manifest projection, templates, compilation, domain skills. The full architecture
 lives in [PLAN.md](PLAN.md).
 
-## Status: workspace-assets phase
+## Status: integration-e2e (final phase)
 
-The package loads as an out-of-tree cordis plugin; domain phases land per PLAN.md §4:
-`workflow-state`, `roles-delegation`, `execution-policy`, `compile-manifests`,
-`integration-e2e`. Workspace initialization, bundled report assets, the `/report-init`
-command factory, and preset-scoped bundled skills are implemented.
+All PLAN.md §4 phases are implemented and merged: workflow state machine,
+role registry + waiters, `send_to_agent` / `report_workflow` / `report_task`,
+the global report router replacing the stock child-report setup, the role
+mutation guard with seatbelt/bwrap isolation, `report_exec` / `compile_report`,
+workspace init + `/report-init` + bundled assets, settings layering with
+durable snapshots, personas + the Main preset, artifact observation with
+external manifest projection, assembled keyless integration smokes, an
+installer boot smoke, and a self-skipping OpenRouter real-API e2e.
 
 ## Quickstart
 
 Prerequisites: Node 22.19+/24+, Corepack-enabled pnpm (`corepack enable`), and a local
 checkout of `deepseek-harness` as a sibling directory (`../deepseek-harness`), built once
-(`cd ../deepseek-harness && pnpm install && pnpm run build`).
+(`cd ../deepseek-harness && pnpm install && pnpm run build`). Windows is **unsupported**:
+specialist process execution fails closed until network-denial isolation is verified there
+(PLAN.md §2.9).
 
 ```sh
 pnpm install                 # links harness packages from ../deepseek-harness
-pnpm test                    # vitest unit tests
-pnpm run build               # tsc -> dist/
-pnpm install:preset          # preset -> $DSH_HOME/.agent-presets/autoreport-main + renders cordis.overlay.generated.yml
-pnpm dsh web --patch ./cordis.overlay.generated.yml   # run from the deepseek-harness checkout
+pnpm test                    # vitest unit tests + keyless integration smokes (e2e self-skips)
+pnpm run build               # tsc -> dist/ (required by the installer)
+pnpm install:preset          # preset -> $DSH_HOME/.agent-presets/autoreport-main
+                             # + renders ./cordis.overlay.generated.yml
+
+# from the deepseek-harness checkout — pick one profile:
+pnpm dsh web --patch /path/to/AutoReportDSH/cordis.overlay.generated.yml
+pnpm dsh headless --patch /path/to/AutoReportDSH/cordis.overlay.generated.yml
 ```
+
+Then select the **`autoreport-main`** preset for your session (preset picker in web;
+`--profile`/preset flags for headless). The overlay replaces DSH's stock child-report row
+with the AutoReport router, so specialists report through `report_workflow` while ordinary
+DSH children keep stock reporting. The first admitted Main turn initializes the experiment
+workspace idempotently; `/report-init [--language latex|typst]` is the explicit repair path.
+
+For provider setup against OpenRouter (`stealth/ox-alpha`), see
+[docs/openrouter-testing.md](docs/openrouter-testing.md); the automated e2e lives at
+`tests/e2e/openrouter.e2e.test.ts` and self-skips unless `OPENROUTER_API_KEY` is set.
 
 `install:preset` accepts `--home <path>` (harness home override), `--repo-root <path>`, and
 `--entry <path>` for testing. It never deletes foreign files under the preset root and fails
@@ -71,25 +91,33 @@ missing resources for that backend — it never deletes the other backend's
 files, so `Report/main.tex` and `Report/main.typ` may coexist while
 `reportLanguage` stays authoritative.
 
-The user layer rides DSH's settings service (namespace `'autoreport'`). DSH
-exposes the registration API in-tree (`installSettingsSection` in
-`@deepseek-ai/dsh-settings`), but that package is not yet linked out-of-tree to
-this plugin, so user settings are currently passed as plain data and the
-namespace registration lands together with the dependency.
+The user layer rides DSH's settings service (namespace `'autoreport'`). This is the one
+**deferred** piece: it needs `@deepseek-ai/dsh-settings` to be linked as an out-of-tree
+dependency (the in-tree registration API exists — `installSettingsSection` — but the package
+is not yet exposed to this plugin). Until then the user layer is absent; project settings,
+composition defaults, and schema defaults already resolve normally.
 
 ## Repo layout
 
 ```text
 package.json               link: dependencies into the local harness checkout
 cordis.template.yml        patch-overlay source (renders cordis.overlay.generated.yml)
-presets/autoreport-main/   Main agent-preset composition (placeholder until roles-delegation)
+presets/autoreport-main/   Main agent-preset composition (rendered by the installer)
 scripts/install-user-preset.ts
-src/index.ts               host-plane plugin entry (registration wiring lands in integration)
+src/index.ts               host-plane plugin entry (host + router rows in the overlay)
+src/host.ts                host-plane apply(): runtime service, role guard, /report-init,
+                           artifact observation, manifest projection
+src/runtime.ts             AutoReportWorkflowRuntime service (state, waiters, artifacts)
+src/workflow/              events/projections, role registry, waiters, report observer
+src/tools/                 send_to_agent, report_task, report router, report_workflow,
+                           report_exec, compile_report
+src/policy/                mutation guard + seatbelt/bwrap isolation backends
 src/workspace/             init.ts (layout + materializer), command.ts (/report-init), skill-loader.ts
-src/skills-preset.ts       preset-scoped registration of resources/skills/*.md
+src/artifacts/             artifact policy, session-log observer, external manifest projection
+src/settings.ts            settings layering + durable workflow-settings snapshots
 resources/                 bundled assets copied from ../autoreportcli/templates (see table below)
-docs/dependencies.md       pinned harness commit + dependency wiring notes
-tests/                     vitest unit tests + smokes
+docs/                      dependencies.md, openrouter-testing.md
+tests/                     vitest unit tests, integration smokes, self-skipping e2e
 ```
 
 ## Bundled resources
