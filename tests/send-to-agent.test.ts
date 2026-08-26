@@ -5,15 +5,20 @@ import { WorkflowState } from '../src/workflow/service.js'
 import { RoleRegistry } from '../src/workflow/role-registry.js'
 import { WaiterRegistry } from '../src/workflow/waiters.js'
 import type { Config } from '../src/config.js'
-import type { TaskSnapshot } from '../src/workflow/events.js'
+import {
+  AUTOREPORT_SCHEMA_VERSION,
+  type TaskSnapshot,
+  type WorkflowMetaSnapshot,
+} from '../src/workflow/events.js'
+import { resolveWorkflowSettings, type WorkflowSettingsSnapshot } from '../src/settings.js'
 import { createSendToAgentTool, type SendToAgentWorkflow } from '../src/tools/send-to-agent.js'
 
 const CONFIG: Config = {
-  reportLanguage: 'latex',
-  latexEngine: 'latexmk',
-  pythonEnv: undefined,
+  defaultReportLanguage: 'latex',
+  defaultLatexEngine: 'latexmk',
+  defaultPythonEnv: undefined,
   workspaceRoot: undefined,
-  specialistRoute: undefined,
+  specialistModel: undefined,
   executionTimeoutMs: 600_000,
 }
 
@@ -29,6 +34,18 @@ function task(overrides: Partial<TaskSnapshot> = {}): TaskSnapshot {
     steps: [{ description: 'write derivation', done: false }],
     scopes: ['Theory'],
     ...overrides,
+  }
+}
+
+/** Durable workflow event carrying a creation-time settings snapshot. */
+function workflowMeta(settings: WorkflowSettingsSnapshot): WorkflowMetaSnapshot {
+  return {
+    version: AUTOREPORT_SCHEMA_VERSION,
+    workflowId: 'wf-1',
+    workspaceRoot: '/workspace',
+    language: settings.reportLanguage,
+    initialized: true,
+    settings,
   }
 }
 
@@ -210,5 +227,70 @@ describe('send_to_agent', () => {
       .rejects.toThrow(/cannot be dispatched/)
     await expect(call({ role: 'REPORT', task_id: 'task-1', prompt: 'wrong', wait: false }))
       .rejects.toThrow(/belongs to THEORY/)
+  })
+
+  it('routes the child through the snapshot specialist model and wait bound when present', async () => {
+    const session = Session.create(SessionId('main'))
+    const state = WorkflowState.fromSession(session)
+    const waiters = new WaiterRegistry()
+    const roleRegistry = new RoleRegistry()
+    const workflow: SendToAgentWorkflow = {
+      roleRegistry,
+      forSession: () => ({ state, waiters }),
+      commit(target, type, data) {
+        const event = appendWorkflowEvent(target, type, data)
+        state.apply(event)
+        return event
+      },
+    }
+    workflow.commit(session, 'autoreport/task', task())
+    workflow.commit(session, 'autoreport/workflow', workflowMeta(resolveWorkflowSettings({
+      override: { specialistModel: { provider: 'route-provider', model: 'route-model' }, executionTimeoutMs: 30 },
+    })))
+    const startContinuable = vi.fn(async (spec: { childId?: SessionId; request?: { agentOptions?: unknown } }) => ({ childId: spec.childId, messageId: 'msg-snap' }))
+    const tool = createSendToAgentTool({
+      subagents: { startContinuable, followup: vi.fn(async () => 'msg-f') },
+      workflow,
+      // Composition route must be IGNORED while a snapshot exists.
+      config: { ...CONFIG, specialistModel: { provider: 'stale-provider', model: 'stale-model' } },
+      childId: () => SessionId('child-snap'),
+      persona: () => 'p',
+    })
+    const exec = { agent: { id: session.id, session }, signal: new AbortController().signal }
+    // No explicit timeout_ms: the snapshot's bound drives the wait.
+    await expect(tool.execute({ role: 'THEORY', task_id: 'task-1', prompt: 'x' } as never, exec as never))
+      .resolves.toMatchObject({ status: 'timeout' })
+    expect(startContinuable.mock.calls[0]?.[0]?.request?.agentOptions).toEqual({ provider: 'route-provider', model: 'route-model' })
+    expect(state.currentDelegation('task-1')?.phase).toBe('timed_out')
+    expect(state.currentDelegation('task-1')?.reason).toContain('30ms')
+  })
+
+  it('passes no agentOptions when the snapshot records explicit Main inheritance', async () => {
+    const session = Session.create(SessionId('main'))
+    const state = WorkflowState.fromSession(session)
+    const waiters = new WaiterRegistry()
+    const roleRegistry = new RoleRegistry()
+    const workflow: SendToAgentWorkflow = {
+      roleRegistry,
+      forSession: () => ({ state, waiters }),
+      commit(target, type, data) {
+        const event = appendWorkflowEvent(target, type, data)
+        state.apply(event)
+        return event
+      },
+    }
+    workflow.commit(session, 'autoreport/task', task())
+    workflow.commit(session, 'autoreport/workflow', workflowMeta(resolveWorkflowSettings({})))
+    const startContinuable = vi.fn(async (spec: { childId?: SessionId; request?: { agentOptions?: unknown } }) => ({ childId: spec.childId, messageId: 'msg-inherit' }))
+    const tool = createSendToAgentTool({
+      subagents: { startContinuable, followup: vi.fn(async () => 'msg-f') },
+      workflow,
+      config: { ...CONFIG, specialistModel: { provider: 'comp-provider', model: 'comp-model' } },
+      childId: () => SessionId('child-inherit'),
+      persona: () => 'p',
+    })
+    const exec = { agent: { id: session.id, session }, signal: new AbortController().signal }
+    await tool.execute({ role: 'THEORY', task_id: 'task-1', prompt: 'x', wait: false } as never, exec as never)
+    expect(startContinuable.mock.calls[0]?.[0]?.request?.agentOptions).toBeUndefined()
   })
 })

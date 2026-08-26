@@ -3,7 +3,12 @@
  * field is changeable from `cordis.yml`; nothing here is hardcoded per
  * deployment (the no-hardcoded-tunables rule). Validation fails loud at load.
  *
- * Provider/model execution stays in DSH; {@link Config.specialistRoute} only
+ * These fields are plugin DEFAULTS — the lowest configurable layer of the
+ * report-workflow settings chain (PLAN.md §2.14), below user settings,
+ * project settings, and explicit workflow overrides. They are not live
+ * workflow inputs: workflows snapshot the resolved values at creation.
+ *
+ * Provider/model execution stays in DSH; {@link Config.specialistModel} only
  * names the route specialists request.
  * @module
  */
@@ -22,38 +27,45 @@ export interface SpecialistRoute {
   readonly provider: string
   /** Model id interpreted by the selected provider adapter. */
   readonly model: string
+  /**
+   * Adapter-owned reasoning effort for the specialist route; absent uses the
+   * adapter default. Carried by settings snapshots until DSH's child
+   * `agentOptions` surface accepts it.
+   */
+  readonly reasoningEffort?: string
 }
 
-/** Plugin configuration schema (see module docs). */
+/** Plugin configuration schema: DEFAULTS for the workflow settings chain (see module docs). */
 export interface Config {
-  /** Report source language (default `latex`). */
-  reportLanguage: ReportLanguage
-  /** LaTeX compiler selection (default `latexmk`). */
-  latexEngine: LatexEngine
+  /** Default report source language (schema default `latex`). */
+  defaultReportLanguage: ReportLanguage
+  /** Default LaTeX compiler selection (schema default `latexmk`). */
+  defaultLatexEngine: LatexEngine
   /**
-   * Python interpreter passed to report execution; absent uses the ambient
-   * `PATH` resolution inside the isolated process.
+   * Default Python interpreter passed to report execution; absent uses the
+   * ambient `PATH` resolution inside the isolated process.
    */
-  pythonEnv: string | undefined
+  defaultPythonEnv: string | undefined
   /**
    * Experiment workspace root; absent resolves to the calling session cwd at
    * use time, never a build-time constant.
    */
   workspaceRoot: string | undefined
-  /** Optional fixed model route for every specialist child. */
-  specialistRoute: SpecialistRoute | undefined
-  /** Bounded wait for `send_to_agent({ wait: true })` (default ten minutes). */
+  /** Default fixed model route for every specialist child; absent inherits Main. */
+  specialistModel: SpecialistRoute | undefined
+  /** Default bounded wait for `send_to_agent({ wait: true })` (default ten minutes). */
   executionTimeoutMs: number
 }
 
 export const Config: z<Config> = z.object({
-  reportLanguage: z.union(['latex', 'typst'] as const).default('latex'),
-  latexEngine: z.union(['latexmk', 'tectonic'] as const).default('latexmk'),
-  pythonEnv: z.string(),
+  defaultReportLanguage: z.union(['latex', 'typst'] as const).default('latex'),
+  defaultLatexEngine: z.union(['latexmk', 'tectonic'] as const).default('latexmk'),
+  defaultPythonEnv: z.string(),
   workspaceRoot: z.string(),
-  specialistRoute: z.object({
+  specialistModel: z.object({
     provider: z.string(),
     model: z.string(),
+    reasoningEffort: z.string(),
   }),
   executionTimeoutMs: z.number().default(600_000),
 }) as unknown as z<Config>

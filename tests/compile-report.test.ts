@@ -3,9 +3,9 @@ import type { ToolExecution } from '@deepseek-ai/dsh-tools'
 import type { Config } from '../src/config.js'
 import { createCompileReportTool } from '../src/tools/compile-report.js'
 
-const CONFIG: Pick<Config, 'reportLanguage' | 'latexEngine'> = {
-  reportLanguage: 'latex',
-  latexEngine: 'latexmk',
+const CONFIG: Pick<Config, 'defaultReportLanguage' | 'defaultLatexEngine'> = {
+  defaultReportLanguage: 'latex',
+  defaultLatexEngine: 'latexmk',
 }
 
 function exec(sessionId = 'report-child'): ToolExecution {
@@ -71,7 +71,7 @@ describe('compile_report', () => {
   it('uses typst defaults when configured language is typst', async () => {
     const listed = ['main.typ']
     const tool = createCompileReportTool({
-      config: { reportLanguage: 'typst', latexEngine: 'latexmk' },
+      config: { defaultReportLanguage: 'typst', defaultLatexEngine: 'latexmk' },
       resolveCallerRole: () => ({ sessionId: 'r', workspaceRoot: '/w' }),
       runner: async () => ({ exit_code: 0, stdout: '', stderr: '', timed_out: false }),
       listFilesFiltered: () => listed,
@@ -79,6 +79,47 @@ describe('compile_report', () => {
     })
     const result = await tool.execute({}, exec() as never) as Record<string, unknown>
     expect(result).toMatchObject({ engine: 'typst', artifact_path: 'Report/main.pdf' })
+  })
+
+  it('lets the workflow settings snapshot outrank composition config', async () => {
+    const runnerCalls: Array<{ argv: readonly string[]; cwd: string }> = []
+    const tool = createCompileReportTool({
+      config: CONFIG,
+      settings: { reportLanguage: 'typst', latexEngine: 'latexmk' },
+      resolveCallerRole: () => ({ sessionId: 'report-child', workspaceRoot: '/workspace' }),
+      runner: async request => {
+        runnerCalls.push({ argv: request.argv, cwd: request.cwd })
+        return { exit_code: 0, stdout: '', stderr: '', timed_out: false }
+      },
+      listFilesFiltered: () => ['main.typ'],
+      commitArtifact: () => undefined,
+    })
+    const result = await tool.execute({}, exec() as never) as Record<string, unknown>
+    // Snapshot language wins over the composition latex default.
+    expect(result).toMatchObject({ engine: 'typst', artifact_path: 'Report/main.pdf' })
+    expect(runnerCalls[0]?.argv).toEqual(['typst', 'compile', 'main.typ', 'main.pdf'])
+  })
+
+  it('lets the snapshot latex engine outrank composition config for latex reports', async () => {
+    const runnerCalls: Array<{ argv: readonly string[] }> = []
+    const tool = createCompileReportTool({
+      config: { defaultReportLanguage: 'latex', defaultLatexEngine: 'latexmk' },
+      settings: { reportLanguage: 'latex', latexEngine: 'tectonic' },
+      resolveCallerRole: () => ({ sessionId: 'report-child', workspaceRoot: '/workspace' }),
+      runner: async request => {
+        runnerCalls.push({ argv: request.argv })
+        return { exit_code: 0, stdout: '', stderr: '', timed_out: false }
+      },
+      listFilesFiltered: () => [],
+      commitArtifact: () => undefined,
+    })
+    process.env['TECTONIC_CACHE'] = '/tmp'
+    try {
+      await tool.execute({}, exec() as never)
+    } finally {
+      delete process.env['TECTONIC_CACHE']
+    }
+    expect(runnerCalls[0]?.argv).toEqual(['tectonic', 'main.tex'])
   })
 
   it('denies non-REPORT callers before running anything', async () => {

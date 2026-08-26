@@ -8,11 +8,11 @@ import { installRoutedReportTool } from '../src/tools/report-router.js'
 import { installWorkflowReportTool } from '../src/tools/report-workflow.js'
 
 const CONFIG: Config = {
-  reportLanguage: 'latex',
-  latexEngine: 'latexmk',
-  pythonEnv: undefined,
+  defaultReportLanguage: 'latex',
+  defaultLatexEngine: 'latexmk',
+  defaultPythonEnv: undefined,
   workspaceRoot: undefined,
-  specialistRoute: undefined,
+  specialistModel: undefined,
   executionTimeoutMs: 600_000,
 }
 

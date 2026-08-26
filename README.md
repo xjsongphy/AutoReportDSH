@@ -34,6 +34,49 @@ pnpm dsh web --patch ./cordis.overlay.generated.yml   # run from the deepseek-ha
 `--entry <path>` for testing. It never deletes foreign files under the preset root and fails
 loud if the built entry is missing.
 
+## Configuration
+
+AutoReportDSH owns ONLY report-workflow policy. DeepSeek Harness keeps providers,
+credentials, Main model selection, compaction, approvals, sandbox/shell, session lifecycle,
+and UI preferences. Policy layers resolve per field, highest first
+(PLAN.md §2.14):
+
+```text
+explicit workflow override
+        ↓
+project settings        <dshHome>/autoreport/<workspaceId>/project.json  (external,
+                          never inside the experiment workspace; `<workspaceId>`
+                          is a sha256-derived key of the absolute workspace root)
+        ↓
+AutoReport user settings (settings namespace 'autoreport')
+        ↓
+Cordis composition Config (plugin defaults)
+        ↓
+schema defaults         latex / latexmk / inherit-Main / ambient PATH / 600000 ms
+```
+
+Plugin `Config` fields are DEFAULTS, not live workflow inputs:
+`defaultReportLanguage`, `defaultLatexEngine`, `specialistModel`
+(`{ provider, model, reasoningEffort? }`; absent inherits the Main route),
+`defaultPythonEnv`, plus `executionTimeoutMs` and `workspaceRoot`. When a
+workflow starts, `resolveWorkflowSettings()` freezes the effective values into a
+`WorkflowSettingsSnapshot` committed once on the durable `autoreport/workflow`
+event; execution reads that snapshot, so later settings changes never mutate an
+in-flight report.
+
+Project settings (`project.json`) are validated JSON written atomically
+(temp file + rename) and keyed by workspace id. `/report-init --language
+latex|typst` records the explicit language there and materializes only the
+missing resources for that backend — it never deletes the other backend's
+files, so `Report/main.tex` and `Report/main.typ` may coexist while
+`reportLanguage` stays authoritative.
+
+The user layer rides DSH's settings service (namespace `'autoreport'`). DSH
+exposes the registration API in-tree (`installSettingsSection` in
+`@deepseek-ai/dsh-settings`), but that package is not yet linked out-of-tree to
+this plugin, so user settings are currently passed as plain data and the
+namespace registration lands together with the dependency.
+
 ## Repo layout
 
 ```text

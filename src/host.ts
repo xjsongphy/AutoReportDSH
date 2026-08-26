@@ -11,16 +11,17 @@ import type { Config } from './config.js'
 import { createRoleToolGuard } from './policy/tool-guard.js'
 import AutoReportWorkflowRuntime from './runtime.js'
 import { createReportInitCommand } from './workspace/command.js'
+import { loadProjectSettings, saveProjectSettings, workspaceIdForRoot } from './settings.js'
 
 export const name = 'autoreportdsh-host'
 export const inject = ['tools']
 
 const DEFAULT_CONFIG: Config = {
-  reportLanguage: 'latex',
-  latexEngine: 'latexmk',
-  pythonEnv: undefined,
+  defaultReportLanguage: 'latex',
+  defaultLatexEngine: 'latexmk',
+  defaultPythonEnv: undefined,
   workspaceRoot: undefined,
-  specialistRoute: undefined,
+  specialistModel: undefined,
   executionTimeoutMs: 600_000,
 }
 
@@ -30,11 +31,11 @@ const DEFAULT_CONFIG: Config = {
  */
 export function resolveHostConfig(raw: Partial<Config> = {}): Config {
   return {
-    reportLanguage: raw.reportLanguage ?? DEFAULT_CONFIG.reportLanguage,
-    latexEngine: raw.latexEngine ?? DEFAULT_CONFIG.latexEngine,
-    pythonEnv: raw.pythonEnv ?? DEFAULT_CONFIG.pythonEnv,
+    defaultReportLanguage: raw.defaultReportLanguage ?? DEFAULT_CONFIG.defaultReportLanguage,
+    defaultLatexEngine: raw.defaultLatexEngine ?? DEFAULT_CONFIG.defaultLatexEngine,
+    defaultPythonEnv: raw.defaultPythonEnv ?? DEFAULT_CONFIG.defaultPythonEnv,
     workspaceRoot: raw.workspaceRoot ?? DEFAULT_CONFIG.workspaceRoot,
-    specialistRoute: raw.specialistRoute ?? DEFAULT_CONFIG.specialistRoute,
+    specialistModel: raw.specialistModel ?? DEFAULT_CONFIG.specialistModel,
     executionTimeoutMs: raw.executionTimeoutMs ?? DEFAULT_CONFIG.executionTimeoutMs,
   }
 }
@@ -55,8 +56,14 @@ export function apply(ctx: Context, config: Partial<Config> = {}): void {
   const commands = ctx.get('commands')
   if (commands !== undefined) {
     const definition = createReportInitCommand({
-      reportLanguage: resolved.reportLanguage,
+      reportLanguage: resolved.defaultReportLanguage,
       ...(resolved.workspaceRoot === undefined ? {} : { workspaceRoot: resolved.workspaceRoot }),
+      // External project settings live under the harness home, keyed by the
+      // invoked workspace root — never inside the experiment workspace.
+      projectStore: root => ({
+        load: () => loadProjectSettings(undefined, workspaceIdForRoot(root)),
+        save: next => saveProjectSettings(undefined, workspaceIdForRoot(root), next),
+      }),
     })
     commands.register({
       ...definition,

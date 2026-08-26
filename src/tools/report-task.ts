@@ -16,7 +16,7 @@ import type { Session, SessionEvent, SessionEventType, SessionId } from '@deepse
 import type { JsonValue } from '@deepseek-ai/dsh-session'
 import { defineTool, type ToolDefinition } from '@deepseek-ai/dsh-tools'
 import type { SpecialistRole } from '../roles.js'
-import type { TaskStep } from '../workflow/events.js'
+import { AUTOREPORT_SCHEMA_VERSION, type TaskStep } from '../workflow/events.js'
 import { isSpecialistRole } from '../roles.js'
 import { appendWorkflowEvent } from '../workflow/store.js'
 import type { DelegationPhase, TaskSnapshot } from '../workflow/events.js'
@@ -205,7 +205,7 @@ export function createReportTaskTool(
           const steps = toSteps(args.steps)
           const taskId = state.nextTaskId()
           const snapshot: TaskSnapshot = {
-            version: 1,
+            version: AUTOREPORT_SCHEMA_VERSION,
             taskId,
             subject,
             role,
@@ -226,7 +226,7 @@ export function createReportTaskTool(
           const revision = (state.currentDelegation(previous.taskId)?.delegationRevision ?? 0) + 1
           const childSessionId = resolveChildId(previous.role)
           commit('autoreport/delegation', {
-            version: 1,
+            version: AUTOREPORT_SCHEMA_VERSION,
             taskId: previous.taskId,
             delegationRevision: revision,
             role: previous.role,

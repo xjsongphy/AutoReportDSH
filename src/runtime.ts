@@ -1,12 +1,19 @@
 import { Service, type Context } from '@deepseek-ai/cordis'
 import type { Session, SessionEvent, SessionEventMap, SessionEventType, SessionId } from '@deepseek-ai/dsh-session'
 import type { Config } from './config.js'
+import { AUTOREPORT_SCHEMA_VERSION, type WorkflowMetaSnapshot } from './workflow/events.js'
 import { WorkflowState } from './workflow/service.js'
 import { RoleRegistry } from './workflow/role-registry.js'
 import { WaiterRegistry } from './workflow/waiters.js'
 import { appendWorkflowEvent } from './workflow/store.js'
 import { observeWorkflowMessage } from './workflow/report-observer.js'
 import { ensureInitialized } from './workspace/init.js'
+import {
+  loadProjectSettings,
+  resolveWorkflowSettings,
+  workspaceIdForRoot,
+  type WorkflowSettingsSnapshot,
+} from './settings.js'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -16,11 +23,11 @@ declare module '@deepseek-ai/cordis' {
 }
 
 const DEFAULT_CONFIG: Config = {
-  reportLanguage: 'latex',
-  latexEngine: 'latexmk',
-  pythonEnv: undefined,
+  defaultReportLanguage: 'latex',
+  defaultLatexEngine: 'latexmk',
+  defaultPythonEnv: undefined,
   workspaceRoot: undefined,
-  specialistRoute: undefined,
+  specialistModel: undefined,
   executionTimeoutMs: 600_000,
 }
 
@@ -40,6 +47,8 @@ export default class AutoReportWorkflowRuntime extends Service {
   readonly roleRegistry = new RoleRegistry()
   /** Validated plugin configuration used by tools and first-turn initialization. */
   readonly config: Config
+  /** Harness home override for external project settings; absent resolves the DSH home. */
+  readonly settingsHome: string | undefined
   private readonly parents = new Map<string, ParentWorkflowRuntime>()
   private readonly mainSessionIds = new Set<string>()
 
@@ -47,10 +56,12 @@ export default class AutoReportWorkflowRuntime extends Service {
    * Create the host runtime and observe committed report messages.
    * @param ctx - host context carrying Session events.
    * @param config - resolved plugin configuration.
+   * @param options - `settingsHome` overrides `<dshHome>` for project settings (tests).
    */
-  constructor(ctx: Context, config: Config = DEFAULT_CONFIG) {
+  constructor(ctx: Context, config: Config = DEFAULT_CONFIG, options: { settingsHome?: string } = {}) {
     super(ctx, 'autoreportWorkflow')
     this.config = config
+    this.settingsHome = options.settingsHome
     ctx.on('session/event', (session, event) => {
       // Continuable children have a parent; AutoReport workflow facts live only on Main.
       if (session.header.parentSession !== undefined) return
@@ -131,7 +142,10 @@ export default class AutoReportWorkflowRuntime extends Service {
   }
 
   /**
-   * Idempotent first-turn workspace initialization for one Main session.
+   * Idempotent first-turn workspace initialization for one Main session:
+   * resolves the settings chain (override > project > user > composition >
+   * defaults), materializes missing resources for the resolved language, then
+   * records the workflow once via {@link createWorkflow}.
    * @param session - Main session whose cwd (or configured root) is the experiment workspace.
    */
   maybeInitialize(session: Session): void {
@@ -139,15 +153,54 @@ export default class AutoReportWorkflowRuntime extends Service {
     if (live.state.projection().meta?.initialized === true) return
     const root = this.config.workspaceRoot ?? session.header.cwd
     if (root === undefined || root.length === 0) return
-    ensureInitialized(root, this.config.reportLanguage)
-    const previous = live.state.projection().meta
-    this.commit(session, 'autoreport/workflow', {
-      version: 1,
+    let settings: WorkflowSettingsSnapshot
+    try {
+      // The user layer rides DSH's settings namespace ('autoreport'); until
+      // @deepseek-ai/dsh-settings is exposed out-of-tree it stays absent here.
+      const project = loadProjectSettings(this.settingsHome, workspaceIdForRoot(root))
+      settings = resolveWorkflowSettings({ project, composition: this.config })
+      ensureInitialized(root, settings.reportLanguage)
+    } catch (error: unknown) {
+      // A broken EXTERNAL settings document must not wedge every first turn;
+      // the next user message retries after repair. The /report-init command
+      // path surfaces the same failure loudly instead of skipping.
+      const message = error instanceof Error ? error.message : String(error)
+      try {
+        this.ctx.logger.warn('autoreportdsh: skipped workflow initialization: %s', message)
+      } catch {
+        // A bare test Context may lack a working logger; containment already happened.
+      }
+      return
+    }
+    this.createWorkflow(session, settings)
+  }
+
+  /**
+   * Commit the durable workflow event ONCE with the resolved settings
+   * snapshot attached (PLAN.md §2.14). Later calls are no-ops: an in-flight
+   * report never adopts changed settings.
+   * @param session - owning Main session.
+   * @param resolvedSettings - frozen snapshot from {@link resolveWorkflowSettings}.
+   * @returns the committed event, or undefined when a workflow already exists.
+   */
+  createWorkflow(
+    session: Session,
+    resolvedSettings: WorkflowSettingsSnapshot,
+  ): SessionEvent<'autoreport/workflow'> | undefined {
+    const previous: WorkflowMetaSnapshot | undefined = this.forSession(session).state.projection().meta
+    if (previous?.initialized === true) return undefined
+    const root = this.config.workspaceRoot ?? session.header.cwd
+    if (root === undefined || root.length === 0) {
+      throw new Error('autoreportdsh: cannot record the workflow without a workspace root')
+    }
+    return this.commit(session, 'autoreport/workflow', {
+      version: AUTOREPORT_SCHEMA_VERSION,
       workflowId: previous?.workflowId ?? String(session.id),
       workspaceRoot: root,
-      language: this.config.reportLanguage,
+      language: resolvedSettings.reportLanguage,
       initialized: true,
-      ...(this.config.specialistRoute === undefined ? {} : { specialistRoute: this.config.specialistRoute }),
+      ...(this.config.specialistModel === undefined ? {} : { specialistRoute: this.config.specialistModel }),
+      settings: resolvedSettings,
     })
   }
 }

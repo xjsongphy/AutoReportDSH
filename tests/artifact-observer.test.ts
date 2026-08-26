@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
-import type { ArtifactSnapshot } from '../src/workflow/events.js'
+import { AUTOREPORT_SCHEMA_VERSION, type ArtifactSnapshot } from '../src/workflow/events.js'
 import {
   attachArtifactObserver,
   emptyArtifactFoldState,
@@ -80,7 +80,7 @@ describe('foldArtifact', () => {
     expect(committed).toHaveLength(1)
     expect(artifacts).toEqual(committed)
     expect(committed[0]).toMatchObject({
-      version: 1,
+      version: AUTOREPORT_SCHEMA_VERSION,
       path: 'Data/Processed/out.csv',
       producedBy: 'DATA_ANALYSIS',
       origin: 'fs-tool',

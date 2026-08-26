@@ -8,7 +8,13 @@ import type AutoReportWorkflowRuntime from '../runtime.js'
 import type { Config } from '../config.js'
 import { isSpecialistRole, rolePolicy, type SpecialistRole } from '../roles.js'
 import { loadSpecialistPersona } from '../personas.js'
-import type { DelegationSnapshot, RoleBindingSnapshot, TaskSnapshot } from '../workflow/events.js'
+import {
+  AUTOREPORT_SCHEMA_VERSION,
+  type DelegationSnapshot,
+  type RoleBindingSnapshot,
+  type TaskSnapshot,
+} from '../workflow/events.js'
+import type { WorkflowSettingsSnapshot } from '../settings.js'
 import { delegationKey } from '../workflow/protocol.js'
 
 const MAX_PROMPT = 16_384
@@ -84,6 +90,25 @@ function normalizeTimeout(raw: unknown, fallback: number): number {
 }
 
 /**
+ * Resolve the child `agentOptions` from the durable settings snapshot,
+ * falling back to composition defaults ONLY when no snapshot is on the
+ * workflow event. `{ inheritMain: true }` passes no route so DSH gives the
+ * child the Main selection. DSH's `AgentOptions` surface carries provider and
+ * model only; a snapshot's `reasoningEffort` rides along until that surface
+ * accepts it.
+ */
+function childAgentOptions(
+  snapshot: WorkflowSettingsSnapshot | undefined,
+  fallbackRoute: Config['specialistModel'],
+): { provider: string; model: string } | undefined {
+  const selection = snapshot?.specialistModel
+  if (selection !== undefined) {
+    return selection.inheritMain ? undefined : { provider: selection.provider, model: selection.model }
+  }
+  return fallbackRoute === undefined ? undefined : { provider: fallbackRoute.provider, model: fallbackRoute.model }
+}
+
+/**
  * Create the fixed-role `send_to_agent` tool over DSH continuable messaging.
  * @param deps - DSH transport, workflow runtime, and plugin config.
  * @returns model-facing tool definition.
@@ -128,11 +153,14 @@ export function createSendToAgentTool(deps: SendToAgentDependencies): ToolDefini
 
       let binding = live.state.bindingForRole(role)
       let firstStart = binding === undefined || binding.provisioning === 'failed'
+      // The workflow's creation-time snapshot outranks composition config;
+      // composition applies only when the event predates snapshots.
+      const settings = live.state.projection().meta?.settings
       if (firstStart) {
         const previousBinding = binding
         const newChild = mintChild()
         const reservation: RoleBindingSnapshot = {
-          version: 1,
+          version: AUTOREPORT_SCHEMA_VERSION,
           role,
           childSessionId: newChild,
           parentSessionId: parent.id,
@@ -153,7 +181,7 @@ export function createSendToAgentTool(deps: SendToAgentDependencies): ToolDefini
       if (binding === undefined) throw new Error(`no role binding available for ${role}`)
 
       const dispatched: DelegationSnapshot = {
-        version: 1,
+        version: AUTOREPORT_SCHEMA_VERSION,
         taskId,
         delegationRevision: revision,
         role,
@@ -176,7 +204,7 @@ export function createSendToAgentTool(deps: SendToAgentDependencies): ToolDefini
       let acceptedMessageId: string
       try {
         if (firstStart) {
-          const agentOptions = deps.config.specialistRoute === undefined ? undefined : deps.config.specialistRoute
+          const agentOptions = childAgentOptions(settings, deps.config.specialistModel)
           const accepted = await deps.subagents.startContinuable({
             provider: 'spawn',
             label: `AutoReport ${role}`,
@@ -230,7 +258,7 @@ export function createSendToAgentTool(deps: SendToAgentDependencies): ToolDefini
         }
       }
 
-      const timeoutMs = normalizeTimeout(args.timeout_ms, deps.config.executionTimeoutMs)
+      const timeoutMs = normalizeTimeout(args.timeout_ms, settings?.executionTimeoutMs ?? deps.config.executionTimeoutMs)
       const outcome = await live.waiters.wait(delegationKey(taskId, revision), timeoutMs)
       if (outcome.status === 'timed_out') {
         const current = live.state.delegationAt(taskId, revision)

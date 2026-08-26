@@ -4,30 +4,30 @@ import { Config } from '../src/config.js'
 describe('autoreportdsh Config', () => {
   it('fills deployment defaults', () => {
     const config = Config({}) as unknown as {
-      reportLanguage: string
-      latexEngine: string
+      defaultReportLanguage: string
+      defaultLatexEngine: string
       executionTimeoutMs: number
-      pythonEnv: undefined
+      defaultPythonEnv: undefined
     }
-    expect(config.reportLanguage).toBe('latex')
-    expect(config.latexEngine).toBe('latexmk')
+    expect(config.defaultReportLanguage).toBe('latex')
+    expect(config.defaultLatexEngine).toBe('latexmk')
     expect(config.executionTimeoutMs).toBe(600_000)
   })
 
   it('accepts a full explicit configuration', () => {
     const config = Config({
-      reportLanguage: 'typst',
-      latexEngine: 'tectonic',
-      pythonEnv: '/usr/bin/python3',
+      defaultReportLanguage: 'typst',
+      defaultLatexEngine: 'tectonic',
+      defaultPythonEnv: '/usr/bin/python3',
       workspaceRoot: '/tmp/exp',
-      specialistRoute: { provider: 'openrouter', model: 'stealth/ox-alpha' },
+      specialistModel: { provider: 'openrouter', model: 'stealth/ox-alpha' },
       executionTimeoutMs: 1000,
     }) as unknown as Record<string, unknown>
-    expect(config['reportLanguage']).toBe('typst')
-    expect(config['specialistRoute']).toEqual({ provider: 'openrouter', model: 'stealth/ox-alpha' })
+    expect(config['defaultReportLanguage']).toBe('typst')
+    expect(config['specialistModel']).toEqual({ provider: 'openrouter', model: 'stealth/ox-alpha' })
   })
 
   it('rejects an unknown language (fail loud)', () => {
-    expect(() => Config({ reportLanguage: 'markdown' as never })).toThrow()
+    expect(() => Config({ defaultReportLanguage: 'markdown' as never })).toThrow()
   })
 })

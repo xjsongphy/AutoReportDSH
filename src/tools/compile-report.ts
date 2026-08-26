@@ -16,13 +16,20 @@ import { existsSync } from 'node:fs'
 import { basename, extname, join } from 'node:path'
 import { defineTool, type ToolDefinition, type ToolExecution } from '@deepseek-ai/dsh-tools'
 import type { Config, LatexEngine, ReportLanguage } from '../config.js'
+import type { WorkflowSettingsSnapshot } from '../settings.js'
 
 const LOG_TAIL_BYTES = 8_192
 
 /** Fully injected dependencies for one compile_report registration. */
 export interface CompileReportDependencies {
-  /** Active plugin configuration (language/engine defaults). */
-  readonly config: Pick<Config, 'reportLanguage' | 'latexEngine'>
+  /** Composition defaults (lowest configurable layer). */
+  readonly config: Pick<Config, 'defaultReportLanguage' | 'defaultLatexEngine'>
+  /**
+   * Durable workflow-settings snapshot from the owning `autoreport/workflow`
+   * event; when present it outranks `config`, which applies only for logs
+   * written before snapshots existed.
+   */
+  readonly settings?: Pick<WorkflowSettingsSnapshot, 'reportLanguage' | 'latexEngine'>
   /**
    * Resolve the calling agent through the SAME mechanism as the role guard.
    * Returns the REPORT caller's session id plus absolute workspace root, or
@@ -104,7 +111,7 @@ export function createCompileReportTool(deps: CompileReportDependencies): ToolDe
       engine: {
         type: 'string',
         enum: ['latexmk', 'tectonic', 'typst'],
-        description: 'Override the configured compiler once; defaults follow plugin config.',
+        description: 'Override the compiler once; defaults follow the resolved workflow settings.',
       },
       entry: { type: 'string', description: "Source file under Report/ (default 'main.tex'/'main.typ')." },
       timeout_ms: { type: 'integer', description: 'Compilation deadline in milliseconds.' },
@@ -128,12 +135,16 @@ export function createCompileReportTool(deps: CompileReportDependencies): ToolDe
       const started = Date.now()
       const caller = deps.resolveCallerRole(exec)
 
+      // Snapshot first; composition config is the fallback ONLY when the
+      // workflow event carries no settings snapshot (pre-layering logs).
+      const configuredLanguage: ReportLanguage = deps.settings?.reportLanguage ?? deps.config.defaultReportLanguage
+      const configuredEngine: LatexEngine = deps.settings?.latexEngine ?? deps.config.defaultLatexEngine
       const effectiveLanguage: ReportLanguage = args.engine === 'typst'
         ? 'typst'
         : args.engine === 'latexmk' || args.engine === 'tectonic'
           ? 'latex'
-          : deps.config.reportLanguage
-      const engine = args.engine ?? (deps.config.reportLanguage === 'latex' ? deps.config.latexEngine : 'typst')
+          : configuredLanguage
+      const engine = args.engine ?? (configuredLanguage === 'latex' ? configuredEngine : 'typst')
 
       if (engine === 'tectonic') {
         if (tectonicCacheDir() === undefined) {

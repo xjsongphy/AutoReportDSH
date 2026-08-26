@@ -12,9 +12,11 @@
 
 import type { SessionId } from '@deepseek-ai/dsh-session'
 import type { SpecialistRole } from '../roles.js'
+import type { SpecialistRoute } from '../config.js'
+import type { WorkflowSettingsSnapshot } from '../settings.js'
 
 /** Current schema version stamped on every snapshot; a field change bumps it. */
-export const AUTOREPORT_SCHEMA_VERSION = 1
+export const AUTOREPORT_SCHEMA_VERSION = 2
 
 /** Validated child-report envelope carried on delegation snapshots (PLAN.md §2.5). */
 export interface WorkflowReportEnvelope {
@@ -167,8 +169,15 @@ export interface WorkflowMetaSnapshot {
   readonly language: 'latex' | 'typst'
   /** Whether `ensureInitialized()` completed for the workspace. */
   readonly initialized: boolean
-  /** Optional specialist route override. */
-  readonly specialistRoute?: { readonly provider: string; readonly model: string }
+  /** Optional specialist route override (composition default at creation time). */
+  readonly specialistRoute?: SpecialistRoute
+  /**
+   * Resolved workflow-settings snapshot frozen at creation (PLAN.md §2.14):
+   * override > project > user > composition > schema defaults. Absent only on
+   * logs written before this field existed; consumers fall back to composition
+   * defaults ONLY in that case.
+   */
+  readonly settings?: WorkflowSettingsSnapshot
 }
 
 declare module '@deepseek-ai/dsh-session/types' {
