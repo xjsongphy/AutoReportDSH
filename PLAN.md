@@ -587,16 +587,58 @@ Anthropic-compatible endpoint from `~/.claude/settings.json`: base URL
 `https://openrouter.ai/api`, key environment variable `OPENROUTER_API_KEY`, and model
 `stealth/ox-alpha` (optionally `stealth/ox-alpha[1M]`). Credentials are never committed.
 
-### 2.14 Configuration
+### 2.14 Settings layering (rev 7)
 
-Validated plugin configuration:
+DSH continues to own providers/credentials, Main model selection, compaction,
+approvals, sandbox/shell configuration, session lifecycle, and UI preferences.
+AutoReport owns ONLY report-workflow policy, layered as:
 
-- `reportLanguage: 'latex' | 'typst'` (default `latex`);
-- `latexEngine: 'latexmk' | 'tectonic'` (default `latexmk`);
-- optional `pythonEnv`, checked before use and passed only to report execution;
-- `workspaceRoot`, defaulting to the session cwd;
-- optional `specialistRoute` (`provider`, `model`);
-- execution policy with network denial as the immutable v1 default.
+```text
+explicit workflow override
+        ↓
+project settings        (<dshHome>/autoreport/<workspaceId>/project.json — external,
+                          never inside the experiment workspace)
+        ↓
+AutoReport user settings (settings namespace 'autoreport')
+        ↓
+Cordis composition Config (plugin defaults)
+        ↓
+schema defaults
+```
+
+Plugin `Config` fields are DEFAULTS (`defaultReportLanguage`, `defaultLatexEngine`,
+`specialistModel` with inherit-from-Main default, `defaultPythonEnv`,
+`executionTimeoutMs`), not live workflow inputs. When a workflow is created,
+`resolveWorkflowSettings()` resolves the full precedence chain and persists the
+effective values as a `WorkflowSettingsSnapshot` in the durable
+`autoreport/workflow` event; execution reads the snapshot, so later settings
+changes never mutate an in-flight report. Project-scoped language selection is
+preserved: `/report-init [--language latex|typst]` updates project settings and
+materializes missing resources for that language without deleting the other
+backend's files; both `Report/main.tex` and `Report/main.typ` may coexist with
+`project.reportLanguage` authoritative.
+
+Fixed authorization stays non-configurable (no allowNetwork/disableRoleIsolation
+surface); AutoReport policy may only narrow DSH capabilities. Specialist model
+reuses DSH routing entirely: children inherit Main by default with one optional
+AutoReport-level specialist override.
+
+### 2.15 Direct human conversation vs workflow delegation (rev 7)
+
+Specialists remain continuable children of MAIN under DSH's parent-owned
+continuation contract; humans talk to them through stock DSH subagent surfaces
+(list/history/prompt/interrupt) with no parallel transport. The domain invariant
+is explicit:
+
+```text
+conversation state != workflow task state
+```
+
+Human follow-ups preserve role context and role-authorized file access (guards
+key on child session identity regardless of message source), but must not create,
+complete, or mutate task/delegation state unless the message carries an active
+workflow delegation context. Every specialist persona carries this rule verbatim;
+MAIN's persona documents that specialists also answer humans directly.
 
 ## 3. Testing and acceptance
 
