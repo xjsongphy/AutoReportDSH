@@ -1,23 +1,15 @@
 /**
  * AutoReportDSH host-plane plugin entry.
  *
- * This phase ships the loadable skeleton only. Later phases register the
- * report workflow service, durable projections, `/report-init`, the role
- * policy guard, and the report-execution capability from this `apply`.
+ * Overlay composition loads `src/host.ts` by absolute path so the global
+ * report router can sit in a sibling row. Tests and the package export keep
+ * this `index` module as the loadable plugin name `autoreportdsh`.
  *
  * @module autoreportdsh
  */
 
-import type { Context } from '@deepseek-ai/cordis'
+export { apply, resolveHostConfig } from './host.js'
+export { name as hostName } from './host.js'
+export { default } from './host.js'
 
 export const name = 'autoreportdsh'
-
-/**
- * Apply the AutoReport domain plugin to a harness context.
- * @param ctx - host-plane context the Loader activates this plugin under.
- */
-export function apply(ctx: Context): void {
-  // Phase scaffold: nothing registered yet. Registrations are effects; later
-  // phases add them here with their own disposers via ctx.effect()/ctx.on().
-  void ctx
-}

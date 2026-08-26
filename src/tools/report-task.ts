@@ -116,19 +116,9 @@ function clearReasons(task: TaskSnapshot): TaskSnapshot {
  * @param state - live projection the tool reads and updates.
  * @returns the tool definition for `ctx.tools.register`.
  */
-export function createReportTaskTool(state: WorkflowState): ToolDefinition {
-  function requireTask(raw: unknown): TaskSnapshot {
-    const taskId = typeof raw === 'string' ? raw : ''
-    const task = state.getTask(taskId)
-    if (task === undefined) throw new Error(`unknown task ${taskId === '' ? '(missing task_id)' : taskId}`)
-    return task
-  }
-
-  /** Resolve the role's bound child id when present; empty until provisioning lands. */
-  function resolveChildId(role: SpecialistRole): SessionId | undefined {
-    return state.bindingForRole(role)?.childSessionId
-  }
-
+export function createReportTaskTool(
+  stateSource: WorkflowState | ((session: Session) => WorkflowState),
+): ToolDefinition {
   return defineTool({
     name: 'report_task',
     description:
@@ -187,6 +177,14 @@ export function createReportTaskTool(state: WorkflowState): ToolDefinition {
     execute(args, exec) {
       const session: Session | undefined = exec.agent?.session
       if (session === undefined) throw new Error('report_task requires an owning agent session')
+      const state = typeof stateSource === 'function' ? stateSource(session) : stateSource
+      const requireTask = (raw: unknown): TaskSnapshot => {
+        const taskId = typeof raw === 'string' ? raw : ''
+        const task = state.getTask(taskId)
+        if (task === undefined) throw new Error(`unknown task ${taskId === '' ? '(missing task_id)' : taskId}`)
+        return task
+      }
+      const resolveChildId = (role: SpecialistRole): SessionId | undefined => state.bindingForRole(role)?.childSessionId
       const commit = <T extends keyof SessionEventMap & string>(type: T, data: SessionEventMap[T]): void => {
         const logged: SessionEvent<T> = appendWorkflowEvent(session, type as never, data as never)
         state.apply(logged as SessionEvent<SessionEventType>)
@@ -311,4 +309,12 @@ export function createReportTaskTool(state: WorkflowState): ToolDefinition {
     },
     presentCall: args => ({ card: 'generic', title: `report_task ${String(args.operation)}`, kind: 'other', rawInput: args }),
   })
+}
+
+export const name = 'autoreportdsh-report-task'
+export const inject = ['tools', 'autoreportWorkflow']
+
+/** Register `report_task` in the AutoReport Main preset scope. */
+export function apply(ctx: import('@deepseek-ai/cordis').Context): void {
+  ctx.tools.register(createReportTaskTool(session => ctx.autoreportWorkflow.forSession(session).state))
 }

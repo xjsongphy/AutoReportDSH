@@ -121,6 +121,8 @@ export interface DelegationSnapshot {
   readonly childSessionId: SessionId
   /** DSH transport evidence: accepted inbox message id. Domain identity stays `(taskId, revision)`. */
   readonly acceptedMessageId?: string
+  /** DSH transport identity of the latest accepted child report. */
+  readonly reportMessageId?: string
   /** Durable phase. */
   readonly phase: DelegationPhase
   /** Latest validated child report; absent until one arrives. */
