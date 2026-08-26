@@ -38,9 +38,14 @@ describe('loadBundledSkills', () => {
     }
   })
 
-  it('keeps the physics quality gates in the writer skill', () => {
+  it('bundles a frozen current-writer projection without workflow-prompt instructions', () => {
     const writer = skills.find(skill => skill.name === 'experiment-report-writer')
-    expect(writer?.content).toContain('Narrative Flow')
-    expect(writer?.content).toContain('Define Before Formula')
+    expect(writer?.content).toContain('38085aededa0')
+    expect(writer?.content).toContain('Narrative requirements')
+    expect(writer?.content).toContain('Claim ledger contract')
+    expect(writer?.content).toContain('Document release gates')
+    expect(writer?.content).not.toContain('report_workflow')
+    expect(writer?.content).not.toContain('report_task')
+    expect(writer?.content).not.toContain('REPORT role')
   })
 })

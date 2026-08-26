@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "kind": "frozen-skill-projection",
+  "target": "resources/skills/experiment-report-writer.md",
+  "runtimeFetch": false,
+  "upstream": {
+    "repository": "https://github.com/xjsongphy/skills",
+    "commit": "38085aededa0",
+    "committedAt": "2026-08-22T06:32:53Z",
+    "modules": [
+      {
+        "path": "writer/references/types/report.md",
+        "blob": "0ad8976948f219cf90ba42ad0c26729c2b6f94e4"
+      },
+      {
+        "path": "writer/references/type-addons/report-experiment.md",
+        "blob": "e116ac4d6c439b36116e26913f986657a74c01dc"
+      },
+      {
+        "path": "writer/references/common/writing.md",
+        "blob": "ef0b2da6939db4a7a9c3aacfc26aeeace496da85"
+      },
+      {
+        "path": "writer/references/common/evidence-and-citations.md",
+        "blob": "bb3d2824300da7414f10a3d7ce94f84fdb5c93b7"
+      },
+      {
+        "path": "writer/references/formats/latex.md",
+        "blob": "240e186faf7a14e144040dd28d73ab5387df73be"
+      },
+      {
+        "path": "writer/references/checks/document.md",
+        "blob": "abb022d99f914d2cf5d814dbd80cf1a259a36584"
+      }
+    ]
+  },
+  "localAdaptations": [
+    "selected only the report-relevant writer modules",
+    "flattened the selected modules into one bundled skill",
+    "replaced internal module-path references with local section references"
+  ]
+}
