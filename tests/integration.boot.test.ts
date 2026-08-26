@@ -73,9 +73,7 @@ describe.skipIf(skipReason !== undefined)('integration: installer CLI against a 
     const composed = readFileSync(join(home, '.agent-presets', 'autoreport-main', 'agent.cordis.yml'), 'utf8')
     expect(composed).toContain('You coordinate automated physics experiment report writing')
     expect(composed).not.toMatch(/__AUTOREPORT_[A-Z_]+__/)
-    expect(composed).toContain(join(REPO_ROOT, 'dist', 'src', 'tools', 'send-to-agent.js'))
-    expect(composed).toContain(join(REPO_ROOT, 'dist', 'src', 'tools', 'report-task.js'))
-    expect(composed).toContain(join(REPO_ROOT, 'dist', 'src', 'skills-preset.js'))
+    expect(composed).toContain(join(REPO_ROOT, 'dist', 'src', 'preset.js'))
 
     // Overlay: stock child-report row disabled; BOTH replacement rows present
     // with absolute built-entry paths and no unresolved tokens.

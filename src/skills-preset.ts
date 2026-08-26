@@ -1,10 +1,10 @@
 /**
  * Preset-scoped registration of the bundled AutoReport skills.
  *
- * This module is mounted as a row of the `autoreport-main` preset
- * composition, so its registrations land in that preset's registry layer and
- * stay invisible to unrelated DSH sessions (PLAN.md §2.12). Specialist
- * children inherit the scope through parent composition.
+ * `src/preset.ts` calls this helper from the single `autoreport-main` preset
+ * contribution, so registrations land in that preset's registry layer and stay
+ * invisible to unrelated DSH sessions (PLAN.md §2.12). Specialist children
+ * inherit the scope through parent composition.
  * @module autoreportdsh-skills
  */
 
@@ -16,8 +16,11 @@ import { loadBundledSkills } from './workspace/skill-loader.js'
 export const name = 'autoreportdsh-skills'
 export const inject = ['skills' as const]
 
-/** Register every bundled skill into the calling context's scope layer. */
-export function apply(ctx: Context): void {
+/**
+ * Register every bundled skill into the calling context's scope layer.
+ * @param ctx - The AutoReport preset context whose skill layer receives them.
+ */
+export function registerBundledSkills(ctx: Context): void {
   for (const skill of loadBundledSkills()) {
     const registration: SkillRegistration = {
       name: skill.name,
@@ -27,4 +30,9 @@ export function apply(ctx: Context): void {
     }
     ctx.skills.register(registration)
   }
+}
+
+/** Preset-plugin compatibility entry; `src/preset.ts` uses the same helper. */
+export function apply(ctx: Context): void {
+  registerBundledSkills(ctx)
 }

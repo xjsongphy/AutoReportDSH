@@ -21,12 +21,10 @@
   config:
     sampleOverCapGlobResults: false
 
-# Project and bundled report skills live in this preset's registry layer.
+# Generic DSH/user/project skills stay available in this preset. AutoReport's
+# bundled skills and domain tools join through the single `autoreport` row below.
 - id: skill-filesystem
   name: '@deepseek-ai/dsh-skill-filesystem'
-
-- id: autoreport-skills
-  name: '__AUTOREPORT_SKILLS_PRESET__'
 
 - id: tool-skill
   name: '@deepseek-ai/dsh-tool-skill'
@@ -50,12 +48,10 @@
         headChars: 4096
         tailChars: 1024
 
-# Fixed report-domain coordination; no generic subagent/workflow/ralph tools.
-- id: autoreport-send-to-agent
-  name: '__AUTOREPORT_SEND_TO_AGENT__'
-
-- id: autoreport-report-task
-  name: '__AUTOREPORT_REPORT_TASK__'
+# One preset-plane AutoReport contribution: scoped bundled skills plus the
+# current fixed-workflow MAIN tools. No generic subagent/workflow/ralph tools.
+- id: autoreport
+  name: '__AUTOREPORT_PRESET__'
 
 - id: tool-ask-user
   name: '@deepseek-ai/dsh-tool-ask-user'

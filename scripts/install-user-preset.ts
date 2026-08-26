@@ -88,9 +88,7 @@ export function install(options: InstallOptions = {}): { presetDir: string; over
     const mainPersona = readFileSync(join(repoRoot, MAIN_PERSONA_FILE), 'utf8')
     const composition = compositionTemplate
       .replace('__AUTOREPORT_MAIN_PERSONA__', indentYamlBlock(mainPersona, 6).trimStart())
-      .replaceAll('__AUTOREPORT_SEND_TO_AGENT__', pluginEntry(repoRoot, 'tools/send-to-agent.js'))
-      .replaceAll('__AUTOREPORT_REPORT_TASK__', pluginEntry(repoRoot, 'tools/report-task.js'))
-      .replaceAll('__AUTOREPORT_SKILLS_PRESET__', pluginEntry(repoRoot, 'skills-preset.js'))
+      .replaceAll('__AUTOREPORT_PRESET__', pluginEntry(repoRoot, 'preset.js'))
     writeFileSync(join(presetDir, 'agent.cordis.yml'), composition)
   } catch (error: unknown) {
     throw new Error(`autoreportdsh: failed to materialize preset under ${presetDir}: ${String(error)}`)

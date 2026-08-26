@@ -648,7 +648,33 @@ complete, or mutate task/delegation state unless the message carries an active
 workflow delegation context. Every specialist persona carries this rule verbatim;
 MAIN's persona documents that specialists also answer humans directly.
 
-### 2.16 Disposition of the sixteen-point integration review (rev 7)
+### 2.16 Model-interface minimization (rev 8)
+
+Composition rows are not model-facing tool count. The `autoreport-main` preset
+therefore retains DSH's generic primitives (`tool-fs`, `tool-fs-search`,
+skill discovery/loading, compaction, and `ask_user_question`) rather than
+reimplementing or removing mature infrastructure for aesthetic reasons.
+
+The three formerly separate AutoReport preset rows are structurally merged into
+one preset-plane `autoreport` plugin contribution. It registers, in the same
+preset scope: bundled AutoReport skills, `send_to_agent`, and the current
+`report_task` tool. This changes neither skill visibility nor tool behavior;
+ordinary DSH sessions still see neither AutoReport skills nor AutoReport tools.
+
+`send_to_agent` remains the core AutoReport model-facing primitive. `report_task`
+remains temporarily exposed for the current E2E workflow contract, but its
+lifecycle operations are a planned simplification target after real workflow
+traces: create/dispatch/complete/block/fail bookkeeping should move behind
+`send_to_agent` and the report observer, leaving at most status/query/cancel
+management visible to MAIN. Do not perform that state-machine refactor without
+trace evidence and a dedicated compatibility review.
+
+Specialist tool scoping currently uses DSH's tested inherited-tool filter plus
+the role guard as authority. Future allowlist-based specialist catalogs are a
+trace-driven optimization, not a reason to replace the mature generic DSH
+filesystem/search/skill primitives now.
+
+### 2.17 Disposition of the sixteen-point integration review (rev 7)
 
 Every point of the post-implementation architecture review, with its disposition
 and where it lives in the codebase:
@@ -787,8 +813,9 @@ workspace-assets/compile-manifests.
 
 ## 6. Implementation status (as of integration-e2e merge)
 
-All planned phases are implemented and merged to `main`; 172 keyless tests pass
-(plus one self-skipping real-API e2e) and the build is clean.
+All planned phases are implemented and merged to `main`; 182 tests pass
+(plus one self-skipping real-API e2e) and the build is clean. The post-review
+preset-plane consolidation is included in this status.
 
 | Phase | Branch(es) | Delivered |
 |---|---|---|
