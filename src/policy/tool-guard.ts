@@ -39,13 +39,24 @@ type Mutation =
   | { readonly kind: 'malformed'; readonly reason: string }
   | { readonly kind: 'unrestricted-exec' }
 
-const UNRESTRICTED_EXECUTORS = new Set([
+/** Executors the role guard refuses outright; specialists must use report_exec. */
+export const UNRESTRICTED_EXECUTORS = new Set([
   'bash',
   'pwsh',
   'bash_persistent',
   'pwsh_persistent',
   'terminal',
   'terminal_open',
+])
+
+/** Model-facing tools whose success mutates workspace files; observed by the artifact observer. */
+export const MUTATION_TOOL_NAMES = new Set([
+  'write',
+  'edit',
+  'str_replace_editor',
+  'delete',
+  'delete_file',
+  'apply_patch',
 ])
 
 function record(value: unknown): Readonly<Record<string, unknown>> | undefined {
