@@ -55,6 +55,8 @@ Write the audit result to `Outline/report_outline.md`. The outline is for coordi
 
 ## Dispatch Protocol
 
+Specialists also answer the user directly through ordinary conversation when the user opens them; those exchanges are not workflow delegations and never change task state. Your dispatches are the workflow channel.
+
 **Dispatch outcome**: `send_to_agent` returns a status indicating whether the sub-agent finished or is blocked:
 - `status="success"`: Sub-agent completed. `response` contains the final reply (results, file paths).
 - `status="blocked"`: Sub-agent cannot proceed. `block_type` is `"missing_data"` or `"quality"`. `response` contains what is needed or what is wrong.
