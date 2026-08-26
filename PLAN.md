@@ -1,4 +1,4 @@
-# AutoReportDSH — Design Plan (rev 5)
+# AutoReportDSH — Design Plan (rev 5, amended rev 7)
 
 Migrate the AutoReportCLI physics-report workflow into a DeepSeek Harness (`dsh`) plugin.
 The scope contract is `../autoreportcli/docs/own-features.md`: preserve AutoReport-owned
@@ -640,6 +640,30 @@ complete, or mutate task/delegation state unless the message carries an active
 workflow delegation context. Every specialist persona carries this rule verbatim;
 MAIN's persona documents that specialists also answer humans directly.
 
+### 2.16 Disposition of the sixteen-point integration review (rev 7)
+
+Every point of the post-implementation architecture review, with its disposition
+and where it lives in the codebase:
+
+| # | Point | Disposition |
+|---|---|---|
+| 1 | Opt-in preset as mode switch | **By design** — installer only adds `autoreport-main` to `$DSH_HOME/.agent-presets`; deployment default preset and ordinary `standard` sessions untouched; no global `enabled` flag (PLAN §2.1) |
+| 2 | DSH-owned vs AutoReport-owned settings split | **Implemented** — `src/settings.ts`; composition `Config` reduced to defaults; user-settings schema ready (`AUTO_REPORT_USER_SETTINGS_SCHEMA`) |
+| 3 | Plugin config = defaults, not live workflow inputs | **Implemented** — fields renamed `defaultReportLanguage`/`defaultLatexEngine`/`defaultPythonEnv`/`specialistModel`; consumers read snapshots |
+| 4 | Project-scoped language selection | **Implemented** — external `<dshHome>/autoreport/<workspaceId>/project.json`; concurrent projects supported |
+| 5 | Persist resolved settings in workflow snapshot | **Implemented** — `WorkflowSettingsSnapshot` in `autoreport/workflow` payload (schema version 2); `resolveWorkflowSettings()` precedence chain |
+| 6 | `/report-init --language latex\|typst` | **Implemented** — updates project settings + materializes missing resources only; other backend files never deleted |
+| 7 | Non-configurable authorization/execution policy | **By design** — fixed role table + immutable `network:'deny'`, no broadening knobs exposed |
+| 8 | Reuse DSH provider infrastructure | **Implemented** — specialists inherit Main route by default; single optional AutoReport-level specialist override (`reasoningEffort` carried in config but not forwarded: DSH `AgentOptions` accepts provider/model/maxTokens only) |
+| 9 | Web settings card via plugin settings seam | **Deferred** — DSH's `SettingsProvider.register` is in-tree but not linked out-of-tree; namespace registration deferred until `@deepseek-ai/dsh-settings` becomes a dependency; documented in README |
+| 10 | Continuable children for four specialists | **Implemented** — one durable child per role, reserve→start→markActive protocol |
+| 11 | Direct human conversations with specialists | **Supported** — stock DSH subagent surfaces; no parallel transport |
+| 12 | Conversation ≠ delegation invariant | **Documented** — PLAN §2.15; enforced by observer correlation on `(task_id, revision)` context |
+| 13 | Specialist prompt rule | **Implemented** — rule present exactly once in each specialist persona; duplicate removed from Common.md |
+| 14 | Role permissions unchanged by human turns | **Enforced** — guard keys on child session identity regardless of message source |
+| 15 | Parent-owned continuation semantics | **Reused** — DSH continuation contract untouched; no independent specialist lifecycle |
+| 16 | Strictly scoped compatibility hooks | **Implemented** — report router falls back to stock `installReportTool` for non-AutoReport children; verified by keyless router tests |
+
 ## 3. Testing and acceptance
 
 ### Keyless unit tests
@@ -752,3 +776,24 @@ workspace-assets/compile-manifests.
     memory layers or prompt-injected summaries is rejected in review.
 12. **Prompt migration**: retain AutoReport quality gates while translating Rust-CLI tool
     names and generic coordination instructions to DSH report tools.
+
+## 6. Implementation status (as of integration-e2e merge)
+
+All planned phases are implemented and merged to `main`; 172 keyless tests pass
+(plus one self-skipping real-API e2e) and the build is clean.
+
+| Phase | Branch(es) | Delivered |
+|---|---|---|
+| DSH compatibility patch | harness `feat/session-append-ignorable` | `Session.append(..., { ignorable: true })` writer surface + cold-load tests |
+| Scaffold | `scaffold` | package, absolute harness links, user-preset installer, overlay template, keyless boot proof |
+| Workflow state | `workflow-state` | role table, `autoreport/*` events + folds, RoleRegistry, waiters, `report_task` tool |
+| Workspace assets | `workspace-assets` | REQUIRED_DIRS init, create-missing-only materializer, `/report-init`, bundled skills |
+| Execution policy | `execution-policy` | mutation guard matrix, seatbelt/bwrap isolation, `report_exec`, live macOS network-denial smoke |
+| Roles & delegation | `roles-delegation` | personas, Main preset, `send_to_agent`, `report_workflow`, global report router, observer |
+| Compile & manifests | `compile-manifests` ×3 lanes | `compile_report`, artifact policy ported from manifest.rs, observer, external manifest projection |
+| Settings layering (rev 7) | `settings-layering` | precedence resolution, project/user settings stores, durable workflow snapshots |
+| Integration & e2e | `integration-e2e` | wiring fixes, assembled smokes, installer boot smoke, OpenRouter config + self-skipping e2e |
+
+Deferred (documented in README): `autoreport` settings namespace card (needs
+`@deepseek-ai/dsh-settings` out-of-tree), Windows support, MinerU network path,
+agent-editable manifest annotations.
