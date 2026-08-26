@@ -141,17 +141,23 @@ describe.skipIf(reason !== undefined)('integration: OpenRouter headless boot (re
 
       // Exactly ONE response happened: parse the trailing result envelope and
       // require a non-empty assistant output — content itself stays unasserted.
+      // Read persistence before asserting so a gateway/model stream anomaly has
+      // enough diagnostics to be investigated without retaining credentials.
       const resultLine = run.stdout.trimEnd().split('\n').at(-1) ?? ''
       const envelope = JSON.parse(resultLine) as { type?: string; output?: string; sessionId?: string }
-      expect(envelope.type).toBe('result')
-      expect(typeof envelope.output).toBe('string')
-      expect(envelope.output!.length).toBeGreaterThan(0)
+      // JSONL persistence buckets sessions below the configured root (for
+      // example by cwd); search recursively rather than assuming a flat root.
+      const logs = readdirSync(sessionsDir, { recursive: true })
+        .filter((name): name is string => typeof name === 'string' && name.endsWith('.jsonl'))
+      const transcript = logs.length === 0 ? '' : readFileSync(join(sessionsDir, logs[0]!), 'utf8')
+      const diagnostic = `driver stdout:\n${run.stdout}\ndriver stderr:\n${run.stderr}\ntranscript:\n${transcript}`
+      expect(envelope.type, diagnostic).toBe('result')
+      expect(typeof envelope.output, diagnostic).toBe('string')
+      expect(envelope.output!.length, diagnostic).toBeGreaterThan(0)
 
       // The durable transcript exists and records assistant output.
-      const logs = readdirSync(sessionsDir).filter(name => name.endsWith('.jsonl'))
-      expect(logs.length).toBeGreaterThanOrEqual(1)
-      const transcript = readFileSync(join(sessionsDir, logs[0]!), 'utf8')
-      expect(transcript).toContain('"assistant/message"')
+      expect(logs.length, diagnostic).toBeGreaterThanOrEqual(1)
+      expect(transcript, diagnostic).toContain('"assistant/message"')
 
       // Coexistence gate: this session never selected the autoreport-main
       // preset, so the loaded AutoReport overlay must have left it entirely

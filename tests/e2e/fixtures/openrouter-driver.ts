@@ -24,8 +24,24 @@ if (configPath === undefined || taskParts.length === 0 || taskParts.every(part =
 let ctx: Awaited<ReturnType<typeof boot>> | undefined
 try {
   ctx = await boot(NAME, resolveConfigPath(configPath, undefined))
-  const result = await runFixtureTurn(ctx, { task: taskParts.join(' ') })
-  process.stdout.write(`${JSON.stringify(result)}\n`)
+  const events: string[] = []
+  const result = await runFixtureTurn(ctx, {
+    task: taskParts.join(' '),
+    onEvent: (_sessionId, event) => {
+      if (event.type === 'llm/retry') {
+        // Test diagnostics only: retry failure fields are already sanitized by
+        // DSH before they enter the durable session log.
+        events.push(`llm/retry:${event.data.failure.code}:${event.data.failure.message}`)
+        return
+      }
+      if (event.type === 'assistant/chunk' && event.data.chunk.type === 'error') {
+        events.push(`assistant/error:${event.data.chunk.error.message}`)
+        return
+      }
+      events.push(event.type)
+    },
+  })
+  process.stdout.write(`${JSON.stringify({ ...result, events })}\n`)
 } catch (error: unknown) {
   process.stderr.write(`${NAME}: ${error instanceof Error ? error.message : String(error)}\n`)
   process.exitCode = 1
