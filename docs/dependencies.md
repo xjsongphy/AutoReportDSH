@@ -5,7 +5,8 @@ iterating rapidly; PLAN.md risk 9).
 
 ## Pinned harness state
 
-- Checkout: `/Users/xjsongphy/Develop/deepseek-harness`
+- Checkout: sibling directory `../deepseek-harness` (all `link:` specifiers are
+  repository-relative so clean clones, CI, and other machines resolve them)
 - Commit at scaffold time: `b150a551b8d465e31e418e1b2eaf5e79bbb7d28e`
   (`Merge pull request #2908 from deepseek-harness/release/dsh-0.1.1-rc.2`)
 - Built: full `pnpm run build` completed successfully on this commit.
