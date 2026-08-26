@@ -91,6 +91,12 @@ asserts only that **a response happened** (non-empty assistant output plus a
 persisted transcript) — never any particular model text. Runtime is bounded
 (<120s including cleanup).
 
+The e2e is also the real-API coexistence smoke: its session runs the stock
+`agent-spine-demo` composition (no `autoreport-main` preset), so with both
+overlay rows loaded it additionally asserts the transcript contains **no**
+`autoreport/*` events — the overlay must leave sessions that did not select
+AutoReport entirely untouched (see `src/membership.ts`).
+
 Activation checklist:
 
 | Condition | Effect |

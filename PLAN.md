@@ -38,6 +38,14 @@ AutoReportDSH owns report semantics and policy.
 
 ### Intentional v1 decisions
 
+- Session membership is explicit (compatibility invariant): loading the AutoReportDSH
+  overlay must not change the behavior of sessions that did not explicitly select it.
+  Only top-level sessions actually running the `autoreport-main` preset (header value or a
+  later logged `agent-preset/selected`, matching DSH's `resolveSessionPreset`) join the
+  workflow runtime as MAIN, and only RoleRegistry-bound children are specialists. Every
+  other session keeps stock DSH behavior: no initialization, no workflow events, stock
+  write/shell policy, stock child reporting. "Unknown to AutoReport" means "not our
+  session", never "invalid AutoReport session" (see `src/membership.ts`).
 - Fixed roles communicate only through DSH’s authenticated parent→child `followup()` and
   child→parent `reportFrom()` paths. AutoReport does not add a broadcast bus or arbitrary
   peer mailbox.

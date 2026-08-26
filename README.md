@@ -46,6 +46,17 @@ with the AutoReport router, so specialists report through `report_workflow` whil
 DSH children keep stock reporting. The first admitted Main turn initializes the experiment
 workspace idempotently; `/report-init [--language latex|typst]` is the explicit repair path.
 
+### Session membership & coexistence
+
+The overlay installs a global session listener and a global tool guard, so ownership is
+explicit (see `src/membership.ts`): only top-level sessions actually running the
+`autoreport-main` preset — header value or a later logged `agent-preset/selected`
+event, matching DSH's own preset resolution — join the workflow runtime as MAIN, and
+only RoleRegistry-bound children are specialists. Every other session keeps stock DSH
+behavior untouched: no workspace initialization, no workflow events, unrestricted writes,
+stock shell tools, and the stock child report tool. "Unknown to AutoReport" means "not our
+session", never "invalid AutoReport session".
+
 For provider setup against OpenRouter (`stealth/ox-alpha`), see
 [docs/openrouter-testing.md](docs/openrouter-testing.md); the automated e2e lives at
 `tests/e2e/openrouter.e2e.test.ts` and self-skips unless `OPENROUTER_API_KEY` is set.
