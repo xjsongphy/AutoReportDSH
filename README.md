@@ -165,7 +165,9 @@ MAIN delegates bounded work through `send_to_agent`; specialists read the shared
 
 ## Configuration
 
-DSH continues to own provider credentials, Main-model selection, compaction, approvals, generic sandbox/shell policy, sessions, and Web UI preferences.
+DSH continues to own provider credentials, provider adapters, endpoint/protocol configuration, model catalogs, Main-model selection, compaction, approvals, generic sandbox/shell policy, sessions, and Web UI preferences.
+
+DSH provides its direct `deepseek-official` adapter plus the `dsh-llm-pi-ai` multi-provider adapter backed by the pi-ai provider/model catalog, and it also permits declared custom routes. Configure OpenAI, Anthropic, Gemini, OpenRouter, DeepSeek, and other supported routes through DSH's Models/settings surface—not through AutoReportDSH. AutoReportDSH never stores API keys or implements a second provider abstraction.
 
 AutoReportDSH owns report-workflow settings. Values resolve once when a workflow begins:
 
@@ -188,7 +190,7 @@ Current composition defaults include:
 ```text
 defaultReportLanguage   latex
 defaultLatexEngine      latexmk
-specialistModel         inherit Main
+specialistModel         inherit Main (optional DSH route selection only)
 defaultPythonEnv        ambient PATH
 executionTimeoutMs      600000
 ```

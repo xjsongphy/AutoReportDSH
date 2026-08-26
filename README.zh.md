@@ -165,7 +165,9 @@ MAIN 通过 `send_to_agent` 有界地委派工作；specialist 读取共享工�
 
 ## 配置
 
-DSH 继续负责 provider 凭证、MAIN 的模型选择、压缩、审批、通用 sandbox/shell、session 生命周期和 Web UI 偏好。
+DSH 继续负责 provider 凭证、provider adapter、endpoint/protocol 配置、模型 catalog、MAIN 的模型选择、压缩、审批、通用 sandbox/shell、session 生命周期和 Web UI 偏好。
+
+DSH 同时提供直连的 `deepseek-official` adapter、由 pi-ai provider/model catalog 驱动的 `dsh-llm-pi-ai` 多 provider adapter，以及手写 custom route 的能力。OpenAI、Anthropic、Gemini、OpenRouter、DeepSeek 等 route 都应在 DSH 的 Models/settings 中配置；AutoReportDSH 不保存 API key，也不维护第二套 provider abstraction。
 
 AutoReportDSH 只管理报告工作流配置。每个字段按以下优先级解析一次：
 
@@ -188,7 +190,7 @@ schema 默认值
 ```text
 defaultReportLanguage   latex
 defaultLatexEngine      latexmk
-specialistModel         继承 MAIN
+specialistModel         继承 MAIN（仅可选 DSH route 选择策略）
 defaultPythonEnv        环境 PATH
 executionTimeoutMs      600000
 ```
