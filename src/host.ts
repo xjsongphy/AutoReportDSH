@@ -8,6 +8,7 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import type { Config } from './config.js'
+import { isAutoReportMainSession } from './membership.js'
 import { createRoleToolGuard } from './policy/tool-guard.js'
 import AutoReportWorkflowRuntime, { type RuntimeOptions } from './runtime.js'
 import { createReportInitCommand } from './workspace/command.js'
@@ -77,6 +78,17 @@ export function apply(ctx: Context, config: Partial<Config> = {}, options: Runti
     commands.register({
       ...definition,
       async handler(invocation) {
+        // Commands are registered by the host-wide command service, so unlike
+        // preset-scoped tools their visibility alone cannot establish product
+        // membership. Reject before parsing, saving project settings, or
+        // materializing files: a stock session must have no AutoReport side
+        // effects merely because the overlay is loaded.
+        if (!isAutoReportMainSession(invocation.agent.session)) {
+          return {
+            kind: 'error',
+            text: "report-init is available only in an 'autoreport-main' session.",
+          }
+        }
         const result = await definition.handler(invocation)
         if (result.kind === 'success') runtime.maybeInitialize(invocation.agent.session)
         return result

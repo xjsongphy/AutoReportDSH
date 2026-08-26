@@ -64,8 +64,10 @@ export default class AutoReportWorkflowRuntime extends Service {
   readonly settingsHome: string | undefined
   private readonly manifestHome: string | undefined
   private readonly parents = new Map<string, ParentWorkflowRuntime>()
+  // Retain admitted parent sessions for workflow/artifact ownership, but do
+  // not use historical admission as current Main authorization: the effective
+  // preset may change while a root is still blank.
   private readonly mainSessions = new Map<string, Session>()
-  private readonly mainSessionIds = new Set<string>()
   private readonly artifactFolds = new Map<string, ArtifactFoldState>()
 
   /**
@@ -191,7 +193,8 @@ export default class AutoReportWorkflowRuntime extends Service {
    * @param sessionId - candidate session id.
    */
   isMainSession(sessionId: SessionId): boolean {
-    return this.mainSessionIds.has(sessionId)
+    const session = this.mainSessions.get(String(sessionId))
+    return session !== undefined && isAutoReportMainSession(session)
   }
 
   /**
@@ -229,7 +232,6 @@ export default class AutoReportWorkflowRuntime extends Service {
     const created = { state: WorkflowState.fromSession(session), waiters: new WaiterRegistry() }
     this.parents.set(session.id, created)
     this.mainSessions.set(String(session.id), session)
-    this.mainSessionIds.add(session.id)
     for (const binding of created.state.projection().bindingsByRole.values()) {
       if (binding.provisioning !== 'failed' && this.roleRegistry.lookup(binding.childSessionId) === undefined) {
         this.roleRegistry.registerReserved(binding)
@@ -295,8 +297,8 @@ export default class AutoReportWorkflowRuntime extends Service {
    * @param session - Main session whose cwd (or configured root) is the experiment workspace.
    */
   maybeInitialize(session: Session): void {
-    // The explicit /report-init recovery path may invoke this from any root;
-    // initialization itself stays preset-gated so stock sessions are untouched.
+    // The host command wrapper admits only autoreport-main callers; retain
+    // this gate here as defense in depth for any future direct caller.
     if (!isAutoReportMainSession(session)) return
     const live = this.forSession(session)
     if (live.state.projection().meta?.initialized === true) return

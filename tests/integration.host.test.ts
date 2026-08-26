@@ -30,8 +30,7 @@ import { AUTOREPORT_MAIN_PRESET } from '../src/membership.js'
 import { REQUIRED_DIRS } from '../src/workspace/init.js'
 import { resolveWorkflowSettings, saveProjectSettings, workspaceIdForRoot } from '../src/settings.js'
 import { AUTOREPORT_SCHEMA_VERSION, type RoleBindingSnapshot } from '../src/workflow/events.js'
-import * as sendToAgentModule from '../src/tools/send-to-agent.js'
-import * as reportTaskModule from '../src/tools/report-task.js'
+import * as presetModule from '../src/preset.js'
 import * as reportRouterModule from '../src/tools/report-router.js'
 
 const CONFIG: Config = {
@@ -100,14 +99,15 @@ interface Assembled {
   continuableSetups: ((childCtx: Parameters<typeof reportRouterModule.installRoutedReportTool>[0]) => () => void)[]
   startedSpecs: { childId: unknown; label: string }[]
   reportInitCommand: { handler: (invocation: unknown) => Promise<{ kind: string; text?: string }> } | undefined
+  presetSkillNames: string[]
 }
 
 /**
  * Boot the assembled stack on a real Context: fake transport services first,
  * then the REAL tool pipeline, then the host plugin (runtime + guard +
  * `/report-init`) and the global report router — the same rows the generated
- * overlay installs, plus the two preset-plane tools mounted through their
- * production `apply()` functions.
+ * overlay installs, plus the single preset-plane product contribution mounted
+ * through its production `apply()` function.
  */
 async function assemble(options: { projectLanguage?: 'latex' | 'typst' } = {}): Promise<Assembled> {
   const ctx = new Context()
@@ -118,6 +118,7 @@ async function assemble(options: { projectLanguage?: 'latex' | 'typst' } = {}): 
   // harness's own specs substitute plain objects the same way).
   const continuableSetups: Assembled['continuableSetups'] = []
   const startedSpecs: Assembled['startedSpecs'] = []
+  const presetSkillNames: string[] = []
   ctx.provide('subagents', {
     registerContinuableSetup: (contribution: Assembled['continuableSetups'][number]) => {
       continuableSetups.push(contribution)
@@ -144,6 +145,12 @@ async function assemble(options: { projectLanguage?: 'latex' | 'typst' } = {}): 
     tools: () => () => {},
     section: () => () => {},
   } as never)
+  ctx.provide('skills', {
+    register: (registration: { name: string }) => {
+      presetSkillNames.push(registration.name)
+      return () => {}
+    },
+  } as never)
   ctx.provide('subprocess', {
     resolveExecutable: async (command: string) => command,
     spawn: () => {
@@ -163,9 +170,9 @@ async function assemble(options: { projectLanguage?: 'latex' | 'typst' } = {}): 
   applyHost(ctx, { ...CONFIG, workspaceRoot }, { settingsHome: home, manifestHome: home })
   // Overlay row 2: the single global continuable-child report router.
   reportRouterModule.apply(ctx)
-  // Preset-plane rows, mounted through their production apply() functions.
-  sendToAgentModule.apply(ctx)
-  reportTaskModule.apply(ctx)
+  // The one preset-plane product contribution: its real apply() registers
+  // scoped bundled skills plus send_to_agent and report_task together.
+  presetModule.apply(ctx)
 
   // A stand-in for the deployment's filesystem write tool: same tool NAME the
   // role guard parses, backed by a real file mutation so success results feed
@@ -208,6 +215,7 @@ async function assemble(options: { projectLanguage?: 'latex' | 'typst' } = {}): 
     continuableSetups,
     startedSpecs,
     reportInitCommand,
+    presetSkillNames,
   }
 }
 
@@ -337,6 +345,11 @@ describe('integration: assembled host (real context)', () => {
 
   it('initializes the workspace once with the frozen settings snapshot on the workflow event', async () => {
     const assembled = await assemble({ projectLanguage: 'typst' })
+    expect(assembled.presetSkillNames.sort()).toEqual([
+      'experiment-report-writer',
+      'latex-compile',
+      'typst-compile',
+    ])
     admitFirstTurn(assembled)
     for (const dir of REQUIRED_DIRS) expect(existsSync(join(assembled.workspaceRoot, dir))).toBe(true)
     const meta = assembled.runtime.forSession(assembled.mainSession).state.projection().meta
@@ -456,11 +469,30 @@ describe('integration: assembled host (real context)', () => {
     await assembled.ctx.fiber?.dispose()
   })
 
-  it('/report-init switches languages through project settings and keeps both backends’ files', async () => {
+  it('/report-init is membership-gated, then switches languages without deleting either backend', async () => {
     const assembled = await assemble()
-    admitFirstTurn(assembled)
     const command = assembled.reportInitCommand
     if (command === undefined) throw new Error('/report-init was not registered by the host plugin')
+
+    // The command service is host-global, so a stock caller must be rejected
+    // BEFORE settings persistence or workspace materialization.
+    const stockCwd = makeTemp('autoreport-it-report-init-stock-')
+    const stockSession = Session.create(SessionId('it-report-init-stock'), undefined, {
+      version: 0,
+      id: SessionId('it-report-init-stock'),
+      createdAt: Date.now(),
+      cwd: stockCwd,
+    })
+    const rejected = await command.handler({
+      rawInput: '--language typst',
+      agent: { session: stockSession },
+    }) as { kind: string; text?: string }
+    expect(rejected.kind).toBe('error')
+    expect(rejected.text).toContain("only in an 'autoreport-main' session")
+    for (const dir of REQUIRED_DIRS) expect(existsSync(join(stockCwd, dir))).toBe(false)
+    expect(existsSync(join(assembled.home, 'autoreport', workspaceIdForRoot(stockCwd), 'project.json'))).toBe(false)
+
+    admitFirstTurn(assembled)
     const invoke = (rawInput: string) => command.handler({
       rawInput,
       agent: { session: assembled.mainSession },
@@ -487,6 +519,30 @@ describe('integration: assembled host (real context)', () => {
     // The durable snapshot NEVER adopts the later project change (PLAN §2.14).
     const after = assembled.runtime.forSession(assembled.mainSession).state.projection().meta?.settings
     expect(after).toEqual(before)
+  })
+
+  it('releases Main guard restrictions when an admitted root switches away from autoreport-main', async () => {
+    const assembled = await assemble()
+    admitFirstTurn(assembled)
+    const initiallyDenied = await execute(assembled.ctx, 'write', {
+      file_path: join(assembled.workspaceRoot, 'Report', 'main.tex'),
+      content: 'denied while MAIN',
+    }, assembled.mainAgent, assembled.mainSession)
+    expect(initiallyDenied.isError).toBe(true)
+
+    // Effective membership follows the newest selection, rather than historical
+    // workflow admission. The global guard must now pass this root through.
+    publish(assembled.ctx, assembled.mainSession, 'agent-preset/selected', { agentPreset: 'minimal' })
+    expect(assembled.runtime.isMainSession(assembled.mainSession.id)).toBe(false)
+    expect(assembled.runtime.ownsSession(assembled.mainSession)).toBe(false)
+    const released = await execute(assembled.ctx, 'write', {
+      file_path: join(assembled.workspaceRoot, 'Report', 'main.tex'),
+      content: 'stock policy restored after preset switch',
+    }, assembled.mainAgent, assembled.mainSession)
+    expect(released.isError).toBe(false)
+    expect(readFileSync(join(assembled.workspaceRoot, 'Report', 'main.tex'), 'utf8')).toContain('stock policy restored')
+
+    await assembled.ctx.fiber?.dispose()
   })
 
   it('stock-session-is-untouched: a standard session in a loaded deployment keeps stock behavior', async () => {

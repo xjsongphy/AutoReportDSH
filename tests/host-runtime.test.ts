@@ -112,7 +112,7 @@ describe('host workflow runtime', () => {
     expect(() => runtime.forSession(stock)).toThrow(/requires the 'autoreport-main' preset/)
   })
 
-  it('admits autoreport-main roots and ignores a later switch away while blank', () => {
+  it('admits autoreport-main roots and releases Main membership after a later preset switch', () => {
     const ctx = new Context()
     const runtime = new AutoReportWorkflowRuntime(ctx, CONFIG)
     const session = rootSession('switchable', AUTOREPORT_MAIN_PRESET)
@@ -124,6 +124,7 @@ describe('host workflow runtime', () => {
     // ends AutoReport ownership (DSH's own resolveSessionPreset semantics).
     session.append('agent-preset/selected', { agentPreset: 'other-preset' })
     expect(isAutoReportMainSession(session)).toBe(false)
+    expect(runtime.isMainSession(SessionId('switchable'))).toBe(false)
     expect(runtime.ownsSession(session)).toBe(false)
   })
 })

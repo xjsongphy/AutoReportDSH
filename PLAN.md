@@ -512,7 +512,9 @@ availability. No network-capable generic web tool is mounted in the report prese
 AutoReportCLI initializes/materializes the project during normal startup. AutoReportDSH
 preserves that behavior at the domain boundary: the first admitted report workflow turn
 calls idempotent `ensureInitialized()`. `/report-init` remains an explicit idempotent
-recovery/reinitialization command registered through `ctx.commands`.
+recovery/reinitialization command registered through `ctx.commands`. Because that
+command registry is host-global, its handler verifies effective `autoreport-main`
+membership before parsing input, saving project settings, or materializing files.
 
 Initialization creates AutoReportCLI’s `REQUIRED_DIRS` (`loader.rs`):
 
@@ -813,9 +815,10 @@ workspace-assets/compile-manifests.
 
 ## 6. Implementation status (as of integration-e2e merge)
 
-All planned phases are implemented and merged to `main`; 182 tests pass
+All planned phases are implemented and merged to `main`; 183 tests pass
 (plus one self-skipping real-API e2e) and the build is clean. The post-review
-preset-plane consolidation is included in this status.
+preset-plane consolidation and lifecycle/coexistence follow-ups are included in
+this status.
 
 | Phase | Branch(es) | Delivered |
 |---|---|---|
