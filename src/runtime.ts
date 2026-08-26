@@ -1,7 +1,11 @@
 import { Service, type Context } from '@deepseek-ai/cordis'
 import type { Session, SessionEvent, SessionEventMap, SessionEventType, SessionId } from '@deepseek-ai/dsh-session'
+import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
 import type { Config } from './config.js'
+import { renderManifest, writeManifests } from './artifacts/manifest.js'
+import { emptyArtifactFoldState, foldArtifact, type ArtifactCaller, type ArtifactFoldState } from './artifacts/observer.js'
 import { AUTOREPORT_SCHEMA_VERSION, type WorkflowMetaSnapshot } from './workflow/events.js'
+import { delegationKey } from './workflow/protocol.js'
 import { WorkflowState } from './workflow/service.js'
 import { RoleRegistry } from './workflow/role-registry.js'
 import { WaiterRegistry } from './workflow/waiters.js'
@@ -37,6 +41,14 @@ export interface ParentWorkflowRuntime {
   readonly waiters: WaiterRegistry
 }
 
+/** Construction options beyond configuration (host wiring / tests). */
+export interface RuntimeOptions {
+  /** Harness home override for external project settings; absent resolves the DSH home. */
+  readonly settingsHome?: string
+  /** Root receiving external manifest projections; absent resolves the DSH home lazily. */
+  readonly manifestHome?: string
+}
+
 /**
  * Host-plane AutoReport runtime keyed by Main Session. The service owns no
  * second persistence or queue: it folds committed Session events and keeps
@@ -49,8 +61,11 @@ export default class AutoReportWorkflowRuntime extends Service {
   readonly config: Config
   /** Harness home override for external project settings; absent resolves the DSH home. */
   readonly settingsHome: string | undefined
+  private readonly manifestHome: string | undefined
   private readonly parents = new Map<string, ParentWorkflowRuntime>()
+  private readonly mainSessions = new Map<string, Session>()
   private readonly mainSessionIds = new Set<string>()
+  private readonly artifactFolds = new Map<string, ArtifactFoldState>()
 
   /**
    * Create the host runtime and observe committed report messages.
@@ -58,11 +73,16 @@ export default class AutoReportWorkflowRuntime extends Service {
    * @param config - resolved plugin configuration.
    * @param options - `settingsHome` overrides `<dshHome>` for project settings (tests).
    */
-  constructor(ctx: Context, config: Config = DEFAULT_CONFIG, options: { settingsHome?: string } = {}) {
+  constructor(ctx: Context, config: Config = DEFAULT_CONFIG, options: RuntimeOptions = {}) {
     super(ctx, 'autoreportWorkflow')
     this.config = config
     this.settingsHome = options.settingsHome
+    this.manifestHome = options.manifestHome
     ctx.on('session/event', (session, event) => {
+      // Artifact facts come from BOTH planes: Main's own Outline writes and
+      // specialist children's role-scoped mutations. Fold every stream; the
+      // caller resolution below decides who is authorized to have produced.
+      this.foldArtifacts(session, event)
       // Continuable children have a parent; AutoReport workflow facts live only on Main.
       if (session.header.parentSession !== undefined) return
       const live = this.forSession(session)
@@ -76,6 +96,84 @@ export default class AutoReportWorkflowRuntime extends Service {
         commit: (type, data) => this.commit(session, type, data),
       })
     })
+  }
+
+  /**
+   * Resolve the calling role and workspace for one observed session, using the
+   * same fail-closed identity sources as the tool guard: MAIN membership or a
+   * synchronous RoleRegistry entry. Unknown sessions produce nothing.
+   */
+  private resolveArtifactCaller(sessionId: string): ArtifactCaller | undefined {
+    const main = this.mainSessions.get(sessionId)
+    if (main !== undefined) {
+      const root = this.config.workspaceRoot ?? main.header.cwd
+      return root === undefined ? undefined : { role: 'MAIN', workspaceRoot: root }
+    }
+    const entry = this.roleRegistry.lookup(sessionId)
+    if (entry === undefined) return undefined
+    const owner = this.workflowForChild(entry.binding.childSessionId)
+    const root = this.config.workspaceRoot ?? owner?.runtime.state.projection().meta?.workspaceRoot
+    return root === undefined ? undefined : { role: entry.binding.role, workspaceRoot: root }
+  }
+
+  /** Fold one committed event of ANY session into artifact observations. */
+  private foldArtifacts(session: Session, event: SessionEvent): void {
+    if (event.type !== 'tool/call' && event.type !== 'tool/result') return
+    const sessionId = String(session.id)
+    const caller = this.resolveArtifactCaller(sessionId)
+    if (caller === undefined) return
+    let state = this.artifactFolds.get(sessionId)
+    if (state === undefined) {
+      state = emptyArtifactFoldState()
+      this.artifactFolds.set(sessionId, state)
+    }
+    foldArtifact(event, caller, state, {
+      sessionId,
+      currentDelegationKey: childId => this.currentDelegationKey(childId),
+      commit: (ownerId, snapshot) => {
+        const owner = this.mainSessions.get(ownerId)
+        if (owner === undefined) return
+        this.commit(owner, 'autoreport/artifact', snapshot)
+      },
+    })
+  }
+
+  /** Current open attempt key for one specialist child, when one is waiting. */
+  private currentDelegationKey(childSessionId: string): { taskId: string; key: string } | undefined {
+    const owner = this.workflowForChild(childSessionId as SessionId)
+    if (owner === undefined) return undefined
+    for (const task of owner.runtime.state.projection().tasks.values()) {
+      const current = owner.runtime.state.currentDelegation(task.taskId)
+      if (current?.childSessionId !== childSessionId) continue
+      if (current.phase !== 'dispatched' && current.phase !== 'waiting_for_child') continue
+      return { taskId: task.taskId, key: delegationKey(task.taskId, current.delegationRevision) }
+    }
+    return undefined
+  }
+
+  /**
+   * Project the accumulated artifact snapshots into the EXTERNAL manifest
+   * cache under the harness home (`<home>/autoreport/<workspaceId>/manifests/`),
+   * never inside the experiment workspace. Failures are contained: the
+   * durable artifact facts are already committed, and a projection hiccup
+   * must never break the tool pipeline that produced them.
+   */
+  private projectManifests(session: Session): void {
+    try {
+      const home = this.manifestHome ?? resolveDshHome()
+      const live = this.forSession(session).state.projection()
+      if (live.meta?.initialized !== true) return
+      const artifacts = live.artifacts
+      if (artifacts.length === 0) return
+      writeManifests(home, workspaceIdForRoot(live.meta.workspaceRoot), renderManifest(artifacts))
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error)
+      try {
+        this.ctx.logger.warn('autoreportdsh: manifest projection failed: %s', message)
+      } catch {
+        // A bare test Context may lack a working logger; containment already happened.
+      }
+    }
   }
 
   /**
@@ -99,6 +197,7 @@ export default class AutoReportWorkflowRuntime extends Service {
     if (existing !== undefined) return existing
     const created = { state: WorkflowState.fromSession(session), waiters: new WaiterRegistry() }
     this.parents.set(session.id, created)
+    this.mainSessions.set(String(session.id), session)
     this.mainSessionIds.add(session.id)
     for (const binding of created.state.projection().bindingsByRole.values()) {
       if (binding.provisioning !== 'failed' && this.roleRegistry.lookup(binding.childSessionId) === undefined) {
@@ -124,7 +223,23 @@ export default class AutoReportWorkflowRuntime extends Service {
   ): SessionEvent<T> {
     const event = appendWorkflowEvent(session, type, data)
     this.forSession(session).state.apply(event as SessionEvent<SessionEventType>)
+    if (type === 'autoreport/artifact') this.projectManifests(session)
     return event
+  }
+
+  /**
+   * Resolve the owning MAIN session and live runtime for one bound child via
+   * the synchronous binding alone — no sessions-service round trip, so child
+   * setup and observers can use it before any registry is published.
+   * @param childId - specialist child Session id.
+   * @returns owning MAIN session with its parent runtime, or undefined.
+   */
+  workflowForChild(childId: SessionId): { session: Session; runtime: ParentWorkflowRuntime } | undefined {
+    const entry = this.roleRegistry.lookup(childId)
+    if (entry === undefined) return undefined
+    const session = this.mainSessions.get(String(entry.binding.parentSessionId))
+    if (session === undefined) return undefined
+    return { session, runtime: this.forSession(session) }
   }
 
   /**

@@ -9,7 +9,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { Config } from './config.js'
 import { createRoleToolGuard } from './policy/tool-guard.js'
-import AutoReportWorkflowRuntime from './runtime.js'
+import AutoReportWorkflowRuntime, { type RuntimeOptions } from './runtime.js'
 import { createReportInitCommand } from './workspace/command.js'
 import { loadProjectSettings, saveProjectSettings, workspaceIdForRoot } from './settings.js'
 
@@ -42,12 +42,20 @@ export function resolveHostConfig(raw: Partial<Config> = {}): Config {
 
 /**
  * Apply the AutoReport host-plane plugin.
+ *
+ * This single registration owns every host-plane piece (PLAN.md §2): the
+ * workflow runtime service (`autoreportWorkflow`, provided via the Service
+ * effect), the global monotonic role guard, first-turn settings-snapshot
+ * initialization plus `/report-init`, and artifact observation with external
+ * manifest projection over every session's committed tool stream.
  * @param ctx - host-plane context the Loader activates this plugin under.
  * @param config - optional overlay configuration.
+ * @param options - optional home overrides for tests; production resolves
+ *   the DSH home itself.
  */
-export function apply(ctx: Context, config: Partial<Config> = {}): void {
+export function apply(ctx: Context, config: Partial<Config> = {}, options: RuntimeOptions = {}): void {
   const resolved = resolveHostConfig(config)
-  const runtime = new AutoReportWorkflowRuntime(ctx, resolved)
+  const runtime = new AutoReportWorkflowRuntime(ctx, resolved, options)
   ctx.tools.guard(createRoleToolGuard({
     registry: runtime.roleRegistry,
     isMainSession: sessionId => runtime.isMainSession(sessionId),
