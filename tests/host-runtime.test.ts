@@ -1,10 +1,14 @@
 import { existsSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import { SettingsProvider, type SettingsNamespace } from '@deepseek-ai/dsh-settings'
 import { Session, SessionId } from '@deepseek-ai/dsh-session'
+import {
+  effectiveSandboxMode,
+  effectiveSandboxWorkspaceRoot,
+} from '@deepseek-ai/dsh-sandbox-policy/src/session-mode.ts'
 import type { Config } from '../src/config.js'
 import AutoReportWorkflowRuntime from '../src/runtime.js'
 import { AUTOREPORT_MAIN_PRESET, isAutoReportMainSession } from '../src/membership.js'
@@ -48,12 +52,13 @@ class MemorySettings extends SettingsProvider {
 }
 
 /** A detached root session whose header names its composing agent preset. */
-function rootSession(id: string, preset: string | undefined): Session {
+function rootSession(id: string, preset: string | undefined, cwd?: string): Session {
   return Session.create(SessionId(id), undefined, {
     version: 0,
     id: SessionId(id),
     createdAt: Date.now(),
     ...(preset === undefined ? {} : { agentPreset: preset }),
+    ...(cwd === undefined ? {} : { cwd }),
   })
 }
 
@@ -161,6 +166,8 @@ describe('host workflow runtime', () => {
     expect(runtime.ownsSession(stock)).toBe(false)
     for (const dir of REQUIRED_DIRS) expect(existsSync(join(root, dir))).toBe(false)
     expect(stock.events.some(event => event.type.startsWith('autoreport/'))).toBe(false)
+    expect(stock.events.some(event => event.type === 'sandbox/mode')).toBe(false)
+    expect(stock.events.some(event => event.type === 'sandbox/workspace-root')).toBe(false)
     expect(() => runtime.forSession(stock)).toThrow(/requires the 'autoreport-main' preset/)
   })
 
@@ -178,5 +185,42 @@ describe('host workflow runtime', () => {
     expect(isAutoReportMainSession(session)).toBe(false)
     expect(runtime.isMainSession(SessionId('switchable'))).toBe(false)
     expect(runtime.ownsSession(session)).toBe(false)
+  })
+
+  it('does not pin MAIN sandbox when autoreport-main is selected then switched before any turn', () => {
+    const root = mkdtempSync(join(tmpdir(), 'autoreport-runtime-'))
+    tempDirs.push(root)
+    const ctx = new Context()
+    const runtime = new AutoReportWorkflowRuntime(ctx, { ...CONFIG, workspaceRoot: root })
+    const session = rootSession('blank-switch', undefined, root)
+
+    session.append('agent-preset/selected', { agentPreset: AUTOREPORT_MAIN_PRESET })
+    ctx.emit('session/event', session, session.events.at(-1)!)
+    session.append('agent-preset/selected', { agentPreset: 'standard' })
+    ctx.emit('session/event', session, session.events.at(-1)!)
+
+    expect(effectiveSandboxMode(session.events)).toBeUndefined()
+    expect(effectiveSandboxWorkspaceRoot(session.events)).toBeUndefined()
+    expect(session.events.some(event => event.type === 'sandbox/mode')).toBe(false)
+    expect(session.events.some(event => event.type === 'sandbox/workspace-root')).toBe(false)
+    expect(runtime.ownsSession(session)).toBe(false)
+  })
+
+  it('pins MAIN sandbox to Outline after the first user message on autoreport-main', () => {
+    const root = mkdtempSync(join(tmpdir(), 'autoreport-runtime-'))
+    tempDirs.push(root)
+    const ctx = new Context()
+    const runtime = new AutoReportWorkflowRuntime(ctx, { ...CONFIG, workspaceRoot: root })
+    const session = rootSession('main-sandbox', AUTOREPORT_MAIN_PRESET, root)
+
+    const message = createUserMessage({
+      content: [{ type: 'text', text: 'start the report' }],
+      source: { kind: 'user' },
+    })
+    ctx.emit('session/event', session, session.append('user/message', message, { surfaceOp: 'append' }))
+
+    expect(runtime.ownsSession(session)).toBe(true)
+    expect(effectiveSandboxMode(session.events)).toBe('workspace-write')
+    expect(effectiveSandboxWorkspaceRoot(session.events)).toBe(resolve(root, 'Outline'))
   })
 })

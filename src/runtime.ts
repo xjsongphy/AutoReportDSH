@@ -112,7 +112,11 @@ export default class AutoReportWorkflowRuntime extends Service {
       if (session.header.parentSession !== undefined) return
       const live = this.forSession(session)
       live.state.apply(event)
+      if (event.type === 'turn/start') {
+        this.ensureMainSandbox(session)
+      }
       if (event.type === 'user/message' && event.data.source.kind === 'user') {
+        this.ensureMainSandbox(session)
         this.maybeInitialize(session)
       }
       observeWorkflowMessage(session, event, {
@@ -255,11 +259,19 @@ export default class AutoReportWorkflowRuntime extends Service {
         this.roleRegistry.registerReserved(binding)
       }
     }
-    const root = this.config.workspaceRoot ?? session.header.cwd
-    if (root !== undefined && root.length > 0) {
-      applyRoleSandbox(session, 'MAIN', root)
-    }
     return created
+  }
+
+  /**
+   * Pin MAIN sandbox confinement once a real turn starts. Idempotent last-wins;
+   * independent of workflow initialization so `/report-init` alone never pins.
+   * @param session - owning Main session.
+   */
+  private ensureMainSandbox(session: Session): void {
+    if (!isAutoReportMainSession(session)) return
+    const root = this.config.workspaceRoot ?? session.header.cwd
+    if (root === undefined || root.length === 0) return
+    applyRoleSandbox(session, 'MAIN', root)
   }
 
   /**
@@ -349,7 +361,6 @@ export default class AutoReportWorkflowRuntime extends Service {
       const project = loadProjectSettings(this.settingsHome, workspaceIdForRoot(root))
       settings = resolveWorkflowSettings({ user: this.userSettingsSource(), project, composition: this.config })
       ensureInitialized(root, settings.reportLanguage)
-      applyRoleSandbox(session, 'MAIN', root)
     } catch (error: unknown) {
       // A broken EXTERNAL settings document must not wedge every first turn;
       // the next user message retries after repair. The /report-init command
