@@ -9,10 +9,11 @@
   },
   "packageManager": "pnpm@11.7.0",
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && tsx scripts/copy-resources.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "install:preset": "tsx scripts/install-user-preset.ts"
+    "install:preset": "tsx scripts/install-user-preset.ts",
+    "sync:resources": "tsx scripts/sync-resources.ts && tsx scripts/copy-resources.ts"
   },
   "dependencies": {
     "@deepseek-ai/cordis": "link:../deepseek-harness/vendor/cordis",

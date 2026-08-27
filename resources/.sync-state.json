@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "resources": {
+    "mineru-skill": {
+      "commit": "38085aededa0f1732150f7b806c827b7e00c9e98",
+      "blob": "7a0e57c55b2d8b11dd4cebfe133d3382e3647628",
+      "remotePath": "mineru/SKILL.md",
+      "destination": "resources/skills/mineru.md",
+      "syncedAt": "2026-08-27T04:48:59.420Z"
+    }
+  }
+}
