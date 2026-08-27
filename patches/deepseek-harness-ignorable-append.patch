@@ -402,8 +402,9 @@ new file mode 100644
 index 0000000000..19b1611315
 --- /dev/null
 +++ b/packages/core/session/tests/append-options.spec.ts
-@@ -0,0 +1,49 @@
+@@ -0,0 +1,50 @@
 +import { describe, expect, expectTypeOf, it } from 'vitest'
++import { createUserMessage } from '@deepseek-ai/dsh-llm'
 +import { Session, SessionEvent, SessionId } from '@deepseek-ai/dsh-session'
 +import type { AppendOptions } from '@deepseek-ai/dsh-session'
 +
@@ -440,10 +441,10 @@ index 0000000000..19b1611315
 +    // Surface events keep their SurfaceIntent parameter; the compiler enforces
 +    // the shape through the conditional tuple, so this compiles only because
 +    // the call carries the required intent.
-+    session.append('user/message', {
++    session.append('user/message', createUserMessage({
 +      content: [{ type: 'text', text: 'q' }],
 +      source: { kind: 'user' },
-+    }, { surfaceOp: 'append' })
++    }), { surfaceOp: 'append' })
 +
 +    expectTypeOf<AppendOptions>().toMatchTypeOf<{ ignorable?: true }>()
 +    // A log-only event accepts the optional options parameter...
@@ -501,9 +502,9 @@ index 8633faa886..842407937d 100644
 +          expect(failure?.message).toMatch(/event type "future\/event".*not marked ignorable/)
 +
 +          const loaded = await ctx.sessionPersistence.load(markedSession.id)
-+          const retained = loaded.events.find(event => event.type === 'future/event')
++          const retained = loaded.events.find(event => (event as { type: string }).type === 'future/event')
 +          expect(retained).toBeDefined()
-+          expect(retained?.ignorable).toBe(true)
++          expect((retained as SessionEvent & { ignorable?: true }).ignorable).toBe(true)
 +        })
 +      } finally {
 +        await sessionFiber.dispose()
