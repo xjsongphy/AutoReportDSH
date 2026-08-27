@@ -1,36 +1,26 @@
 /**
- * Role-scoped registration of AutoReport's bundled domain skills.
+ * Role-scoped installation of AutoReport's bundled domain instructions.
  *
- * The Main preset deliberately registers no domain skills. Each specialist
- * receives only the instructions that belong to its fixed responsibility when
- * the continuable child scope is created. DSH's normal user/project skill
- * providers remain independent of this narrow AutoReport catalog.
+ * Continuable children expose only the tool and system-prompt services during
+ * their unpublished setup window.  A runtime `ctx.skills.register()` call is
+ * therefore unavailable there and would either fail or leak into the host
+ * scope.  Install the bundled skill bodies as child-scoped system-prompt
+ * sections instead; this retains the role boundary and disposes with the
+ * child, without widening the shared skill catalogue.
  * @module autoreportdsh-skills
  */
 
 import type { Context } from '@deepseek-ai/cordis'
-import type { SkillRegistration } from '@deepseek-ai/dsh-skill'
 import type { SpecialistRole } from './roles.js'
 import { loadBundledSkills, type BundledSkill } from './workspace/skill-loader.js'
 
 export const name = 'autoreportdsh-skills'
-export const inject = ['skills' as const]
+export const inject = ['systemPrompt' as const]
 
 /** Language-specific compilation guidance selected for a REPORT child. */
 export type ReportSkillLanguage = 'latex' | 'typst'
 
-/**
- * Return the AutoReport-owned skills allowed to one specialist.
- *
- * MinerU is useful only to roles that consume reference PDFs: THEORY extracts
- * source material for derivations and REPORT extracts citation/template
- * material. It is intentionally invisible to MAIN, DATA_ANALYSIS, and
- * PLOTTING. REPORT alone receives writing and active-language compilation
- * guidance.
- * @param role - fixed specialist identity.
- * @param language - active report language for a REPORT child.
- * @returns exact allowed bundled skill names.
- */
+/** Return the AutoReport-owned instruction names permitted to one specialist. */
 export function skillNamesForRole(role: SpecialistRole, language: ReportSkillLanguage): readonly string[] {
   switch (role) {
     case 'THEORY':
@@ -43,23 +33,24 @@ export function skillNamesForRole(role: SpecialistRole, language: ReportSkillLan
   }
 }
 
-function registration(skill: BundledSkill): SkillRegistration {
+function section(skill: BundledSkill): { name: string; order: number; text: string } {
   return {
-    name: skill.name,
-    description: skill.description,
-    content: skill.content,
-    source: 'runtime',
+    name: `autoreport:skill:${skill.name}`,
+    // Role instructions should follow the base persona but precede ordinary
+    // deployment sections, and use deterministic ordering for stable prompts.
+    order: 10,
+    text: skill.content,
   }
 }
 
 /**
- * Register only the domain skills permitted to a newly-created specialist
+ * Install only the domain instructions permitted to a newly-created specialist
  * child. The registration belongs to the child scope and is disposed with it,
- * so one role cannot leak its catalog into another child or the MAIN preset.
+ * so one role cannot leak its instructions into another child or MAIN.
  * @param ctx - unpublished specialist child context.
  * @param role - role recorded in the synchronous RoleRegistry.
  * @param language - frozen workflow report language.
- * @returns composite disposer for the child-scoped registrations.
+ * @returns composite disposer for the child-scoped prompt sections.
  */
 export function registerRoleSkills(
   ctx: Context,
@@ -72,7 +63,7 @@ export function registerRoleSkills(
     for (const name of skillNamesForRole(role, language)) {
       const skill = available.get(name)
       if (skill === undefined) throw new Error(`AutoReport bundled skill ${name} is missing for ${role}`)
-      disposers.push(ctx.skills.register(registration(skill)))
+      disposers.push(ctx.systemPrompt.section(section(skill)))
     }
   } catch (error: unknown) {
     for (const dispose of disposers.reverse()) dispose()
@@ -91,8 +82,5 @@ export function registerRoleSkills(
   }
 }
 
-/**
- * Compatibility entrypoint. Domain skills are no longer preset-wide; this is
- * intentionally a no-op so an old composition row cannot broaden visibility.
- */
+/** Compatibility entrypoint: role instructions are installed per child only. */
 export function apply(_ctx: Context): void {}

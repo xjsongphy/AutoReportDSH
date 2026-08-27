@@ -333,8 +333,9 @@ describe('integration: assembled host (real context)', () => {
     const theory = makeChildRecorder('it-theory')
     setup(theory.ctx)
     expect(theory.toolNames).toEqual(['report_workflow', 'report_exec'])
-    expect(theory.skillNames).toEqual(['mineru'])
+    expect(theory.skillNames).toEqual([])
     expect(theory.toolNames).not.toContain('report')
+    expect(theory.sections.some(section => section.name === 'autoreport:skill:mineru')).toBe(true)
     expect(theory.sections.some(section => section.text.includes('THEORY'))).toBe(true)
 
     // REPORT additionally receives compile_report; nobody else does.
@@ -343,7 +344,12 @@ describe('integration: assembled host (real context)', () => {
     const reporter = makeChildRecorder('it-report')
     setup(reporter.ctx)
     expect(reporter.toolNames).toEqual(['report_workflow', 'report_exec', 'compile_report'])
-    expect(reporter.skillNames).toEqual(['experiment-report-writer', 'latex-compile', 'mineru'])
+    expect(reporter.skillNames).toEqual([])
+    expect(reporter.sections.map(section => section.name)).toEqual(expect.arrayContaining([
+      'autoreport:skill:experiment-report-writer',
+      'autoreport:skill:latex-compile',
+      'autoreport:skill:mineru',
+    ]))
     const plotter = makeChildRecorder('it-plotting-bound')
     assembled.runtime.roleRegistry.registerReserved({
       ...binding, role: 'PLOTTING', childSessionId: SessionId('it-plotting-bound'),
