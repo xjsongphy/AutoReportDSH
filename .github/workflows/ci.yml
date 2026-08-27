@@ -81,6 +81,14 @@ jobs:
       - name: Enable Corepack
         run: corepack enable
 
+      # Live bash confinement tests need an OS sandbox. ubuntu-latest does not
+      # ship bubblewrap; without it the suite would skip the P0 write-denial
+      # cases. macOS runners already have sandbox-exec.
+      - name: Install Linux bubblewrap
+        if: runner.os == 'Linux'
+        working-directory: ${{ github.workspace }}
+        run: sudo apt-get update && sudo apt-get install -y bubblewrap
+
       - name: Install and build the pinned Harness
         working-directory: deepseek-harness
         run: |

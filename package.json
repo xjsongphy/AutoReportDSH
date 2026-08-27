@@ -35,6 +35,13 @@
     "@deepseek-ai/schemastery": "link:../deepseek-harness/vendor/schemastery"
   },
   "devDependencies": {
+    "@deepseek-ai/dsh-bash-local": "link:../deepseek-harness/packages/shell/bash-local",
+    "@deepseek-ai/dsh-bash-sandbox": "link:../deepseek-harness/packages/shell/bash-sandbox",
+    "@deepseek-ai/dsh-sandbox": "link:../deepseek-harness/packages/sandbox/sandbox",
+    "@deepseek-ai/dsh-sandbox-local": "link:../deepseek-harness/packages/sandbox/sandbox-local",
+    "@deepseek-ai/dsh-shell": "link:../deepseek-harness/packages/shell/shell",
+    "@deepseek-ai/dsh-subprocess-local": "link:../deepseek-harness/packages/subprocess/subprocess-local",
+    "@deepseek-ai/dsh-tool-bash": "link:../deepseek-harness/packages/shell/tool-bash",
     "@types/node": "^24.0.0",
     "tsx": "^4.20.0",
     "typescript": "^5.9.0",

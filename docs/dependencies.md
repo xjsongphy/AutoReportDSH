@@ -70,5 +70,17 @@ use explicit `.ts` specifiers and cross-package internals).
 | `@deepseek-ai/dsh-home-paths` | `../deepseek-harness/packages/util/home-paths` |
 | `@deepseek-ai/dsh-brand` | `../deepseek-harness/packages/util/brand` |
 
+### Test-only linked packages
+
+| Dependency | Linked path (relative to this repo) |
+|---|---|
+| `@deepseek-ai/dsh-tool-bash` | `../deepseek-harness/packages/shell/tool-bash` |
+| `@deepseek-ai/dsh-bash-local` | `../deepseek-harness/packages/shell/bash-local` |
+| `@deepseek-ai/dsh-bash-sandbox` | `../deepseek-harness/packages/shell/bash-sandbox` |
+| `@deepseek-ai/dsh-shell` | `../deepseek-harness/packages/shell/shell` |
+| `@deepseek-ai/dsh-subprocess-local` | `../deepseek-harness/packages/subprocess/subprocess-local` |
+| `@deepseek-ai/dsh-sandbox` | `../deepseek-harness/packages/sandbox/sandbox` |
+| `@deepseek-ai/dsh-sandbox-local` | `../deepseek-harness/packages/sandbox/sandbox-local` |
+
 All names verified against each linked package's `package.json`; exports map `. -> ./lib/index.js`
 with types at `./lib/types/index.d.ts`.
