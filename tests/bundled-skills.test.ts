@@ -26,6 +26,7 @@ describe('loadBundledSkills', () => {
       'experiment-report-writer',
       'latex-compile',
       'mineru',
+      'pdf-reference-reader',
       'typst-compile',
     ])
   })
@@ -48,5 +49,17 @@ describe('loadBundledSkills', () => {
     expect(writer?.content).not.toContain('report_workflow')
     expect(writer?.content).not.toContain('report_task')
     expect(writer?.content).not.toContain('REPORT role')
+  })
+
+  it('documents bash-driven LaTeX compilation without compile_report', () => {
+    const latex = skills.find(skill => skill.name === 'latex-compile')
+    expect(latex?.content).toContain('latexmk')
+    expect(latex?.content).not.toContain('compile_report')
+  })
+
+  it('includes pdf-reference-reader for MAIN PDF extraction', () => {
+    const reader = skills.find(skill => skill.name === 'pdf-reference-reader')
+    expect(reader?.content).toContain('mineru-open-api extract')
+    expect(reader?.content).toContain('Outline/.cache/mineru/')
   })
 })

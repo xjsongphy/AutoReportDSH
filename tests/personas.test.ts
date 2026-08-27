@@ -28,22 +28,36 @@ const QUALITY_GATES: Readonly<Record<string, readonly string[]>> = {
 }
 
 describe('persona migration', () => {
-  it('loads Main with DSH tool names and no generic delegation surface', () => {
+  it('loads Main with DSH tool names, bash/pdf guidance, and no generic delegation surface', () => {
     const text = loadMainPersona()
     expect(text).toContain('send_to_agent')
     expect(text).toContain('report_task')
+    expect(text).toContain('pdf-reference-reader')
+    expect(text).toContain('mineru-open-api')
+    expect(text).toContain('bash')
     expect(text).not.toContain('subagent_fork')
     expect(text).not.toContain('`respond`')
   })
 
-  it('prefixes every specialist with the shared collaboration rules', () => {
+const ROLE_PERSONA_FILES: Readonly<Record<string, string>> = {
+  THEORY: 'theory_agent.md',
+  DATA_ANALYSIS: 'data_analysis_agent.md',
+  PLOTTING: 'plotting_agent.md',
+  REPORT: 'report_agent.md',
+}
+
+  it('prefixes every specialist with the shared collaboration rules and bash execution', () => {
     const common = readFileSync(join(REPO_PERSONAS, 'Common.md'), 'utf8')
     for (const role of allSpecialistRoles()) {
       const text = loadSpecialistPersona(role)
+      const roleFile = readFileSync(join(REPO_PERSONAS, ROLE_PERSONA_FILES[role] ?? ''), 'utf8')
       expect(text.startsWith(common)).toBe(true)
       expect(text).toContain('report_workflow')
       expect(text).toContain('task_id')
       expect(text).toContain('delegation_revision')
+      expect(roleFile).toContain('bash')
+      expect(roleFile).toContain('DSH_AUTOREPORT_PYTHON')
+      expect(roleFile).not.toMatch(/with the `report_exec` tool|Execute the script with the `report_exec`/u)
       expect(text).not.toContain('`respond`')
     }
   })

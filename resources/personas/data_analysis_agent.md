@@ -17,6 +17,13 @@ Enter analysis workflow only when the outcome requires data analysis outputs. Ot
 
 Workflow is conditional on the requested outcome, not automatic for every message.
 
+## Execution
+
+- Run analysis and one-off checks via **bash** (not `report_exec`).
+- When `$DSH_AUTOREPORT_PYTHON` is set, invoke Python as `"$DSH_AUTOREPORT_PYTHON"` (or `"$DSH_AUTOREPORT_PYTHON_BIN/python"` when the bin directory is set).
+- Network is available for package installs when needed.
+- Writes stay confined to your role directory (`Data/Processed/`).
+
 ## Core
 
 - **You MUST call `report_workflow` with task_id, delegation_revision, status, block_type, response, and produced_files to finish a Main-dispatched task. Never end your turn without reporting. Do not ask the user questions directly — assume sensibly or report `missing_data` to Main.**

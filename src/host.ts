@@ -10,19 +10,24 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { Config } from './config.js'
 import { isAutoReportMainSession } from './membership.js'
 import { createRoleToolGuard } from './policy/tool-guard.js'
+import { installAutoReportPythonEnv } from './python-env.js'
 import AutoReportWorkflowRuntime, { type RuntimeOptions } from './runtime.js'
 import { createReportInitCommand } from './workspace/command.js'
 import { loadProjectSettings, saveProjectSettings, workspaceIdForRoot } from './settings.js'
+import { installTurnGuards } from './workflow/turn-guard.js'
 
 export const name = 'autoreportdsh-host'
 export const inject = ['tools']
+
+const DEFAULT_WAIT_MS = 600_000
 
 const DEFAULT_CONFIG: Config = {
   defaultReportLanguage: 'latex',
   defaultLatexEngine: 'latexmk',
   workspaceRoot: undefined,
   specialistModel: undefined,
-  executionTimeoutMs: 600_000,
+  delegationWaitTimeoutMs: DEFAULT_WAIT_MS,
+  executionTimeoutMs: DEFAULT_WAIT_MS,
 }
 
 /**
@@ -30,12 +35,17 @@ const DEFAULT_CONFIG: Config = {
  * @param raw - overlay/row config.
  */
 export function resolveHostConfig(raw: Partial<Config> = {}): Config {
+  const wait = raw.delegationWaitTimeoutMs
+    ?? raw.executionTimeoutMs
+    ?? DEFAULT_WAIT_MS
   return {
     defaultReportLanguage: raw.defaultReportLanguage ?? DEFAULT_CONFIG.defaultReportLanguage,
     defaultLatexEngine: raw.defaultLatexEngine ?? DEFAULT_CONFIG.defaultLatexEngine,
     workspaceRoot: raw.workspaceRoot ?? DEFAULT_CONFIG.workspaceRoot,
     specialistModel: raw.specialistModel ?? DEFAULT_CONFIG.specialistModel,
-    executionTimeoutMs: raw.executionTimeoutMs ?? DEFAULT_CONFIG.executionTimeoutMs,
+    delegationWaitTimeoutMs: wait,
+    executionTimeoutMs: wait,
+    ...(raw.pythonExecutable === undefined ? {} : { pythonExecutable: raw.pythonExecutable }),
   }
 }
 
@@ -60,6 +70,12 @@ export function apply(ctx: Context, config: Partial<Config> = {}, options: Runti
     isMainSession: sessionId => runtime.isMainSession(sessionId),
     ...(resolved.workspaceRoot === undefined ? {} : { workspaceRoot: resolved.workspaceRoot }),
   }))
+  installTurnGuards(ctx, {
+    roleRegistry: runtime.roleRegistry,
+    isMainSession: sessionId => runtime.isMainSession(sessionId),
+    getProjection: sessionId => runtime.projectionFor(sessionId),
+  })
+  installAutoReportPythonEnv(ctx, () => runtime.currentUserSettings().pythonExecutable ?? runtime.config.pythonExecutable)
   const commands = ctx.get('commands')
   if (commands !== undefined) {
     const definition = createReportInitCommand({

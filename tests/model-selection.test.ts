@@ -10,6 +10,7 @@ const CONFIG: Config = {
   defaultLatexEngine: 'latexmk',
   workspaceRoot: undefined,
   specialistModel: undefined,
+  delegationWaitTimeoutMs: 600_000,
   executionTimeoutMs: 600_000,
 }
 

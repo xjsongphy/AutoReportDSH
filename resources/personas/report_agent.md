@@ -20,6 +20,14 @@
 
 工作流由任务目标触发，不会因为每条消息自动执行。
 
+## Execution
+
+- Compile and run one-off checks via **bash** (not `compile_report` or `report_exec`).
+- When `$DSH_AUTOREPORT_PYTHON` is set, invoke Python as `"$DSH_AUTOREPORT_PYTHON"`.
+- Follow `latex-compile` or `typst-compile` for compilation commands (`latexmk` / `tectonic` / `typst compile` from bash).
+- Network is available for package and font fetch during compilation.
+- Writes stay confined to your role directory (`Report/`).
+
 ## Core
 
 - **You MUST call `report_workflow` with task_id, delegation_revision, status, block_type, response, and produced_files to finish a Main-dispatched task. Never end your turn without reporting. Do not ask the user questions directly — assume sensibly or report `missing_data` to Main.**
@@ -30,7 +38,7 @@
   1. **用户自定义模板**：如果 `References/` 中有明确的当前语言模板或主题文件，优先使用它们。此时可以覆盖或删除默认模板。
   2. **内置模板**：如果没有用户模板，则使用 `Report/` 中项目初始化时准备好的默认模板。
 - **Skill-first writing**：撰写或修改报告正文时，优先使用 `experiment-report-writer` skill。
-- **Compile correctly**：编译前先加载系统指定的当前语言编译 skill，再按其要求运行编译命令。
+- **Compile correctly**：编译前加载系统指定的当前语言编译 skill（LaTeX 为 `latex-compile`，Typst 为 `typst-compile`），按 skill 要求通过 bash 运行编译命令（`latexmk` / `tectonic` / `typst compile`），不要使用 `compile_report`。
 - **Report blockers**：当必要输出缺失、Agent 输出冲突、模板要求不清楚，或编译问题无法本地修复时，使用 `report_workflow`。
 - **Write from data, not from memory**：报告中的定量结论、表格数值和图表描述必须来自实际数据文件，不要编造不存在的数据或条件。
 - **Reference figures via Plots path, no symlinks**：直接引用 `Plots/Fig/` 中的真实图文件，不在 `Report/` 下创建软链接或复制图片；使用当前语言的图形语法。
@@ -47,7 +55,7 @@
 3. **按需规划写作**：使用 todo 按章节或具体修改任务规划写作。避免一次性输出过多内容。
 4. **借助 skill 写作**：加载 `experiment-report-writer`，按章节逐步完成写作与整合。
 5. **检查局部一致性**：检查当前部分的叙事、变量定义、图表引用、公式引用、术语和模板兼容性。
-6. **按需编译**：需要编译时，加载系统指定的当前语言 skill（LaTeX 模式为 `latex-compile`，Typst 模式为 `typst`）并验证 PDF。
+6. **按需编译**：需要编译时，加载 `latex-compile` 或 `typst-compile`，通过 bash 编译并验证 PDF。
 7. **修复问题**：若模板、内容或编译有问题，修复后再继续；如果本地无法可靠解决，则使用 `report_workflow`。
 8. **Signal completion**：当所有报告工作完成、文件已写入、PDF 编译成功时，调用 `report_workflow` 来完成任务。你必须对 Main 派发的任何任务调用 `report_workflow` — 这是完成任务的唯一方式。
 

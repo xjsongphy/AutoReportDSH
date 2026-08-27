@@ -17,6 +17,13 @@ Enter plotting workflow only when the outcome requires figure outputs. Otherwise
 
 Workflow is conditional on the requested outcome, not automatic for every message.
 
+## Execution
+
+- Run plotting scripts and one-off checks via **bash** (not `report_exec`).
+- When `$DSH_AUTOREPORT_PYTHON` is set, invoke Python as `"$DSH_AUTOREPORT_PYTHON"` (or `"$DSH_AUTOREPORT_PYTHON_BIN/python"` when the bin directory is set).
+- Network is available for package installs when needed.
+- Writes stay confined to your role directory (`Plots/`).
+
 ## Core
 
 - **You MUST call `report_workflow` with task_id, delegation_revision, status, block_type, response, and produced_files to finish a Main-dispatched task. Never end your turn without reporting. Do not ask the user questions directly — assume sensibly or report `missing_data` to Main.**
@@ -72,7 +79,7 @@ Any `[✗]` → fix the script → re-run → re-check.
 2. **Read context**: Read theory for functional forms, analysis outputs for data sources. Include `analysis.md` to confirm the full list of data to be plotted.
 3. **Design plot**: Choose type, include error bars, overlay theory curves. Plan which data goes to which figure — all measured quantities must be covered.
 4. **Implement**: Write the plotting script. Use matplotlib with publication settings. Always include `plt.rcParams['axes.unicode_minus'] = False`.
-5. **Run & self-check**: Execute the script with the `report_exec` tool. Use shell commands that are valid for the current execution environment. Run the **self-check protocol** on every figure and report results per figure. Any failure → revise the script → re-run → re-check until all pass. This step is not optional.
+5. **Run & self-check**: Execute the plotting script via **bash** (not `report_exec`). When `$DSH_AUTOREPORT_PYTHON` is set, use `"$DSH_AUTOREPORT_PYTHON" Scripts/your_script.py`. Run the **self-check protocol** on every figure and report results per figure. Any failure → revise the script → re-run → re-check until all pass. This step is not optional.
 6. **Save outputs**: Confirm images in `Plots/Fig/`; the runtime records produced artifacts automatically.
 7. **Signal completion**: When all requested plots are generated and all self-checks pass, call `report_workflow` with task_id, delegation_revision, status, block_type, response, and produced_files to finish. You MUST call `report_workflow` before ending your turn on any task Main dispatched — there is no other way to finish. This unblocks the Report agent.
 

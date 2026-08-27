@@ -1,18 +1,18 @@
 ---
 name: latex-compile
-description: Use when compiling LaTeX reports in an AutoReport workspace, or when diagnosing compilation errors, missing cross-references, or diagnostic warnings from the compile_report workflow.
+description: Use when compiling LaTeX reports in an AutoReport workspace via bash, or when diagnosing compilation errors, missing cross-references, or diagnostic warnings.
 ---
 
 # LaTeX Compile
 
-LaTeX compilation assistant for AutoReport LaTeX reports, handling the standard two-pass workflow, error diagnosis, and cross-reference repair.
+LaTeX compilation assistant for AutoReport LaTeX reports: bash-driven `latexmk` / `tectonic`, error diagnosis, and cross-reference repair.
 
 **Important: When this skill is loaded, there is usually a compilation problem that needs solving. Always surface sufficient error information for diagnosis — do not over-filter output.**
 
 ## When to Use
 
 **Use when:**
-- Compiling `Report/main.tex` (XeLaTeX toolchain via `compile_report`)
+- Compiling `Report/main.tex` with the XeLaTeX toolchain
 - Encountering LaTeX compilation errors (environment mismatch, undefined references, Chinese character issues)
 - Diagnosing compilation warnings or failed builds
 
@@ -20,24 +20,42 @@ LaTeX compilation assistant for AutoReport LaTeX reports, handling the standard 
 - The active report language is Typst (`typst-compile` covers that path)
 - Setting up a new workspace (`/report-init` materializes `Report/main.tex` and `mpltx.cls`)
 
-## Compilation Through compile_report
+## Compilation via bash
 
-In an AutoReport workspace you do not invoke compilers directly; call `compile_report`, which runs the configured engine inside the report execution policy (offline, writes confined to `Report/`). The guidance below explains what the tool does and how to read its diagnostics.
+Run compilers from bash with workdir `Report/` (or use `latexmk -cd`). Network access is allowed for package fetch.
 
-Standard engine behavior (latexmk driving XeLaTeX):
+**Preferred (latexmk + XeLaTeX):**
 
 ```bash
-# conceptual equivalent of what compile_report runs
+cd Report && latexmk -xelatex -interaction=nonstopmode -file-line-error main.tex
+```
+
+`latexmk` runs multiple passes as needed for cross-references.
+
+**Fallback when `latexmk` is missing:**
+
+```bash
+cd Report && tectonic -X compile main.tex
+```
+
+**Manual two-pass XeLaTeX (when neither tool is available):**
+
+```bash
+cd Report
 xelatex -synctex=1 -interaction=nonstopmode -file-line-error main.tex
 xelatex -synctex=1 -interaction=nonstopmode -file-line-error main.tex
 ```
 
-**Parameters:**
+**Engine choice:** check what is installed (`command -v latexmk`, `command -v tectonic`). User/workspace `latexEngine` setting (`latexmk` vs `tectonic`) is a hint — prefer it when the binary exists.
+
+**Parameters (XeLaTeX):**
 - `-synctex=1`: generate SyncTeX data for PDF viewer synchronization
 - `-interaction=nonstopmode`: continue on errors so all problems are shown at once
 - `-file-line-error`: display error messages with file and line numbers
 
-**Must compile twice**: the first pass generates `.aux` files, the second pass resolves cross-references. If labels or references change, compile again.
+**Must compile twice** when using raw `xelatex`: the first pass generates `.aux` files, the second resolves cross-references. If labels change, compile again.
+
+All writes stay inside `Report/`.
 
 ## Common Compilation Error Diagnosis
 
@@ -95,7 +113,7 @@ LaTeX Warning: Reference `eq:label' undefined...
 LaTeX Warning: Label(s) may have changed. Rerun to get cross-references right.
 ```
 
-**Fix:** run `compile_report` again (second pass).
+**Fix:** run `latexmk` or `xelatex` again (second pass).
 
 ## Output Interpretation
 
@@ -108,18 +126,18 @@ LaTeX Warning: Label(s) may have changed. Rerun to get cross-references right.
 **Do not over-filter compiler output — errors may appear anywhere.**
 
 Recommended:
-- Filter to errors/warnings without truncating position: `grep -E "Error|! |Warning"` over the returned log tail.
+- Filter to errors/warnings without truncating position: `grep -E "Error|! |Warning"` over the log tail.
 - Use `-file-line-error` style locations (`./main.tex:123: ...`) and read around that line with fs tools before editing.
 
 Never rely on only the first or last few lines of a long log; middle errors are common.
 
 ## Workflow
 
-1. Call `compile_report`. Read its structured diagnostics fully.
-2. Map each error to file + line using the `-file-line-error` location.
+1. Run the bash compile command from `Report/`. Capture full stdout/stderr.
+2. Map each error to file + line using `-file-line-error` locations.
 3. Fix with fs edit tools (writes stay inside `Report/`).
-4. Recompile with `compile_report`; repeat until clean.
-5. Confirm the final artifact path reported by the tool.
+4. Recompile via bash; repeat until clean.
+5. Confirm `Report/main.pdf` exists and updated.
 
 ## Common Issues
 

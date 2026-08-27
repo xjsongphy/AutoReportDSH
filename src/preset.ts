@@ -9,6 +9,7 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
+import { registerMainSkills } from './skills-preset.js'
 import { createReportTaskTool } from './tools/report-task.js'
 import { createSendToAgentTool } from './tools/send-to-agent.js'
 import type {} from './runtime.js'
@@ -22,6 +23,7 @@ export const inject = ['tools', 'skills', 'subagents', 'autoreportWorkflow'] as 
  * @param ctx - The `autoreport-main` preset scope.
  */
 export function apply(ctx: Context): void {
+  registerMainSkills(ctx)
   ctx.tools.register(createSendToAgentTool({
     subagents: ctx.subagents,
     workflow: ctx.autoreportWorkflow,

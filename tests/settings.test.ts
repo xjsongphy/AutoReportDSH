@@ -33,28 +33,36 @@ const COMPOSITION = {
   defaultReportLanguage: 'latex',
   defaultLatexEngine: 'latexmk',
   specialistModel: { provider: 'comp-provider', model: 'comp-model' },
+  delegationWaitTimeoutMs: 1000,
   executionTimeoutMs: 1000,
+  pythonExecutable: '/comp/python',
 } as const
 
 const USER = {
   defaultReportLanguage: 'typst',
   defaultLatexEngine: 'tectonic',
   specialistModel: { provider: 'user-provider', model: 'user-model', reasoningEffort: 'high' },
+  delegationWaitTimeoutMs: 2000,
   executionTimeoutMs: 2000,
+  pythonExecutable: '/user/python',
 } as const
 
 const PROJECT = {
   reportLanguage: 'latex',
   latexEngine: 'tectonic',
   specialistModel: { provider: 'project-provider', model: 'project-model' },
+  delegationWaitTimeoutMs: 3000,
   executionTimeoutMs: 3000,
+  pythonExecutable: '/project/python',
 } as const
 
 const OVERRIDE = {
   reportLanguage: 'typst',
   latexEngine: 'latexmk',
   specialistModel: { inheritMain: true },
+  delegationWaitTimeoutMs: 4000,
   executionTimeoutMs: 4000,
+  pythonExecutable: '/override/python',
 } as const
 
 describe('resolveWorkflowSettings precedence', () => {
@@ -63,10 +71,11 @@ describe('resolveWorkflowSettings precedence', () => {
       reportLanguage: 'latex',
       latexEngine: 'latexmk',
       specialistModel: { inheritMain: true },
+      delegationWaitTimeoutMs: 600_000,
       executionTimeoutMs: 600_000,
     })
     // The documented-defaults constant mirrors the schema layer exactly.
-    expect(WORKFLOW_SETTINGS_SCHEMA_DEFAULTS).toMatchObject({ reportLanguage: 'latex', latexEngine: 'latexmk', executionTimeoutMs: 600_000 })
+    expect(WORKFLOW_SETTINGS_SCHEMA_DEFAULTS).toMatchObject({ reportLanguage: 'latex', latexEngine: 'latexmk', delegationWaitTimeoutMs: 600_000 })
   })
 
   it('applies each single layer above the schema defaults', () => {
@@ -74,19 +83,25 @@ describe('resolveWorkflowSettings precedence', () => {
       reportLanguage: 'latex',
       latexEngine: 'latexmk',
       specialistModel: { inheritMain: false, provider: 'comp-provider', model: 'comp-model' },
+      delegationWaitTimeoutMs: 1000,
       executionTimeoutMs: 1000,
+      pythonExecutable: '/comp/python',
     })
     expect(resolveWorkflowSettings({ user: USER })).toEqual({
       reportLanguage: 'typst',
       latexEngine: 'tectonic',
       specialistModel: { inheritMain: false, provider: 'user-provider', model: 'user-model', reasoningEffort: 'high' },
+      delegationWaitTimeoutMs: 2000,
       executionTimeoutMs: 2000,
+      pythonExecutable: '/user/python',
     })
     expect(resolveWorkflowSettings({ project: PROJECT })).toEqual({
       reportLanguage: 'latex',
       latexEngine: 'tectonic',
       specialistModel: { inheritMain: false, provider: 'project-provider', model: 'project-model' },
+      delegationWaitTimeoutMs: 3000,
       executionTimeoutMs: 3000,
+      pythonExecutable: '/project/python',
     })
   })
 
@@ -95,28 +110,36 @@ describe('resolveWorkflowSettings precedence', () => {
     expect(resolveWorkflowSettings(all)).toMatchObject({
       reportLanguage: 'typst',
       latexEngine: 'latexmk',
+      delegationWaitTimeoutMs: 4000,
       executionTimeoutMs: 4000,
+      pythonExecutable: '/override/python',
       specialistModel: { inheritMain: true },
     })
     const withoutOverride = (({ override: _drop, ...rest }) => rest)(all)
     expect(resolveWorkflowSettings(withoutOverride)).toMatchObject({
       reportLanguage: 'latex',
       latexEngine: 'tectonic',
+      delegationWaitTimeoutMs: 3000,
       executionTimeoutMs: 3000,
+      pythonExecutable: '/project/python',
       specialistModel: { provider: 'project-provider' },
     })
     const withoutProject = (({ project: _drop, ...rest }) => rest)(withoutOverride)
     expect(resolveWorkflowSettings(withoutProject)).toMatchObject({
       reportLanguage: 'typst',
       latexEngine: 'tectonic',
+      delegationWaitTimeoutMs: 2000,
       executionTimeoutMs: 2000,
+      pythonExecutable: '/user/python',
       specialistModel: { provider: 'user-provider', reasoningEffort: 'high' },
     })
     const withoutUser = (({ user: _drop, ...rest }) => rest)(withoutProject)
     expect(resolveWorkflowSettings(withoutUser)).toMatchObject({
       reportLanguage: 'latex',
       latexEngine: 'latexmk',
+      delegationWaitTimeoutMs: 1000,
       executionTimeoutMs: 1000,
+      pythonExecutable: '/comp/python',
       specialistModel: { provider: 'comp-provider' },
     })
   })
@@ -126,14 +149,21 @@ describe('resolveWorkflowSettings precedence', () => {
       composition: COMPOSITION,
       user: { defaultLatexEngine: 'tectonic' },
       project: { reportLanguage: 'typst' },
-      override: { executionTimeoutMs: 42 },
+      override: { delegationWaitTimeoutMs: 42 },
     })
     expect(resolved).toEqual({
       reportLanguage: 'typst',
       latexEngine: 'tectonic',
       specialistModel: { inheritMain: false, provider: 'comp-provider', model: 'comp-model' },
+      delegationWaitTimeoutMs: 42,
       executionTimeoutMs: 42,
+      pythonExecutable: '/comp/python',
     })
+  })
+
+  it('accepts deprecated executionTimeoutMs alias in override layers', () => {
+    expect(resolveWorkflowSettings({ override: { executionTimeoutMs: 77 } }).delegationWaitTimeoutMs).toBe(77)
+    expect(resolveWorkflowSettings({ override: { executionTimeoutMs: 77 } }).executionTimeoutMs).toBe(77)
   })
 
   it('accepts a plain route shorthand on the override and fails loud on garbage', () => {
@@ -148,7 +178,7 @@ describe('resolveWorkflowSettings precedence', () => {
       .toThrow(/specialistModel/)
     expect(() => resolveWorkflowSettings({ override: { reportLanguage: 'markdown' as never } })).toThrow(/reportLanguage/)
     expect(() => resolveWorkflowSettings({ project: { latexEngine: 'pandoc' as never } })).toThrow(/latexEngine/)
-    expect(() => resolveWorkflowSettings({ user: { executionTimeoutMs: 0 } })).toThrow(/executionTimeoutMs/)
+    expect(() => resolveWorkflowSettings({ user: { delegationWaitTimeoutMs: 0 } })).toThrow(/delegationWaitTimeoutMs/)
     expect(() => resolveWorkflowSettings({ composition: { specialistModel: { provider: '', model: 'm' } } })).toThrow(/specialistModel/)
   })
 })
@@ -193,11 +223,12 @@ describe('snapshot immutability', () => {
     // in-flight report).
     project['reportLanguage'] = 'typst'
     project['latexEngine'] = 'latexmk'
-    project['executionTimeoutMs'] = 999_999
+    project['delegationWaitTimeoutMs'] = 999_999
     project['specialistModel'] = { provider: 'mutated', model: 'mutated' }
 
     expect(resolved.reportLanguage).toBe('latex')
     expect(resolved.latexEngine).toBe('tectonic')
+    expect(resolved.delegationWaitTimeoutMs).toBe(3000)
     expect(resolved.executionTimeoutMs).toBe(3000)
     expect(resolved.specialistModel).toEqual({ inheritMain: false, provider: 'project-provider', model: 'project-model' })
   })
@@ -223,11 +254,11 @@ describe('project settings persistence', () => {
     expect(loadProjectSettings(home, workspaceId)).toEqual({})
     expect(existsSync(join(home, 'autoreport'))).toBe(false)
 
-    saveProjectSettings(home, workspaceId, { reportLanguage: 'typst', executionTimeoutMs: 5000 })
+    saveProjectSettings(home, workspaceId, { reportLanguage: 'typst', delegationWaitTimeoutMs: 5000 })
     const directory = join(home, 'autoreport', workspaceId)
     expect(JSON.parse(readFileSync(join(directory, 'project.json'), 'utf8')))
-      .toEqual({ reportLanguage: 'typst', executionTimeoutMs: 5000 })
-    expect(loadProjectSettings(home, workspaceId)).toEqual({ reportLanguage: 'typst', executionTimeoutMs: 5000 })
+      .toEqual({ reportLanguage: 'typst', delegationWaitTimeoutMs: 5000 })
+    expect(loadProjectSettings(home, workspaceId)).toEqual({ reportLanguage: 'typst', delegationWaitTimeoutMs: 5000 })
     // Atomic rename leaves no temporary siblings behind.
     expect(readdirSync(directory)).toEqual(['project.json'])
 
@@ -254,7 +285,7 @@ describe('project settings persistence', () => {
     const user = AUTO_REPORT_USER_SETTINGS_SCHEMA({}) as Record<string, unknown>
     expect(user['defaultReportLanguage']).toBe('latex')
     expect(user['defaultLatexEngine']).toBe('latexmk')
-    expect(user['executionTimeoutMs']).toBe(600_000)
+    expect(user['delegationWaitTimeoutMs']).toBe(600_000)
     // Schemastery materializes the nested route object as {}; storage and
     // resolution treat that artifact as absent (covered by the roundtrip and
     // inheritance tests).

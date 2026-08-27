@@ -11,6 +11,7 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
+import type {} from '@deepseek-ai/dsh-skill'
 import type { SpecialistRole } from './roles.js'
 import { loadBundledSkills, type BundledSkill } from './workspace/skill-loader.js'
 
@@ -20,16 +21,18 @@ export const inject = ['systemPrompt' as const]
 /** Language-specific compilation guidance selected for a REPORT child. */
 export type ReportSkillLanguage = 'latex' | 'typst'
 
+/** MAIN-only bundled skills registered in the preset scope. */
+export const MAIN_SKILL_NAMES: readonly string[] = ['pdf-reference-reader', 'mineru']
+
 /** Return the AutoReport-owned instruction names permitted to one specialist. */
 export function skillNamesForRole(role: SpecialistRole, language: ReportSkillLanguage): readonly string[] {
   switch (role) {
     case 'THEORY':
-      return ['mineru']
-    case 'REPORT':
-      return ['experiment-report-writer', language === 'latex' ? 'latex-compile' : 'typst-compile', 'mineru']
     case 'DATA_ANALYSIS':
     case 'PLOTTING':
       return []
+    case 'REPORT':
+      return ['experiment-report-writer', language === 'latex' ? 'latex-compile' : 'typst-compile']
   }
 }
 
@@ -40,6 +43,54 @@ function section(skill: BundledSkill): { name: string; order: number; text: stri
     // deployment sections, and use deterministic ordering for stable prompts.
     order: 10,
     text: skill.content,
+  }
+}
+
+function registerBundledSkill(
+  skill: BundledSkill,
+  registerSkill: (registration: { name: string; description: string; source: string; content: string }) => () => void,
+): () => void {
+  return registerSkill({
+    name: skill.name,
+    description: skill.description,
+    source: 'runtime',
+    content: skill.content,
+  })
+}
+
+/**
+ * Register MAIN-only bundled skills (`pdf-reference-reader` and `mineru` alias)
+ * in the preset scope where `ctx.skills.register` is available.
+ * @param ctx - `autoreport-main` preset context.
+ * @returns composite disposer for registered skills.
+ */
+export function registerMainSkills(ctx: Context): () => void {
+  const available = new Map(loadBundledSkills().map(skill => [skill.name, skill]))
+  const disposers: (() => void)[] = []
+  const registerSkill = ctx.skills?.register
+  if (registerSkill === undefined) return () => {}
+
+  try {
+    for (const name of MAIN_SKILL_NAMES) {
+      const skill = available.get(name)
+      if (skill === undefined) throw new Error(`AutoReport bundled skill ${name} is missing for MAIN`)
+      disposers.push(registerBundledSkill(skill, registerSkill))
+    }
+  } catch (error: unknown) {
+    for (const dispose of disposers.reverse()) dispose()
+    throw error
+  }
+
+  return () => {
+    const failures: unknown[] = []
+    for (const dispose of disposers.reverse()) {
+      try {
+        dispose()
+      } catch (error: unknown) {
+        failures.push(error)
+      }
+    }
+    if (failures.length > 0) throw new AggregateError(failures, 'failed to dispose AutoReport MAIN skills')
   }
 }
 

@@ -5,7 +5,7 @@ description: Active report language guidance for Typst AutoReport workspaces. Lo
 
 # Active report language: Typst
 
-Write the report entry point as `Report/main.typ`. Import the local `mplts.typ` theme. Do not load `latex-compile`; use the Typst skill and `compile_report` when available.
+Write the report entry point as `Report/main.typ`. Import the local `mplts.typ` theme. Do not load `latex-compile`; use the Typst skill and bash `typst compile` when compiling.
 
 ## Typst layout rules
 

@@ -42,11 +42,11 @@ import type { Config, LatexEngine, ReportLanguage, SpecialistRoute } from './con
 export const WORKFLOW_SETTINGS_SCHEMA_DEFAULTS: Readonly<{
   reportLanguage: ReportLanguage
   latexEngine: LatexEngine
-  executionTimeoutMs: number
+  delegationWaitTimeoutMs: number
 }> = Object.freeze({
   reportLanguage: 'latex',
   latexEngine: 'latexmk',
-  executionTimeoutMs: 600_000,
+  delegationWaitTimeoutMs: 600_000,
 })
 
 /** Registered DSH namespace for AutoReport's user-level workflow defaults. */
@@ -58,9 +58,13 @@ export interface AutoReportUserSettings {
   /** Default LaTeX compiler (schema default `latexmk`). */
   defaultLatexEngine: LatexEngine
   /** Bounded wait for `send_to_agent({ wait: true })` (schema default ten minutes). */
-  executionTimeoutMs: number
+  delegationWaitTimeoutMs: number
+  /** Deprecated alias equal to {@link delegationWaitTimeoutMs}. */
+  executionTimeoutMs?: number
   /** Optional specialist route; absent inherits the Main route. */
   specialistModel?: SpecialistRoute
+  /** Optional absolute Python interpreter for specialist bash execution. */
+  pythonExecutable?: string
 }
 
 /**
@@ -80,7 +84,9 @@ export const AUTO_REPORT_USER_SETTINGS_SCHEMA: z<AutoReportUserSettings> = z.obj
   defaultReportLanguage: z.union(['latex', 'typst'] as const).default(WORKFLOW_SETTINGS_SCHEMA_DEFAULTS.reportLanguage),
   defaultLatexEngine: z.union(['latexmk', 'tectonic'] as const).default(WORKFLOW_SETTINGS_SCHEMA_DEFAULTS.latexEngine),
   specialistModel: SPECIALIST_ROUTE_SCHEMA,
-  executionTimeoutMs: z.number().default(WORKFLOW_SETTINGS_SCHEMA_DEFAULTS.executionTimeoutMs),
+  delegationWaitTimeoutMs: z.number().default(WORKFLOW_SETTINGS_SCHEMA_DEFAULTS.delegationWaitTimeoutMs),
+  executionTimeoutMs: z.number(),
+  pythonExecutable: z.string(),
 }) as unknown as z<AutoReportUserSettings>
 
 /** Convert composition defaults into the base layer for DSH user settings. */
@@ -88,8 +94,10 @@ export function autoReportUserSettingsBase(config: Config): AutoReportUserSettin
   return {
     defaultReportLanguage: config.defaultReportLanguage,
     defaultLatexEngine: config.defaultLatexEngine,
+    delegationWaitTimeoutMs: config.delegationWaitTimeoutMs ?? config.executionTimeoutMs,
     executionTimeoutMs: config.executionTimeoutMs,
     ...(config.specialistModel === undefined ? {} : { specialistModel: config.specialistModel }),
+    ...(config.pythonExecutable === undefined ? {} : { pythonExecutable: config.pythonExecutable }),
   }
 }
 
@@ -104,9 +112,13 @@ export interface AutoReportProjectSettings {
   /** Workspace LaTeX compiler preference. */
   latexEngine?: LatexEngine
   /** Workspace delegation-wait bound. */
+  delegationWaitTimeoutMs?: number
+  /** Deprecated alias equal to {@link delegationWaitTimeoutMs}. */
   executionTimeoutMs?: number
   /** Workspace specialist route; absent inherits lower layers. */
   specialistModel?: SpecialistRoute
+  /** Workspace Python interpreter override. */
+  pythonExecutable?: string
 }
 
 /** Schemastery schema validating the external project-settings document. */
@@ -114,7 +126,9 @@ export const AUTO_REPORT_PROJECT_SETTINGS_SCHEMA: z<AutoReportProjectSettings> =
   reportLanguage: z.union(['latex', 'typst'] as const),
   latexEngine: z.union(['latexmk', 'tectonic'] as const),
   specialistModel: SPECIALIST_ROUTE_SCHEMA,
+  delegationWaitTimeoutMs: z.number(),
   executionTimeoutMs: z.number(),
+  pythonExecutable: z.string(),
 }) as unknown as z<AutoReportProjectSettings>
 
 /**
@@ -140,14 +154,17 @@ function compactSection<S extends Record<string, unknown>>(section: S): S {
 /** Composition-layer fields that act as plugin DEFAULTS (see {@link Config}). */
 export type WorkflowCompositionDefaults = Pick<
   Config,
-  'defaultReportLanguage' | 'defaultLatexEngine' | 'specialistModel' | 'executionTimeoutMs'
+  'defaultReportLanguage' | 'defaultLatexEngine' | 'specialistModel' | 'delegationWaitTimeoutMs' | 'executionTimeoutMs' | 'pythonExecutable'
 >
 
 /** Explicit per-workflow inputs; highest layer, owned by the creating turn. */
 export interface WorkflowSettingsOverride {
   reportLanguage?: ReportLanguage
   latexEngine?: LatexEngine
+  delegationWaitTimeoutMs?: number
+  /** Deprecated alias equal to {@link delegationWaitTimeoutMs}. */
   executionTimeoutMs?: number
+  pythonExecutable?: string
   /**
    * Concrete `{ provider, model, reasoningEffort? }` route shorthand or the
    * explicit `{ inheritMain: true }` selection recorded verbatim.
@@ -178,7 +195,11 @@ export interface WorkflowSettingsSnapshot {
   /** Concrete specialist route or explicit Main inheritance. */
   readonly specialistModel: SpecialistModelSelection
   /** Bounded wait applied to delegation waits. */
+  readonly delegationWaitTimeoutMs: number
+  /** Deprecated alias equal to {@link delegationWaitTimeoutMs}. */
   readonly executionTimeoutMs: number
+  /** Resolved Python interpreter when configured at any layer. */
+  readonly pythonExecutable?: string
 }
 
 /** Input layers for {@link resolveWorkflowSettings}; every layer may be absent. */
@@ -270,10 +291,25 @@ export function resolveWorkflowSettings(layers: WorkflowSettingsLayers): Workflo
     firstDefined(override?.latexEngine, project?.latexEngine, user?.defaultLatexEngine, composition?.defaultLatexEngine),
     LATEX_ENGINES,
   ) ?? WORKFLOW_SETTINGS_SCHEMA_DEFAULTS.latexEngine
-  const executionTimeoutMs = positiveIntegerField(
-    'executionTimeoutMs',
-    firstDefined(override?.executionTimeoutMs, project?.executionTimeoutMs, user?.executionTimeoutMs, composition?.executionTimeoutMs),
-  ) ?? WORKFLOW_SETTINGS_SCHEMA_DEFAULTS.executionTimeoutMs
+  const delegationWaitTimeoutMs = positiveIntegerField(
+    'delegationWaitTimeoutMs',
+    firstDefined(
+      override?.delegationWaitTimeoutMs,
+      override?.executionTimeoutMs,
+      project?.delegationWaitTimeoutMs,
+      project?.executionTimeoutMs,
+      user?.delegationWaitTimeoutMs,
+      user?.executionTimeoutMs,
+      composition?.delegationWaitTimeoutMs,
+      composition?.executionTimeoutMs,
+    ),
+  ) ?? WORKFLOW_SETTINGS_SCHEMA_DEFAULTS.delegationWaitTimeoutMs
+  const pythonExecutable = firstDefined(
+    override?.pythonExecutable,
+    project?.pythonExecutable,
+    user?.pythonExecutable,
+    composition?.pythonExecutable,
+  )
   const specialistModel = firstDefined(
     routeField('override.specialistModel', override?.specialistModel),
     routeField('project.specialistModel', project?.specialistModel),
@@ -284,7 +320,9 @@ export function resolveWorkflowSettings(layers: WorkflowSettingsLayers): Workflo
     reportLanguage,
     latexEngine,
     specialistModel,
-    executionTimeoutMs,
+    delegationWaitTimeoutMs,
+    executionTimeoutMs: delegationWaitTimeoutMs,
+    ...(pythonExecutable === undefined ? {} : { pythonExecutable }),
   })
 }
 
