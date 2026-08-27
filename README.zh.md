@@ -20,7 +20,7 @@
 
 > **开发者预览版。** 当前支持从源码安装，并有完整的无密钥集成测试覆盖。npm/DSH bundle 正式发布流程已预留，但尚未发布。
 
-AutoReportDSH 将 [AutoReportCLI](../autoreportcli) 的报告领域工作流迁移为 DeepSeek Harness（`dsh`）插件。DSH 负责通用运行时：agent loop、持续子会话、持久化、上下文压缩、模型路由、工具管线、子进程生命周期、审批和 Web UI。AutoReportDSH 只负责报告领域语义：固定角色、委派状态、角色权限、离线执行、报告资源、编译和产物追踪。
+AutoReportDSH 将 [AutoReportCLI](../autoreportcli) 的报告领域工作流迁移为 DeepSeek Harness（`dsh`）插件。DSH 负责通用运行时：agent loop、持续子会话、持久化、上下文压缩、模型路由、工具管线、子进程生命周期、审批、沙箱和 Web UI。AutoReportDSH 只负责报告领域语义：固定角色、委派状态、角色可写根目录、报告资源、编译 skill 和产物追踪。
 
 完整架构和实现记录见 [PLAN.md](PLAN.md)。
 
@@ -36,16 +36,17 @@ AutoReportDSH 将 [AutoReportCLI](../autoreportcli) 的报告领域工作流迁�
 | PLOTTING | 绘图脚本与图像 | `Plots/` |
 | REPORT | LaTeX/Typst 源码与报告编译 | `Report/` |
 
-模型使用 DSH 原生的文件、搜索、技能、压缩和用户提问能力。MAIN 只额外看到很小的 AutoReport 领域接口：
+模型使用 DSH 原生的 `read` / `write` / `edit` / `bash` / `skill`（搜索走 bash 中的 `rg`/`find`）。MAIN 只额外看到很小的 AutoReport 领域接口：
 
 ```text
 send_to_agent     向固定角色委派任务，并持久化任务/版本状态
-report_task       当前工作流的状态与清单管理
+report_task       当前工作流的状态与清单管理（将逐步内化）
+ask_user_question DSH 原生结构化提问，用于需求缺口
 ```
 
 specialist 是 DSH continuable child session。它们会保留角色上下文，能够接收后续任务，并通过 `report_workflow` 返回结构化结果。用户直接与 specialist 对话时，那是普通对话；没有活跃 workflow delegation 上下文时，不会自动创建或完成任务。
 
-AutoReport 专属 skill 按角色隔离：THEORY 仅有 `mineru`；REPORT 有 `experiment-report-writer`、当前语言的编译 skill 与 `mineru`；DATA_ANALYSIS 和 PLOTTING 不获得这些领域 skill。DSH 的用户/项目 skill 仍遵循原本的 DSH 可见性。
+AutoReport 专属 skill 按角色隔离：MAIN 有 `pdf-reference-reader`（及 `mineru` 别名），把 References 中的 PDF 抽到 `Outline/.cache/mineru/`；REPORT 有 `experiment-report-writer` 和当前语言的编译 skill（`latex-compile` 或 `typst-compile`）；THEORY、DATA_ANALYSIS、PLOTTING 不获得这些领域 skill。DSH 的用户/项目 skill 仍遵循原本的 DSH 可见性。
 
 ## 与普通 DSH 共存
 
@@ -67,10 +68,7 @@ autoreport-main    AutoReport 物理实验报告工作流
 - Node.js `22.19+` 或 `24+`
 - 启用 Corepack 的 pnpm
 - 本地 DeepSeek Harness checkout，且版本与 [docs/dependencies.md](docs/dependencies.md) 中记录的版本兼容
-- specialist 进程执行支持 macOS 或 Linux
-  - macOS 使用 Seatbelt 网络拒绝配置。
-  - Linux 使用带网络 namespace 的 Bubblewrap。
-  - Windows 在验证等价网络隔离前故意不支持。
+- DSH 原生 bash 与 workspace-write 沙箱（macOS、Linux；Windows 应在该主机上验证 DSH bash/pwsh 沙箱后再正式纳入）
 
 ### 1. 获取并构建 DeepSeek Harness
 
@@ -98,7 +96,7 @@ pnpm test
 pnpm run build
 ```
 
-无密钥测试会覆盖 workflow 持久化、preset 成员判定、角色目录边界、网络隔离、报告资源、产物 manifest 和真实 Loader 启动。
+无密钥测试会覆盖 workflow 持久化、preset 成员判定、角色可写根目录、报告资源、产物 manifest 和真实 Loader 启动。
 
 ### 刷新外部维护的 skill
 
@@ -207,20 +205,22 @@ schema 默认值
 defaultReportLanguage   latex
 defaultLatexEngine      latexmk
 specialistModel         继承 MAIN（可选的 shared DSH route 选择）
-executionTimeoutMs      600000
+delegationWaitTimeoutMs 600000
+pythonExecutable        可选，specialist bash 使用的解释器
 ```
 
-`autoreport` 用户设置 namespace 已通过 `@deepseek-ai/dsh-settings` 注册并持久化、校验 `defaultReportLanguage`、`defaultLatexEngine`、`specialistModel` 和 `executionTimeoutMs`。浏览器 settings card 属于可选发布体验优化，暂不实现。配置了 `specialistModel.reasoningEffort` 时，会通过 DSH 的 agent-scoped model-selection seam 真正生效，而非只记录快照。
+`autoreport` 用户设置 namespace 已通过 `@deepseek-ai/dsh-settings` 注册并持久化、校验 `defaultReportLanguage`、`defaultLatexEngine`、`specialistModel`、`delegationWaitTimeoutMs` 和可选的 `pythonExecutable`。浏览器 settings card 属于可选发布体验优化，暂不实现。配置了 `specialistModel.reasoningEffort` 时，会通过 DSH 的 agent-scoped model-selection seam 真正生效，而非只记录快照。
 
 ## 安全模型
 
 角色边界由运行时强制执行，而不只是 persona 中的文字约束：
 
-- 每个角色只能写入固定的可写根目录。
-- `autoreport-main` 不挂载通用 shell 工具。
-- specialist 命令通过 `report_exec` 执行：显式 argv、DSH 子进程生命周期管理、角色目录隔离。
-- specialist 默认拒绝网络访问。
-- `compile_report` 只对 REPORT 开放。
+- 每个角色的导航 cwd 都是实验根目录。
+- DSH `workspace-write` 沙箱把每个角色钉在各自的可写根目录（`Outline/`、`Theory/`、`Data/Processed/`、`Plots/`、`Report/`）。
+- 五个角色都使用 DSH 原生 `bash`。网络允许访问；可写根目录隔离与网络策略是两件事。
+- AutoReport session 不能通过 `sandbox_permissions` 扩大写权限。
+- MAIN 可以用 bash 和 `pdf-reference-reader` skill 解析 PDF，但不能写到 `Outline/` 以外。
+- specialist 通过 bash 与 skill 编译、运行 Python，不再使用专用 model tool。
 - 用户直接与 specialist 对话时，角色文件权限不变。
 
 ## 测试
@@ -280,8 +280,9 @@ src/
 ├── preset.ts               单一 preset-plane AutoReport contribution
 ├── runtime.ts              workflow state、waiters、artifacts、manifests、settings snapshot
 ├── workflow/               events、projections、registry、waiters、report observer
-├── tools/                  delegation、报告返回、角色执行、编译
-├── policy/                 tool guard 与 Seatbelt/Bubblewrap 隔离
+├── tools/                  send_to_agent、report_workflow、report_task
+├── policy/                 role guard 与按角色的 DSH sandbox 根目录
+├── python-env.ts           DSH_AUTOREPORT_PYTHON shell-env 事实
 ├── workspace/              目录、资源、命令和 skill loader
 ├── artifacts/              过滤、观察和外部 manifest projection
 └── settings.ts             项目/用户/默认设置解析
@@ -291,11 +292,12 @@ tests/                      unit、integration、boot、可选真实 API 测试
 
 ## 当前限制
 
-- Windows specialist 执行会 fail closed，直到验证等价网络隔离。
-- MinerU 指令只提供给 THEORY 与 REPORT；`report_exec` 仍默认拒绝网络，实际 API 抽取须等待明确的联网执行策略。
+- CI 尚未包含 Windows；自定义网络隔离已删除，应对照 DSH bash/pwsh 沙箱重新验证，而不是永久标记为不支持。
+- MinerU 由 MAIN 通过 bash 与 `pdf-reference-reader` skill 调用（输出 `Outline/.cache/mineru/`），没有单独的 MinerU model tool。
 - artifact manifest 由运行时生成，agent 不能添加自由文本备注。
-- 当前保留 `report_task` 以维持现有 workflow 合约；durable task/delegation event 是核心，model-facing bookkeeping API 只会在获得真实 trace 后再收缩。
-- role guard 为 defense in depth 识别若干 mutation-tool schema；preset 不挂载 `delete` 或 `apply_patch`。
+- 当前保留 `report_task` 以维持现有 workflow 合约；`send_to_agent` 已能自动创建任务，其余 bookkeeping API 会在获得真实 trace 后再收缩。
+- role guard 仍对 write/edit 路径做 defense in depth；preset 不挂载 `delete` 或 `apply_patch`。
+- AutoReportCLI 的 `References/skills` 尚未作为按 session cwd 的 DSH skill 根接入。
 
 ## 许可证
 

@@ -1,4 +1,15 @@
-# AutoReportDSH — Design Plan (rev 5, amended rev 7)
+# AutoReportDSH — Design Plan (rev 5, amended rev 8)
+
+Migrate the AutoReportCLI physics-report workflow into a DeepSeek Harness (`dsh`) plugin.
+The scope contract is `../autoreportcli/docs/own-features.md`: preserve AutoReport-owned
+domain semantics while reusing DSH infrastructure wherever its contract is equivalent.
+
+**Rev 8 execution-layer amendment.** Role writable roots are independent DSH sandbox
+workspace roots (cwd stays the experiment root). All five roles use DSH-native `bash`
+with network allowed. `report_exec`, `compile_report`, and AutoReport network-denial
+isolation are removed. Python/MinerU/LaTeX/Typst are skills plus shell-env facts, not
+dedicated model tools. Sections below that still describe `report_exec` / network deny
+are historical; README.md is the current product surface.
 
 Migrate the AutoReportCLI physics-report workflow into a DeepSeek Harness (`dsh`) plugin.
 The scope contract is `../autoreportcli/docs/own-features.md`: preserve AutoReport-owned

@@ -20,7 +20,7 @@
 
 > **Developer preview.** AutoReportDSH is source-installable and fully covered by keyless integration tests. The npm/DSH-bundle release flow described below is planned but **not published yet**.
 
-AutoReportDSH migrates the report-domain behavior of [AutoReportCLI](../autoreportcli) into a DeepSeek Harness (`dsh`) plugin. DSH owns the generic runtime—agent loop, sessions, compaction, providers, tools, subprocess lifecycle, approvals, and UI. AutoReportDSH owns the report workflow—fixed roles, durable delegation state, role authorization, offline report execution, resources, compilation, and artifacts.
+AutoReportDSH migrates the report-domain behavior of [AutoReportCLI](../autoreportcli) into a DeepSeek Harness (`dsh`) plugin. DSH owns the generic runtime—agent loop, sessions, compaction, providers, tools, subprocess lifecycle, approvals, sandbox, and UI. AutoReportDSH owns the report workflow—fixed roles, durable delegation state, role writable roots, resources, compilation skills, and artifacts.
 
 The detailed design and implementation record live in [PLAN.md](PLAN.md).
 
@@ -36,16 +36,17 @@ Selecting the opt-in **`autoreport-main`** agent preset enables one fixed team:
 | PLOTTING | Plot scripts and figures | `Plots/` |
 | REPORT | LaTeX/Typst sources and report compilation | `Report/` |
 
-The model uses DSH-native primitives for files, search, skills, compaction, and user questions. AutoReport-specific MAIN tools are deliberately small:
+The model uses DSH-native `read` / `write` / `edit` / `bash` / `skill` primitives (search via `rg`/`find` in bash). AutoReport-specific MAIN tools are deliberately small:
 
 ```text
 send_to_agent     fixed-role delegation with durable task/revision tracking
-report_task       current workflow status/checklist management
+report_task       current workflow status/checklist management (to be internalized)
+ask_user_question DSH-native structured questions for requirement gaps
 ```
 
 Specialist children are DSH continuable sessions. They keep role context across follow-ups and report structured outcomes through `report_workflow`. A direct human conversation with a specialist remains ordinary conversation; it does not create or complete a workflow task without an active delegation context.
 
-AutoReport-owned skills are role-scoped: THEORY receives `mineru`; REPORT receives `experiment-report-writer`, the active language compiler skill, and `mineru`; DATA_ANALYSIS and PLOTTING receive none of these domain skills. DSH user/project skills retain their normal DSH visibility.
+AutoReport-owned skills are role-scoped: MAIN receives `pdf-reference-reader` (and a `mineru` alias) for References PDF extraction into `Outline/.cache/mineru/`; REPORT receives `experiment-report-writer` plus the active language compile skill (`latex-compile` or `typst-compile`); THEORY, DATA_ANALYSIS, and PLOTTING receive none of these domain skills. DSH user/project skills retain their normal DSH visibility.
 
 ## Coexistence with normal DSH
 
@@ -67,10 +68,7 @@ This is the currently supported installation method. The two repositories must b
 - Node.js `22.19+` or `24+`
 - Corepack-enabled pnpm
 - A local DeepSeek Harness checkout compatible with the version pinned in [docs/dependencies.md](docs/dependencies.md)
-- macOS or Linux for specialist process execution
-  - macOS uses a Seatbelt network-denial profile.
-  - Linux uses Bubblewrap with a network namespace.
-  - Windows is intentionally unsupported until equivalent network isolation is verified.
+- DSH-native bash and workspace-write sandbox (macOS, Linux; Windows should work once DSH bash/pwsh sandbox is verified on that host)
 
 ### 1. Check out and build DeepSeek Harness
 
@@ -98,7 +96,7 @@ pnpm test
 pnpm run build
 ```
 
-The keyless suite validates workflow persistence, preset membership, role boundaries, network isolation, report resources, artifact manifests, and real Loader boot behavior.
+The keyless suite validates workflow persistence, preset membership, role writable roots, report resources, artifact manifests, and real Loader boot behavior.
 
 ### Refresh externally maintained skills
 
@@ -207,20 +205,22 @@ Current composition defaults include:
 defaultReportLanguage   latex
 defaultLatexEngine      latexmk
 specialistModel         inherit Main (optional shared DSH route selection)
-executionTimeoutMs      600000
+delegationWaitTimeoutMs 600000
+pythonExecutable        optional interpreter for specialist bash
 ```
 
-The `autoreport` user-settings namespace is registered through `@deepseek-ai/dsh-settings`; it persists and validates `defaultReportLanguage`, `defaultLatexEngine`, `specialistModel`, and `executionTimeoutMs`. A browser settings card is optional release-polish and remains deferred. `specialistModel.reasoningEffort`, when present, is applied through DSH's agent-scoped model-selection seam rather than merely recorded.
+The `autoreport` user-settings namespace is registered through `@deepseek-ai/dsh-settings`; it persists and validates `defaultReportLanguage`, `defaultLatexEngine`, `specialistModel`, `delegationWaitTimeoutMs`, and optional `pythonExecutable`. A browser settings card is optional release-polish and remains deferred. `specialistModel.reasoningEffort`, when present, is applied through DSH's agent-scoped model-selection seam rather than merely recorded.
 
 ## Security model
 
 Role boundaries are runtime-enforced, not persona-only guidance:
 
-- A role may write only in its fixed writable roots.
-- Generic shell tools are absent from `autoreport-main`.
-- Specialist commands use `report_exec`, which runs explicit argv through DSH subprocess lifecycle management plus role-root isolation.
-- Specialist network access is denied by default.
-- Report compilation is REPORT-only.
+- Every role keeps the experiment root as its navigation cwd.
+- DSH `workspace-write` sandbox pins each role to its writable root (`Outline/`, `Theory/`, `Data/Processed/`, `Plots/`, `Report/`).
+- All five roles use DSH-native `bash`. Network access is allowed; writable-root isolation is independent of network policy.
+- AutoReport sessions cannot escalate via `sandbox_permissions`.
+- MAIN may inspect PDFs (MinerU via the `pdf-reference-reader` skill and bash) but cannot write outside `Outline/`.
+- Specialists compile and run Python through bash and skills, not dedicated model tools.
 - A specialist's direct human follow-up has the same file permissions as its workflow task.
 
 ## Tests
@@ -274,8 +274,9 @@ src/
 ├── preset.ts               one preset-plane AutoReport contribution
 ├── runtime.ts              workflow state, artifacts, manifests, settings snapshot
 ├── workflow/               events, projections, registry, waiters, report observer
-├── tools/                  delegation, reports, role-scoped execution, compilation
-├── policy/                 tool guard and platform isolation
+├── tools/                  send_to_agent, report_workflow, report_task
+├── policy/                 role guard and per-role DSH sandbox roots
+├── python-env.ts           DSH_AUTOREPORT_PYTHON shell-env facts
 ├── workspace/              directories, resources, command, skill loader
 ├── artifacts/              filtering, observation, external manifest projection
 └── settings.ts             project/user/default settings resolution
@@ -285,11 +286,12 @@ tests/                      unit, integration, boot, and opt-in real-API tests
 
 ## Current limitations
 
-- Windows specialist execution fails closed until network isolation is verified.
-- MinerU instructions are available only to THEORY and REPORT; actual API extraction still requires an explicit future network-execution policy because `report_exec` remains network-denied.
+- Windows CI is not in the matrix yet; custom network-isolation is gone, so Windows should be re-verified against DSH bash/pwsh sandbox rather than treated as permanently unsupported.
+- MinerU runs through MAIN bash and the `pdf-reference-reader` skill (`Outline/.cache/mineru/`); there is no dedicated MinerU model tool.
 - Artifact manifests are runtime-generated; agents cannot add free-form manifest notes.
-- `report_task` is retained for the current workflow contract. Durable task/delegation events are core; the model-facing bookkeeping API will be reduced only after real workflow traces.
-- The role guard recognizes several mutation-tool schemas as defense in depth; `delete` and `apply_patch` are not mounted by this preset.
+- `report_task` is retained for the current workflow contract. `send_to_agent` already auto-creates tasks; the remaining bookkeeping API will shrink after real workflow traces.
+- The role guard still checks write/edit paths as defense in depth; `delete` and `apply_patch` are not mounted by this preset.
+- `References/skills` AutoReportCLI project-skill compatibility is not wired as a per-session DSH skill root yet.
 
 ## License
 

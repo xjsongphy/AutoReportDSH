@@ -34,7 +34,7 @@ agent-default-model:
 }
 ```
 
-`XMSXB_API_KEY` 只能通过 DSH Credentials UI 或启动进程环境提供，绝不写入本仓库、实验目录、日志或本文档。
+凭据由已有的 DSH `openai-codex` OAuth credential store 提供；测试脚本不会读取、复制、导出或写入 token。
 
 ## 3. 启动与工作区初始化
 
@@ -51,21 +51,21 @@ cd ~/Develop/AutoReportDSH
 ./.autoreportdsh-local/start-cv-web.sh
 ```
 
-打开 `http://127.0.0.1:3081`，创建 session 时选择 `autoreport-main`，工作目录选择 `~/Develop/CV`。第一条请求前可运行：
+打开 `http://127.0.0.1:3081`，创建 session 时选择 `autoreport-main`，工作目录选择 `~/Develop/CV`。首个报告工作流 turn 会自动、幂等地完成初始化；需要单独检查时也可运行：
 
 ```text
 /report-init --language typst
 ```
 
-初始化只创建缺失目录和资源；已存在的 `Report/main.typ`、`Report/mplts.typ` 等文件不会覆盖。
+初始化只创建缺失目录和资源；已存在的 `Report/main.typ`、`Report/mplts.typ` 等文件不会覆盖。API 测试脚本不再先队列该命令，以免将 slash-command turn 与后续报告 turn 混淆。
 
 ## 4. 在页面中观察什么
 
 - **Chat**：用户消息、MAIN 回复、所有 tool call/result。`send_to_agent` 是 MAIN 对固定角色的委派；`report_workflow` 是 specialist 返回的结构化完成/阻塞结果。
 - **Trajectory 标签页**：逐 turn/step 的事件账本；可检查请求路由、输入/输出、时长、token usage、工具调用和结果。这是检查 agent 工作轨迹的首选页面。
-- **模型选择器**：确认 MAIN 路由为 `xmsxb / gpt-5.6-terra`。已开始的 session 保留其已记录的路由。
+- **模型选择器**：确认 MAIN 路由为 `openai-codex / gpt-5.6-luna`。已开始的 session 保留其已记录的路由。
 - **子 agent 面包屑/会话**：specialist 是持久的 continuable child sessions；可查看各角色对话。它们保持角色权限，不能获得 MAIN 的任意写入权。
-- **工具卡片**：检查 `report_exec`、`compile_report`、`send_to_agent`、`report_workflow` 的参数与结果。REPORT 独占 `compile_report`。
+- **工具卡片**：检查 `bash`、`send_to_agent`、`report_workflow` 的参数与结果。REPORT 通过 bash 按 `latex-compile` / `typst-compile` skill 编译。
 - **报告任务状态**：`report_task` 的工具结果和 `autoreport/*` 事件给出 task、revision、waiting/completed/blocked/timeout 状态；不要以 UI todo 取代该工作流状态。
 
 ## 5. 持久化日志、产物和最终报告
@@ -123,9 +123,18 @@ opencli browser autoreport screenshot /tmp/autoreportdsh.png
 
 自动化检查应将截图写入 `/tmp/`，并以 DSH 的 session log、导出 ZIP 与 manifest 作为可审计的权威记录；OpenCLI 页面快照仅用于验证 UI 投影。
 
-## 8. 已知限制
+## 8. 本次实测结果（2026-08-27）
+
+- `pnpm test` 通过：33 个 test files、190 个 tests；唯一跳过项是未配置 `OPENROUTER_API_KEY` 的显式 opt-in e2e。
+- OpenCLI `doctor` 为绿色，实际打开 `http://127.0.0.1:3081` 后成功读取 DOM 状态并写出截图至 `/tmp/autoreportdsh-cv-before-final.png`。因此本机确实能查看 DSH 页面状态和截图。
+- MAIN 实际 `request/header` 为 `openai-codex / gpt-5.6-luna / xhigh`。THEORY child 实际请求为同一 provider/model，证明 MAIN 与 specialist 的 provider/model 双层路由可用。
+- 完整流水线**未验收通过**：THEORY 开始后，Codex OAuth 返回 `The usage limit has been reached`；`Report/main.pdf` 未生成，PLOTTING、REPORT 与 manifest 也未完成。不可把这次运行称为报告生成成功。
+- 测试中发现并修复两个本地运行时问题：child setup 中访问未注入的 `skills` 服务，以及 `send_to_agent(wait: true)` 忽略已持久化 inbox report、导致等待超时。对应回归测试已加入。
+- API 测试脚本现在遇到非 `completed` 的 `turn/end` 会以非零状态失败，避免 quota 或 transport 错误被误报为成功。
+
+## 9. 已知限制
 
 - DSH Web 启动命令来自 harness checkout：`pnpm dsh ...`，系统 PATH 中无需存在独立 `dsh` 二进制。
-- AutoReport specialist 默认禁止网络；MAIN 的 provider 请求仍由 DSH host 发出。
-- Windows 的 specialist 隔离故意 fail closed；本次 macOS 测试不受此限制。
-- AutoReport 当前支持 MAIN 与 specialist 两级**独立模型路由选择**：MAIN 使用 DSH 的 session model，`specialistModel` 可为四个 specialist 指定另一条固定 route，或省略/设为 `{ "inheritMain": true }` 继承 MAIN；specialist 的 `reasoningEffort` 通过 DSH agent-scoped model-selection seam 写入实际 child 请求并记录在 request header。
+- AutoReport specialist 默认禁止网络；MAIN 的 provider 请求仍由 DSH host 发出。因此 MinerU 的联网提取在本次 THEORY 任务中被正确拒绝，child 改用项目已有的本地提取留档并记录该限制。
+- 角色写权限由 DSH sandbox 的 per-role writable root 强制；本次 macOS 测试应确认 bash 不能跨角色写。
+- AutoReport 支持 MAIN 与 specialist 两级**provider/model 独立路由**：MAIN 使用 DSH 的 session model，`specialistModel` 可为四个 specialist 指定另一条固定 route，或省略/设为 `{ "inheritMain": true }` 继承 MAIN。实测中 `specialistModel.reasoningEffort: xhigh` 没有写入 child 的首个 `request/header`（记录为 `medium`）；这是 Web model-selection hook 的顺序缺陷，尚未修复，不能宣称 specialist effort 已生效。
