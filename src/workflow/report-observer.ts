@@ -12,8 +12,10 @@ export interface WorkflowReportObserverDependencies {
   readonly commit: (type: 'autoreport/delegation', data: DelegationSnapshot) => void
 }
 
-function messageText(event: SessionEvent<'user/message'>): string {
-  return event.data.content
+type DeliveredMessage = SessionEvent<'user/message'>['data']
+
+function messageText(message: DeliveredMessage): string {
+  return message.content
     .filter((block): block is { type: 'text'; text: string } => block.type === 'text')
     .map(block => block.text)
     .join('\n')
@@ -53,30 +55,18 @@ function settleOutcome(snapshot: DelegationSnapshot): WaiterOutcome {
   }
 }
 
-/**
- * Fold one durable parent Session event into AutoReport delegation state.
- * The input is the real SessionEvent wrapper, never a raw UserMessage.
- * @param _session - parent session receiving the message.
- * @param event - committed Session event.
- * @param deps - projection, waiters, and durable commit callback.
- */
-export function observeWorkflowMessage(
-  _session: Session,
-  event: SessionEvent,
-  deps: WorkflowReportObserverDependencies,
-): void {
-  if (event.type !== 'user/message') return
-  const source = event.data.source
+function observeDeliveredMessage(message: DeliveredMessage, deps: WorkflowReportObserverDependencies): void {
+  const source = message.source
   if (source.kind === 'subagent-report') {
     const reportSource = source as SubagentReportMessageSource
-    const parsed = parseWorkflowEnvelope(messageText(event))
+    const parsed = parseWorkflowEnvelope(messageText(message))
     if (!parsed.ok) {
       const current = currentForChild(deps.state, reportSource.senderSessionId)
       if (current === undefined) return
       const failed: DelegationSnapshot = {
         ...current,
         phase: 'failed',
-        reportMessageId: String(event.data.id),
+        reportMessageId: String(message.id),
         reason: `invalid workflow report: ${parsed.reason}`,
         settledAt: Date.now(),
       }
@@ -88,7 +78,7 @@ export function observeWorkflowMessage(
     const report = parsed.value
     const attempt = deps.state.delegationAt(report.task_id, report.delegation_revision)
     if (attempt === undefined || attempt.childSessionId !== reportSource.senderSessionId) return
-    const reportMessageId = String(event.data.id)
+    const reportMessageId = String(message.id)
     if (attempt.reportMessageId === reportMessageId) return
     const current = deps.state.currentDelegation(report.task_id)
     const stale = current === undefined || current.delegationRevision !== report.delegation_revision
@@ -101,9 +91,7 @@ export function observeWorkflowMessage(
       ...(stale ? { reason: `late report for delegation revision ${report.delegation_revision}` } : {}),
     }
     deps.commit('autoreport/delegation', settled)
-    if (!stale) {
-      deps.waiters.settle(delegationKey(settled.taskId, settled.delegationRevision), settleOutcome(settled))
-    }
+    if (!stale) deps.waiters.settle(delegationKey(settled.taskId, settled.delegationRevision), settleOutcome(settled))
     return
   }
 
@@ -114,11 +102,31 @@ export function observeWorkflowMessage(
     const failed: DelegationSnapshot = {
       ...current,
       phase: 'failed',
-      reportMessageId: String(event.data.id),
+      reportMessageId: String(message.id),
       reason: settledSource.summary,
       settledAt: Date.now(),
     }
     deps.commit('autoreport/delegation', failed)
     deps.waiters.settle(delegationKey(failed.taskId, failed.delegationRevision), settleOutcome(failed))
+  }
+}
+
+/**
+ * Fold a child report at its durable delivery boundary. `reportFrom()` commits
+ * an inbox splice before the parent consumes the corresponding `user/message`.
+ * Settling only at the latter deadlocks `send_to_agent({ wait: true })`.
+ * Subsequent surface delivery retains the same message id and is idempotent.
+ */
+export function observeWorkflowMessage(
+  _session: Session,
+  event: SessionEvent,
+  deps: WorkflowReportObserverDependencies,
+): void {
+  if (event.type === 'user/message') {
+    observeDeliveredMessage(event.data, deps)
+    return
+  }
+  if (event.type === 'agent/inbox/spliced') {
+    for (const message of event.data.inserted) observeDeliveredMessage(message, deps)
   }
 }

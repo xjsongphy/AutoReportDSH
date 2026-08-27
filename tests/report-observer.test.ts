@@ -70,6 +70,37 @@ describe('report observer', () => {
     await expect(pending).resolves.toMatchObject({ status: 'completed', response: 'processed.csv written' })
   })
 
+  it('settles wait:true from the report delivery inbox splice before MAIN consumes it', async () => {
+    const session = Session.create(SessionId('parent'))
+    const state = WorkflowState.fromSession(session)
+    const waiters = new WaiterRegistry()
+    seedWaiting(session, state)
+    const pending = waiters.wait('task-7#1', 5_000)
+    const message = createUserMessage({
+      content: [{ type: 'text', text: JSON.stringify({
+        task_id: 'task-7',
+        delegation_revision: 1,
+        status: 'success',
+        block_type: null,
+        response: 'delivered before parent step',
+        produced_files: ['Theory/theory.md'],
+      }) }],
+      source: { kind: 'subagent-report', form: 'relay', senderSessionId: SessionId('child-da') },
+    })
+    const event = session.append('agent/inbox/spliced', {
+      target: 'next-step', start: 0, inserted: [message],
+    })
+    observe(session, state, waiters, event)
+    expect(state.currentDelegation('task-7')?.phase).toBe('completed')
+    await expect(pending).resolves.toMatchObject({ status: 'completed', response: 'delivered before parent step' })
+
+    // When the queued message later enters the chat surface, its identity
+    // prevents a duplicate workflow event or a second waiter settlement.
+    const surfaced = session.append('user/message', message, { surfaceOp: 'append' })
+    observe(session, state, waiters, surfaced)
+    expect(state.currentDelegation('task-7')?.reportMessageId).toBe(String(message.id))
+  })
+
   it('keeps a late report as stale evidence without completing the current revision', () => {
     const session = Session.create(SessionId('parent'))
     const state = WorkflowState.fromSession(session)
