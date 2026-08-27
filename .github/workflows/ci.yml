@@ -28,7 +28,7 @@ jobs:
   verify:
     name: ${{ matrix.name }} / locked Harness / test + build
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 30
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
@@ -37,6 +37,8 @@ jobs:
             os: ubuntu-latest
           - name: macOS
             os: macos-latest
+          - name: Windows
+            os: windows-latest
 
     steps:
       # The plugin's package.json intentionally uses sibling link: dependencies.
