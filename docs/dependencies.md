@@ -7,18 +7,16 @@ iterating rapidly; PLAN.md risk 9).
 
 - Checkout: sibling directory `../deepseek-harness` (all `link:` specifiers are
   repository-relative so clean clones, CI, and other machines resolve them)
-- Commit at scaffold time: `b150a551b8d465e31e418e1b2eaf5e79bbb7d28e`
-  (`Merge pull request #2908 from deepseek-harness/release/dsh-0.1.1-rc.2`)
+- CI/source-install pin: `429220f41e6362a0674d21b4d7dfe94cfaa59c8d`
+  (includes the ignorable-append seam and public `@deepseek-ai/dsh-settings` export)
 - Built: full `pnpm run build` completed successfully on this commit.
 
-## Pending harness patch
+## Compatibility seams
 
-`workflow-state` depends on a first-party DSH compatibility change adding an append-options
-seam so non-surface events can be written as
-`session.append(type, data, { ignorable: true })` — the marker stock readers need to skip
-out-of-tree `autoreport/*` records on cold load instead of refusing the session
-(PLAN.md §2.6 persistence gate). Branch: `feat/session-append-ignorable`. This repo pins the
-harness commit it consumes; update both together when the patch merges.
+The pinned Harness exposes `Session.append(type, data, { ignorable: true })`, so stock readers
+skip out-of-tree `autoreport/*` records during cold load, and publicly exports
+`@deepseek-ai/dsh-settings`. Update the source-install pin and the CI `DSH_REF` together after
+any compatibility review.
 
 ## Wiring decision
 
