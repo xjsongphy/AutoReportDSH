@@ -817,7 +817,7 @@ workspace-assets/compile-manifests.
 
 ## 6. Implementation status (as of integration-e2e merge)
 
-All planned phases are implemented and merged to `main`; 183 tests pass
+All planned phases are implemented and merged to `main`; 190 tests pass
 (plus one self-skipping real-API e2e) and the build is clean. The post-review
 preset-plane consolidation and lifecycle/coexistence follow-ups are included in
 this status.
