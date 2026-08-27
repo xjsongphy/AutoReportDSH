@@ -10,7 +10,6 @@ import { installWorkflowReportTool } from '../src/tools/report-workflow.js'
 const CONFIG: Config = {
   defaultReportLanguage: 'latex',
   defaultLatexEngine: 'latexmk',
-  defaultPythonEnv: undefined,
   workspaceRoot: undefined,
   specialistModel: undefined,
   executionTimeoutMs: 600_000,
@@ -18,6 +17,7 @@ const CONFIG: Config = {
 
 function childContext() {
   const tools: { name: string }[] = []
+  const skills: { name: string }[] = []
   const sections: { name: string; text: string }[] = []
   const ctx = {
     agent: { id: SessionId('child-1') },
@@ -33,8 +33,14 @@ function childContext() {
         return () => {}
       },
     },
+    skills: {
+      register: (skill: { name: string }) => {
+        skills.push(skill)
+        return () => {}
+      },
+    },
   }
-  return { ctx: ctx as unknown as Context, tools, sections }
+  return { ctx: ctx as unknown as Context, tools, skills, sections }
 }
 
 function hostContext() {
@@ -57,7 +63,7 @@ describe('report router', () => {
   it('installs stock report for ordinary DSH children', () => {
     const child = childContext()
     const host = hostContext()
-    installRoutedReportTool(child.ctx, host.ctx, { roleRegistry: new RoleRegistry(), config: CONFIG })
+    installRoutedReportTool(child.ctx, host.ctx, { roleRegistry: new RoleRegistry(), config: CONFIG, workflowForChild: () => undefined })
     expect(child.tools.map(tool => tool.name)).toEqual(['report'])
     expect(child.sections.some(section => section.name === 'tool:report')).toBe(true)
   })
@@ -75,8 +81,9 @@ describe('report router', () => {
       provisioning: 'reserved',
     }
     roleRegistry.registerReserved(binding)
-    installRoutedReportTool(child.ctx, host.ctx, { roleRegistry, config: CONFIG })
+    installRoutedReportTool(child.ctx, host.ctx, { roleRegistry, config: CONFIG, workflowForChild: () => undefined })
     expect(child.tools.map(tool => tool.name)).toEqual(['report_workflow', 'report_exec'])
+    expect(child.skills.map(skill => skill.name)).toEqual(['mineru'])
     expect(child.sections.some(section => section.text.includes('THEORY'))).toBe(true)
     expect(child.tools.some(tool => tool.name === 'report')).toBe(false)
   })
