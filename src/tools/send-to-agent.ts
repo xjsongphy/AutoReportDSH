@@ -3,6 +3,7 @@ import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { ContentBlock } from '@deepseek-ai/dsh-llm'
 import { SessionId, type Session } from '@deepseek-ai/dsh-session'
 import type { CoordinatorMessageSource, SubagentRuntime } from '@deepseek-ai/dsh-subagent'
+import { SubagentError } from '@deepseek-ai/dsh-subagent'
 import { defineTool, type ToolDefinition } from '@deepseek-ai/dsh-tools'
 import type AutoReportWorkflowRuntime from '../runtime.js'
 import type { Config } from '../config.js'
@@ -19,6 +20,7 @@ import { delegationKey } from '../workflow/protocol.js'
 
 const MAX_PROMPT = 16_384
 const MAX_CONTEXT = 8_192
+const MAX_SUBJECT = 256
 const MIN_TIMEOUT_MS = 1
 const MAX_TIMEOUT_MS = 900_000
 
@@ -41,6 +43,14 @@ function text(raw: unknown, name: string, max: number): string {
   return raw.trim()
 }
 
+/** Workspace-relative scope each role's tasks produce files into. */
+function roleToScope(role: SpecialistRole): string {
+  if (role === 'DATA_ANALYSIS') return 'Data/Processed'
+  if (role === 'PLOTTING') return 'Plots'
+  if (role === 'REPORT') return 'Report'
+  return 'Theory'
+}
+
 function taskBriefing(
   task: TaskSnapshot,
   revision: number,
@@ -56,7 +66,7 @@ function taskBriefing(
     `Role: ${task.role}`,
     `Task subject: ${task.subject}`,
     `Writable roots: ${policy.writableRoots.join(', ')}`,
-    'All other workspace paths are read-only. Network access is denied.',
+    'All other workspace paths are read-only. Network access is allowed; writes remain confined to the writable roots above.',
     `Checklist:\n${checklist}`,
     `Goal:\n${prompt}`,
     ...(context === undefined ? [] : [`Explicit user constraints:\n${context}`]),
@@ -87,6 +97,17 @@ function normalizeTimeout(raw: unknown, fallback: number): number {
     throw new Error(`timeout_ms must be an integer between ${MIN_TIMEOUT_MS} and ${MAX_TIMEOUT_MS}`)
   }
   return value
+}
+
+function isNotResumable(error: unknown): boolean {
+  if (error instanceof SubagentError && error.code === 'NOT_RESUMABLE') return true
+  return (error as { code?: string }).code === 'NOT_RESUMABLE'
+}
+
+function subjectFromPrompt(prompt: string, rawSubject: unknown): string {
+  if (rawSubject !== undefined) return text(rawSubject, 'subject', MAX_SUBJECT)
+  const firstLine = prompt.split('\n')[0]?.trim() ?? prompt
+  return firstLine.length <= MAX_SUBJECT ? firstLine : firstLine.slice(0, MAX_SUBJECT)
 }
 
 /**
@@ -122,11 +143,13 @@ export function createSendToAgentTool(deps: SendToAgentDependencies): ToolDefini
 
   return defineTool({
     name: 'send_to_agent',
-    description: 'Dispatch one durable AutoReport task to its fixed specialist role. Defaults to waiting for a structured workflow report.',
+    description: 'Dispatch one durable AutoReport task to its fixed specialist role. Creates a task when task_id is omitted. Defaults to waiting for a structured workflow report.',
     parameters: {
       role: { type: 'string', required: true, enum: ['THEORY', 'DATA_ANALYSIS', 'PLOTTING', 'REPORT'] },
-      task_id: { type: 'string', required: true },
       prompt: { type: 'string', required: true },
+      subject: { type: 'string', description: 'Short task subject when auto-creating a task.' },
+      dependencies: { type: 'array', items: { type: 'string' }, description: 'Task ids that must complete first.' },
+      task_id: { type: 'string', description: 'Existing task id for redispatch or follow-up.' },
       context: { type: 'string' },
       wait: { type: 'boolean', description: 'Wait for success/blocked/timeout; default true.' },
       timeout_ms: { type: 'number', description: 'Bounded wait in milliseconds.' },
@@ -147,16 +170,39 @@ export function createSendToAgentTool(deps: SendToAgentDependencies): ToolDefini
       const context = args.context === undefined ? undefined : text(args.context, 'context', MAX_CONTEXT)
       const parentSession: Session = parent.session
       const live = deps.workflow.forSession(parentSession)
-      const taskId = text(args.task_id, 'task_id', 256)
-      const task = live.state.getTask(taskId)
-      if (task === undefined) throw new Error(`unknown task ${taskId}`)
+
+      let task: TaskSnapshot
+      let taskId: string
+      if (args.task_id !== undefined) {
+        taskId = text(args.task_id, 'task_id', 256)
+        const existing = live.state.getTask(taskId)
+        if (existing === undefined) throw new Error(`unknown task ${taskId}`)
+        task = existing
+      } else {
+        const dependencies = Array.isArray(args.dependencies) ? args.dependencies.map(String) : []
+        for (const dependency of dependencies) {
+          if (live.state.getTask(dependency) === undefined) throw new Error(`unknown dependency ${dependency}`)
+        }
+        taskId = live.state.nextTaskId()
+        task = {
+          version: AUTOREPORT_SCHEMA_VERSION,
+          taskId,
+          subject: subjectFromPrompt(prompt, args.subject),
+          role,
+          dependencies,
+          status: 'pending',
+          revision: 1,
+          steps: [],
+          scopes: [roleToScope(role)],
+        }
+        deps.workflow.commit(parentSession, 'autoreport/task', task)
+      }
+
       ensureTaskDispatchable(task, role, live.state)
       const revision = nextAttempt(task, live)
 
       let binding = live.state.bindingForRole(role)
       let firstStart = binding === undefined || binding.provisioning === 'failed'
-      // The workflow's creation-time snapshot outranks composition config;
-      // composition applies only when the event predates snapshots.
       const settings = live.state.projection().meta?.settings
       if (firstStart) {
         const previousBinding = binding
@@ -182,7 +228,7 @@ export function createSendToAgentTool(deps: SendToAgentDependencies): ToolDefini
       }
       if (binding === undefined) throw new Error(`no role binding available for ${role}`)
 
-      const dispatched: DelegationSnapshot = {
+      let dispatched: DelegationSnapshot = {
         version: AUTOREPORT_SCHEMA_VERSION,
         taskId,
         delegationRevision: revision,
@@ -201,39 +247,77 @@ export function createSendToAgentTool(deps: SendToAgentDependencies): ToolDefini
         })
       }
 
-      const bound = binding
+      let bound = binding
       const content: ContentBlock[] = [{ type: 'text', text: taskBriefing(task, revision, prompt, context) }]
       let acceptedMessageId: string
+      let rebindAttempted = false
       try {
-        if (firstStart) {
-          const agentOptions = childAgentOptions(settings, deps.config.specialistModel)
-          const accepted = await deps.subagents.startContinuable({
-            provider: 'spawn',
-            label: `AutoReport ${role}`,
-            childId: bound.childSessionId,
-            request: {
-              prompt: content,
-              parent,
-              ...(agentOptions === undefined ? {} : { agentOptions }),
-              maxDepth: 1,
-              persona: persona(role),
-              toolFilter: { deny: ['send_to_agent', 'report_task', 'ask_user_question'] },
-            },
-            signal: exec.signal,
-          })
-          acceptedMessageId = String(accepted.messageId)
-          deps.workflow.roleRegistry.markActive(bound.childSessionId)
-          const active: RoleBindingSnapshot = { ...bound, provisioning: 'active' }
-          deps.workflow.commit(parentSession, 'autoreport/role-binding', active)
-          binding = active
-          firstStart = false
-        } else {
-          const source: CoordinatorMessageSource = { kind: 'coordinator', form: 'relay', senderSessionId: parent.id }
-          acceptedMessageId = String(await deps.subagents.followup(parent, bound.childSessionId, content, {
-            source,
-            signal: exec.signal,
-          }))
+        const deliver = async (): Promise<string> => {
+          if (firstStart) {
+            const agentOptions = childAgentOptions(settings, deps.config.specialistModel)
+            const accepted = await deps.subagents.startContinuable({
+              provider: 'spawn',
+              label: `AutoReport ${role}`,
+              childId: bound.childSessionId,
+              request: {
+                prompt: content,
+                parent,
+                ...(agentOptions === undefined ? {} : { agentOptions }),
+                maxDepth: 1,
+                persona: persona(role),
+                toolFilter: { deny: ['send_to_agent', 'report_task', 'ask_user_question'] },
+              },
+              signal: exec.signal,
+            })
+            deps.workflow.roleRegistry.markActive(bound.childSessionId)
+            const active: RoleBindingSnapshot = { ...bound, provisioning: 'active' }
+            deps.workflow.commit(parentSession, 'autoreport/role-binding', active)
+            bound = active
+            binding = active
+            firstStart = false
+            return String(accepted.messageId)
+          }
+          try {
+            const source: CoordinatorMessageSource = { kind: 'coordinator', form: 'relay', senderSessionId: parent.id }
+            return String(await deps.subagents.followup(parent, bound.childSessionId, content, {
+              source,
+              signal: exec.signal,
+            }))
+          } catch (error: unknown) {
+            if (!rebindAttempted && isNotResumable(error)) {
+              rebindAttempted = true
+              const previousBinding = bound
+              deps.workflow.commit(parentSession, 'autoreport/role-binding', { ...bound, provisioning: 'failed' })
+              const newChild = mintChild()
+              const reservation: RoleBindingSnapshot = {
+                version: AUTOREPORT_SCHEMA_VERSION,
+                role,
+                childSessionId: newChild,
+                parentSessionId: parent.id,
+                workflowId: live.state.projection().meta?.workflowId ?? String(parent.id),
+                provisioning: 'reserved',
+                supersedes: previousBinding.childSessionId,
+              }
+              deps.workflow.commit(parentSession, 'autoreport/role-binding', reservation)
+              if (deps.workflow.roleRegistry.lookup(previousBinding.childSessionId) !== undefined) {
+                deps.workflow.roleRegistry.rebind(role, previousBinding.childSessionId, reservation)
+              } else {
+                deps.workflow.roleRegistry.registerReserved(reservation)
+              }
+              bound = reservation
+              binding = reservation
+              firstStart = true
+              dispatched = {
+                ...dispatched,
+                childSessionId: reservation.childSessionId,
+              }
+              deps.workflow.commit(parentSession, 'autoreport/delegation', dispatched)
+              return deliver()
+            }
+            throw error
+          }
         }
+        acceptedMessageId = await deliver()
       } catch (error: unknown) {
         if (bound.provisioning === 'reserved') {
           deps.workflow.roleRegistry.revoke(bound.childSessionId)
@@ -260,7 +344,10 @@ export function createSendToAgentTool(deps: SendToAgentDependencies): ToolDefini
         }
       }
 
-      const timeoutMs = normalizeTimeout(args.timeout_ms, settings?.executionTimeoutMs ?? deps.config.executionTimeoutMs)
+      const timeoutMs = normalizeTimeout(
+        args.timeout_ms,
+        settings?.delegationWaitTimeoutMs ?? deps.config.delegationWaitTimeoutMs ?? 600_000,
+      )
       const outcome = await live.waiters.wait(delegationKey(taskId, revision), timeoutMs)
       if (outcome.status === 'timed_out') {
         const current = live.state.delegationAt(taskId, revision)

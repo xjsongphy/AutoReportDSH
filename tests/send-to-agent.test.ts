@@ -18,6 +18,7 @@ const CONFIG: Config = {
   defaultLatexEngine: 'latexmk',
   workspaceRoot: undefined,
   specialistModel: undefined,
+  delegationWaitTimeoutMs: 600_000,
   executionTimeoutMs: 600_000,
 }
 
@@ -88,6 +89,101 @@ function harness() {
 }
 
 describe('send_to_agent', () => {
+  it('dispatches without a prior report_task when task_id is omitted', async () => {
+    const session = Session.create(SessionId('main'))
+    const state = WorkflowState.fromSession(session)
+    const waiters = new WaiterRegistry()
+    const roleRegistry = new RoleRegistry()
+    const workflow: SendToAgentWorkflow = {
+      roleRegistry,
+      forSession: () => ({ state, waiters }),
+      commit(target, type, data) {
+        const event = appendWorkflowEvent(target, type, data)
+        state.apply(event)
+        return event
+      },
+    }
+    const subagents = {
+      startContinuable: vi.fn(async (spec: { childId?: SessionId }) => ({
+        childId: spec.childId,
+        messageId: 'msg-auto',
+      })),
+      followup: vi.fn(),
+    }
+    const tool = createSendToAgentTool({
+      subagents,
+      workflow,
+      config: CONFIG,
+      childId: () => SessionId('child-auto'),
+      persona: () => 'p',
+    })
+    const exec = { agent: { id: session.id, session }, signal: new AbortController().signal }
+    const result = await tool.execute({
+      role: 'PLOTTING',
+      prompt: 'Plot the fit results',
+      wait: false,
+    } as never, exec as never) as Record<string, unknown>
+    expect(result).toMatchObject({ status: 'delegated', task_id: 'task-1', delegation_revision: 1 })
+    expect(state.getTask('task-1')).toMatchObject({
+      subject: 'Plot the fit results',
+      role: 'PLOTTING',
+      status: 'running',
+      scopes: ['Plots'],
+    })
+    expect(subagents.startContinuable).toHaveBeenCalledOnce()
+  })
+
+  it('rebinds and starts fresh when followup is NOT_RESUMABLE', async () => {
+    const session = Session.create(SessionId('main'))
+    const state = WorkflowState.fromSession(session)
+    const waiters = new WaiterRegistry()
+    const roleRegistry = new RoleRegistry()
+    const workflow: SendToAgentWorkflow = {
+      roleRegistry,
+      forSession: () => ({ state, waiters }),
+      commit(target, type, data) {
+        const event = appendWorkflowEvent(target, type, data)
+        state.apply(event)
+        return event
+      },
+    }
+    workflow.commit(session, 'autoreport/task', task())
+    const ids = [SessionId('child-a'), SessionId('child-b')]
+    const subagents = {
+      startContinuable: vi.fn(async (spec: { childId?: SessionId }) => {
+        if (spec.childId === 'child-b') {
+          return { childId: spec.childId, messageId: 'msg-rebind' }
+        }
+        return { childId: spec.childId, messageId: 'msg-start' }
+      }),
+      followup: vi.fn(async () => {
+        const error = Object.assign(new Error('not resumable'), { code: 'NOT_RESUMABLE' })
+        throw error
+      }),
+    }
+    const tool = createSendToAgentTool({
+      subagents,
+      workflow,
+      config: CONFIG,
+      childId: () => ids.shift() ?? SessionId('child-overflow'),
+      persona: () => 'p',
+    })
+    const exec = { agent: { id: session.id, session }, signal: new AbortController().signal }
+    const call = (args: Record<string, unknown>) => tool.execute(args as never, exec as never)
+    await call({ role: 'THEORY', task_id: 'task-1', prompt: 'first', wait: false })
+    workflow.commit(session, 'autoreport/delegation', {
+      ...state.currentDelegation('task-1')!,
+      phase: 'completed',
+      settledAt: 2,
+    })
+    await expect(call({ role: 'THEORY', task_id: 'task-1', prompt: 'second', wait: false }))
+      .resolves.toMatchObject({ status: 'delegated', delegation_revision: 2, message_id: 'msg-rebind' })
+    expect(subagents.followup).toHaveBeenCalledOnce()
+    expect(subagents.startContinuable).toHaveBeenCalledTimes(2)
+    expect(state.bindingForRole('THEORY')?.childSessionId).toBe('child-b')
+    expect(state.currentDelegation('task-1')?.childSessionId).toBe('child-b')
+  })
+
   it('reserves the child id before startContinuable and returns immediately when wait is false', async () => {
     const { call, state, roleRegistry, subagents } = harness()
     const result = await call({

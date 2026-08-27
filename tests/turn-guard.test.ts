@@ -1,0 +1,118 @@
+import { describe, expect, it } from 'vitest'
+import { SessionId } from '@deepseek-ai/dsh-session'
+import { RoleRegistry } from '../src/workflow/role-registry.js'
+import { AUTOREPORT_SCHEMA_VERSION, type DelegationSnapshot, type TaskSnapshot } from '../src/workflow/events.js'
+import type { WorkflowProjection } from '../src/workflow/service.js'
+import { shouldSteerMain, shouldSteerSpecialist } from '../src/workflow/turn-guard.js'
+
+function projection(tasks: TaskSnapshot[], delegations: DelegationSnapshot[]): WorkflowProjection {
+  return {
+    meta: undefined,
+    tasks: new Map(tasks.map(task => [task.taskId, task])),
+    delegations: new Map(delegations.map(item => [`${item.taskId}#${item.delegationRevision}`, item])),
+    bindingsByChild: new Map(),
+    bindingsByRole: new Map(),
+    artifacts: [],
+  }
+}
+
+describe('turn-stopping guards', () => {
+  it('steers a bound specialist with an unanswered delegation up to twice', () => {
+    const registry = new RoleRegistry()
+    const child = SessionId('child-theory')
+    registry.registerReserved({
+      version: AUTOREPORT_SCHEMA_VERSION,
+      role: 'THEORY',
+      childSessionId: child,
+      parentSessionId: SessionId('main'),
+      workflowId: 'wf',
+      provisioning: 'reserved',
+    })
+    const tasks: TaskSnapshot[] = [{
+      version: AUTOREPORT_SCHEMA_VERSION,
+      taskId: 'task-1',
+      subject: 'Derive',
+      role: 'THEORY',
+      dependencies: [],
+      status: 'running',
+      revision: 1,
+      steps: [],
+      scopes: ['Theory'],
+      latestDelegationRevision: 1,
+    }]
+    const delegations: DelegationSnapshot[] = [{
+      version: AUTOREPORT_SCHEMA_VERSION,
+      taskId: 'task-1',
+      delegationRevision: 1,
+      role: 'THEORY',
+      childSessionId: child,
+      phase: 'waiting_for_child',
+      dispatchedAt: 1,
+    }]
+    const fold = projection(tasks, delegations)
+    expect(shouldSteerSpecialist(registry, child, fold, 0)).toBe(true)
+    expect(shouldSteerSpecialist(registry, child, fold, 1)).toBe(true)
+    expect(shouldSteerSpecialist(registry, child, fold, 2)).toBe(false)
+    expect(shouldSteerSpecialist(registry, SessionId('foreign'), fold, 0)).toBe(false)
+  })
+
+  it('does not steer after an accepted report exists', () => {
+    const registry = new RoleRegistry()
+    const child = SessionId('child-theory')
+    registry.registerReserved({
+      version: AUTOREPORT_SCHEMA_VERSION,
+      role: 'THEORY',
+      childSessionId: child,
+      parentSessionId: SessionId('main'),
+      workflowId: 'wf',
+      provisioning: 'active',
+    })
+    const fold = projection([{
+      version: AUTOREPORT_SCHEMA_VERSION,
+      taskId: 'task-1',
+      subject: 'Derive',
+      role: 'THEORY',
+      dependencies: [],
+      status: 'completed',
+      revision: 2,
+      steps: [],
+      scopes: ['Theory'],
+      latestDelegationRevision: 1,
+    }], [{
+      version: AUTOREPORT_SCHEMA_VERSION,
+      taskId: 'task-1',
+      delegationRevision: 1,
+      role: 'THEORY',
+      childSessionId: child,
+      phase: 'completed',
+      dispatchedAt: 1,
+      report: {
+        task_id: 'task-1',
+        delegation_revision: 1,
+        status: 'success',
+        block_type: null,
+        response: 'done',
+        produced_files: [],
+      },
+    }])
+    expect(shouldSteerSpecialist(registry, child, fold, 0)).toBe(false)
+  })
+
+  it('reminds MAIN once when a task is blocked', () => {
+    const fold = projection([{
+      version: AUTOREPORT_SCHEMA_VERSION,
+      taskId: 'task-9',
+      subject: 'Need data',
+      role: 'DATA_ANALYSIS',
+      dependencies: [],
+      status: 'blocked',
+      revision: 2,
+      steps: [],
+      scopes: ['Data/Processed'],
+      blockedReason: 'missing csv',
+    }], [])
+    expect(shouldSteerMain(fold, 0)).toBe(true)
+    expect(shouldSteerMain(fold, 1)).toBe(false)
+    expect(shouldSteerMain(projection([], []), 0)).toBe(false)
+  })
+})

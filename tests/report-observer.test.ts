@@ -66,6 +66,7 @@ describe('report observer', () => {
     }), { surfaceOp: 'append' })
     observe(session, state, waiters, event)
     expect(state.currentDelegation('task-7')?.phase).toBe('completed')
+    expect(state.getTask('task-7')?.status).toBe('completed')
     expect(state.currentDelegation('task-7')?.reportMessageId).toBe(String(event.data.id))
     await expect(pending).resolves.toMatchObject({ status: 'completed', response: 'processed.csv written' })
   })
@@ -146,6 +147,63 @@ describe('report observer', () => {
     observe(session, state, waiters, first)
     expect(state.currentDelegation('task-7')?.phase).toBe('completed')
     expect(state.currentDelegation('task-7')?.settledAt).toBe(settledAt)
+  })
+
+  it('marks the task blocked when the child reports blocked', () => {
+    const session = Session.create(SessionId('parent'))
+    const state = WorkflowState.fromSession(session)
+    const waiters = new WaiterRegistry()
+    seedWaiting(session, state)
+    const event = session.append('user/message', createUserMessage({
+      content: [{ type: 'text', text: JSON.stringify({
+        task_id: 'task-7',
+        delegation_revision: 1,
+        status: 'blocked',
+        block_type: 'missing_data',
+        response: 'need raw CSV',
+        produced_files: [],
+      }) }],
+      source: { kind: 'subagent-report', form: 'relay', senderSessionId: SessionId('child-da') },
+    }), { surfaceOp: 'append' })
+    observe(session, state, waiters, event)
+    expect(state.currentDelegation('task-7')?.phase).toBe('blocked')
+    expect(state.getTask('task-7')?.status).toBe('blocked')
+    expect(state.getTask('task-7')?.blockedReason).toBe('need raw CSV')
+  })
+
+  it('marks the task failed for an invalid child report', () => {
+    const session = Session.create(SessionId('parent'))
+    const state = WorkflowState.fromSession(session)
+    const waiters = new WaiterRegistry()
+    seedWaiting(session, state)
+    const event = session.append('user/message', createUserMessage({
+      content: [{ type: 'text', text: 'not-json' }],
+      source: { kind: 'subagent-report', form: 'relay', senderSessionId: SessionId('child-da') },
+    }), { surfaceOp: 'append' })
+    observe(session, state, waiters, event)
+    expect(state.getTask('task-7')?.status).toBe('failed')
+    expect(state.getTask('task-7')?.failedReason).toMatch(/invalid workflow report/)
+  })
+
+  it('does not change the task when a stale report arrives', () => {
+    const session = Session.create(SessionId('parent'))
+    const state = WorkflowState.fromSession(session)
+    const waiters = new WaiterRegistry()
+    seedWaiting(session, state, 1)
+    seedWaiting(session, state, 2)
+    const event = session.append('user/message', createUserMessage({
+      content: [{ type: 'text', text: JSON.stringify({
+        task_id: 'task-7',
+        delegation_revision: 1,
+        status: 'success',
+        block_type: null,
+        response: 'late',
+        produced_files: [],
+      }) }],
+      source: { kind: 'subagent-report', form: 'relay', senderSessionId: SessionId('child-da') },
+    }), { surfaceOp: 'append' })
+    observe(session, state, waiters, event)
+    expect(state.getTask('task-7')?.status).toBe('running')
   })
 
   it('turns a malformed child report into an explicit quality failure', async () => {

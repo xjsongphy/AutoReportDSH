@@ -1,6 +1,6 @@
 import type { Session, SessionEvent, SessionId } from '@deepseek-ai/dsh-session'
 import type { SubagentReportMessageSource, SubagentSettledMessageSource } from '@deepseek-ai/dsh-subagent'
-import type { DelegationSnapshot } from './events.js'
+import type { DelegationSnapshot, TaskSnapshot } from './events.js'
 import { delegationKey, parseWorkflowEnvelope } from './protocol.js'
 import type { WorkflowState } from './service.js'
 import type { WaiterRegistry, WaiterOutcome } from './waiters.js'
@@ -9,7 +9,10 @@ import type { WaiterRegistry, WaiterOutcome } from './waiters.js'
 export interface WorkflowReportObserverDependencies {
   readonly state: WorkflowState
   readonly waiters: WaiterRegistry
-  readonly commit: (type: 'autoreport/delegation', data: DelegationSnapshot) => void
+  readonly commit: {
+    (type: 'autoreport/delegation', data: DelegationSnapshot): void
+    (type: 'autoreport/task', data: TaskSnapshot): void
+  }
 }
 
 type DeliveredMessage = SessionEvent<'user/message'>['data']
@@ -55,6 +58,60 @@ function settleOutcome(snapshot: DelegationSnapshot): WaiterOutcome {
   }
 }
 
+function taskMatchesAttempt(task: TaskSnapshot, delegationRevision: number): boolean {
+  return task.latestDelegationRevision === undefined || task.latestDelegationRevision === delegationRevision
+}
+
+/**
+ * Mirror a non-stale delegation terminal phase onto the owning task snapshot.
+ * @param state - live workflow projection.
+ * @param snapshot - settled delegation attempt.
+ * @param deps - durable commit sink.
+ */
+function settleTaskFromDelegation(
+  state: WorkflowState,
+  snapshot: DelegationSnapshot,
+  deps: WorkflowReportObserverDependencies,
+): void {
+  if (snapshot.phase === 'stale') return
+  const task = state.getTask(snapshot.taskId)
+  if (task === undefined) return
+  if (!taskMatchesAttempt(task, snapshot.delegationRevision)) return
+
+  if (snapshot.phase === 'completed') {
+    const { blockedReason: _blocked, failedReason: _failed, ...rest } = task
+    deps.commit('autoreport/task', {
+      ...rest,
+      status: 'completed',
+      revision: task.revision + 1,
+    })
+    return
+  }
+  if (snapshot.phase === 'blocked') {
+    const blockedReason = snapshot.report?.response
+      ?? snapshot.report?.block_type
+      ?? 'blocked'
+    const { blockedReason: _blocked, failedReason: _failed, ...rest } = task
+    deps.commit('autoreport/task', {
+      ...rest,
+      status: 'blocked',
+      revision: task.revision + 1,
+      blockedReason,
+    })
+    return
+  }
+  if (snapshot.phase === 'failed') {
+    const failedReason = snapshot.reason ?? 'failed'
+    const { blockedReason: _blocked, failedReason: _failed, ...rest } = task
+    deps.commit('autoreport/task', {
+      ...rest,
+      status: 'failed',
+      revision: task.revision + 1,
+      failedReason,
+    })
+  }
+}
+
 function observeDeliveredMessage(message: DeliveredMessage, deps: WorkflowReportObserverDependencies): void {
   const source = message.source
   if (source.kind === 'subagent-report') {
@@ -71,6 +128,7 @@ function observeDeliveredMessage(message: DeliveredMessage, deps: WorkflowReport
         settledAt: Date.now(),
       }
       deps.commit('autoreport/delegation', failed)
+      settleTaskFromDelegation(deps.state, failed, deps)
       deps.waiters.settle(delegationKey(failed.taskId, failed.delegationRevision), settleOutcome(failed))
       return
     }
@@ -91,7 +149,10 @@ function observeDeliveredMessage(message: DeliveredMessage, deps: WorkflowReport
       ...(stale ? { reason: `late report for delegation revision ${report.delegation_revision}` } : {}),
     }
     deps.commit('autoreport/delegation', settled)
-    if (!stale) deps.waiters.settle(delegationKey(settled.taskId, settled.delegationRevision), settleOutcome(settled))
+    if (!stale) {
+      settleTaskFromDelegation(deps.state, settled, deps)
+      deps.waiters.settle(delegationKey(settled.taskId, settled.delegationRevision), settleOutcome(settled))
+    }
     return
   }
 
@@ -107,6 +168,7 @@ function observeDeliveredMessage(message: DeliveredMessage, deps: WorkflowReport
       settledAt: Date.now(),
     }
     deps.commit('autoreport/delegation', failed)
+    settleTaskFromDelegation(deps.state, failed, deps)
     deps.waiters.settle(delegationKey(failed.taskId, failed.delegationRevision), settleOutcome(failed))
   }
 }
