@@ -21,7 +21,7 @@ export const MAX_SCAN_DEPTH = 16
 export const MAX_SCAN_ENTRIES = 50_000
 
 /** Directory names never traversed (manifest.rs `should_ignore_dir`). */
-const IGNORED_DIR_NAMES = new Set(['.git', '__pycache__', '.autoreport', 'target'])
+const IGNORED_DIR_NAMES = new Set(['.git', '__pycache__', '.autoreport', '.cache', 'target'])
 
 /** Exact file-name ignores (manifest.rs `should_ignore_file`, first clause). */
 const IGNORED_FILE_NAMES = new Set(['.DS_Store', 'Thumbs.db'])

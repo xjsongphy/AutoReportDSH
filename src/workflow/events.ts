@@ -11,7 +11,7 @@
  */
 
 import type { SessionId } from '@deepseek-ai/dsh-session'
-import type { SpecialistRole } from '../roles.js'
+import type { AutoReportRole, SpecialistRole } from '../roles.js'
 import type { SpecialistRoute } from '../config.js'
 import type { WorkflowSettingsSnapshot } from '../settings.js'
 
@@ -144,7 +144,7 @@ export interface ArtifactSnapshot {
   /** Normalized workspace-relative path. */
   readonly path: string
   /** Role whose tool/process produced the file. */
-  readonly producedBy: SpecialistRole
+  readonly producedBy: AutoReportRole
   /** Observer channel that recorded the artifact. */
   readonly origin: 'fs-tool' | 'process'
   /** Change classification; `unknown` covers unclassifiable process effects. */

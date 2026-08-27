@@ -30,8 +30,8 @@ function file(relPath: string): void {
 }
 
 describe('AutoReport artifact ignore rules (manifest.rs port)', () => {
-  it('ignores the exact directory-name set', () => {
-    for (const name of ['.git', '__pycache__', '.autoreport', 'target']) {
+  it('ignores the exact directory-name set including .cache', () => {
+    for (const name of ['.git', '__pycache__', '.autoreport', '.cache', 'target']) {
       expect(shouldIgnoreDir(name)).toBe(true)
     }
     expect(shouldIgnoreDir('Target')).toBe(false)
@@ -54,6 +54,7 @@ describe('AutoReport artifact ignore rules (manifest.rs port)', () => {
   })
 
   it('rejects paths with an ignored segment anywhere before the leaf', () => {
+    expect(shouldIgnore('Outline/.cache/mineru/out.md')).toBe(true)
     expect(shouldIgnore('__pycache__/model.pkl')).toBe(true)
     expect(shouldIgnore('Plots/Fig/target/keep.txt')).toBe(true)
     expect(shouldIgnore('Report/main.aux')).toBe(true)
@@ -76,6 +77,7 @@ describe('snapshotDir traversal', () => {
     file('Plots/__pycache__/cache.bin')
     file('Theory/derivation.md')
     file('target/stale.txt')
+    file('Outline/.cache/mineru/out.md')
 
     const snapshot = snapshotDir(root)
     expect(snapshot).toEqual([

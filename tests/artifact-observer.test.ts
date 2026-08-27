@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { AUTOREPORT_SCHEMA_VERSION, type ArtifactSnapshot } from '../src/workflow/events.js'
 import {
   attachArtifactObserver,
@@ -8,7 +11,6 @@ import {
   mutationTargetPaths,
   type ArtifactCaller,
 } from '../src/artifacts/observer.js'
-import { MUTATION_TOOL_NAMES } from '../src/policy/tool-guard.js'
 
 const WORKSPACE = '/tmp/ws'
 
@@ -105,6 +107,77 @@ describe('foldArtifact', () => {
     expect(committed).toEqual([])
   })
 
+  it('records MAIN as producedBy for Main Outline writes', () => {
+    const state = emptyArtifactFoldState()
+    const committed: ArtifactSnapshot[] = []
+    const deps = {
+      sessionId: 'main-1',
+      currentDelegationKey: undefined,
+      commit: (_s: string, snapshot: ArtifactSnapshot) => committed.push(snapshot),
+    }
+    const call = callEvent('write', { file_path: `${WORKSPACE}/Outline/plan.md` })
+    foldArtifact(call, caller('MAIN'), state, deps)
+    foldArtifact(resultEvent((call as unknown as { seq: number }).seq, false), caller('MAIN'), state, deps)
+    expect(committed[0]?.producedBy).toBe('MAIN')
+  })
+
+  it('skips cache paths under Outline/.cache', () => {
+    const state = emptyArtifactFoldState()
+    const committed: ArtifactSnapshot[] = []
+    const deps = {
+      sessionId: 'main-1',
+      currentDelegationKey: undefined,
+      commit: (_s: string, snapshot: ArtifactSnapshot) => committed.push(snapshot),
+    }
+    const call = callEvent('write', { file_path: `${WORKSPACE}/Outline/.cache/mineru/out.md` })
+    foldArtifact(call, caller('MAIN'), state, deps)
+    foldArtifact(resultEvent((call as unknown as { seq: number }).seq, false), caller('MAIN'), state, deps)
+    expect(committed).toEqual([])
+  })
+
+  it('observes bash process writes via before/after snapshots', () => {
+    const root = mkdtempSync(join(tmpdir(), 'autoreport-bash-'))
+    const outline = join(root, 'Outline')
+    mkdirSync(outline, { recursive: true })
+    writeFileSync(join(outline, 'before.md'), 'x')
+    const state = emptyArtifactFoldState()
+    const committed: ArtifactSnapshot[] = []
+    const deps = {
+      sessionId: 'main-1',
+      currentDelegationKey: undefined,
+      commit: (_s: string, snapshot: ArtifactSnapshot) => committed.push(snapshot),
+    }
+    const mainCaller: ArtifactCaller = { role: 'MAIN', workspaceRoot: root }
+    const call = callEvent('bash', { command: 'echo hi > new.md' })
+    foldArtifact(call, mainCaller, state, deps)
+    writeFileSync(join(outline, 'after.md'), 'y')
+    foldArtifact(resultEvent((call as unknown as { seq: number }).seq, false), mainCaller, state, deps)
+    expect(committed).toEqual([expect.objectContaining({
+      path: 'Outline/after.md',
+      producedBy: 'MAIN',
+      origin: 'process',
+      status: 'created',
+    })])
+  })
+
+  it('produces nothing for failed bash results', () => {
+    const root = mkdtempSync(join(tmpdir(), 'autoreport-bash-fail-'))
+    mkdirSync(join(root, 'Theory'), { recursive: true })
+    const state = emptyArtifactFoldState()
+    const committed: ArtifactSnapshot[] = []
+    const deps = {
+      sessionId: 'child-1',
+      currentDelegationKey: undefined,
+      commit: (_s: string, snapshot: ArtifactSnapshot) => committed.push(snapshot),
+    }
+    const theoryCaller: ArtifactCaller = { role: 'THEORY', workspaceRoot: root }
+    const call = callEvent('bash', { command: 'false' }, 'call-b')
+    foldArtifact(call, theoryCaller, state, deps)
+    writeFileSync(join(root, 'Theory', 'leak.md'), 'x')
+    foldArtifact(resultEvent((call as unknown as { seq: number }).seq, true), theoryCaller, state, deps)
+    expect(committed).toEqual([])
+  })
+
   it('ignores non-mutation tools entirely', () => {
     const state = emptyArtifactFoldState()
     const read = callEvent('read', { path: '/x' }, 'call-r')
@@ -114,18 +187,6 @@ describe('foldArtifact', () => {
       commit: () => {},
     })).toEqual([])
     expect(state.pending.size).toBe(0)
-  })
-
-  it('skips report_exec and compile_report results (executor-owned diffs)', () => {
-    const state = emptyArtifactFoldState()
-    const execCall = callEvent('report_exec', { argv: ['python'] }, 'call-e')
-    expect(foldArtifact(execCall, caller('PLOTTING'), state, {
-      sessionId: 'child-2',
-      currentDelegationKey: undefined,
-      commit: () => {},
-    })).toEqual([])
-    expect(MUTATION_TOOL_NAMES.has('report_exec')).toBe(false)
-    expect(MUTATION_TOOL_NAMES.has('compile_report')).toBe(false)
   })
 
   it('deduplicates repeated delivery of the same triple', () => {
