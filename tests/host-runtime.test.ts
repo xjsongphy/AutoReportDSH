@@ -1,8 +1,9 @@
 import { existsSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
+import { SettingsProvider, type SettingsNamespace } from '@deepseek-ai/dsh-settings'
 import { Session, SessionId } from '@deepseek-ai/dsh-session'
 import type { Config } from '../src/config.js'
 import AutoReportWorkflowRuntime from '../src/runtime.js'
@@ -19,10 +20,30 @@ afterEach(() => {
 const CONFIG: Config = {
   defaultReportLanguage: 'latex',
   defaultLatexEngine: 'latexmk',
-  defaultPythonEnv: undefined,
   workspaceRoot: undefined,
   specialistModel: undefined,
   executionTimeoutMs: 600_000,
+}
+
+/** Minimal persistent settings provider proving the out-of-tree namespace seam. */
+class MemorySettings extends SettingsProvider {
+  private readonly doc: Record<string, unknown>
+
+  constructor(ctx: Context, options: { doc?: Record<string, unknown> } = {}) {
+    super(ctx)
+    this.doc = structuredClone(options.doc ?? {})
+  }
+
+  get writable(): boolean { return true }
+
+  protected load(): Promise<Record<string, unknown>> {
+    return Promise.resolve(structuredClone(this.doc))
+  }
+
+  protected persist(namespace: SettingsNamespace, section: Record<string, unknown>): Promise<void> {
+    this.doc[String(namespace)] = structuredClone(section)
+    return Promise.resolve()
+  }
 }
 
 /** A detached root session whose header names its composing agent preset. */
@@ -54,6 +75,35 @@ describe('host workflow runtime', () => {
     expect(meta?.settings).toEqual(resolveWorkflowSettings({ composition: { ...CONFIG, workspaceRoot: root } }))
     runtime.maybeInitialize(session)
     expect(runtime.forSession(session).state.projection().meta?.initialized).toBe(true)
+  })
+
+  it('snapshots the registered DSH autoreport user settings for a new workflow', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'autoreport-runtime-'))
+    tempDirs.push(root)
+    const ctx = new Context()
+    await ctx.plugin(MemorySettings, {
+      doc: {
+        autoreport: {
+          defaultReportLanguage: 'typst',
+          defaultLatexEngine: 'tectonic',
+          specialistModel: { provider: 'specialist', model: 'reasoning-model', reasoningEffort: 'high' },
+          executionTimeoutMs: 12_345,
+        },
+      },
+    })
+    const runtime = new AutoReportWorkflowRuntime(ctx, { ...CONFIG, workspaceRoot: root })
+    await vi.waitFor(() => {
+      const section = ctx.settings.describe().find(entry => entry.ns === 'autoreport')
+      expect(section?.value).toMatchObject({ defaultReportLanguage: 'typst', executionTimeoutMs: 12_345 })
+    })
+    const session = rootSession('main-user-settings', AUTOREPORT_MAIN_PRESET)
+    runtime.maybeInitialize(session)
+    expect(runtime.forSession(session).state.projection().meta?.settings).toEqual({
+      reportLanguage: 'typst',
+      latexEngine: 'tectonic',
+      specialistModel: { inheritMain: false, provider: 'specialist', model: 'reasoning-model', reasoningEffort: 'high' },
+      executionTimeoutMs: 12_345,
+    })
   })
 
   it('resolves the language from external project settings, never the workspace', () => {

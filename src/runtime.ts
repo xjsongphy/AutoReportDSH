@@ -1,6 +1,7 @@
 import { Service, type Context } from '@deepseek-ai/cordis'
 import type { Session, SessionEvent, SessionEventMap, SessionEventType, SessionId } from '@deepseek-ai/dsh-session'
 import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
+import { installSettingsSection } from '@deepseek-ai/dsh-settings'
 import type { Config } from './config.js'
 import { AUTOREPORT_MAIN_PRESET, isAutoReportMainSession } from './membership.js'
 import { renderManifest, writeManifests } from './artifacts/manifest.js'
@@ -14,9 +15,13 @@ import { appendWorkflowEvent } from './workflow/store.js'
 import { observeWorkflowMessage } from './workflow/report-observer.js'
 import { ensureInitialized } from './workspace/init.js'
 import {
+  AUTO_REPORT_USER_SETTINGS_SCHEMA,
+  AUTOREPORT_SETTINGS_NAMESPACE,
+  autoReportUserSettingsBase,
   loadProjectSettings,
   resolveWorkflowSettings,
   workspaceIdForRoot,
+  type AutoReportUserSettings,
   type WorkflowSettingsSnapshot,
 } from './settings.js'
 
@@ -30,7 +35,6 @@ declare module '@deepseek-ai/cordis' {
 const DEFAULT_CONFIG: Config = {
   defaultReportLanguage: 'latex',
   defaultLatexEngine: 'latexmk',
-  defaultPythonEnv: undefined,
   workspaceRoot: undefined,
   specialistModel: undefined,
   executionTimeoutMs: 600_000,
@@ -69,6 +73,8 @@ export default class AutoReportWorkflowRuntime extends Service {
   // preset may change while a root is still blank.
   private readonly mainSessions = new Map<string, Session>()
   private readonly artifactFolds = new Map<string, ArtifactFoldState>()
+  /** Current DSH-resolved user defaults; each new workflow snapshots this once. */
+  private userSettingsSource: () => AutoReportUserSettings
 
   /**
    * Create the host runtime and observe committed report messages.
@@ -81,6 +87,14 @@ export default class AutoReportWorkflowRuntime extends Service {
     this.config = config
     this.settingsHome = options.settingsHome
     this.manifestHome = options.manifestHome
+    const userSettingsBase = autoReportUserSettingsBase(config)
+    this.userSettingsSource = () => userSettingsBase
+    installSettingsSection(ctx, AUTOREPORT_SETTINGS_NAMESPACE, AUTO_REPORT_USER_SETTINGS_SCHEMA, userSettingsBase, {
+      setSource: current => { this.userSettingsSource = current },
+      // Settings are deliberately read only when a workflow is created;
+      // existing snapshots must not change under an in-flight report.
+      onChange: () => {},
+    })
     ctx.on('session/event', (session, event) => {
       // Coexistence gate (PLAN.md compatibility invariant): sessions that did
       // not select AutoReport stay stock — no state, no initialization, no
@@ -289,6 +303,11 @@ export default class AutoReportWorkflowRuntime extends Service {
     return { session, runtime: this.forSession(session) }
   }
 
+  /** Read the current DSH-resolved user defaults for a future workflow. */
+  currentUserSettings(): AutoReportUserSettings {
+    return this.userSettingsSource()
+  }
+
   /**
    * Idempotent first-turn workspace initialization for one Main session:
    * resolves the settings chain (override > project > user > composition >
@@ -306,10 +325,8 @@ export default class AutoReportWorkflowRuntime extends Service {
     if (root === undefined || root.length === 0) return
     let settings: WorkflowSettingsSnapshot
     try {
-      // The user layer rides DSH's settings namespace ('autoreport'); until
-      // @deepseek-ai/dsh-settings is exposed out-of-tree it stays absent here.
       const project = loadProjectSettings(this.settingsHome, workspaceIdForRoot(root))
-      settings = resolveWorkflowSettings({ project, composition: this.config })
+      settings = resolveWorkflowSettings({ user: this.userSettingsSource(), project, composition: this.config })
       ensureInitialized(root, settings.reportLanguage)
     } catch (error: unknown) {
       // A broken EXTERNAL settings document must not wedge every first turn;

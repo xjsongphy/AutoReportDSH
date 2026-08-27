@@ -27,11 +27,7 @@ export interface SpecialistRoute {
   readonly provider: string
   /** Model id interpreted by the selected provider adapter. */
   readonly model: string
-  /**
-   * Adapter-owned reasoning effort for the specialist route; absent uses the
-   * adapter default. Carried by settings snapshots until DSH's child
-   * `agentOptions` surface accepts it.
-   */
+  /** Adapter-owned reasoning effort; absent leaves the provider default in effect. */
   readonly reasoningEffort?: string
 }
 
@@ -41,11 +37,6 @@ export interface Config {
   defaultReportLanguage: ReportLanguage
   /** Default LaTeX compiler selection (schema default `latexmk`). */
   defaultLatexEngine: LatexEngine
-  /**
-   * Default Python interpreter passed to report execution; absent uses the
-   * ambient `PATH` resolution inside the isolated process.
-   */
-  defaultPythonEnv: string | undefined
   /**
    * Experiment workspace root; absent resolves to the calling session cwd at
    * use time, never a build-time constant.
@@ -60,7 +51,6 @@ export interface Config {
 export const Config: z<Config> = z.object({
   defaultReportLanguage: z.union(['latex', 'typst'] as const).default('latex'),
   defaultLatexEngine: z.union(['latexmk', 'tectonic'] as const).default('latexmk'),
-  defaultPythonEnv: z.string(),
   workspaceRoot: z.string(),
   specialistModel: z.object({
     provider: z.string(),

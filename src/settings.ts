@@ -5,12 +5,12 @@
  * preferences. Resolution applies one fixed precedence chain per field:
  *
  * ```text
- * explicit workflow override
+ * explicit workflow override (internal only; no v1 user surface)
  *         ↓
  * project settings        (<dshHome>/autoreport/<workspaceId>/project.json —
  *                          external, never inside the experiment workspace)
  *         ↓
- * AutoReport user settings (settings namespace 'autoreport')
+ * AutoReport user settings (DSH settings namespace 'autoreport')
  *         ↓
  * Cordis composition Config (plugin defaults)
  *         ↓
@@ -22,10 +22,10 @@
  * the durable `autoreport/workflow` event; execution reads the snapshot, so
  * later settings changes never mutate an in-flight report.
  *
- * The user layer normally arrives through DSH's settings service (namespace
- * `'autoreport'`, registered with `installSettingsSection`). That package is
- * not yet exposed out-of-tree to this plugin, so registration is deferred and
- * callers pass `user` as plain data until the dependency lands.
+ * The user layer arrives through DSH's settings service (namespace
+ * `'autoreport'`, registered by the workflow runtime with
+ * `installSettingsSection`). Callers may still supply plain data for pure
+ * resolution tests and one-off integrations.
  * @module
  */
 
@@ -34,6 +34,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileS
 import { randomUUID } from 'node:crypto'
 import { dirname, join, resolve } from 'node:path'
 import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
+import { settingsNamespace } from '@deepseek-ai/dsh-settings'
 import z from '@deepseek-ai/schemastery'
 import type { Config, LatexEngine, ReportLanguage, SpecialistRoute } from './config.js'
 
@@ -48,7 +49,9 @@ export const WORKFLOW_SETTINGS_SCHEMA_DEFAULTS: Readonly<{
   executionTimeoutMs: 600_000,
 })
 
-/** Full user-settings shape once resolved (namespace `'autoreport'`). */
+/** Registered DSH namespace for AutoReport's user-level workflow defaults. */
+export const AUTOREPORT_SETTINGS_NAMESPACE = settingsNamespace('autoreport')
+
 export interface AutoReportUserSettings {
   /** Default report source language (schema default `latex`). */
   defaultReportLanguage: ReportLanguage
@@ -56,8 +59,6 @@ export interface AutoReportUserSettings {
   defaultLatexEngine: LatexEngine
   /** Bounded wait for `send_to_agent({ wait: true })` (schema default ten minutes). */
   executionTimeoutMs: number
-  /** Python interpreter for report execution; absent uses ambient `PATH`. */
-  defaultPythonEnv?: string
   /** Optional specialist route; absent inherits the Main route. */
   specialistModel?: SpecialistRoute
 }
@@ -79,9 +80,18 @@ export const AUTO_REPORT_USER_SETTINGS_SCHEMA: z<AutoReportUserSettings> = z.obj
   defaultReportLanguage: z.union(['latex', 'typst'] as const).default(WORKFLOW_SETTINGS_SCHEMA_DEFAULTS.reportLanguage),
   defaultLatexEngine: z.union(['latexmk', 'tectonic'] as const).default(WORKFLOW_SETTINGS_SCHEMA_DEFAULTS.latexEngine),
   specialistModel: SPECIALIST_ROUTE_SCHEMA,
-  defaultPythonEnv: z.string(),
   executionTimeoutMs: z.number().default(WORKFLOW_SETTINGS_SCHEMA_DEFAULTS.executionTimeoutMs),
 }) as unknown as z<AutoReportUserSettings>
+
+/** Convert composition defaults into the base layer for DSH user settings. */
+export function autoReportUserSettingsBase(config: Config): AutoReportUserSettings {
+  return {
+    defaultReportLanguage: config.defaultReportLanguage,
+    defaultLatexEngine: config.defaultLatexEngine,
+    executionTimeoutMs: config.executionTimeoutMs,
+    ...(config.specialistModel === undefined ? {} : { specialistModel: config.specialistModel }),
+  }
+}
 
 /**
  * Per-workspace policy persisted OUTSIDE the experiment workspace at
@@ -93,8 +103,6 @@ export interface AutoReportProjectSettings {
   reportLanguage?: ReportLanguage
   /** Workspace LaTeX compiler preference. */
   latexEngine?: LatexEngine
-  /** Python interpreter for this workspace; absent inherits lower layers. */
-  pythonEnv?: string
   /** Workspace delegation-wait bound. */
   executionTimeoutMs?: number
   /** Workspace specialist route; absent inherits lower layers. */
@@ -106,7 +114,6 @@ export const AUTO_REPORT_PROJECT_SETTINGS_SCHEMA: z<AutoReportProjectSettings> =
   reportLanguage: z.union(['latex', 'typst'] as const),
   latexEngine: z.union(['latexmk', 'tectonic'] as const),
   specialistModel: SPECIALIST_ROUTE_SCHEMA,
-  pythonEnv: z.string(),
   executionTimeoutMs: z.number(),
 }) as unknown as z<AutoReportProjectSettings>
 
@@ -133,14 +140,13 @@ function compactSection<S extends Record<string, unknown>>(section: S): S {
 /** Composition-layer fields that act as plugin DEFAULTS (see {@link Config}). */
 export type WorkflowCompositionDefaults = Pick<
   Config,
-  'defaultReportLanguage' | 'defaultLatexEngine' | 'specialistModel' | 'defaultPythonEnv' | 'executionTimeoutMs'
+  'defaultReportLanguage' | 'defaultLatexEngine' | 'specialistModel' | 'executionTimeoutMs'
 >
 
 /** Explicit per-workflow inputs; highest layer, owned by the creating turn. */
 export interface WorkflowSettingsOverride {
   reportLanguage?: ReportLanguage
   latexEngine?: LatexEngine
-  pythonEnv?: string
   executionTimeoutMs?: number
   /**
    * Concrete `{ provider, model, reasoningEffort? }` route shorthand or the
@@ -171,8 +177,6 @@ export interface WorkflowSettingsSnapshot {
   readonly latexEngine: LatexEngine
   /** Concrete specialist route or explicit Main inheritance. */
   readonly specialistModel: SpecialistModelSelection
-  /** Resolved interpreter; absent means ambient `PATH` inside isolation. */
-  readonly pythonEnv?: string
   /** Bounded wait applied to delegation waits. */
   readonly executionTimeoutMs: number
 }
@@ -266,7 +270,6 @@ export function resolveWorkflowSettings(layers: WorkflowSettingsLayers): Workflo
     firstDefined(override?.latexEngine, project?.latexEngine, user?.defaultLatexEngine, composition?.defaultLatexEngine),
     LATEX_ENGINES,
   ) ?? WORKFLOW_SETTINGS_SCHEMA_DEFAULTS.latexEngine
-  const pythonEnv = firstDefined(override?.pythonEnv, project?.pythonEnv, user?.defaultPythonEnv, composition?.defaultPythonEnv)
   const executionTimeoutMs = positiveIntegerField(
     'executionTimeoutMs',
     firstDefined(override?.executionTimeoutMs, project?.executionTimeoutMs, user?.executionTimeoutMs, composition?.executionTimeoutMs),
@@ -281,7 +284,6 @@ export function resolveWorkflowSettings(layers: WorkflowSettingsLayers): Workflo
     reportLanguage,
     latexEngine,
     specialistModel,
-    ...(pythonEnv === undefined ? {} : { pythonEnv }),
     executionTimeoutMs,
   })
 }

@@ -7,7 +7,6 @@ describe('autoreportdsh Config', () => {
       defaultReportLanguage: string
       defaultLatexEngine: string
       executionTimeoutMs: number
-      defaultPythonEnv: undefined
     }
     expect(config.defaultReportLanguage).toBe('latex')
     expect(config.defaultLatexEngine).toBe('latexmk')
@@ -18,7 +17,6 @@ describe('autoreportdsh Config', () => {
     const config = Config({
       defaultReportLanguage: 'typst',
       defaultLatexEngine: 'tectonic',
-      defaultPythonEnv: '/usr/bin/python3',
       workspaceRoot: '/tmp/exp',
       specialistModel: { provider: 'openrouter', model: 'stealth/ox-alpha' },
       executionTimeoutMs: 1000,

@@ -16,7 +16,6 @@ import { createSendToAgentTool, type SendToAgentWorkflow } from '../src/tools/se
 const CONFIG: Config = {
   defaultReportLanguage: 'latex',
   defaultLatexEngine: 'latexmk',
-  defaultPythonEnv: undefined,
   workspaceRoot: undefined,
   specialistModel: undefined,
   executionTimeoutMs: 600_000,

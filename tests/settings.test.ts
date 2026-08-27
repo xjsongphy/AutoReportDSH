@@ -32,7 +32,6 @@ afterEach(() => {
 const COMPOSITION = {
   defaultReportLanguage: 'latex',
   defaultLatexEngine: 'latexmk',
-  defaultPythonEnv: '/env/composition-python',
   specialistModel: { provider: 'comp-provider', model: 'comp-model' },
   executionTimeoutMs: 1000,
 } as const
@@ -40,7 +39,6 @@ const COMPOSITION = {
 const USER = {
   defaultReportLanguage: 'typst',
   defaultLatexEngine: 'tectonic',
-  defaultPythonEnv: '/env/user-python',
   specialistModel: { provider: 'user-provider', model: 'user-model', reasoningEffort: 'high' },
   executionTimeoutMs: 2000,
 } as const
@@ -48,7 +46,6 @@ const USER = {
 const PROJECT = {
   reportLanguage: 'latex',
   latexEngine: 'tectonic',
-  pythonEnv: '/env/project-python',
   specialistModel: { provider: 'project-provider', model: 'project-model' },
   executionTimeoutMs: 3000,
 } as const
@@ -56,7 +53,6 @@ const PROJECT = {
 const OVERRIDE = {
   reportLanguage: 'typst',
   latexEngine: 'latexmk',
-  pythonEnv: '/env/override-python',
   specialistModel: { inheritMain: true },
   executionTimeoutMs: 4000,
 } as const
@@ -78,21 +74,18 @@ describe('resolveWorkflowSettings precedence', () => {
       reportLanguage: 'latex',
       latexEngine: 'latexmk',
       specialistModel: { inheritMain: false, provider: 'comp-provider', model: 'comp-model' },
-      pythonEnv: '/env/composition-python',
       executionTimeoutMs: 1000,
     })
     expect(resolveWorkflowSettings({ user: USER })).toEqual({
       reportLanguage: 'typst',
       latexEngine: 'tectonic',
       specialistModel: { inheritMain: false, provider: 'user-provider', model: 'user-model', reasoningEffort: 'high' },
-      pythonEnv: '/env/user-python',
       executionTimeoutMs: 2000,
     })
     expect(resolveWorkflowSettings({ project: PROJECT })).toEqual({
       reportLanguage: 'latex',
       latexEngine: 'tectonic',
       specialistModel: { inheritMain: false, provider: 'project-provider', model: 'project-model' },
-      pythonEnv: '/env/project-python',
       executionTimeoutMs: 3000,
     })
   })
@@ -102,7 +95,6 @@ describe('resolveWorkflowSettings precedence', () => {
     expect(resolveWorkflowSettings(all)).toMatchObject({
       reportLanguage: 'typst',
       latexEngine: 'latexmk',
-      pythonEnv: '/env/override-python',
       executionTimeoutMs: 4000,
       specialistModel: { inheritMain: true },
     })
@@ -110,7 +102,6 @@ describe('resolveWorkflowSettings precedence', () => {
     expect(resolveWorkflowSettings(withoutOverride)).toMatchObject({
       reportLanguage: 'latex',
       latexEngine: 'tectonic',
-      pythonEnv: '/env/project-python',
       executionTimeoutMs: 3000,
       specialistModel: { provider: 'project-provider' },
     })
@@ -118,7 +109,6 @@ describe('resolveWorkflowSettings precedence', () => {
     expect(resolveWorkflowSettings(withoutProject)).toMatchObject({
       reportLanguage: 'typst',
       latexEngine: 'tectonic',
-      pythonEnv: '/env/user-python',
       executionTimeoutMs: 2000,
       specialistModel: { provider: 'user-provider', reasoningEffort: 'high' },
     })
@@ -126,7 +116,6 @@ describe('resolveWorkflowSettings precedence', () => {
     expect(resolveWorkflowSettings(withoutUser)).toMatchObject({
       reportLanguage: 'latex',
       latexEngine: 'latexmk',
-      pythonEnv: '/env/composition-python',
       executionTimeoutMs: 1000,
       specialistModel: { provider: 'comp-provider' },
     })
@@ -143,7 +132,6 @@ describe('resolveWorkflowSettings precedence', () => {
       reportLanguage: 'typst',
       latexEngine: 'tectonic',
       specialistModel: { inheritMain: false, provider: 'comp-provider', model: 'comp-model' },
-      pythonEnv: '/env/composition-python',
       executionTimeoutMs: 42,
     })
   })
@@ -205,13 +193,11 @@ describe('snapshot immutability', () => {
     // in-flight report).
     project['reportLanguage'] = 'typst'
     project['latexEngine'] = 'latexmk'
-    project['pythonEnv'] = '/env/mutated'
     project['executionTimeoutMs'] = 999_999
     project['specialistModel'] = { provider: 'mutated', model: 'mutated' }
 
     expect(resolved.reportLanguage).toBe('latex')
     expect(resolved.latexEngine).toBe('tectonic')
-    expect(resolved.pythonEnv).toBe('/env/project-python')
     expect(resolved.executionTimeoutMs).toBe(3000)
     expect(resolved.specialistModel).toEqual({ inheritMain: false, provider: 'project-provider', model: 'project-model' })
   })

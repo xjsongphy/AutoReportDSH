@@ -20,7 +20,6 @@ export const inject = ['tools']
 const DEFAULT_CONFIG: Config = {
   defaultReportLanguage: 'latex',
   defaultLatexEngine: 'latexmk',
-  defaultPythonEnv: undefined,
   workspaceRoot: undefined,
   specialistModel: undefined,
   executionTimeoutMs: 600_000,
@@ -34,7 +33,6 @@ export function resolveHostConfig(raw: Partial<Config> = {}): Config {
   return {
     defaultReportLanguage: raw.defaultReportLanguage ?? DEFAULT_CONFIG.defaultReportLanguage,
     defaultLatexEngine: raw.defaultLatexEngine ?? DEFAULT_CONFIG.defaultLatexEngine,
-    defaultPythonEnv: raw.defaultPythonEnv ?? DEFAULT_CONFIG.defaultPythonEnv,
     workspaceRoot: raw.workspaceRoot ?? DEFAULT_CONFIG.workspaceRoot,
     specialistModel: raw.specialistModel ?? DEFAULT_CONFIG.specialistModel,
     executionTimeoutMs: raw.executionTimeoutMs ?? DEFAULT_CONFIG.executionTimeoutMs,
@@ -66,6 +64,7 @@ export function apply(ctx: Context, config: Partial<Config> = {}, options: Runti
   if (commands !== undefined) {
     const definition = createReportInitCommand({
       reportLanguage: resolved.defaultReportLanguage,
+      currentDefaultReportLanguage: () => runtime.currentUserSettings().defaultReportLanguage,
       ...(resolved.workspaceRoot === undefined ? {} : { workspaceRoot: resolved.workspaceRoot }),
       // External project settings live under the harness home, keyed by the
       // invoked workspace root — never inside the experiment workspace.

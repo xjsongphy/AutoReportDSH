@@ -41,6 +41,8 @@ export interface ReportInitCommandOptions {
    * project settings choose one.
    */
   readonly reportLanguage: ReportLanguage
+  /** Current DSH user default; read at invocation time when no project/flag wins. */
+  readonly currentDefaultReportLanguage?: () => ReportLanguage
   /**
    * Builds the external settings seam for the invoked workspace root; absent
    * (factory-only tests) keeps the command persistence-free.
@@ -152,7 +154,7 @@ export function createReportInitCommand(options: ReportInitCommandOptions): Comm
       try {
         const store = options.projectStore?.(root)
         const project: AutoReportProjectSettings = store?.load() ?? {}
-        const language = parsed.language ?? project.reportLanguage ?? options.reportLanguage
+        const language = parsed.language ?? project.reportLanguage ?? options.currentDefaultReportLanguage?.() ?? options.reportLanguage
         let saved = ''
         if (parsed.language !== undefined && store !== undefined) {
           // Record the explicit choice BEFORE materializing so a crash between

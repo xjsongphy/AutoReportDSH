@@ -16,7 +16,7 @@ import type { SpecialistRoute } from '../config.js'
 import type { WorkflowSettingsSnapshot } from '../settings.js'
 
 /** Current schema version stamped on every snapshot; a field change bumps it. */
-export const AUTOREPORT_SCHEMA_VERSION = 2
+export const AUTOREPORT_SCHEMA_VERSION = 3
 
 /** Validated child-report envelope carried on delegation snapshots (PLAN.md §2.5). */
 export interface WorkflowReportEnvelope {

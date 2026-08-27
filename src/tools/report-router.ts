@@ -1,5 +1,6 @@
 import type { Context } from '@deepseek-ai/cordis'
-import type { Agent } from '@deepseek-ai/dsh-agent'
+import { installModelSelection, type Agent, type ModelSelection } from '@deepseek-ai/dsh-agent'
+import { ReasoningEffortId } from '@deepseek-ai/dsh-llm'
 import type { ToolExecution } from '@deepseek-ai/dsh-tools'
 import { installReportTool } from '@deepseek-ai/dsh-tool-subagent-report'
 import { snapshotDir } from '../artifacts/artifact-policy.js'
@@ -15,6 +16,28 @@ export const inject = ['subagents', 'tools', 'systemPrompt', 'subprocess', 'auto
 
 /** Router inputs shared by every specialist branch. */
 type RoutedWorkflow = Pick<AutoReportWorkflowRuntime, 'roleRegistry' | 'config' | 'workflowForChild'>
+
+/**
+ * Install DSH's agent-scoped selection seam for a concrete specialist route.
+ * The workflow snapshot wins; composition is a compatibility fallback for logs
+ * written before snapshots existed. Main inheritance installs nothing, leaving
+ * DSH's normal parent-route inheritance untouched.
+ */
+export function installSpecialistModelSelection(childCtx: Context, workflow: RoutedWorkflow): (() => void) | undefined {
+  const child = childCtx.agent as Agent
+  const snapshot = workflow.workflowForChild(child.id)?.runtime.state.projection().meta?.settings
+  const selected = snapshot?.specialistModel
+  const route = selected === undefined
+    ? workflow.config.specialistModel
+    : selected.inheritMain ? undefined : selected
+  if (route === undefined) return undefined
+  const selection: ModelSelection = {
+    provider: route.provider,
+    model: route.model,
+    ...(route.reasoningEffort === undefined ? {} : { reasoningEffort: ReasoningEffortId(route.reasoningEffort) }),
+  }
+  return installModelSelection(childCtx, { current: selection, assembled: undefined })
+}
 
 /**
  * Build the REPORT-only `compile_report` registration over the same shared
@@ -115,6 +138,8 @@ export function installRoutedReportTool(
   const disposeReport = installWorkflowReportTool(childCtx, hostCtx, entry.binding.role)
   const disposers: (() => void)[] = []
   try {
+    const disposeModelSelection = installSpecialistModelSelection(childCtx, workflow)
+    if (disposeModelSelection !== undefined) disposers.push(disposeModelSelection)
     disposers.push(childCtx.tools.register(createReportExecTool(hostCtx, {
       registry: workflow.roleRegistry,
       ...(workflow.config.workspaceRoot === undefined ? {} : { workspaceRoot: workflow.config.workspaceRoot }),
@@ -123,9 +148,9 @@ export function installRoutedReportTool(
       disposers.push(installCompileReportTool(childCtx, hostCtx, workflow, child))
     }
   } catch (error: unknown) {
-    for (const dispose of [disposers.pop(), disposeReport]) {
+    for (const dispose of [...disposers.reverse(), disposeReport]) {
       try {
-        dispose?.()
+        dispose()
       } catch {
         // Best-effort rollback of partial registrations before rethrowing.
       }

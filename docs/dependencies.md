@@ -42,6 +42,7 @@ use explicit `.ts` specifiers and cross-package internals).
 | `@deepseek-ai/cordis` | `../deepseek-harness/vendor/cordis` |
 | `@deepseek-ai/schemastery` | `../deepseek-harness/vendor/schemastery` |
 | `@deepseek-ai/dsh-session` | `../deepseek-harness/packages/core/session` |
+| `@deepseek-ai/dsh-settings` | `../deepseek-harness/packages/settings/settings` |
 | `@deepseek-ai/dsh-tools` | `../deepseek-harness/packages/core/tools` |
 | `@deepseek-ai/dsh-agent` | `../deepseek-harness/packages/core/agent` |
 | `@deepseek-ai/dsh-subagent` | `../deepseek-harness/packages/subagent/subagent` |
