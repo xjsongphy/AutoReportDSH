@@ -120,7 +120,7 @@ This writes the rendered user preset to:
 $DSH_HOME/.agent-presets/autoreport-main/
 ```
 
-and writes `cordis.overlay.generated.yml` in this repository. The installer is idempotent: it updates AutoReport-owned preset files and keeps unrelated files under the user preset directory.
+links the package at `$DSH_HOME/profiles/node_modules/autoreportdsh` so the web client can load the settings card, and writes `cordis.overlay.generated.yml` in this repository. The installer is idempotent: it updates AutoReport-owned preset files and keeps unrelated files under the user preset directory.
 
 For an isolated harness home:
 
@@ -139,7 +139,7 @@ pnpm dsh web \
   --patch ../AutoReportDSH/cordis.overlay.generated.yml
 ```
 
-Open `http://127.0.0.1:3081`, create a session, and select **`autoreport-main`**. Use another port when an existing DSH Web server already occupies the default `3080`.
+Open `http://127.0.0.1:3081`, create a session, and select **`autoreport-main`**. Report-workflow defaults are under **Settings → Plugins → Plugin configuration → AutoReport**. Use another port when an existing DSH Web server already occupies the default `3080`.
 
 For a one-shot harness profile:
 
@@ -209,7 +209,7 @@ delegationWaitTimeoutMs 600000
 pythonExecutable        optional interpreter for specialist bash
 ```
 
-The `autoreport` user-settings namespace is registered through `@deepseek-ai/dsh-settings`; it persists and validates `defaultReportLanguage`, `defaultLatexEngine`, `specialistModel`, `delegationWaitTimeoutMs`, and optional `pythonExecutable`. A browser settings card is optional release-polish and remains deferred. `specialistModel.reasoningEffort`, when present, is applied through DSH's agent-scoped model-selection seam rather than merely recorded.
+The `autoreport` user-settings namespace is registered through `@deepseek-ai/dsh-settings`; it persists and validates `defaultReportLanguage`, `defaultLatexEngine`, `specialistModel`, `delegationWaitTimeoutMs`, and optional `pythonExecutable`. The web settings card lives under **Settings → Plugins → Plugin configuration**. Changing those values does not alter a report that is already running. `specialistModel.reasoningEffort`, when present, is applied through DSH's agent-scoped model-selection seam rather than merely recorded.
 
 ## Security model
 
@@ -272,6 +272,7 @@ scripts/install-user-preset.ts
 src/
 ├── host.ts                 host runtime, membership gate, guard, /report-init
 ├── preset.ts               one preset-plane AutoReport contribution
+├── client/                 web settings card (Plugins → Plugin configuration)
 ├── runtime.ts              workflow state, artifacts, manifests, settings snapshot
 ├── workflow/               events, projections, registry, waiters, report observer
 ├── tools/                  send_to_agent, report_workflow, report_task

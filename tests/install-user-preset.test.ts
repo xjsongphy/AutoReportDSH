@@ -52,12 +52,15 @@ describe('install-user-preset', () => {
     expect(composed).not.toContain('dsh-tool-todo')
 
     const overlay = readFileSync(result.overlayFile, 'utf8')
-    expect(overlay).toContain(entry)
+    expect(overlay).toContain('name: autoreportdsh')
+    expect(overlay).not.toContain(entry)
     expect(overlay).toContain(join(ROOT, 'dist', 'src', 'tools', 'report-router.js'))
     expect(overlay).toContain('tool-subagent-report')
     expect(overlay).toContain('disabled: true')
     expect(overlay).not.toContain('__AUTOREPORT_ENTRY__')
     expect(overlay).not.toContain('__AUTOREPORT_REPORT_ROUTER__')
+    expect(result.packageLink).toBe(join(home, 'profiles', 'node_modules', 'autoreportdsh'))
+    expect(existsSync(result.packageLink)).toBe(true)
   })
 
   it('is idempotent: a rerun overwrites ours and keeps foreign files', () => {

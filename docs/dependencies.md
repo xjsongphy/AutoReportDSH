@@ -81,6 +81,13 @@ use explicit `.ts` specifiers and cross-package internals).
 | `@deepseek-ai/dsh-subprocess-local` | `../deepseek-harness/packages/subprocess/subprocess-local` |
 | `@deepseek-ai/dsh-sandbox` | `../deepseek-harness/packages/sandbox/sandbox` |
 | `@deepseek-ai/dsh-sandbox-local` | `../deepseek-harness/packages/sandbox/sandbox-local` |
+| `@deepseek-ai/dsh-client-runtime` | `../deepseek-harness/packages/client/runtime` |
+| `@deepseek-ai/dsh-client-locale` | `../deepseek-harness/packages/client/locale` |
+| `@deepseek-ai/dsh-client-ui-settings` | `../deepseek-harness/packages/client/ui-settings` |
+| `@deepseek-ai/dsh-client-ui-settings-plugins` | `../deepseek-harness/packages/client/ui-settings-plugins` |
+| `@deepseek-ai/dsh-client-ui-slots` | `../deepseek-harness/packages/client/ui-slots` |
+| `@deepseek-ai/dsh-client-connection` | `../deepseek-harness/packages/client/connection` |
+| `@deepseek-ai/dsh-api-remotes` | `../deepseek-harness/packages/api/remotes` |
 
 All names verified against each linked package's `package.json`; exports map `. -> ./lib/index.js`
 with types at `./lib/types/index.d.ts`.

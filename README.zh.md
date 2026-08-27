@@ -120,7 +120,7 @@ pnpm run install:preset
 $DSH_HOME/.agent-presets/autoreport-main/
 ```
 
-并在本仓库生成 `cordis.overlay.generated.yml`。命令可重复运行：会更新 AutoReport 自己管理的 preset 文件，并保留 user preset 目录下无关的用户文件。
+把本包装到 `$DSH_HOME/profiles/node_modules/autoreportdsh`（供 Web 加载设置卡片），并在本仓库生成 `cordis.overlay.generated.yml`。命令可重复运行：会更新 AutoReport 自己管理的 preset 文件，并保留 user preset 目录下无关的用户文件。
 
 使用隔离的 harness home：
 
@@ -139,7 +139,7 @@ pnpm dsh web \
   --patch ../AutoReportDSH/cordis.overlay.generated.yml
 ```
 
-访问 `http://127.0.0.1:3081`，新建 session 后选择 **`autoreport-main`**。若已有 DSH Web 服务占用默认的 `3080` 端口，请使用其他端口。
+访问 `http://127.0.0.1:3081`，新建 session 后选择 **`autoreport-main`**。报告工作流默认值在 **设置 → 插件 → 插件配置 → AutoReport**。若已有 DSH Web 服务占用默认的 `3080` 端口，请使用其他端口。
 
 单次 headless 运行：
 
@@ -209,7 +209,7 @@ delegationWaitTimeoutMs 600000
 pythonExecutable        可选，specialist bash 使用的解释器
 ```
 
-`autoreport` 用户设置 namespace 已通过 `@deepseek-ai/dsh-settings` 注册并持久化、校验 `defaultReportLanguage`、`defaultLatexEngine`、`specialistModel`、`delegationWaitTimeoutMs` 和可选的 `pythonExecutable`。浏览器 settings card 属于可选发布体验优化，暂不实现。配置了 `specialistModel.reasoningEffort` 时，会通过 DSH 的 agent-scoped model-selection seam 真正生效，而非只记录快照。
+`autoreport` 用户设置 namespace 已通过 `@deepseek-ai/dsh-settings` 注册并持久化、校验 `defaultReportLanguage`、`defaultLatexEngine`、`specialistModel`、`delegationWaitTimeoutMs` 和可选的 `pythonExecutable`。浏览器设置卡片在 **设置 → 插件 → 插件配置**。修改这些值不会改变已经在跑的报告。配置了 `specialistModel.reasoningEffort` 时，会通过 DSH 的 agent-scoped model-selection seam 真正生效，而非只记录快照。
 
 ## 安全模型
 
@@ -278,6 +278,7 @@ scripts/install-user-preset.ts
 src/
 ├── host.ts                 host runtime、成员判定、guard、/report-init
 ├── preset.ts               单一 preset-plane AutoReport contribution
+├── client/                 Web 设置卡片（插件配置 tab）
 ├── runtime.ts              workflow state、waiters、artifacts、manifests、settings snapshot
 ├── workflow/               events、projections、registry、waiters、report observer
 ├── tools/                  send_to_agent、report_workflow、report_task

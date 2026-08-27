@@ -18,7 +18,8 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 
 const REPO_ROOT = join(import.meta.dirname, '..')
-const HOST_ENTRY = join(REPO_ROOT, 'dist', 'src', 'host.js')
+const HOST_ENTRY = join(REPO_ROOT, 'dist', 'src', 'index.js')
+const CLIENT_BUNDLE = join(REPO_ROOT, 'dist', 'client.js')
 const ROUTER_ENTRY = join(REPO_ROOT, 'dist', 'src', 'tools', 'report-router.js')
 const INSTALLER = join(REPO_ROOT, 'scripts', 'install-user-preset.ts')
 const OVERLAY_FILE = join(REPO_ROOT, 'cordis.overlay.generated.yml')
@@ -28,7 +29,7 @@ const OVERLAY_FILE = join(REPO_ROOT, 'cordis.overlay.generated.yml')
  * Returns undefined when ready, or the skip reason string.
  */
 function ensureBuilt(): string | undefined {
-  if (existsSync(HOST_ENTRY) && existsSync(ROUTER_ENTRY)) return undefined
+  if (existsSync(HOST_ENTRY) && existsSync(ROUTER_ENTRY) && existsSync(CLIENT_BUNDLE)) return undefined
   const build = spawnSync('pnpm', ['run', 'build'], {
     cwd: REPO_ROOT,
     encoding: 'utf8',
@@ -38,7 +39,7 @@ function ensureBuilt(): string | undefined {
   if (build.status !== 0) {
     return `skipping: \`pnpm run build\` failed (${build.status}): ${(build.stderr ?? '').slice(-400)}`
   }
-  if (!existsSync(HOST_ENTRY) || !existsSync(ROUTER_ENTRY)) {
+  if (!existsSync(HOST_ENTRY) || !existsSync(ROUTER_ENTRY) || !existsSync(CLIENT_BUNDLE)) {
     return 'skipping: build succeeded but dist entries are still missing'
   }
   return undefined
@@ -76,15 +77,17 @@ describe.skipIf(skipReason !== undefined)('integration: installer CLI against a 
     expect(composed).not.toMatch(/__AUTOREPORT_[A-Z_]+__/)
     expect(composed).toContain(join(REPO_ROOT, 'dist', 'src', 'preset.js'))
 
-    // Overlay: stock child-report row disabled; BOTH replacement rows present
-    // with absolute built-entry paths and no unresolved tokens.
+    // Overlay: stock child-report row disabled; host row is the package name
+    // so the client-module scan can resolve dsh.client; router stays a path.
     const overlay = readFileSync(OVERLAY_FILE, 'utf8')
     expect(overlay).toMatch(/- id: tool-subagent-report\s*\n\s+disabled: true/)
     expect(overlay).toContain('- id: autoreportdsh-host')
-    expect(overlay).toContain(`name: '${HOST_ENTRY}'`)
+    expect(overlay).toMatch(/name: autoreportdsh\s*$/m)
+    expect(overlay).not.toContain(HOST_ENTRY)
     expect(overlay).toContain('- id: autoreportdsh-report-router')
     expect(overlay).toContain(`name: '${ROUTER_ENTRY}'`)
     expect(overlay).not.toMatch(/__AUTOREPORT_/)
+    expect(existsSync(join(home, 'profiles', 'node_modules', 'autoreportdsh'))).toBe(true)
 
     // Idempotent rerun stays green (deployment re-runs install freely).
     const rerun = spawnSync(process.execPath, [

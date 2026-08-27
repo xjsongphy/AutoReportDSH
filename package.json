@@ -8,9 +8,27 @@
     "node": ">=22.19.0"
   },
   "packageManager": "pnpm@11.7.0",
+  "main": "./dist/src/index.js",
+  "exports": {
+    ".": {
+      "default": "./dist/src/index.js"
+    },
+    "./client": {
+      "default": "./dist/client.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-settings-plugins"
+      ]
+    }
+  },
   "scripts": {
-    "build": "tsc -p tsconfig.json && tsx scripts/copy-resources.ts",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "build": "tsc -p tsconfig.json && tsx scripts/copy-resources.ts && tsx scripts/build-client.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.client.json --noEmit",
     "test": "vitest run",
     "install:preset": "tsx scripts/install-user-preset.ts",
     "sync:resources": "tsx scripts/sync-resources.ts && tsx scripts/copy-resources.ts"
@@ -35,14 +53,28 @@
     "@deepseek-ai/schemastery": "link:../deepseek-harness/vendor/schemastery"
   },
   "devDependencies": {
+    "@deepseek-ai/dsh-api-remotes": "link:../deepseek-harness/packages/api/remotes",
     "@deepseek-ai/dsh-bash-local": "link:../deepseek-harness/packages/shell/bash-local",
     "@deepseek-ai/dsh-bash-sandbox": "link:../deepseek-harness/packages/shell/bash-sandbox",
+    "@deepseek-ai/dsh-client-connection": "link:../deepseek-harness/packages/client/connection",
+    "@deepseek-ai/dsh-client-locale": "link:../deepseek-harness/packages/client/locale",
+    "@deepseek-ai/dsh-client-runtime": "link:../deepseek-harness/packages/client/runtime",
+    "@deepseek-ai/dsh-client-ui-settings": "link:../deepseek-harness/packages/client/ui-settings",
+    "@deepseek-ai/dsh-client-ui-settings-plugins": "link:../deepseek-harness/packages/client/ui-settings-plugins",
+    "@deepseek-ai/dsh-client-ui-slots": "link:../deepseek-harness/packages/client/ui-slots",
     "@deepseek-ai/dsh-sandbox": "link:../deepseek-harness/packages/sandbox/sandbox",
     "@deepseek-ai/dsh-sandbox-local": "link:../deepseek-harness/packages/sandbox/sandbox-local",
     "@deepseek-ai/dsh-shell": "link:../deepseek-harness/packages/shell/shell",
     "@deepseek-ai/dsh-subprocess-local": "link:../deepseek-harness/packages/subprocess/subprocess-local",
     "@deepseek-ai/dsh-tool-bash": "link:../deepseek-harness/packages/shell/tool-bash",
+    "@testing-library/react": "^16.3.2",
     "@types/node": "^24.0.0",
+    "@types/react": "~18.3.1",
+    "@types/react-dom": "~18.3.0",
+    "esbuild": "^0.25.0",
+    "jsdom": "^26.1.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
     "tsx": "^4.20.0",
     "typescript": "^5.9.0",
     "vitest": "^3.2.0"

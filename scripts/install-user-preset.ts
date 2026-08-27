@@ -5,16 +5,19 @@
  * user preset root (`<home>/.agent-presets/autoreport-main`) so the shipped
  * agent-presets roster discovers it through DSH's ordinary `includeUserRoot`
  * discovery, then renders cordis.overlay.generated.yml from
- * cordis.template.yml with the absolute built plugin entry path.
+ * cordis.template.yml with the package-name host row (`autoreportdsh`) and
+ * the absolute built report-router path. Also symlinks this package under
+ * `<home>/profiles/node_modules/autoreportdsh` so Node and the client-module
+ * scan can resolve `exports["./client"]`.
  *
  * Idempotent: our own files are overwritten in place; foreign files inside an
  * existing preset directory are never removed. Run after `pnpm run build` so
- * dist/src/host.js exists for the overlay.
+ * dist/src/index.js and dist/client.js exist.
  *
  * @module autoreportdsh/install-user-preset
  */
 
-import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs'
+import { cpSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, statSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
@@ -34,12 +37,41 @@ function indentYamlBlock(value: string, spaces: number): string {
   return value.trimEnd().split('\n').map(line => `${indent}${line}`).join('\n')
 }
 
+/**
+ * Point `$DSH_HOME/profiles/node_modules/autoreportdsh` at this package so
+ * Loader and the client-module scan resolve it by name.
+ * @param home - harness home.
+ * @param repoRoot - this package's root.
+ * @returns the symlink path.
+ */
+function linkPackage(home: string, repoRoot: string): string {
+  const modules = join(home, 'profiles', 'node_modules')
+  mkdirSync(modules, { recursive: true })
+  const link = join(modules, 'autoreportdsh')
+  const target = resolve(repoRoot)
+  let existing: ReturnType<typeof lstatSync> | undefined
+  try {
+    existing = lstatSync(link)
+  } catch (error: unknown) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+  }
+  if (existing !== undefined) {
+    if (!existing.isSymbolicLink()) {
+      throw new Error(`autoreportdsh: ${link} exists and is not a symlink`)
+    }
+    if (realpathSync(link) === realpathSync(target)) return link
+    unlinkSync(link)
+  }
+  symlinkSync(target, link)
+  return link
+}
+
 export interface InstallOptions {
   /** Harness home override (test seam); defaults to DSH's own resolution. */
   home?: string
   /** Repository root override (test seam); defaults to this package root. */
   repoRoot?: string
-  /** Built host entry override; defaults to `<repoRoot>/dist/src/host.js`. */
+  /** Built host entry that must exist; defaults to `<repoRoot>/dist/src/index.js`. */
   entry?: string
 }
 
@@ -66,14 +98,23 @@ function mergeCopy(sourceDir: string, targetDir: string): void {
  * @param options - optional home/repoRoot/entry overrides for testing.
  * @returns a report of every written path for callers and tests.
  */
-export function install(options: InstallOptions = {}): { presetDir: string; overlayFile: string; entry: string } {
+export function install(options: InstallOptions = {}): {
+  presetDir: string
+  overlayFile: string
+  entry: string
+  packageLink: string
+} {
   const repoRoot = options.repoRoot !== undefined ? resolve(options.repoRoot) : resolve(dirname(fileURLToPath(import.meta.url)), '..')
   const home = options.home !== undefined ? resolve(options.home) : resolveDshHome()
-  // rootDir is the repo root, so tsc preserves src/.
-  const entry = options.entry !== undefined ? resolve(options.entry) : join(repoRoot, 'dist', 'src', 'host.js')
+  // rootDir is the repo root, so tsc preserves src/. Package main is index.js.
+  const entry = options.entry !== undefined ? resolve(options.entry) : join(repoRoot, 'dist', 'src', 'index.js')
+  const clientBundle = join(repoRoot, 'dist', 'client.js')
 
   if (!isAbsolute(entry) || !existsSync(entry)) {
     throw new Error(`autoreportdsh: built plugin entry not found at ${entry}; run \`pnpm run build\` first`)
+  }
+  if (options.entry === undefined && !existsSync(clientBundle)) {
+    throw new Error(`autoreportdsh: client bundle not found at ${clientBundle}; run \`pnpm run build\` first`)
   }
 
   const sourceDir = join(repoRoot, PRESET_SOURCE_DIR)
@@ -104,11 +145,10 @@ export function install(options: InstallOptions = {}): { presetDir: string; over
 
   const overlayFile = join(repoRoot, GENERATED_OVERLAY_FILE)
   const reportRouter = pluginEntry(repoRoot, 'tools/report-router.js')
-  writeFileSync(overlayFile, template
-    .replaceAll('__AUTOREPORT_ENTRY__', entry)
-    .replaceAll('__AUTOREPORT_REPORT_ROUTER__', reportRouter))
+  writeFileSync(overlayFile, template.replaceAll('__AUTOREPORT_REPORT_ROUTER__', reportRouter))
+  const packageLink = linkPackage(home, repoRoot)
 
-  return { presetDir, overlayFile, entry }
+  return { presetDir, overlayFile, entry, packageLink }
 }
 
 /** CLI entry: `pnpm install:preset [--home <path>] [--repo-root <path>] [--entry <path>]`. */
@@ -135,6 +175,7 @@ function main(argv: readonly string[]): void {
   const result = install(options)
   console.log(`autoreportdsh: preset installed at ${result.presetDir}`)
   console.log(`autoreportdsh: overlay rendered at ${result.overlayFile}`)
+  console.log(`autoreportdsh: package linked at ${result.packageLink}`)
   console.log('autoreportdsh: boot with `pnpm dsh web --patch ./cordis.overlay.generated.yml`')
 }
 

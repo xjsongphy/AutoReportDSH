@@ -9,6 +9,17 @@ describe('scaffold smoke', () => {
     expect(typeof plugin.apply).toBe('function')
   })
 
+  it('declares a web client half for the settings card', async () => {
+    const { readFileSync } = await import('node:fs')
+    const { join } = await import('node:path')
+    const manifest = JSON.parse(readFileSync(join(import.meta.dirname, '..', 'package.json'), 'utf8')) as {
+      exports: Record<string, unknown>
+      dsh: { client: { platform: string } }
+    }
+    expect(manifest.dsh.client.platform).toBe('web')
+    expect(manifest.exports['./client']).toEqual({ default: './dist/client.js' })
+  })
+
   it('resolves linked @deepseek-ai/dsh-session runtime exports', () => {
     expect(typeof Session).toBe('function')
     expect(typeof Service).toBe('function')

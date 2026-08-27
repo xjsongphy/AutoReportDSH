@@ -704,7 +704,7 @@ and where it lives in the codebase:
 | 6 | `/report-init --language latex\|typst` | **Implemented** — updates project settings + materializes missing resources only; other backend files never deleted |
 | 7 | Non-configurable authorization/execution policy | **By design** — fixed role table + immutable `network:'deny'`, no broadening knobs exposed |
 | 8 | Reuse DSH provider infrastructure | **Implemented** — specialists inherit Main by default; one optional shared route override is applied through DSH agent-scoped model selection, including `reasoningEffort` |
-| 9 | Web settings card via plugin settings seam | **Partially deferred by choice** — the `autoreport` namespace is registered through out-of-tree `@deepseek-ai/dsh-settings`; only the optional browser card remains deferred |
+| 9 | Web settings card via plugin settings seam | **Implemented** — `src/client/` registers `settings.plugin.item` keyed on namespace `autoreport`; Host half remains `installSettingsSection` |
 | 10 | Continuable children for four specialists | **Implemented** — one durable child per role, reserve→start→markActive protocol |
 | 11 | Direct human conversations with specialists | **Supported** — stock DSH subagent surfaces; no parallel transport |
 | 12 | Conversation ≠ delegation invariant | **Documented** — PLAN §2.15; enforced by observer correlation on `(task_id, revision)` context |

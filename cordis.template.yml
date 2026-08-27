@@ -1,9 +1,11 @@
 # AutoReportDSH patch-overlay over a stock dsh profile.
 #
 # install-user-preset.ts renders cordis.overlay.generated.yml from this file,
-# replacing the __AUTOREPORT_ENTRY__ token in the row below with the absolute
-# built host entry (dist/src/host.js) and __AUTOREPORT_REPORT_ROUTER__ with the
-# global child-report router. Usage after rendering and installing:
+# replacing __AUTOREPORT_REPORT_ROUTER__ with the absolute built child-report
+# router. The host row is the package name `autoreportdsh` so DSH's client
+# module scan can resolve package.json (`dsh.client` + exports["./client"]).
+# The installer also symlinks this package under
+# `$DSH_HOME/profiles/node_modules/autoreportdsh`. Usage after rendering:
 #
 #   pnpm dsh web --patch ./cordis.overlay.generated.yml
 #
@@ -15,6 +17,6 @@
 
 - insert:
     - id: autoreportdsh-host
-      name: '__AUTOREPORT_ENTRY__'
+      name: autoreportdsh
     - id: autoreportdsh-report-router
       name: '__AUTOREPORT_REPORT_ROUTER__'
