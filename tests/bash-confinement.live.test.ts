@@ -1,4 +1,5 @@
 import { spawnSync } from 'node:child_process'
+import { createServer } from 'node:http'
 import { existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -149,6 +150,7 @@ function callBash(harness: Context, command: string, agent: Agent) {
 }
 
 const SANDBOX_USABLE = sandboxUsable()
+const CURL_AVAILABLE = spawnSync('curl', ['--version'], { timeout: 5_000, stdio: 'ignore' }).status === 0
 
 describe('bash role write confinement (live)', () => {
   it.skipIf(process.platform === 'win32' || process.env.CI !== 'true')(
@@ -200,6 +202,46 @@ describe('bash role write confinement (live)', () => {
     const denied = await callBash(harness, 'echo blocked > Theory/foo.md', agent)
     expectsSandboxDenial(text(denied))
     expect(existsSync(join(experimentRoot, 'Theory/foo.md'))).toBe(false)
+  }, 30_000)
+
+  it('MAIN bash can reach localhost (network allowed)', async ctx => {
+    if (!CURL_AVAILABLE) {
+      ctx.skip('curl not found in PATH; skipping MAIN network probe')
+      return
+    }
+
+    const experimentRoot = experimentWorkspace()
+    const harness = await setupHarness(experimentRoot)
+    const agent = registerAgent(harness, sessionForRole(experimentRoot, 'MAIN', 'main-network'))
+
+    const server = createServer((_req, res) => {
+      res.writeHead(200, { 'Content-Type': 'text/plain' })
+      res.end('ok')
+    })
+
+    await new Promise<void>((resolve, reject) => {
+      server.once('error', reject)
+      server.listen(0, '127.0.0.1', () => resolve())
+    })
+
+    const address = server.address()
+    if (address === null || typeof address === 'string') {
+      await new Promise<void>((resolve, reject) => server.close(err => (err ? reject(err) : resolve())))
+      throw new Error('expected TCP server address')
+    }
+
+    try {
+      const result = await callBash(
+        harness,
+        `curl -sf --max-time 5 http://127.0.0.1:${address.port}/`,
+        agent,
+      )
+      expect(result.isError).toBe(false)
+      expect(text(result)).not.toMatch(/file access denied|sandbox.*denied/i)
+      expect(text(result)).toContain('ok')
+    } finally {
+      await new Promise<void>((resolve, reject) => server.close(err => (err ? reject(err) : resolve())))
+    }
   }, 30_000)
   })
 })
