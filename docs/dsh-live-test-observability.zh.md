@@ -6,7 +6,7 @@
 
 - DSH 管理 provider、模型、凭据、会话、子会话、Web UI、工具执行和日志持久化。
 - AutoReportDSH 仅管理报告工作流：MAIN 与 THEORY、DATA_ANALYSIS、PLOTTING、REPORT 四个固定 specialist、目录权限、任务/委派状态、报告资源和产物 manifest。
-- MAIN 的模型由 DSH 的 `agent-default-model` 决定；每个 specialist 可继承 MAIN，或由 AutoReport 项目设置的 `specialistModel` 另行指定。
+- MAIN 的模型由 DSH 的 `agent-default-model` 决定；每个 specialist 可继承 MAIN，或由 AutoReport 项目设置的 `specialistModel` 独立指定。此次测试将两者均固定为 `openai-codex / gpt-5.6-luna`。
 - 专项目录外的设置文件为：`$DSH_HOME/autoreport/<workspace-id>/project.json`。`workspace-id` 是工作区绝对路径 SHA-256 的前 16 位，避免把配置或机密写进实验目录。
 - 工作流建立时会冻结模型和语言等设置快照；随后修改默认设置不会改变该工作流。
 
@@ -15,25 +15,10 @@
 目标路由为：
 
 ```yaml
-llm-pi-ai:
-  providers:
-    xmsxb:
-      apiKeyEnv: XMSXB_API_KEY
-      displayName: 灵妙AI聚合网关
-      api: openai-responses
-      baseURL: https://zyapi.xmsxb.com/v1
-      reasoning: high
-      models:
-        - id: gpt-5.6-terra
-          name: gpt-5.6-terra
-          contextWindow: 1050000
-          maxTokens: 128000
-          input: [text, image]
-          reasoningEfforts:
-            high: high
 agent-default-model:
-  provider: xmsxb
-  model: gpt-5.6-terra
+  provider: openai-codex
+  model: gpt-5.6-luna
+  reasoningEffort: xhigh
 ```
 
 对应的 DSH `autoreport` 用户设置为：
@@ -42,9 +27,9 @@ agent-default-model:
 {
   "defaultReportLanguage": "typst",
   "specialistModel": {
-    "provider": "xmsxb",
-    "model": "gpt-5.6-terra",
-    "reasoningEffort": "high"
+    "provider": "openai-codex",
+    "model": "gpt-5.6-luna",
+    "reasoningEffort": "xhigh"
   }
 }
 ```
@@ -53,21 +38,17 @@ agent-default-model:
 
 ## 3. 启动与工作区初始化
 
-先构建并安装 preset：
+先写入 CV 的外部项目设置、构建并安装 preset。此流程使用已有 DSH OAuth 凭据；不复制、导出或写入任何 token：
 
 ```sh
 cd ~/Develop/AutoReportDSH
-pnpm run build
-DSH_HOME=/tmp/autoreportdsh-cv-home pnpm run install:preset -- --home /tmp/autoreportdsh-cv-home
+./.autoreportdsh-local/prepare-cv-test.sh
 ```
 
-从 sibling harness checkout 启动 Web（`--no-open` 适用于由操作者自行打开页面的测试）：
+从 sibling harness checkout 启动 Web（`--no-open` 适用于自动化和人工检查）：
 
 ```sh
-cd ~/Develop/deepseek-harness
-DSH_HOME=/tmp/autoreportdsh-cv-home \
-XMSXB_API_KEY="${XMSXB_API_KEY}" \
-pnpm dsh web --patch ../AutoReportDSH/cordis.overlay.generated.yml --port 3081 --no-open
+./.autoreportdsh-local/start-cv-web.sh
 ```
 
 打开 `http://127.0.0.1:3081`，创建 session 时选择 `autoreport-main`，工作目录选择 `~/Develop/CV`。第一条请求前可运行：
@@ -123,7 +104,7 @@ $DSH_HOME/autoreport/<workspace-id>/manifests/
 
 验收时检查：
 
-1. MAIN 和 child 的 `request/context` 都为 `xmsxb / gpt-5.6-terra`；
+1. MAIN 和 child 的 `request/context` 都为 `openai-codex / gpt-5.6-luna`；
 2. 四个 specialist 都有可追踪的 delegation revision 与结构化 `report_workflow` 结论；
 3. 每个角色只写自己的目录；
 4. `Report/main.pdf` 存在且 Typst 编译无失败；
@@ -131,9 +112,7 @@ $DSH_HOME/autoreport/<workspace-id>/manifests/
 
 ## 7. OpenCLI 浏览器可见性结论
 
-已执行 `opencli doctor -v`。本机 OpenCLI daemon 正常，但 Chrome Browser Bridge extension 未连接，因此当前 **不能** 用 OpenCLI 读取 DSH 页面状态、DOM、网络、截图或驱动页面。
-
-满足下列条件后，OpenCLI 可用于只读检查和截图：
+已执行 `opencli doctor`。本机 daemon 与 Chrome Browser Bridge extension 均已连接，因此 **可以** 用 OpenCLI 读取 DSH 页面状态、DOM、网络与截图；完整测试前必须对运行中的 `http://127.0.0.1:3081` 再做一次实际检查。可使用：
 
 ```sh
 opencli doctor
@@ -142,11 +121,11 @@ opencli browser autoreport state
 opencli browser autoreport screenshot /tmp/autoreportdsh.png
 ```
 
-在 doctor 变绿前，应直接使用浏览器页面和 DSH 的 session 日志/manifest；不要声称已经通过 OpenCLI 查看了页面或截图。
+自动化检查应将截图写入 `/tmp/`，并以 DSH 的 session log、导出 ZIP 与 manifest 作为可审计的权威记录；OpenCLI 页面快照仅用于验证 UI 投影。
 
 ## 8. 已知限制
 
 - DSH Web 启动命令来自 harness checkout：`pnpm dsh ...`，系统 PATH 中无需存在独立 `dsh` 二进制。
 - AutoReport specialist 默认禁止网络；MAIN 的 provider 请求仍由 DSH host 发出。
 - Windows 的 specialist 隔离故意 fail closed；本次 macOS 测试不受此限制。
-- AutoReport 当前支持 MAIN 与 specialist 两级**独立模型路由选择**；specialist 的 `reasoningEffort` 通过 DSH agent-scoped model-selection seam 写入实际 child 请求并记录在 request header。
+- AutoReport 当前支持 MAIN 与 specialist 两级**独立模型路由选择**：MAIN 使用 DSH 的 session model，`specialistModel` 可为四个 specialist 指定另一条固定 route，或省略/设为 `{ "inheritMain": true }` 继承 MAIN；specialist 的 `reasoningEffort` 通过 DSH agent-scoped model-selection seam 写入实际 child 请求并记录在 request header。
