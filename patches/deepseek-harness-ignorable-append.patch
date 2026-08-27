@@ -1,0 +1,517 @@
+diff --git a/.agents/notes/implemented/architecture/2026-08-10-session-log-version-mechanism.i18n.yaml b/.agents/notes/implemented/architecture/2026-08-10-session-log-version-mechanism.i18n.yaml
+index fa18284fad..f7d8aeb81e 100644
+--- a/.agents/notes/implemented/architecture/2026-08-10-session-log-version-mechanism.i18n.yaml
++++ b/.agents/notes/implemented/architecture/2026-08-10-session-log-version-mechanism.i18n.yaml
+@@ -2,5 +2,5 @@
+ # side as of the last confirmed-consistent state. Both languages carry equal authority;
+ # after editing either side, bring the other along and re-record with:
+ #   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-08-10-session-log-version-mechanism.md
+-2026-08-10-session-log-version-mechanism.md: 25eb1230a254219c827b1d2750dba367b113f9f7
+-2026-08-10-session-log-version-mechanism.zh.md: ac1088527ba14a8018c5a7fb3c77c9232bd3b3a9
++2026-08-10-session-log-version-mechanism.md: 0f94a04af189ae05e79d89b9595b14d8ae820bf7
++2026-08-10-session-log-version-mechanism.zh.md: 55971ca13456aa8c07bf94147340a54e8a7b7371
+diff --git a/.agents/notes/implemented/architecture/2026-08-10-session-log-version-mechanism.md b/.agents/notes/implemented/architecture/2026-08-10-session-log-version-mechanism.md
+index 25eb1230a2..0f94a04af1 100644
+--- a/.agents/notes/implemented/architecture/2026-08-10-session-log-version-mechanism.md
++++ b/.agents/notes/implemented/architecture/2026-08-10-session-log-version-mechanism.md
+@@ -20,7 +20,7 @@ Session logs must be upgradable after release, and the runtime that ships first
+ 
+ ## Consequences
+ 
+-What shipped in v0 (release 0812): direction-aware refusal with the raw-log path; the unknown-event guard against a generated known-vocabulary list (`KNOWN_SESSION_EVENT_TYPES`, emitted by `gen-persistence-catalog` from every `SessionEventMap` merge and kept fresh by `verify-persistence-catalog`); the `ignorable` envelope field accepted by seed validation, both backends (a dedicated SQLite column, `SCHEMA_VERSION` 15), and the BFF wire schema. The upgrader chain itself is deferred until the first real v0→v1 step exists to test it against; writers do not yet set `ignorable` (no producer needs it), so `Session.append` gains that surface with its first user. Until a registration surface exists, an out-of-repo plugin's events refuse resume under first-party readers — the pre-release stance accepts that, and the refusal is loud rather than silent. The unknown-type guard is read-side only: `appendCore` keeps rejecting retired legacy shapes but does not vocabulary-check new types, because an append-time refusal would stall a live session's durability mid-flight, which costs more than a loud refusal at the log's next load. The JSONL backend additionally refuses a foreign version from the raw header line before validating today's header shape or decoding any event row, so a structurally different future format still reports the upgrade direction instead of "corrupt"; SQLite gates whole-file structure through its own `SCHEMA_VERSION` pragma first.
++What shipped in v0 (release 0812): direction-aware refusal with the raw-log path; the unknown-event guard against a generated known-vocabulary list (`KNOWN_SESSION_EVENT_TYPES`, emitted by `gen-persistence-catalog` from every `SessionEventMap` merge and kept fresh by `verify-persistence-catalog`); the `ignorable` envelope field accepted by seed validation, both backends (a dedicated SQLite column, `SCHEMA_VERSION` 15), and the BFF wire schema. The upgrader chain itself is deferred until the first real v0→v1 step exists to test it against; the `Session.append` `{ ignorable: true }` writer surface shipped with its first consumer (see [the append ignorable option note](../feature/2026-08-24-session-append-ignorable-option.md)), so writers can now mark out-of-repo plugin events skippable. Until a registration surface exists, unmarked out-of-repo plugin events still refuse resume under first-party readers — the pre-release stance accepts that, and the refusal is loud rather than silent. The unknown-type guard is read-side only: `appendCore` keeps rejecting retired legacy shapes but does not vocabulary-check new types, because an append-time refusal would stall a live session's durability mid-flight, which costs more than a loud refusal at the log's next load. The JSONL backend additionally refuses a foreign version from the raw header line before validating today's header shape or decoding any event row, so a structurally different future format still reports the upgrade direction instead of "corrupt"; SQLite gates whole-file structure through its own `SCHEMA_VERSION` pragma first.
+ 
+ ## Alternatives considered
+ 
+diff --git a/.agents/notes/implemented/architecture/2026-08-10-session-log-version-mechanism.zh.md b/.agents/notes/implemented/architecture/2026-08-10-session-log-version-mechanism.zh.md
+index ac1088527b..55971ca134 100644
+--- a/.agents/notes/implemented/architecture/2026-08-10-session-log-version-mechanism.zh.md
++++ b/.agents/notes/implemented/architecture/2026-08-10-session-log-version-mechanism.zh.md
+@@ -20,7 +20,7 @@ Session log 在发布后必须能升级格式，而最先发布的运行时决
+ 
+ ## 影响
+ 
+-v0（0812 发布）交付的内容：分方向的拒绝并带原始日志路径；基于生成的已知词汇清单（`KNOWN_SESSION_EVENT_TYPES`，由 `gen-persistence-catalog` 从所有 `SessionEventMap` 声明合并生成，`verify-persistence-catalog` 保证新鲜）的未知事件守卫；`ignorable` 信封字段被种子校验、两个后端（SQLite 专用列，`SCHEMA_VERSION` 升到 15）和 BFF 线上 schema 接受。升级器链本身推迟到第一个真实的 v0→v1 变更出现、有真实对象可测时再建；写入侧目前不写 `ignorable`（还没有生产者需要它），`Session.append` 的这一表面随第一个使用者一起落地。在注册表面出现之前，仓库外插件的事件在第一方读取器下无法恢复会话，预发布立场接受这一点，而且拒绝是显式的而非静默的。未知类型守卫只在读取侧生效：`appendCore` 继续拒绝已淘汰的 legacy 形状，但不对新类型做词汇检查，因为写入时拒绝会让活跃会话的持久化中途停摆，代价大于下次加载时的显式拒绝。JSONL 后端还会在校验当前 header 形状、解码任何事件行之前，直接从原始 header 行拒绝外来版本，因此结构完全不同的未来格式仍会报告升级方向而不是"损坏"；SQLite 则先由自己的 `SCHEMA_VERSION` pragma 把关整个文件的结构。
++v0（0812 发布）交付的内容：分方向的拒绝并带原始日志路径；基于生成的已知词汇清单（`KNOWN_SESSION_EVENT_TYPES`，由 `gen-persistence-catalog` 从所有 `SessionEventMap` 声明合并生成，`verify-persistence-catalog` 保证新鲜）的未知事件守卫；`ignorable` 信封字段被种子校验、两个后端（SQLite 专用列，`SCHEMA_VERSION` 升到 15）和 BFF 线上 schema 接受。升级器链本身推迟到第一个真实的 v0→v1 变更出现、有真实对象可测时再建；`Session.append` 的 `{ ignorable: true }` 写入表面已随第一个使用者落地（见[追加 ignorable 选项的 Agent Note](../feature/2026-08-24-session-append-ignorable-option.zh.md)），写入方现在可以把仓库外插件事件标记为可跳过。在注册表面出现之前，未带标记的仓库外插件事件在第一方读取器下依旧无法恢复会话，预发布立场接受这一点，而且拒绝是显式的而非静默的。未知类型守卫只在读取侧生效：`appendCore` 继续拒绝已淘汰的 legacy 形状，但不对新类型做词汇检查，因为写入时拒绝会让活跃会话的持久化中途停摆，代价大于下次加载时的显式拒绝。JSONL 后端还会在校验当前 header 形状、解码任何事件行之前，直接从原始 header 行拒绝外来版本，因此结构完全不同的未来格式仍会报告升级方向而不是"损坏"；SQLite 则先由自己的 `SCHEMA_VERSION` pragma 把关整个文件的结构。
+ 
+ ## 曾考虑的替代方案
+ 
+diff --git a/.agents/notes/implemented/feature/2026-08-24-session-append-ignorable-option.i18n.yaml b/.agents/notes/implemented/feature/2026-08-24-session-append-ignorable-option.i18n.yaml
+new file mode 100644
+index 0000000000..848540a66f
+--- /dev/null
++++ b/.agents/notes/implemented/feature/2026-08-24-session-append-ignorable-option.i18n.yaml
+@@ -0,0 +1,6 @@
++# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
++# side as of the last confirmed-consistent state. Both languages carry equal authority;
++# after editing either side, bring the other along and re-record with:
++#   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-08-24-session-append-ignorable-option.md
++2026-08-24-session-append-ignorable-option.md: 549144153ef8c3cf6bc0a6cfc7a1927b071a344f
++2026-08-24-session-append-ignorable-option.zh.md: b22e7a71c43f98109f9c605e523fe63d4ed2f52e
+diff --git a/.agents/notes/implemented/feature/2026-08-24-session-append-ignorable-option.md b/.agents/notes/implemented/feature/2026-08-24-session-append-ignorable-option.md
+new file mode 100644
+index 0000000000..549144153e
+--- /dev/null
++++ b/.agents/notes/implemented/feature/2026-08-24-session-append-ignorable-option.md
+@@ -0,0 +1,34 @@
++# Agent Note: Session append ignorable option
++
++Status: implemented
++
++English | [中文](2026-08-24-session-append-ignorable-option.zh.md)
++
++## Problem
++
++Writers could not set the `SessionEvent.ignorable` envelope marker. `Session.append` accepted surface intent only, so every appended event was required-on-read, while the read side already skipped unknown-but-ignorable events. An out-of-tree plugin with domain event types therefore had no supported way to produce a log that stock harness builds can reopen: every cold resume refused with `SessionFormatUnsupportedError` because the plugin's types are outside the generated `KNOWN_SESSION_EVENT_TYPES`. The workarounds each fork durability or the log contract — monkey-patching `append`, constructing event objects outside `Session`, writing straight to a persistence backend, or keeping a parallel plugin-side event log.
++
++The [session log version mechanism note](../architecture/2026-08-10-session-log-version-mechanism.md) recorded this writer surface as deferred until its first consumer. AutoReportDSH (an out-of-tree physics-report workflow plugin persisting `autoreport/*` records) is that consumer.
++
++## Decision
++
++`Session.append(type, data, opts?)` takes one optional options parameter whose type depends on the event kind through the existing conditional variadic tuple:
++
++```ts ignore-check
++...opts: T extends SurfaceEventType ? [opts: SurfaceIntent] : [opts?: AppendOptions]
++```
++
++`AppendOptions` carries `ignorable?: true`. Surface events keep requiring `SurfaceIntent`; non-surface events may now carry the marker. The marker is copied onto the frozen log entry exactly like hand-authored fields, so seed validation, both persistence backends (JSONL rows serialize whole events; SQLite's dedicated column), the BFF wire schema, and the unknown-type read guard all behave as they already do for marked events. Nothing on the read path changed.
++
++A registration surface that would add out-of-tree types to the known vocabulary stays deferred; marked unknown events remain unknown-but-skippable, never interpreted.
++
++## Alternatives considered
++
++- Monkey-patch `Session.prototype.append` from the plugin — rejected: forks the official write path, bypasses future core changes silently, and escapes typecheck at the exact boundary where durability is decided.
++- Construct `SessionEvent` objects outside `Session` or write through persistence directly — rejected: duplicates snapshot/validate/freeze/publish duties in a second place that can drift from the log contract.
++- Keep a separate plugin-side event log — rejected: splits the source of truth the session log owns, so projections and resume would reconcile two stores.
++- Allow `ignorable` inside `SurfaceIntent` for surface events too — rejected for now: surface events are model-visible reconstruction inputs, no consumer needs a skippable one, and widening the surface contract invites silent history loss.
++
++## Consequences
++
++Old writers are unaffected (absent marker still means required), and readers are unchanged. Out-of-repo plugins can now persist purely informational domain events that first-party builds skip safely; the cost is trusting writers to mark only genuinely lossless records, which is the same trust boundary the envelope contract always had. Focused tests cover marker round-trip through flush/load across all coordinator backends and refusal when an unmarked unknown event shares the log.
+diff --git a/.agents/notes/implemented/feature/2026-08-24-session-append-ignorable-option.zh.md b/.agents/notes/implemented/feature/2026-08-24-session-append-ignorable-option.zh.md
+new file mode 100644
+index 0000000000..b22e7a71c4
+--- /dev/null
++++ b/.agents/notes/implemented/feature/2026-08-24-session-append-ignorable-option.zh.md
+@@ -0,0 +1,34 @@
++# Agent Note: Session append ignorable option
++
++Status: implemented
++
++[English](2026-08-24-session-append-ignorable-option.md) | 中文
++
++## Problem
++
++写入方无法设置 `SessionEvent.ignorable` 信封标记。`Session.append` 只接受 surface intent，因此每个追加的事件在读取时都是必需的；而读取侧早已会跳过未知但可忽略的事件。于是，拥有领域事件类型的仓库外插件没有任何受支持的方式来产出第一方构建能够重新打开的日志：由于插件的类型不在生成的 `KNOWN_SESSION_EVENT_TYPES` 内，每次冷恢复都会以 `SessionFormatUnsupportedError` 拒绝。各种绕法都会分叉持久化或日志契约——猴子补丁 `append`、在 `Session` 之外构造事件对象、直接写持久化后端，或者在插件侧另记一份事件日志。
++
++[会话日志版本机制 note](../architecture/2026-08-10-session-log-version-mechanism.zh.md) 记录了这一写入表面推迟到第一个使用者出现。AutoReportDSH（持久化 `autoreport/*` 记录的仓库外物理实验报告工作流插件）就是那个使用者。
++
++## Decision
++
++`Session.append(type, data, opts?)` 通过既有的条件变长元组接受一个类型随事件种类变化的可选参数：
++
++```ts ignore-check
++...opts: T extends SurfaceEventType ? [opts: SurfaceIntent] : [opts?: AppendOptions]
++```
++
++`AppendOptions` 携带 `ignorable?: true`。surface 事件继续必填 `SurfaceIntent`；非 surface 事件现在可以携带该标记。标记像手写字段一样被复制到冻结的日志条目上，因此种子校验、两个持久化后端（JSONL 行序列化整个事件；SQLite 专用列）、BFF 线上 schema 以及未知类型读取守卫的行为与它们对带标记事件的既有行为完全一致。读取路径没有任何改动。
++
++把仓库外类型加入已知词汇表的注册表面仍然推迟；带标记的未知事件保持"未知但可跳过"，永远不会被解释。
++
++## Alternatives considered
++
++- 由插件猴子补丁 `Session.prototype.append` —— 拒绝：分叉官方写入路径，静默绕过未来的核心变更，并且在决定持久化的边界上逃逸类型检查。
++- 在 `Session` 之外构造 `SessionEvent` 对象或直接写持久化 —— 拒绝：在第二处复制快照/校验/冻结/发布职责，可能与日志契约漂移。
++- 插件侧另建事件日志 —— 拒绝：割裂会话日志拥有的唯一事实来源，投影和恢复需要调和两个存储。
++- 同时允许 surface 事件的 `SurfaceIntent` 携带 `ignorable` —— 目前拒绝：surface 事件是模型可见的重建输入，没有使用者需要可跳过的 surface 事件，放宽 surface 契约会引来静默丢失历史的风险。
++
++## Consequences
++
++旧写入方不受影响（缺少标记仍表示必需），读取方不变。仓库外插件现在可以持久化纯信息性的领域事件，第一方构建会安全地跳过它们；代价是信任写入方只标记真正无损的记录，而这正是信封契约一贯的信任边界。聚焦测试覆盖标记经 flush/load 在全部协调器后端的往返，以及同一日志中未标记未知事件的拒绝行为。
+diff --git a/docs/persistence-catalog.i18n.yaml b/docs/persistence-catalog.i18n.yaml
+index b48d644649..fb1eea827a 100644
+--- a/docs/persistence-catalog.i18n.yaml
++++ b/docs/persistence-catalog.i18n.yaml
+@@ -2,5 +2,5 @@
+ # side as of the last confirmed-consistent state. Both languages carry equal authority;
+ # after editing either side, bring the other along and re-record with:
+ #   pnpm run verify-translation-pairing --write docs/persistence-catalog.md
+-persistence-catalog.md: aaedabf93db497dc3e760ea5609497151569a3a4
++persistence-catalog.md: 22e60bfe9788d9641be9bccf6c1b1c80dd180c5d
+ persistence-catalog.zh.md: c2810adb5866dafeea4b092794f241c229cd3c9e
+diff --git a/docs/persistence-catalog.md b/docs/persistence-catalog.md
+index aaedabf93d..22e60bfe97 100644
+--- a/docs/persistence-catalog.md
++++ b/docs/persistence-catalog.md
+@@ -90,7 +90,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
+ }[T]
+ ```
+ 
+-Sources: [`packages/core/session/src/types.ts:340`](../packages/core/session/src/types.ts) · [`packages/core/session/src/types.ts:347`](../packages/core/session/src/types.ts) · [`packages/core/session/src/types.ts:376`](../packages/core/session/src/types.ts) · [`packages/core/session/src/types.ts:408`](../packages/core/session/src/types.ts)
++Sources: [`packages/core/session/src/types.ts:340`](../packages/core/session/src/types.ts) · [`packages/core/session/src/types.ts:347`](../packages/core/session/src/types.ts) · [`packages/core/session/src/types.ts:376`](../packages/core/session/src/types.ts) · [`packages/core/session/src/types.ts:427`](../packages/core/session/src/types.ts)
+ 
+ ## Events
+ 
+diff --git a/docs/subsystems/session.i18n.yaml b/docs/subsystems/session.i18n.yaml
+index 814f019958..287aca1fee 100644
+--- a/docs/subsystems/session.i18n.yaml
++++ b/docs/subsystems/session.i18n.yaml
+@@ -2,5 +2,5 @@
+ # side as of the last confirmed-consistent state. Both languages carry equal authority;
+ # after editing either side, bring the other along and re-record with:
+ #   pnpm run verify-translation-pairing --write docs/subsystems/session.md
+-session.md: 96520c72b83bf713b7fe09563f7d6e44c0386bcf
+-session.zh.md: 28a259226b8149dbe26c7650bc574de4aa43a740
++session.md: f03559ca10fee12f8daed9d0fffcf00860a75b63
++session.zh.md: 6ab9534915d3c3322d2d10f6f67bd1fe9c4d1b24
+diff --git a/docs/subsystems/session.md b/docs/subsystems/session.md
+index 96520c72b8..f03559ca10 100644
+--- a/docs/subsystems/session.md
++++ b/docs/subsystems/session.md
+@@ -316,6 +316,31 @@ Required for `SurfaceEventType` events — every message-producing event must de
+ 
+ Only `assistant/message` may carry a present empty `sourceEventSeqs`; when the field is absent, the event does not record which earlier events produced the message, and the provider may still have emitted chunks.
+ 
++### `AppendOptions` — the non-surface parameter to `session.append()`
++
++```ts type-equiv
++/**
++ * Optional writer metadata for appending one NON-surface event via
++ * {@link Session.append}. Surface events take {@link SurfaceIntent} instead;
++ * the compiler rejects this parameter there.
++ */
++interface AppendOptions {
++  /**
++   * Marks the event one an unrecognized reader may skip: a log containing an
++   * event type outside the reading build's vocabulary stays openable when the
++   * event carries `true`. Writers set this only on purely informational
++   * records whose loss cannot affect reconstruction — out-of-repo plugin
++   * events are the intended users. Absent means required: a reader meeting an
++   * unrecognized type without this marker MUST refuse to reconstruct the
++   * session instead of silently dropping the event (see
++   * {@link SessionEvent.ignorable}).
++   */
++  ignorable?: true
++}
++```
++
++Optional for every non-`SurfaceEventType` event. The unknown-type guard on the persistence read path already honors the envelope's `ignorable` marker, so a log written by a harness (or out-of-tree plugin) carrying types this build has never seen stays openable when those records are marked — and still refuses loudly when they are not.
++
+ ### `SessionSurface` — the live readonly surface projection
+ 
+ `Session.surface` returns the session's stable `SessionSurface` view. The same incremental manager validates append candidates before commit and advances this projection from committed events; callers can observe membership and replacement generation but cannot invoke validation.
+@@ -448,14 +473,16 @@ declare class Session {
+    *
+    * @param type - The event type (key of {@link SessionEventMap}).
+    * @param data - The event payload; must be JSON-serializable.
+-   * @param opts - Surface metadata: `surfaceOp` controls how the event enters
+-   *   the ordered surface; `sourceEventSeqs` lists the seq numbers of earlier
+-   *   events this one derives from. REQUIRED for
+-   *   {@link SurfaceEventType} events (every message-producing event must
+-   *   declare how it joins the surface, the sole source of derived model
+-   *   history) and
+-   *   rejected by the compiler for non-surface types like `turn/start` or
+-   *   `assistant/chunk`.
++   * @param opts - Event-kind-specific options. Surface events take surface
++   *   metadata: `surfaceOp` controls how the event enters the ordered
++   *   surface; `sourceEventSeqs` lists the seq numbers of earlier events this
++   *   one derives from. REQUIRED for {@link SurfaceEventType} events (every
++   *   message-producing event must declare how it joins the surface, the sole
++   *   source of derived model history) and rejected by the compiler for
++   *   non-surface types like `turn/start` or `assistant/chunk`. Non-surface
++   *   events instead take {@link AppendOptions}, whose `ignorable` marker
++   *   lets an unrecognized future reader skip the event instead of refusing
++   *   the whole log.
+    * @returns the logged event — its assigned `seq`/`time` plus the SNAPSHOT of
+    *   `data` that entered the log, so reading `event.data` back sees the logged
+    *   value, never the caller's still-mutable input.
+@@ -476,7 +503,7 @@ declare class Session {
+   append<T extends SessionEventType>(
+     type: T,
+     data: SessionEventMap[T],
+-    ...opts: T extends SurfaceEventType ? [opts: SurfaceIntent] : []
++    ...opts: T extends SurfaceEventType ? [opts: SurfaceIntent] : [opts?: AppendOptions]
+   ): SessionEvent<T>;
+   /**
+    * The {@link EpochHeader} in force after the log's last header event — the
+diff --git a/docs/subsystems/session.zh.md b/docs/subsystems/session.zh.md
+index 28a259226b..6ab9534915 100644
+--- a/docs/subsystems/session.zh.md
++++ b/docs/subsystems/session.zh.md
+@@ -318,6 +318,31 @@ interface SurfaceIntent {
+ 
+ 只有 `assistant/message` 可以携带存在但为空的 `sourceEventSeqs`；字段不存在时，该事件没有记录这条消息由哪些早期事件产生，但提供方仍可能发出过分片。
+ 
++### `AppendOptions`：非 surface 事件的 `session.append()` 参数
++
++```ts type-equiv
++/**
++ * Optional writer metadata for appending one NON-surface event via
++ * {@link Session.append}. Surface events take {@link SurfaceIntent} instead;
++ * the compiler rejects this parameter there.
++ */
++interface AppendOptions {
++  /**
++   * Marks the event one an unrecognized reader may skip: a log containing an
++   * event type outside the reading build's vocabulary stays openable when the
++   * event carries `true`. Writers set this only on purely informational
++   * records whose loss cannot affect reconstruction — out-of-repo plugin
++   * events are the intended users. Absent means required: a reader meeting an
++   * unrecognized type without this marker MUST refuse to reconstruct the
++   * session instead of silently dropping the event (see
++   * {@link SessionEvent.ignorable}).
++   */
++  ignorable?: true
++}
++```
++
++对每个非 `SurfaceEventType` 事件可选。持久化读取路径的未知类型守卫本就遵循信封上的 `ignorable` 标记，因此当日志包含本构建从未见过的事件类型时，只要这些记录带有标记，日志仍然可以打开；没有标记时依旧会响亮地拒绝。
++
+ ### `SessionSurface`：实时只读 surface 投影
+ 
+ `Session.surface` 返回会话稳定的 `SessionSurface` 视图。同一个增量管理器在提交前校验追加候选事件，并根据已提交事件推进该投影；调用方可以观察成员关系和替换代次，但不能调用校验。
+@@ -450,14 +475,16 @@ declare class Session {
+    *
+    * @param type - The event type (key of {@link SessionEventMap}).
+    * @param data - The event payload; must be JSON-serializable.
+-   * @param opts - Surface metadata: `surfaceOp` controls how the event enters
+-   *   the ordered surface; `sourceEventSeqs` lists the seq numbers of earlier
+-   *   events this one derives from. REQUIRED for
+-   *   {@link SurfaceEventType} events (every message-producing event must
+-   *   declare how it joins the surface, the sole source of derived model
+-   *   history) and
+-   *   rejected by the compiler for non-surface types like `turn/start` or
+-   *   `assistant/chunk`.
++   * @param opts - Event-kind-specific options. Surface events take surface
++   *   metadata: `surfaceOp` controls how the event enters the ordered
++   *   surface; `sourceEventSeqs` lists the seq numbers of earlier events this
++   *   one derives from. REQUIRED for {@link SurfaceEventType} events (every
++   *   message-producing event must declare how it joins the surface, the sole
++   *   source of derived model history) and rejected by the compiler for
++   *   non-surface types like `turn/start` or `assistant/chunk`. Non-surface
++   *   events instead take {@link AppendOptions}, whose `ignorable` marker
++   *   lets an unrecognized future reader skip the event instead of refusing
++   *   the whole log.
+    * @returns the logged event — its assigned `seq`/`time` plus the SNAPSHOT of
+    *   `data` that entered the log, so reading `event.data` back sees the logged
+    *   value, never the caller's still-mutable input.
+@@ -478,7 +505,7 @@ declare class Session {
+   append<T extends SessionEventType>(
+     type: T,
+     data: SessionEventMap[T],
+-    ...opts: T extends SurfaceEventType ? [opts: SurfaceIntent] : []
++    ...opts: T extends SurfaceEventType ? [opts: SurfaceIntent] : [opts?: AppendOptions]
+   ): SessionEvent<T>;
+   /**
+    * The {@link EpochHeader} in force after the log's last header event — the
+diff --git a/packages/core/session/src/index.ts b/packages/core/session/src/index.ts
+index 2d82a88623..91eda5fba0 100644
+--- a/packages/core/session/src/index.ts
++++ b/packages/core/session/src/index.ts
+@@ -14,7 +14,7 @@ import type { Scoped } from '@deepseek-ai/dsh-scope'
+ import type { Message } from '@deepseek-ai/dsh-llm'
+ import { SESSION_FORMAT_VERSION, SessionId } from './types.ts'
+ import type { TypertLookup } from '@deepseek-ai/dsh-typert-protocol'
+-import type { CreateSessionOptions, EpochHeader, PrepareSessionOptions, RequestContext, SessionEvent, SessionEventMap, SessionEventType, SessionHeader, SurfaceIntent, SurfaceEventType } from './types.ts'
++import type { AppendOptions, CreateSessionOptions, EpochHeader, PrepareSessionOptions, RequestContext, SessionEvent, SessionEventMap, SessionEventType, SessionHeader, SurfaceIntent, SurfaceEventType } from './types.ts'
+ import { snapshotJsonValue } from './json.ts'
+ import { deriveEventMessage, SurfaceManager } from './surface.ts'
+ import type { SessionSurface } from './surface.ts'
+@@ -576,14 +576,16 @@ export class Session {
+    *
+    * @param type - The event type (key of {@link SessionEventMap}).
+    * @param data - The event payload; must be JSON-serializable.
+-   * @param opts - Surface metadata: `surfaceOp` controls how the event enters
+-   *   the ordered surface; `sourceEventSeqs` lists the seq numbers of earlier
+-   *   events this one derives from. REQUIRED for
+-   *   {@link SurfaceEventType} events (every message-producing event must
+-   *   declare how it joins the surface, the sole source of derived model
+-   *   history) and
+-   *   rejected by the compiler for non-surface types like `turn/start` or
+-   *   `assistant/chunk`.
++   * @param opts - Event-kind-specific options. Surface events take surface
++   *   metadata: `surfaceOp` controls how the event enters the ordered
++   *   surface; `sourceEventSeqs` lists the seq numbers of earlier events this
++   *   one derives from. REQUIRED for {@link SurfaceEventType} events (every
++   *   message-producing event must declare how it joins the surface, the sole
++   *   source of derived model history) and rejected by the compiler for
++   *   non-surface types like `turn/start` or `assistant/chunk`. Non-surface
++   *   events instead take {@link AppendOptions}, whose `ignorable` marker
++   *   lets an unrecognized future reader skip the event instead of refusing
++   *   the whole log.
+    * @returns the logged event — its assigned `seq`/`time` plus the SNAPSHOT of
+    *   `data` that entered the log, so reading `event.data` back sees the logged
+    *   value, never the caller's still-mutable input.
+@@ -604,9 +606,14 @@ export class Session {
+   append<T extends SessionEventType>(
+     type: T,
+     data: SessionEventMap[T],
+-    ...opts: T extends SurfaceEventType ? [opts: SurfaceIntent] : []
++    ...opts: T extends SurfaceEventType ? [opts: SurfaceIntent] : [opts?: AppendOptions]
+   ): SessionEvent<T> {
+-    const surfaceOpts: SurfaceIntent | undefined = opts[0]
++    // One optional parameter serves both event kinds; the conditional tuple
++    // type decides which shape each caller may pass, and the casts below read
++    // the two disjoint fields off it without runtime shape sniffing.
++    const appendOpts = opts[0] as SurfaceIntent | AppendOptions | undefined
++    const ignorable = (appendOpts as AppendOptions | undefined)?.ignorable === true
++    const surfaceOpts = appendOpts as SurfaceIntent | undefined
+     const surfaceMetadata = {
+       ...surfaceOpts?.sourceEventSeqs === undefined ? {} : { sourceEventSeqs: surfaceOpts.sourceEventSeqs },
+       ...surfaceOpts?.surfaceOp === undefined ? {} : { surfaceOp: surfaceOpts.surfaceOp },
+@@ -630,6 +637,7 @@ export class Session {
+       time: Date.now(),
+       data: dataSnapshot,
+       ...(surfaceMetadataSnapshot as { surfaceOp?: unknown; sourceEventSeqs?: unknown }),
++      ...(ignorable ? { ignorable: true as const } : {}),
+     } as unknown as SessionEvent<T>)
+     this.surfaceManager.validateNext(event as SessionEvent)
+ 
+diff --git a/packages/core/session/src/types.ts b/packages/core/session/src/types.ts
+index 31ce28a01b..a4689db7c8 100644
+--- a/packages/core/session/src/types.ts
++++ b/packages/core/session/src/types.ts
+@@ -392,6 +392,25 @@ export interface SurfaceIntent {
+   sourceEventSeqs?: number[]
+ }
+ 
++/**
++ * Optional writer metadata for appending one NON-surface event via
++ * {@link Session.append}. Surface events take {@link SurfaceIntent} instead;
++ * the compiler rejects this parameter there.
++ */
++export interface AppendOptions {
++  /**
++   * Marks the event one an unrecognized reader may skip: a log containing an
++   * event type outside the reading build's vocabulary stays openable when the
++   * event carries `true`. Writers set this only on purely informational
++   * records whose loss cannot affect reconstruction — out-of-repo plugin
++   * events are the intended users. Absent means required: a reader meeting an
++   * unrecognized type without this marker MUST refuse to reconstruct the
++   * session instead of silently dropping the event (see
++   * {@link SessionEvent.ignorable}).
++   */
++  ignorable?: true
++}
++
+ /**
+  * One immutable entry in the session log.
+  *
+diff --git a/packages/core/session/tests/append-options.spec.ts b/packages/core/session/tests/append-options.spec.ts
+new file mode 100644
+index 0000000000..19b1611315
+--- /dev/null
++++ b/packages/core/session/tests/append-options.spec.ts
+@@ -0,0 +1,49 @@
++import { describe, expect, expectTypeOf, it } from 'vitest'
++import { Session, SessionEvent, SessionId } from '@deepseek-ai/dsh-session'
++import type { AppendOptions } from '@deepseek-ai/dsh-session'
++
++describe('Session.append options', () => {
++  it('marks a non-surface event ignorable when the writer passes { ignorable: true }', () => {
++    const session = Session.create(SessionId('append-ignorable'))
++    const event = session.append('turn/start', { turn: 1 }, { ignorable: true })
++
++    expect(event.ignorable).toBe(true)
++    expect(session.events[0]?.ignorable).toBe(true)
++  })
++
++  it('leaves non-surface events required-on-read without options or with empty options', () => {
++    const session = Session.create(SessionId('append-required'))
++    const noOptions = session.append('turn/start', { turn: 1 })
++    const emptyOptions = session.append('step/start', { turn: 1, step: 1 }, {})
++
++    expect(noOptions.ignorable).toBeUndefined()
++    expect(emptyOptions.ignorable).toBeUndefined()
++  })
++
++  it('keeps the marker on the frozen logged entry, not only the returned event', () => {
++    const session = Session.create(SessionId('append-frozen'))
++    session.append('turn/start', { turn: 7 }, { ignorable: true })
++    session.append('turn/end', { turn: 7, reason: { kind: 'completed' } })
++
++    expect(session.events.map(event => event.ignorable)).toEqual([true, undefined])
++    expect(Object.isFrozen(session.events[0])).toBe(true)
++  })
++
++  it('still requires surface metadata for surface events and rejects it for log-only events at compile time', () => {
++    const session = Session.create(SessionId('append-surface-compile'))
++
++    // Surface events keep their SurfaceIntent parameter; the compiler enforces
++    // the shape through the conditional tuple, so this compiles only because
++    // the call carries the required intent.
++    session.append('user/message', {
++      content: [{ type: 'text', text: 'q' }],
++      source: { kind: 'user' },
++    }, { surfaceOp: 'append' })
++
++    expectTypeOf<AppendOptions>().toMatchTypeOf<{ ignorable?: true }>()
++    // A log-only event accepts the optional options parameter...
++    session.append('turn/start', { turn: 2 })
++    // ...and the returned event type stays tied to the appended kind.
++    expectTypeOf(session.append('turn/start', { turn: 3 })).toEqualTypeOf<SessionEvent<'turn/start'>>()
++  })
++})
+diff --git a/packages/session/session-persistence/tests/coordinator-contract.ts b/packages/session/session-persistence/tests/coordinator-contract.ts
+index 8633faa886..842407937d 100644
+--- a/packages/session/session-persistence/tests/coordinator-contract.ts
++++ b/packages/session/session-persistence/tests/coordinator-contract.ts
+@@ -1385,6 +1385,58 @@ export function runCoordinatorContract(name: string, makeFixture: () => Promise<
+       }
+     })
+ 
++    it('round-trips a live-append ignorable marker through flush and load', async () => {
++      const fix = await makeFixture()
++      const { ctx, fiber } = await freshCtx(fix)
++      let markedSession!: Session
++      let requiredSession!: Session
++      // The sessions are created inside a nested fiber so the test can detach
++      // them from the store; a still-live session would make load() return a
++      // live snapshot instead of reading storage and refusing/retaining.
++      const sessionFiber = await ctx.plugin(Object.assign((inner: Context) => {
++        markedSession = inner.sessions.create(SessionId('live-ignorable'), { meta: { cwd: WORK } })
++        requiredSession = inner.sessions.create(SessionId('live-required'), { meta: { cwd: WORK } })
++      }, { inject: ['sessions'] }))
++      try {
++        // The unknown type is written through the REAL append surface (the
++        // { ignorable: true } options object), not hand-authored seeds, so the
++        // writer-to-storage path is what keeps the marker durable.
++        const appendUnknown = markedSession.append.bind(markedSession) as (
++          type: string,
++          data: unknown,
++          opts?: { ignorable?: true },
++        ) => SessionEvent
++        const markedEvent = appendUnknown('future/event', { payload: 1 }, { ignorable: true })
++        expect(markedEvent.ignorable).toBe(true)
++        await ctx.sessions.flush(markedSession)
++
++        // An unmarked unknown event from the same writer surface must still
++        // refuse at load: the marker is the only safety difference.
++        const appendUnknownRequired = requiredSession.append.bind(requiredSession) as (
++          type: string,
++          data: unknown,
++        ) => SessionEvent
++        appendUnknownRequired('future/event', { payload: 2 })
++        await ctx.sessions.flush(requiredSession)
++
++        await sessionFiber.dispose()
++        await vi.waitFor(async () => {
++          const failure = await ctx.sessionPersistence.load(requiredSession.id).then(() => undefined, (error: unknown) => error as Error)
++          expect(failure?.name).toBe('SessionFormatUnsupportedError')
++          expect(failure?.message).toMatch(/event type "future\/event".*not marked ignorable/)
++
++          const loaded = await ctx.sessionPersistence.load(markedSession.id)
++          const retained = loaded.events.find(event => event.type === 'future/event')
++          expect(retained).toBeDefined()
++          expect(retained?.ignorable).toBe(true)
++        })
++      } finally {
++        await sessionFiber.dispose()
++        await fiber.dispose()
++        await fix.cleanup()
++      }
++    })
++
+     it('round-trips a header with parentSession (fork lineage)', async () => {
+       const fix = await makeFixture()
+       const { ctx, fiber } = await freshCtx(fix)

@@ -7,16 +7,22 @@ iterating rapidly; PLAN.md risk 9).
 
 - Checkout: sibling directory `../deepseek-harness` (all `link:` specifiers are
   repository-relative so clean clones, CI, and other machines resolve them)
-- CI/source-install pin: `429220f41e6362a0674d21b4d7dfe94cfaa59c8d`
-  (includes the ignorable-append seam and public `@deepseek-ai/dsh-settings` export)
-- Built: full `pnpm run build` completed successfully on this commit.
+- Public upstream base: `b150a551b8d465e31e418e1b2eaf5e79bbb7d28e`
+  (`dsh-v0.1.1-rc.2`)
+- Local development Harness: `429220f41e6362a0674d21b4d7dfe94cfaa59c8d`
+  (adds the ignorable-append seam used by AutoReportDSH)
 
 ## Compatibility seams
 
-The pinned Harness exposes `Session.append(type, data, { ignorable: true })`, so stock readers
-skip out-of-tree `autoreport/*` records during cold load, and publicly exports
-`@deepseek-ai/dsh-settings`. Update the source-install pin and the CI `DSH_REF` together after
-any compatibility review.
+AutoReportDSH requires `Session.append(type, data, { ignorable: true })` so stock readers skip
+out-of-tree `autoreport/*` records during cold load. Until the upstream DSH release range
+contains that API, CI checks out the public upstream base and applies
+[`patches/deepseek-harness-ignorable-append.patch`](../patches/deepseek-harness-ignorable-append.patch)
+before building. Local source development should use the matching patched Harness checkout.
+
+`@deepseek-ai/dsh-settings` is already present in the public base and supplies the AutoReport
+user-settings namespace. Once the append API is released upstream, remove the patch step,
+update the source-install requirement, and pin the published compatibility version together.
 
 ## Wiring decision
 
