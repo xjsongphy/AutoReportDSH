@@ -15,8 +15,9 @@ concurrency:
 
 env:
   NODE_VERSION: '22.19.0'
-  # Public upstream base. The next step applies the small compatibility patch
-  # required until DSH releases Session.append(..., { ignorable: true }).
+  # Public upstream base. Later steps apply the compatibility patches required
+  # until DSH releases Session.append(..., { ignorable: true }) and
+  # sandbox/workspace-root.
   DSH_REF: 'b150a551b8d465e31e418e1b2eaf5e79bbb7d28e'
 
 defaults:
@@ -55,9 +56,13 @@ jobs:
           path: deepseek-harness
           persist-credentials: false
 
-      - name: Apply required DSH session compatibility patch
+      - name: Apply required DSH compatibility patches
         working-directory: deepseek-harness
-        run: git apply --check ../AutoReportDSH/patches/deepseek-harness-ignorable-append.patch && git apply ../AutoReportDSH/patches/deepseek-harness-ignorable-append.patch
+        run: |
+          git apply --check ../AutoReportDSH/patches/deepseek-harness-ignorable-append.patch
+          git apply ../AutoReportDSH/patches/deepseek-harness-ignorable-append.patch
+          git apply --check ../AutoReportDSH/patches/deepseek-harness-sandbox-workspace-root.patch
+          git apply ../AutoReportDSH/patches/deepseek-harness-sandbox-workspace-root.patch
 
       - name: Set up pnpm
         uses: pnpm/action-setup@v4

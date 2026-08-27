@@ -26,12 +26,18 @@ importers:
       '@deepseek-ai/dsh-llm':
         specifier: link:../deepseek-harness/packages/llm/llm
         version: link:../deepseek-harness/packages/llm/llm
+      '@deepseek-ai/dsh-sandbox-policy':
+        specifier: link:../deepseek-harness/packages/sandbox/sandbox-policy
+        version: link:../deepseek-harness/packages/sandbox/sandbox-policy
       '@deepseek-ai/dsh-session':
         specifier: link:../deepseek-harness/packages/core/session
         version: link:../deepseek-harness/packages/core/session
       '@deepseek-ai/dsh-settings':
         specifier: link:../deepseek-harness/packages/settings/settings
         version: link:../deepseek-harness/packages/settings/settings
+      '@deepseek-ai/dsh-shell-env':
+        specifier: link:../deepseek-harness/packages/shell/shell-env
+        version: link:../deepseek-harness/packages/shell/shell-env
       '@deepseek-ai/dsh-skill':
         specifier: link:../deepseek-harness/packages/skill/skill
         version: link:../deepseek-harness/packages/skill/skill
