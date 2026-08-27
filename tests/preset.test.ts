@@ -2,9 +2,9 @@ import type { Context } from '@deepseek-ai/cordis'
 import { describe, expect, it } from 'vitest'
 import { apply } from '../src/preset.js'
 
-/** The preset contribution is intentionally small: scoped skills plus two MAIN tools. */
+/** The preset contribution is intentionally small: no domain skills leak into MAIN. */
 describe('autoreport preset contribution', () => {
-  it('registers bundled skills and the current fixed-workflow MAIN tools together', () => {
+  it('registers only the current fixed-workflow MAIN tools', () => {
     const tools: string[] = []
     const skills: string[] = []
     const context = {
@@ -25,7 +25,6 @@ describe('autoreport preset contribution', () => {
         config: {
           defaultReportLanguage: 'latex',
           defaultLatexEngine: 'latexmk',
-          defaultPythonEnv: undefined,
           workspaceRoot: undefined,
           specialistModel: undefined,
           executionTimeoutMs: 600_000,
@@ -37,10 +36,6 @@ describe('autoreport preset contribution', () => {
     apply(context)
 
     expect(tools.sort()).toEqual(['report_task', 'send_to_agent'])
-    expect(skills.sort()).toEqual([
-      'experiment-report-writer',
-      'latex-compile',
-      'typst-compile',
-    ])
+    expect(skills).toEqual([])
   })
 })

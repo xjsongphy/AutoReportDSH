@@ -11,18 +11,17 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { createReportTaskTool } from './tools/report-task.js'
 import { createSendToAgentTool } from './tools/send-to-agent.js'
-import { registerBundledSkills } from './skills-preset.js'
 import type {} from './runtime.js'
 
 export const name = 'autoreportdsh-preset'
 export const inject = ['tools', 'skills', 'subagents', 'autoreportWorkflow'] as const
 
 /**
- * Register AutoReport's preset-scoped skills and its current MAIN tools.
+ * Register AutoReport's current MAIN tools. Domain skills are registered only
+ * in role-bound specialist child scopes by the continuable router.
  * @param ctx - The `autoreport-main` preset scope.
  */
 export function apply(ctx: Context): void {
-  registerBundledSkills(ctx)
   ctx.tools.register(createSendToAgentTool({
     subagents: ctx.subagents,
     workflow: ctx.autoreportWorkflow,

@@ -36,7 +36,6 @@ import * as reportRouterModule from '../src/tools/report-router.js'
 const CONFIG: Config = {
   defaultReportLanguage: 'latex',
   defaultLatexEngine: 'latexmk',
-  defaultPythonEnv: undefined,
   workspaceRoot: undefined,
   specialistModel: undefined,
   executionTimeoutMs: 600_000,
@@ -53,11 +52,13 @@ interface RecordedSection {
 interface ChildRecorder {
   readonly ctx: Parameters<typeof reportRouterModule.installRoutedReportTool>[0]
   readonly toolNames: string[]
+  readonly skillNames: string[]
   readonly sections: RecordedSection[]
 }
 
 function makeChildRecorder(id: string): ChildRecorder {
   const toolNames: string[] = []
+  const skillNames: string[] = []
   const sections: RecordedSection[] = []
   const ctx = {
     agent: { id: SessionId(`${id}`) } as Agent,
@@ -73,8 +74,14 @@ function makeChildRecorder(id: string): ChildRecorder {
         return () => {}
       },
     },
+    skills: {
+      register: (skill: { name: string }) => {
+        skillNames.push(skill.name)
+        return () => {}
+      },
+    },
   }
-  return { ctx: ctx as ChildRecorder['ctx'], toolNames, sections }
+  return { ctx: ctx as ChildRecorder['ctx'], toolNames, skillNames, sections }
 }
 
 const tempDirs: string[] = []
@@ -326,6 +333,7 @@ describe('integration: assembled host (real context)', () => {
     const theory = makeChildRecorder('it-theory')
     setup(theory.ctx)
     expect(theory.toolNames).toEqual(['report_workflow', 'report_exec'])
+    expect(theory.skillNames).toEqual(['mineru'])
     expect(theory.toolNames).not.toContain('report')
     expect(theory.sections.some(section => section.text.includes('THEORY'))).toBe(true)
 
@@ -335,21 +343,19 @@ describe('integration: assembled host (real context)', () => {
     const reporter = makeChildRecorder('it-report')
     setup(reporter.ctx)
     expect(reporter.toolNames).toEqual(['report_workflow', 'report_exec', 'compile_report'])
+    expect(reporter.skillNames).toEqual(['experiment-report-writer', 'latex-compile', 'mineru'])
     const plotter = makeChildRecorder('it-plotting-bound')
     assembled.runtime.roleRegistry.registerReserved({
       ...binding, role: 'PLOTTING', childSessionId: SessionId('it-plotting-bound'),
     })
     setup(plotter.ctx)
     expect(plotter.toolNames).toEqual(['report_workflow', 'report_exec'])
+    expect(plotter.skillNames).toEqual([])
   })
 
   it('initializes the workspace once with the frozen settings snapshot on the workflow event', async () => {
     const assembled = await assemble({ projectLanguage: 'typst' })
-    expect(assembled.presetSkillNames.sort()).toEqual([
-      'experiment-report-writer',
-      'latex-compile',
-      'typst-compile',
-    ])
+    expect(assembled.presetSkillNames).toEqual([])
     admitFirstTurn(assembled)
     for (const dir of REQUIRED_DIRS) expect(existsSync(join(assembled.workspaceRoot, dir))).toBe(true)
     const meta = assembled.runtime.forSession(assembled.mainSession).state.projection().meta

@@ -10,6 +10,7 @@ import { createPlatformIsolationBackend, type IsolationBackend } from '../policy
 import { createReportExecTool, runIsolated } from './report-exec.js'
 import { createCompileReportTool } from './compile-report.js'
 import { installWorkflowReportTool } from './report-workflow.js'
+import { registerRoleSkills } from '../skills-preset.js'
 
 export const name = 'autoreportdsh-report-router'
 export const inject = ['subagents', 'tools', 'systemPrompt', 'subprocess', 'autoreportWorkflow']
@@ -140,6 +141,9 @@ export function installRoutedReportTool(
   try {
     const disposeModelSelection = installSpecialistModelSelection(childCtx, workflow)
     if (disposeModelSelection !== undefined) disposers.push(disposeModelSelection)
+    const language = workflow.workflowForChild(child.id)?.runtime.state.projection().meta?.settings?.reportLanguage
+      ?? workflow.config.defaultReportLanguage
+    disposers.push(registerRoleSkills(childCtx, entry.binding.role, language))
     disposers.push(childCtx.tools.register(createReportExecTool(hostCtx, {
       registry: workflow.roleRegistry,
       ...(workflow.config.workspaceRoot === undefined ? {} : { workspaceRoot: workflow.config.workspaceRoot }),

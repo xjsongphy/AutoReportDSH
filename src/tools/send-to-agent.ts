@@ -94,8 +94,10 @@ function normalizeTimeout(raw: unknown, fallback: number): number {
  * falling back to composition defaults ONLY when no snapshot is on the
  * workflow event. `{ inheritMain: true }` passes no route so DSH gives the
  * child the Main selection. DSH's `AgentOptions` surface carries provider and
- * model only; a snapshot's `reasoningEffort` rides along until that surface
- * accepts it.
+ * model only, which seeds the child descriptor. The global AutoReport child
+ * setup router applies the complete
+ * snapshot selection (including reasoning effort) through DSH's scoped
+ * `installModelSelection()` seam before the child is published.
  */
 function childAgentOptions(
   snapshot: WorkflowSettingsSnapshot | undefined,
