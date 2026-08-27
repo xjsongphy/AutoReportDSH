@@ -22,6 +22,7 @@ const CONFIG: Config = {
   defaultLatexEngine: 'latexmk',
   workspaceRoot: undefined,
   specialistModel: undefined,
+  delegationWaitTimeoutMs: 600_000,
   executionTimeoutMs: 600_000,
 }
 
@@ -87,14 +88,14 @@ describe('host workflow runtime', () => {
           defaultReportLanguage: 'typst',
           defaultLatexEngine: 'tectonic',
           specialistModel: { provider: 'specialist', model: 'reasoning-model', reasoningEffort: 'high' },
-          executionTimeoutMs: 12_345,
+          delegationWaitTimeoutMs: 12_345,
         },
       },
     })
     const runtime = new AutoReportWorkflowRuntime(ctx, { ...CONFIG, workspaceRoot: root })
     await vi.waitFor(() => {
       const section = ctx.settings.describe().find(entry => entry.ns === 'autoreport')
-      expect(section?.value).toMatchObject({ defaultReportLanguage: 'typst', executionTimeoutMs: 12_345 })
+      expect(section?.value).toMatchObject({ defaultReportLanguage: 'typst', delegationWaitTimeoutMs: 12_345 })
     })
     const session = rootSession('main-user-settings', AUTOREPORT_MAIN_PRESET)
     runtime.maybeInitialize(session)
@@ -102,6 +103,7 @@ describe('host workflow runtime', () => {
       reportLanguage: 'typst',
       latexEngine: 'tectonic',
       specialistModel: { inheritMain: false, provider: 'specialist', model: 'reasoning-model', reasoningEffort: 'high' },
+      delegationWaitTimeoutMs: 12_345,
       executionTimeoutMs: 12_345,
     })
   })

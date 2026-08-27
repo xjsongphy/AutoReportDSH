@@ -18,7 +18,7 @@ import z from '@deepseek-ai/schemastery'
 /** Report source language for materialization and compilation. */
 export type ReportLanguage = 'latex' | 'typst'
 
-/** LaTeX engine used by `compile_report`. Tectonic requires a verified local cache. */
+/** LaTeX engine hint for bash-driven compilation. Tectonic requires a verified local cache. */
 export type LatexEngine = 'latexmk' | 'tectonic'
 
 /** Optional specialist model route; DSH owns credentials and execution. */
@@ -45,7 +45,14 @@ export interface Config {
   /** Default fixed model route for every specialist child; absent inherits Main. */
   specialistModel: SpecialistRoute | undefined
   /** Default bounded wait for `send_to_agent({ wait: true })` (default ten minutes). */
+  delegationWaitTimeoutMs?: number
+  /**
+   * Deprecated alias equal to {@link delegationWaitTimeoutMs} when set; host
+   * plane still reads this field until send-to-agent switches.
+   */
   executionTimeoutMs: number
+  /** Optional absolute Python interpreter path for specialist bash execution. */
+  pythonExecutable?: string
 }
 
 export const Config: z<Config> = z.object({
@@ -57,5 +64,7 @@ export const Config: z<Config> = z.object({
     model: z.string(),
     reasoningEffort: z.string(),
   }),
+  delegationWaitTimeoutMs: z.number(),
   executionTimeoutMs: z.number().default(600_000),
+  pythonExecutable: z.string(),
 }) as unknown as z<Config>

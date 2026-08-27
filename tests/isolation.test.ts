@@ -1,111 +1,64 @@
-import { existsSync, mkdtempSync, mkdirSync, rmSync } from 'node:fs'
-import { createServer } from 'node:net'
+import { mkdtempSync, mkdirSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
-import { spawn } from 'node:child_process'
 import { afterEach, describe, expect, it } from 'vitest'
+import { Session, SessionId } from '@deepseek-ai/dsh-session'
 import {
-  buildDarwinSeatbeltCommand,
-  buildLinuxBwrapCommand,
-  buildSeatbeltProfile,
-  createPlatformIsolationBackend,
-  IsolationUnavailableError,
-  type IsolationRequest,
-} from '../src/policy/isolation/index.js'
+  effectiveSandboxMode,
+  effectiveSandboxWorkspaceRoot,
+} from '@deepseek-ai/dsh-sandbox-policy/src/session-mode.ts'
+import { applyRoleSandbox, roleWritableRoot } from '../src/policy/sandbox-roots.js'
 
 const cleanup: string[] = []
 afterEach(() => {
   for (const path of cleanup.splice(0)) rmSync(path, { recursive: true, force: true })
 })
 
-function request(): IsolationRequest {
-  const root = mkdtempSync(join(tmpdir(), 'autoreport-isolation-'))
+function workspace(): string {
+  const root = mkdtempSync(join(tmpdir(), 'autoreport-sandbox-'))
   cleanup.push(root)
-  const writable = join(root, 'Theory')
-  const temp = join(root, 'private-temp')
-  mkdirSync(writable)
-  mkdirSync(temp)
-  return {
-    argv: ['/usr/bin/true'],
-    cwd: writable,
-    readableRoots: [root],
-    writableRoots: [writable],
-    tempRoot: temp,
+  for (const dir of ['Outline', 'Theory', 'Data/Processed', 'Plots', 'Report']) {
+    mkdirSync(join(root, dir), { recursive: true })
   }
+  return root
 }
 
-describe('report isolation builders', () => {
-  it('builds the established DSH bwrap file profile plus network isolation', () => {
-    const input = request()
-    const command = buildLinuxBwrapCommand(input, '/usr/bin/bwrap')
-    expect(command.argv.slice(0, 3)).toEqual(['/usr/bin/bwrap', '--ro-bind', '/'])
-    expect(command.argv).toContain('--unshare-net')
-    expect(command.argv).toContain('--unshare-pid')
-    expect(command.argv).toContain('--die-with-parent')
-    expect(command.argv).toContain('--tmpfs')
-    expect(command.argv).toContain(input.tempRoot)
-    expect(command.argv).toContain(input.writableRoots[0])
-    expect(command.argv.slice(-2)).toEqual(['--', '/usr/bin/true'])
-    expect(command.env['TMPDIR']).toBe(input.tempRoot)
-  })
-
-  it('builds a Seatbelt profile with narrow writes and mandatory network denial', () => {
-    const input = request()
-    const profile = buildSeatbeltProfile(input)
-    expect(profile).toContain('(deny network*)')
-    expect(profile).toContain('(deny file-write*)')
-    expect(profile).toContain(input.writableRoots[0])
-    expect(profile).toContain(input.tempRoot)
-    const command = buildDarwinSeatbeltCommand(input)
-    expect(command.argv[0]).toBe('/usr/bin/sandbox-exec')
-    expect(command.argv).toContain(profile)
-    expect(command.argv.slice(-2)).toEqual(['--', '/usr/bin/true'])
-  })
-
-  it('fails closed for an unsupported platform and missing runner', async () => {
-    const unsupported = createPlatformIsolationBackend(async () => '/runner', 'win32')
-    await expect(unsupported.wrap(request())).rejects.toBeInstanceOf(IsolationUnavailableError)
-    const missing = createPlatformIsolationBackend(async () => { throw new Error('ENOENT') }, 'linux')
-    await expect(missing.wrap(request())).rejects.toThrow(/bubblewrap is missing/u)
+describe('roleWritableRoot', () => {
+  it('maps each role to its writable directory under the experiment root', () => {
+    const root = workspace()
+    expect(roleWritableRoot(root, 'MAIN')).toBe(resolve(root, 'Outline'))
+    expect(roleWritableRoot(root, 'THEORY')).toBe(resolve(root, 'Theory'))
+    expect(roleWritableRoot(root, 'DATA_ANALYSIS')).toBe(resolve(root, 'Data/Processed'))
+    expect(roleWritableRoot(root, 'PLOTTING')).toBe(resolve(root, 'Plots'))
+    expect(roleWritableRoot(root, 'REPORT')).toBe(resolve(root, 'Report'))
   })
 })
 
-const currentBackendAvailable = process.platform === 'darwin'
-  ? existsSync('/usr/bin/sandbox-exec')
-  : process.platform === 'linux' && process.env['PATH']?.split(':').some(dir => existsSync(resolve(dir, 'bwrap'))) === true
-
-it.skipIf(!currentBackendAvailable)('denies a deterministic localhost TCP connection in the live platform sandbox', async () => {
-  const input = request()
-  const server = createServer(socket => socket.end())
-  await new Promise<void>((accept, reject) => {
-    server.once('error', reject)
-    server.listen(0, '127.0.0.1', accept)
-  })
-  try {
-    const address = server.address()
-    if (address === null || typeof address === 'string') throw new Error('test server has no TCP port')
-    const script = `
-      const net = require('node:net');
-      const socket = net.connect(${address.port}, '127.0.0.1');
-      socket.on('connect', () => process.exit(2));
-      socket.on('error', () => process.exit(0));
-      setTimeout(() => process.exit(0), 2000);
-    `
-    const liveRequest = { ...input, argv: [process.execPath, '-e', script] }
-    const command = process.platform === 'darwin'
-      ? buildDarwinSeatbeltCommand(liveRequest)
-      : buildLinuxBwrapCommand(liveRequest)
-    const code = await new Promise<number | null>((accept, reject) => {
-      const child = spawn(command.argv[0]!, command.argv.slice(1), {
-        cwd: input.cwd,
-        env: { ...process.env, ...command.env },
-        stdio: 'ignore',
-      })
-      child.once('error', reject)
-      child.once('exit', accept)
+describe('applyRoleSandbox', () => {
+  it('pins workspace-write mode and the role writable root without changing session cwd', () => {
+    const root = workspace()
+    const session = Session.create(SessionId('sandbox-main'), undefined, {
+      version: 0,
+      id: SessionId('sandbox-main'),
+      createdAt: Date.now(),
+      cwd: root,
     })
-    expect(code).toBe(0)
-  } finally {
-    await new Promise<void>(accept => server.close(() => accept()))
-  }
+    applyRoleSandbox(session, 'DATA_ANALYSIS', root)
+    expect(session.header.cwd).toBe(root)
+    expect(effectiveSandboxMode(session.events)).toBe('workspace-write')
+    expect(effectiveSandboxWorkspaceRoot(session.events)).toBe(resolve(root, 'Data/Processed'))
+  })
+
+  it('last call wins when reapplied for a different role', () => {
+    const root = workspace()
+    const session = Session.create(SessionId('sandbox-child'), undefined, {
+      version: 0,
+      id: SessionId('sandbox-child'),
+      createdAt: Date.now(),
+      cwd: root,
+    })
+    applyRoleSandbox(session, 'THEORY', root)
+    applyRoleSandbox(session, 'REPORT', root)
+    expect(effectiveSandboxWorkspaceRoot(session.events)).toBe(resolve(root, 'Report'))
+  })
 })

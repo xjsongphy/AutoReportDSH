@@ -38,6 +38,7 @@ const CONFIG: Config = {
   defaultLatexEngine: 'latexmk',
   workspaceRoot: undefined,
   specialistModel: undefined,
+  delegationWaitTimeoutMs: 600_000,
   executionTimeoutMs: 600_000,
 }
 
@@ -332,36 +333,33 @@ describe('integration: assembled host (real context)', () => {
     assembled.runtime.roleRegistry.registerReserved(binding)
     const theory = makeChildRecorder('it-theory')
     setup(theory.ctx)
-    expect(theory.toolNames).toEqual(['report_workflow', 'report_exec'])
+    expect(theory.toolNames).toEqual(['report_workflow'])
     expect(theory.skillNames).toEqual([])
     expect(theory.toolNames).not.toContain('report')
-    expect(theory.sections.some(section => section.name === 'autoreport:skill:mineru')).toBe(true)
     expect(theory.sections.some(section => section.text.includes('THEORY'))).toBe(true)
 
-    // REPORT additionally receives compile_report; nobody else does.
     const reportBinding: RoleBindingSnapshot = { ...binding, role: 'REPORT', childSessionId: SessionId('it-report') }
     assembled.runtime.roleRegistry.registerReserved(reportBinding)
     const reporter = makeChildRecorder('it-report')
     setup(reporter.ctx)
-    expect(reporter.toolNames).toEqual(['report_workflow', 'report_exec', 'compile_report'])
+    expect(reporter.toolNames).toEqual(['report_workflow'])
     expect(reporter.skillNames).toEqual([])
     expect(reporter.sections.map(section => section.name)).toEqual(expect.arrayContaining([
       'autoreport:skill:experiment-report-writer',
       'autoreport:skill:latex-compile',
-      'autoreport:skill:mineru',
     ]))
     const plotter = makeChildRecorder('it-plotting-bound')
     assembled.runtime.roleRegistry.registerReserved({
       ...binding, role: 'PLOTTING', childSessionId: SessionId('it-plotting-bound'),
     })
     setup(plotter.ctx)
-    expect(plotter.toolNames).toEqual(['report_workflow', 'report_exec'])
+    expect(plotter.toolNames).toEqual(['report_workflow'])
     expect(plotter.skillNames).toEqual([])
   })
 
   it('initializes the workspace once with the frozen settings snapshot on the workflow event', async () => {
     const assembled = await assemble({ projectLanguage: 'typst' })
-    expect(assembled.presetSkillNames).toEqual([])
+    expect(assembled.presetSkillNames).toEqual(['pdf-reference-reader', 'mineru'])
     admitFirstTurn(assembled)
     for (const dir of REQUIRED_DIRS) expect(existsSync(join(assembled.workspaceRoot, dir))).toBe(true)
     const meta = assembled.runtime.forSession(assembled.mainSession).state.projection().meta

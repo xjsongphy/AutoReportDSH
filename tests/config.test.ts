@@ -6,11 +6,13 @@ describe('autoreportdsh Config', () => {
     const config = Config({}) as unknown as {
       defaultReportLanguage: string
       defaultLatexEngine: string
+      delegationWaitTimeoutMs: number
       executionTimeoutMs: number
     }
     expect(config.defaultReportLanguage).toBe('latex')
     expect(config.defaultLatexEngine).toBe('latexmk')
     expect(config.executionTimeoutMs).toBe(600_000)
+    expect(config.delegationWaitTimeoutMs ?? config.executionTimeoutMs).toBe(600_000)
   })
 
   it('accepts a full explicit configuration', () => {
@@ -19,10 +21,13 @@ describe('autoreportdsh Config', () => {
       defaultLatexEngine: 'tectonic',
       workspaceRoot: '/tmp/exp',
       specialistModel: { provider: 'openrouter', model: 'stealth/ox-alpha' },
+      delegationWaitTimeoutMs: 1000,
       executionTimeoutMs: 1000,
+      pythonExecutable: '/opt/python3',
     }) as unknown as Record<string, unknown>
     expect(config['defaultReportLanguage']).toBe('typst')
     expect(config['specialistModel']).toEqual({ provider: 'openrouter', model: 'stealth/ox-alpha' })
+    expect(config['pythonExecutable']).toBe('/opt/python3')
   })
 
   it('rejects an unknown language (fail loud)', () => {

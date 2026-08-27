@@ -1,19 +1,14 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { installModelSelection, type Agent, type ModelSelection } from '@deepseek-ai/dsh-agent'
 import { ReasoningEffortId } from '@deepseek-ai/dsh-llm'
-import type { ToolExecution } from '@deepseek-ai/dsh-tools'
 import { installReportTool } from '@deepseek-ai/dsh-tool-subagent-report'
-import { snapshotDir } from '../artifacts/artifact-policy.js'
-import { AUTOREPORT_SCHEMA_VERSION, type ArtifactSnapshot } from '../workflow/events.js'
 import type AutoReportWorkflowRuntime from '../runtime.js'
-import { createPlatformIsolationBackend, type IsolationBackend } from '../policy/isolation/index.js'
-import { createReportExecTool, runIsolated } from './report-exec.js'
-import { createCompileReportTool } from './compile-report.js'
+import { applyRoleSandbox } from '../policy/sandbox-roots.js'
 import { installWorkflowReportTool } from './report-workflow.js'
 import { registerRoleSkills } from '../skills-preset.js'
 
 export const name = 'autoreportdsh-report-router'
-export const inject = ['subagents', 'tools', 'systemPrompt', 'subprocess', 'autoreportWorkflow']
+export const inject = ['subagents', 'tools', 'systemPrompt', 'autoreportWorkflow']
 
 /** Router inputs shared by every specialist branch. */
 type RoutedWorkflow = Pick<AutoReportWorkflowRuntime, 'roleRegistry' | 'config' | 'workflowForChild'>
@@ -41,87 +36,9 @@ export function installSpecialistModelSelection(childCtx: Context, workflow: Rou
 }
 
 /**
- * Build the REPORT-only `compile_report` registration over the same shared
- * isolated runner `report_exec` uses (PLAN.md §2.12): caller identity through
- * the synchronous registry (REPORT only), platform isolation backend over
- * DSH's subprocess seam, and process artifacts committed onto the owning MAIN
- * session. Registration never touches platform tooling; the isolation
- * backend and its executable resolution are constructed lazily per call.
- */
-function installCompileReportTool(
-  childCtx: Context,
-  hostCtx: Context,
-  workflow: RoutedWorkflow & Pick<AutoReportWorkflowRuntime, 'commit'>,
-  child: Agent,
-): () => void {
-  const subprocess = hostCtx.subprocess
-  if (subprocess === undefined) {
-    throw new Error('autoreportdsh: compile_report requires the subprocess service')
-  }
-  const resolveCallerRole = (exec: Readonly<ToolExecution>): { sessionId: string; workspaceRoot: string } => {
-    const session = exec.agent?.session
-    if (session === undefined) throw new Error('compile_report requires an owning agent')
-    const entry = workflow.roleRegistry.lookup(session.id)
-    if (entry === undefined || entry.binding.role !== 'REPORT') {
-      throw new Error('AutoReport compile_report is available only to REPORT')
-    }
-    const root = workflow.config.workspaceRoot ?? session.header.cwd
-    if (root === undefined || root.length === 0) {
-      throw new Error('compile_report requires a workspace root or session cwd')
-    }
-    return { sessionId: String(session.id), workspaceRoot: root }
-  }
-  let isolation: IsolationBackend | undefined
-  return childCtx.tools.register(createCompileReportTool({
-    config: workflow.config,
-    resolveCallerRole,
-    runner: request => {
-      // Per-call construction keeps registration side-effect free while each
-      // compilation still resolves through the deployment's executable lookup.
-      isolation ??= createPlatformIsolationBackend(
-        (command, signal) => subprocess.resolveExecutable(command, {}, signal),
-      )
-      return runIsolated(
-        {
-          subprocess,
-          isolation,
-          maxOutputBytes: 65_536,
-          createTemp: async () => {
-            const { mkdtemp } = await import('node:fs/promises')
-            const { tmpdir } = await import('node:os')
-            return mkdtemp(`${tmpdir()}/autoreportdsh-`)
-          },
-          removeTemp: async path => {
-            const { rm } = await import('node:fs/promises')
-            await rm(path, { recursive: true, force: true })
-          },
-        },
-        request,
-        { externalSignal: request.externalSignal, timeoutMs: request.timeoutMs },
-      )
-    },
-    listFilesFiltered: root => snapshotDir(root),
-    commitArtifact: snapshot => {
-      const owner = workflow.workflowForChild(child.id)
-      if (owner === undefined) return
-      const artifact: ArtifactSnapshot = {
-        version: AUTOREPORT_SCHEMA_VERSION,
-        path: snapshot.path,
-        status: snapshot.status,
-        producedBy: 'REPORT',
-        origin: 'process',
-        recordedAt: snapshot.recordedAt,
-      }
-      workflow.commit(owner.session, 'autoreport/artifact', artifact)
-    },
-  }))
-}
-
-/**
  * Route one continuable child's report surface by pre-provisioned role.
- * AutoReport children get the structured protocol plus `report_exec` (and
- * `compile_report` for REPORT only); ordinary DSH children keep the
- * maintained stock implementation.
+ * AutoReport children get the structured protocol and role skills; ordinary
+ * DSH children keep the maintained stock implementation.
  * @param childCtx - unpublished continuable child scope.
  * @param hostCtx - host context carrying shared services.
  * @param workflow - AutoReport role registry, config, and owning-session lookup.
@@ -130,7 +47,7 @@ function installCompileReportTool(
 export function installRoutedReportTool(
   childCtx: Context,
   hostCtx: Context,
-  workflow: RoutedWorkflow & Pick<AutoReportWorkflowRuntime, 'commit'>,
+  workflow: RoutedWorkflow,
 ): () => void {
   const child = childCtx.agent as Agent
   const entry = workflow.roleRegistry.lookup(child.id)
@@ -144,12 +61,12 @@ export function installRoutedReportTool(
     const language = workflow.workflowForChild(child.id)?.runtime.state.projection().meta?.settings?.reportLanguage
       ?? workflow.config.defaultReportLanguage
     disposers.push(registerRoleSkills(childCtx, entry.binding.role, language))
-    disposers.push(childCtx.tools.register(createReportExecTool(hostCtx, {
-      registry: workflow.roleRegistry,
-      ...(workflow.config.workspaceRoot === undefined ? {} : { workspaceRoot: workflow.config.workspaceRoot }),
-    })))
-    if (entry.binding.role === 'REPORT') {
-      disposers.push(installCompileReportTool(childCtx, hostCtx, workflow, child))
+    const session = child.session
+    if (session !== undefined) {
+      const workspaceRoot = workflow.config.workspaceRoot ?? session.header.cwd
+      if (workspaceRoot !== undefined && workspaceRoot.length > 0) {
+        applyRoleSandbox(session, entry.binding.role, workspaceRoot)
+      }
     }
   } catch (error: unknown) {
     for (const dispose of [...disposers.reverse(), disposeReport]) {

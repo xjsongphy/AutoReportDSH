@@ -4,10 +4,10 @@
  * Session identity; this table is the domain source for authorization and
  * process isolation.
  *
- * `cwd` controls relative-path behavior only — it is never an authorization
- * boundary. Readable roots are workspace-relative; `'.'` denotes the whole
- * experiment workspace. Writable roots are narrower than the workspace root
- * and are enforced independently by the tool guard and the isolation backend.
+ * Navigation cwd is always the experiment root (`'.'`). Writable roots are
+ * narrower than the workspace and are enforced by DSH sandbox `workspaceRoot`
+ * (independent of session cwd) plus a shrunk AutoReport guard. Network is
+ * allowed: DSH sandbox is a file-effect boundary, not a network boundary.
  * @module
  */
 
@@ -17,16 +17,16 @@ export type AutoReportRole = 'MAIN' | 'THEORY' | 'DATA_ANALYSIS' | 'PLOTTING' | 
 /** Roles that run as continuable specialist children (every role except MAIN). */
 export type SpecialistRole = Exclude<AutoReportRole, 'MAIN'>
 
-/** Explicit execution policy for one role (PLAN.md §2.2). */
+/** Explicit execution policy for one role (PLAN.md §2.2, execution-layer rev). */
 export interface ReportRolePolicy {
-  /** Working directory for report processes, workspace-relative. */
+  /** Navigation cwd, always the experiment root. Not a write-authorization boundary. */
   readonly cwd: string
-  /** Directories report processes may read; `'.'` is the whole workspace. */
+  /** Directories the role may read; `'.'` is the whole workspace. */
   readonly readableRoots: readonly string[]
-  /** Directories role mutations may target and processes may write. */
+  /** Directories role mutations may target; DSH sandbox workspaceRoot. */
   readonly writableRoots: readonly string[]
-  /** Immutable v1 network posture. */
-  readonly network: 'deny'
+  /** Network posture: allowed. File writes stay confined by sandbox. */
+  readonly network: 'allow'
   /** Private temporary area per process; never a shared world-writable dir. */
   readonly temp: 'private'
 }
@@ -35,39 +35,39 @@ const MAIN_POLICY: ReportRolePolicy = {
   cwd: '.',
   readableRoots: ['.'],
   writableRoots: ['Outline'],
-  network: 'deny',
+  network: 'allow',
   temp: 'private',
 }
 
 const THEORY_POLICY: ReportRolePolicy = {
-  cwd: 'Theory',
+  cwd: '.',
   readableRoots: ['.'],
   writableRoots: ['Theory'],
-  network: 'deny',
+  network: 'allow',
   temp: 'private',
 }
 
 const DATA_ANALYSIS_POLICY: ReportRolePolicy = {
-  cwd: 'Data',
+  cwd: '.',
   readableRoots: ['.'],
   writableRoots: ['Data/Processed'],
-  network: 'deny',
+  network: 'allow',
   temp: 'private',
 }
 
 const PLOTTING_POLICY: ReportRolePolicy = {
-  cwd: 'Plots',
+  cwd: '.',
   readableRoots: ['.'],
   writableRoots: ['Plots'],
-  network: 'deny',
+  network: 'allow',
   temp: 'private',
 }
 
 const REPORT_POLICY: ReportRolePolicy = {
-  cwd: 'Report',
+  cwd: '.',
   readableRoots: ['.'],
   writableRoots: ['Report'],
-  network: 'deny',
+  network: 'allow',
   temp: 'private',
 }
 

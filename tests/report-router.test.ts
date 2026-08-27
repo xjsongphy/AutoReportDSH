@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { Context } from '@deepseek-ai/cordis'
-import { SessionId } from '@deepseek-ai/dsh-session'
+import { Session, SessionId } from '@deepseek-ai/dsh-session'
+import {
+  effectiveSandboxMode,
+  effectiveSandboxWorkspaceRoot,
+} from '@deepseek-ai/dsh-sandbox-policy/src/session-mode.ts'
 import { RoleRegistry } from '../src/workflow/role-registry.js'
 import type { Config } from '../src/config.js'
 import type { RoleBindingSnapshot } from '../src/workflow/events.js'
@@ -12,15 +16,23 @@ const CONFIG: Config = {
   defaultLatexEngine: 'latexmk',
   workspaceRoot: undefined,
   specialistModel: undefined,
+  delegationWaitTimeoutMs: 600_000,
   executionTimeoutMs: 600_000,
 }
 
-function childContext() {
+function childContext(id = 'child-1', cwd?: string) {
   const tools: { name: string }[] = []
   const skills: { name: string }[] = []
   const sections: { name: string; text: string }[] = []
+  const sessionId = SessionId(id)
+  const session = Session.create(sessionId, undefined, {
+    version: 0,
+    id: sessionId,
+    createdAt: Date.now(),
+    cwd: cwd ?? '/tmp/autoreport-workspace',
+  })
   const ctx = {
-    agent: { id: SessionId('child-1') },
+    agent: { id: sessionId, session },
     tools: {
       register: (tool: { name: string }) => {
         tools.push(tool)
@@ -40,7 +52,7 @@ function childContext() {
       },
     },
   }
-  return { ctx: ctx as unknown as Context, tools, skills, sections }
+  return { ctx: ctx as unknown as Context, tools, skills, sections, session }
 }
 
 function hostContext() {
@@ -48,12 +60,6 @@ function hostContext() {
   return {
     ctx: {
       subagents: { reportFrom },
-      subprocess: {
-        resolveExecutable: async (command: string) => command,
-        spawn: () => {
-          throw new Error('spawn unused in routing tests')
-        },
-      },
     } as unknown as Context,
     reportFrom,
   }
@@ -68,8 +74,9 @@ describe('report router', () => {
     expect(child.sections.some(section => section.name === 'tool:report')).toBe(true)
   })
 
-  it('installs report_workflow and report_exec for a pre-bound specialist', () => {
-    const child = childContext()
+  it('installs report_workflow and role sandbox for a pre-bound specialist', () => {
+    const workspaceRoot = '/tmp/autoreport-theory-workspace'
+    const child = childContext('child-1', workspaceRoot)
     const host = hostContext()
     const roleRegistry = new RoleRegistry()
     const binding: RoleBindingSnapshot = {
@@ -82,11 +89,60 @@ describe('report router', () => {
     }
     roleRegistry.registerReserved(binding)
     installRoutedReportTool(child.ctx, host.ctx, { roleRegistry, config: CONFIG, workflowForChild: () => undefined })
-    expect(child.tools.map(tool => tool.name)).toEqual(['report_workflow', 'report_exec'])
+    expect(child.tools.map(tool => tool.name)).toEqual(['report_workflow'])
     expect(child.skills).toEqual([])
-    expect(child.sections.some(section => section.name === 'autoreport:skill:mineru')).toBe(true)
     expect(child.sections.some(section => section.text.includes('THEORY'))).toBe(true)
     expect(child.tools.some(tool => tool.name === 'report')).toBe(false)
+    expect(effectiveSandboxMode(child.session.events)).toBe('workspace-write')
+    expect(effectiveSandboxWorkspaceRoot(child.session.events)).toBe(`${workspaceRoot}/Theory`)
+  })
+
+  it('installs report_workflow only for REPORT with compile skills', () => {
+    const workspaceRoot = '/tmp/autoreport-report-workspace'
+    const child = childContext('child-report', workspaceRoot)
+    const host = hostContext()
+    const roleRegistry = new RoleRegistry()
+    roleRegistry.registerReserved({
+      version: 1,
+      role: 'REPORT',
+      childSessionId: SessionId('child-report'),
+      parentSessionId: SessionId('main'),
+      workflowId: 'wf',
+      provisioning: 'reserved',
+    })
+    installRoutedReportTool(child.ctx, host.ctx, { roleRegistry, config: CONFIG, workflowForChild: () => undefined })
+    expect(child.tools.map(tool => tool.name)).toEqual(['report_workflow'])
+    expect(child.sections.map(section => section.name)).toEqual(expect.arrayContaining([
+      'autoreport:skill:experiment-report-writer',
+      'autoreport:skill:latex-compile',
+    ]))
+    expect(effectiveSandboxWorkspaceRoot(child.session.events)).toBe(`${workspaceRoot}/Report`)
+  })
+
+  it('skips sandbox apply when the child has no session', () => {
+    const tools: { name: string }[] = []
+    const roleRegistry = new RoleRegistry()
+    roleRegistry.registerReserved({
+      version: 1,
+      role: 'PLOTTING',
+      childSessionId: SessionId('child-stock'),
+      parentSessionId: SessionId('main'),
+      workflowId: 'wf',
+      provisioning: 'reserved',
+    })
+    const ctx = {
+      agent: { id: SessionId('child-stock') },
+      tools: {
+        register: (tool: { name: string }) => {
+          tools.push(tool)
+          return () => {}
+        },
+      },
+      systemPrompt: { section: () => () => {} },
+      skills: { register: () => () => {} },
+    } as unknown as Context
+    installRoutedReportTool(ctx, hostContext().ctx, { roleRegistry, config: CONFIG, workflowForChild: () => undefined })
+    expect(tools.map(tool => tool.name)).toEqual(['report_workflow'])
   })
 })
 

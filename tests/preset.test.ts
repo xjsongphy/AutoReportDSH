@@ -27,6 +27,7 @@ describe('autoreport preset contribution', () => {
           defaultLatexEngine: 'latexmk',
           workspaceRoot: undefined,
           specialistModel: undefined,
+          delegationWaitTimeoutMs: 600_000,
           executionTimeoutMs: 600_000,
         },
         forSession: () => ({ state: {} }),
@@ -36,6 +37,6 @@ describe('autoreport preset contribution', () => {
     apply(context)
 
     expect(tools.sort()).toEqual(['report_task', 'send_to_agent'])
-    expect(skills).toEqual([])
+    expect(skills).toEqual(['pdf-reference-reader', 'mineru'])
   })
 })

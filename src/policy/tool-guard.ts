@@ -1,10 +1,11 @@
 /**
  * Synchronous AutoReport role guard over DSH's immutable ToolExecution.
  *
- * The guard is authorization, not visibility. Presets omit generic shell tools,
- * but this guard still denies them if composition drifts. Filesystem targets are
- * canonicalized through the closest existing ancestor so a workspace symlink
- * cannot escape a role's writable roots.
+ * The guard is authorization, not visibility. Domain invariants DSH cannot
+ * represent: role membership, sandbox_permissions escalation denial, and
+ * defense-in-depth write-path checks against role writable roots. Filesystem
+ * targets are canonicalized through the closest existing ancestor so a
+ * workspace symlink cannot escape a role's writable roots.
  *
  * Coexistence: only AutoReport-owned sessions are restricted — a MAIN root is
  * one actually running the `autoreport-main` preset (or explicitly wired as
@@ -44,17 +45,6 @@ type Mutation =
   | { readonly kind: 'none' }
   | { readonly kind: 'paths'; readonly paths: readonly string[] }
   | { readonly kind: 'malformed'; readonly reason: string }
-  | { readonly kind: 'unrestricted-exec' }
-
-/** Executors the role guard refuses outright; specialists must use report_exec. */
-export const UNRESTRICTED_EXECUTORS = new Set([
-  'bash',
-  'pwsh',
-  'bash_persistent',
-  'pwsh_persistent',
-  'terminal',
-  'terminal_open',
-])
 
 /** Model-facing tools whose success mutates workspace files; observed by the artifact observer. */
 export const MUTATION_TOOL_NAMES = new Set([
@@ -96,7 +86,6 @@ function patchTargets(args: Readonly<Record<string, unknown>>): Mutation {
 
 /** Describe a mutation call using current DSH tool schemas. */
 function mutation(exec: Readonly<ToolExecution>): Mutation {
-  if (UNRESTRICTED_EXECUTORS.has(exec.name)) return { kind: 'unrestricted-exec' }
   const args = record(exec.arguments)
   switch (exec.name) {
     case 'write':
@@ -212,6 +201,11 @@ function targetDenial(target: string, resolved: ResolvedRole): string | undefine
     : `AutoReport ${resolved.role} may write only ${resolved.policy.writableRoots.join(', ')}: ${target}`
 }
 
+function sandboxPermissionsEscalation(exec: Readonly<ToolExecution>): boolean {
+  const args = record(exec.arguments)
+  return args !== undefined && typeof args['sandbox_permissions'] === 'string'
+}
+
 /**
  * Create the monotonic role guard registered through `ctx.tools.guard()`.
  * @param options - registry and Main/workspace identity inputs.
@@ -220,7 +214,7 @@ function targetDenial(target: string, resolved: ResolvedRole): string | undefine
 export function createRoleToolGuard(options: RoleGuardOptions): ToolGuard {
   return exec => {
     const call = mutation(exec)
-    const protectedCall = call.kind !== 'none' || exec.name === 'report_exec' || exec.name === 'compile_report'
+    const protectedCall = call.kind !== 'none' || sandboxPermissionsEscalation(exec)
     if (!protectedCall) return undefined
 
     const resolved = resolveRole(exec, options)
@@ -228,16 +222,10 @@ export function createRoleToolGuard(options: RoleGuardOptions): ToolGuard {
     if (resolved === FOREIGN) return undefined
     if (resolved === undefined) return `AutoReport denied ${exec.name}: calling agent has no valid role binding`
 
-    if (call.kind === 'unrestricted-exec') {
-      return `AutoReport ${resolved.role} must use report_exec instead of unrestricted ${exec.name}`
+    if (sandboxPermissionsEscalation(exec)) {
+      return 'AutoReport denies sandbox_permissions escalation beyond the role writable root'
     }
     if (call.kind === 'malformed') return `AutoReport denied ${exec.name}: ${call.reason}`
-    if (exec.name === 'report_exec' && resolved.role === 'MAIN') {
-      return 'AutoReport MAIN cannot execute processes; delegate to a specialist'
-    }
-    if (exec.name === 'compile_report' && resolved.role !== 'REPORT') {
-      return 'AutoReport compile_report is available only to REPORT'
-    }
     if (call.kind === 'paths') {
       for (const path of call.paths) {
         const denied = targetDenial(path, resolved)

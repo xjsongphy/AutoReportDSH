@@ -8,11 +8,12 @@ import { renderManifest, writeManifests } from './artifacts/manifest.js'
 import { emptyArtifactFoldState, foldArtifact, type ArtifactCaller, type ArtifactFoldState } from './artifacts/observer.js'
 import { AUTOREPORT_SCHEMA_VERSION, type WorkflowMetaSnapshot } from './workflow/events.js'
 import { delegationKey } from './workflow/protocol.js'
-import { WorkflowState } from './workflow/service.js'
+import { WorkflowState, type WorkflowProjection } from './workflow/service.js'
 import { RoleRegistry } from './workflow/role-registry.js'
 import { WaiterRegistry } from './workflow/waiters.js'
 import { appendWorkflowEvent } from './workflow/store.js'
 import { observeWorkflowMessage } from './workflow/report-observer.js'
+import { applyRoleSandbox } from './policy/sandbox-roots.js'
 import { ensureInitialized } from './workspace/init.js'
 import {
   AUTO_REPORT_USER_SETTINGS_SCHEMA,
@@ -32,12 +33,15 @@ declare module '@deepseek-ai/cordis' {
   }
 }
 
+const DEFAULT_WAIT_MS = 600_000
+
 const DEFAULT_CONFIG: Config = {
   defaultReportLanguage: 'latex',
   defaultLatexEngine: 'latexmk',
   workspaceRoot: undefined,
   specialistModel: undefined,
-  executionTimeoutMs: 600_000,
+  delegationWaitTimeoutMs: DEFAULT_WAIT_MS,
+  executionTimeoutMs: DEFAULT_WAIT_MS,
 }
 
 /** Per-parent live synchronization state. Durable facts remain in the Session log. */
@@ -251,6 +255,10 @@ export default class AutoReportWorkflowRuntime extends Service {
         this.roleRegistry.registerReserved(binding)
       }
     }
+    const root = this.config.workspaceRoot ?? session.header.cwd
+    if (root !== undefined && root.length > 0) {
+      applyRoleSandbox(session, 'MAIN', root)
+    }
     return created
   }
 
@@ -287,6 +295,19 @@ export default class AutoReportWorkflowRuntime extends Service {
     const session = this.mainSessions.get(String(entry.binding.parentSessionId))
     if (session === undefined) return undefined
     return { session, runtime: this.forSession(session) }
+  }
+
+  /**
+   * Workflow projection for a MAIN session id or a bound specialist child id.
+   * Specialist lookups return the owning Main projection (tasks live there).
+   * @param sessionId - Main or specialist session id.
+   */
+  projectionFor(sessionId: string): WorkflowProjection | undefined {
+    const asChild = this.workflowForChild(sessionId as SessionId)
+    if (asChild !== undefined) return asChild.runtime.state.projection()
+    const main = this.mainSessions.get(sessionId)
+    if (main === undefined) return undefined
+    return this.forSession(main).state.projection()
   }
 
   /**
@@ -328,6 +349,7 @@ export default class AutoReportWorkflowRuntime extends Service {
       const project = loadProjectSettings(this.settingsHome, workspaceIdForRoot(root))
       settings = resolveWorkflowSettings({ user: this.userSettingsSource(), project, composition: this.config })
       ensureInitialized(root, settings.reportLanguage)
+      applyRoleSandbox(session, 'MAIN', root)
     } catch (error: unknown) {
       // A broken EXTERNAL settings document must not wedge every first turn;
       // the next user message retries after repair. The /report-init command
