@@ -75,7 +75,15 @@ export function apply(ctx: Context, config: Partial<Config> = {}, options: Runti
     isMainSession: sessionId => runtime.isMainSession(sessionId),
     getProjection: sessionId => runtime.projectionFor(sessionId),
   })
-  installAutoReportPythonEnv(ctx, () => runtime.currentUserSettings().pythonExecutable ?? runtime.config.pythonExecutable)
+  installAutoReportPythonEnv(ctx, {
+    ownsSession: session => runtime.ownsSession(session),
+    snapshotPythonExecutable: session =>
+      runtime.projectionFor(String(session.id))?.meta?.settings?.pythonExecutable,
+    hasWorkflowSnapshot: session =>
+      runtime.projectionFor(String(session.id))?.meta?.initialized === true,
+    fallbackPythonExecutable: () =>
+      runtime.currentUserSettings().pythonExecutable ?? runtime.config.pythonExecutable,
+  })
   const commands = ctx.get('commands')
   if (commands !== undefined) {
     const definition = createReportInitCommand({

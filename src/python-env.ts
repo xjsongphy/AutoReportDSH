@@ -9,17 +9,29 @@ import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-shell-env'
 import { existsSync } from 'node:fs'
 import { dirname, join } from 'node:path'
+import type { Session } from '@deepseek-ai/dsh-session'
 import type { ToolExecution } from '@deepseek-ai/dsh-tools'
+
+/** Session ownership and frozen workflow settings for Python shell-env resolution. */
+export interface AutoReportPythonEnvDeps {
+  ownsSession(session: Session): boolean
+  /** Frozen workflow snapshot python, or undefined when this session has no snapshot. */
+  snapshotPythonExecutable(session: Session): string | undefined
+  /** Whether a durable workflow snapshot exists (initialized), even when python is unset. */
+  hasWorkflowSnapshot(session: Session): boolean
+  /** Compatibility fallback used ONLY when no workflow snapshot exists yet. */
+  fallbackPythonExecutable(): string | undefined
+}
 
 /**
  * Install the AutoReport Python shell-environment contributor.
  * @param ctx - preset or host context with optional `shellEnv` service.
- * @param getExecutable - resolves configured interpreter from settings snapshot or config.
+ * @param deps - session ownership and frozen workflow python resolution.
  * @returns disposer removing the contributor; no-op when `shellEnv` is absent.
  */
 export function installAutoReportPythonEnv(
   ctx: Context,
-  getExecutable: () => string | undefined,
+  deps: AutoReportPythonEnvDeps,
 ): () => void {
   if (ctx.get('shellEnv') === undefined) return () => {}
 
@@ -34,7 +46,11 @@ export function installAutoReportPythonEnv(
       },
     },
     resolve(execution: ToolExecution) {
-      const executable = resolvePythonExecutable(getExecutable, execution)
+      const session = execution.agent?.session
+      if (session === undefined) return {}
+      if (!deps.ownsSession(session)) return {}
+
+      const executable = resolvePythonExecutable(deps, session)
       const binDir = pythonBinDir(executable)
       return {
         DSH_AUTOREPORT_PYTHON: executable,
@@ -44,17 +60,19 @@ export function installAutoReportPythonEnv(
   })
 }
 
-function resolvePythonExecutable(
-  getExecutable: () => string | undefined,
-  execution: ToolExecution,
-): string {
-  const fromSettings = getExecutable()
-  if (fromSettings !== undefined && fromSettings.length > 0) return fromSettings
+function resolvePythonExecutable(deps: AutoReportPythonEnvDeps, session: Session): string {
+  const fromSnapshot = deps.snapshotPythonExecutable(session)
+  if (fromSnapshot !== undefined && fromSnapshot.length > 0) return fromSnapshot
+
+  if (!deps.hasWorkflowSnapshot(session)) {
+    const fromFallback = deps.fallbackPythonExecutable()
+    if (fromFallback !== undefined && fromFallback.length > 0) return fromFallback
+  }
 
   const fromEnv = process.env.DSH_AUTOREPORT_PYTHON
   if (fromEnv !== undefined && fromEnv.length > 0) return fromEnv
 
-  const cwd = execution.agent?.session.header.cwd
+  const cwd = session.header.cwd
   if (cwd !== undefined) {
     for (const candidate of [join(cwd, '.venv/bin/python'), join(cwd, '.venv/bin/python3')]) {
       if (existsSync(candidate)) return candidate
