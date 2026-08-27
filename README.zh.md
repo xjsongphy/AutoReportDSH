@@ -230,14 +230,15 @@ pnpm test
 pnpm run build
 ```
 
-OpenRouter 真实 API 测试是显式 opt-in：
+真实 provider smoke 是显式 opt-in，并直接使用 DSH 当前已配置的默认模型路由：
 
 ```sh
-export OPENROUTER_API_KEY=...
-pnpm vitest run tests/e2e/openrouter.e2e.test.ts
+export AUTOREPORT_LIVE_TEST=1
+export AUTOREPORT_E2E_DSH_HOME="/path/to/configured/dsh-home"
+pnpm vitest run tests/e2e/configured-route.e2e.test.ts
 ```
 
-`stealth/ox-alpha` 的 Anthropic-compatible route 见 [docs/openrouter-testing.md](docs/openrouter-testing.md)。真实 e2e 在失败时会保留经过脱敏的 DSH retry 诊断；不会把凭证写入仓库或测试产物。
+见 [docs/live-provider-testing.md](docs/live-provider-testing.md)。该测试不声明 provider、模型、endpoint 或 API key；由 DSH 按所选 deployment profile 使用实际配置的 route。
 
 ### GitHub Actions CI
 
@@ -284,7 +285,7 @@ src/
 ├── workspace/              目录、资源、命令和 skill loader
 ├── artifacts/              过滤、观察和外部 manifest projection
 └── settings.ts             项目/用户/默认设置解析
-docs/                       dependency 与 OpenRouter 测试说明
+docs/                       dependency 与 live-provider 测试说明
 tests/                      unit、integration、boot、可选真实 API 测试
 ```
 

@@ -230,14 +230,15 @@ pnpm test
 pnpm run build
 ```
 
-The OpenRouter real-API milestone is intentionally opt-in:
+The live-provider smoke is intentionally opt-in and uses the default model route already configured in DSH:
 
 ```sh
-export OPENROUTER_API_KEY=...
-pnpm vitest run tests/e2e/openrouter.e2e.test.ts
+export AUTOREPORT_LIVE_TEST=1
+export AUTOREPORT_E2E_DSH_HOME="/path/to/configured/dsh-home"
+pnpm vitest run tests/e2e/configured-route.e2e.test.ts
 ```
 
-See [docs/openrouter-testing.md](docs/openrouter-testing.md) for the verified `stealth/ox-alpha` Anthropic-compatible route. Gateway quota failures are reported with sanitized retry diagnostics; credentials are never written to the repository or test artifacts.
+See [docs/live-provider-testing.md](docs/live-provider-testing.md). The test never declares a provider, model, endpoint, or API key; DSH selects the same route as the chosen deployment profile.
 
 ### GitHub Actions CI
 
@@ -278,7 +279,7 @@ src/
 ├── workspace/              directories, resources, command, skill loader
 ├── artifacts/              filtering, observation, external manifest projection
 └── settings.ts             project/user/default settings resolution
-docs/                       dependency and OpenRouter test notes
+docs/                       dependency and live-provider test notes
 tests/                      unit, integration, boot, and opt-in real-API tests
 ```
 

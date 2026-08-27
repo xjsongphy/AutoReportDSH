@@ -595,10 +595,10 @@ separate Main/specialist binding as a lightweight policy:
 - If `specialistRoute` is unset, specialists inherit the Main route, matching DSH defaults.
 
 This keeps provider mechanics in DSH while preserving the product-level ability to select a
-different specialist model. Development/e2e configuration uses OpenRouter’s
-Anthropic-compatible endpoint from `~/.claude/settings.json`: base URL
-`https://openrouter.ai/api`, key environment variable `OPENROUTER_API_KEY`, and model
-`stealth/ox-alpha` (optionally `stealth/ox-alpha[1M]`). Credentials are never committed.
+different specialist model. The opt-in live-provider smoke boots the selected DSH profile
+with its already configured default route; it never declares a provider, endpoint, model, or
+credential. A controlled OpenRouter benchmark may be configured through DSH settings
+separately, but it is not the deployment e2e default. Credentials are never committed.
 
 ### 2.14 Settings layering (rev 7)
 
@@ -759,10 +759,10 @@ Recovery acceptance (keyless):
 
 ### Real API milestone
 
-Only after all keyless acceptance tests pass, use OpenRouter `stealth/ox-alpha` to drive:
-initialization → Main task creation/dispatch → Theory/Data/Plotting continuations → Report
-compilation. Assert durable events, files, external manifests, write denials, and PDF output;
-never accept a model’s textual claim as evidence.
+Only after all keyless acceptance tests pass, run the selected DSH profile's configured
+provider route to drive: initialization → Main task creation/dispatch → Theory/Data/Plotting
+continuations → Report compilation. Assert durable events, files, external manifests, write
+denials, and PDF output; never accept a model’s textual claim as evidence.
 
 ## 4. Delivery plan
 
@@ -775,7 +775,7 @@ never accept a model’s textual claim as evidence.
 | `execution-policy` | actual mutation guard, explicit execution policy, `report_exec` over ctx.subprocess, Linux/macOS network isolation and smokes | scaffold, workflow-state |
 | `workspace-assets` | startup `ensureInitialized`, `/report-init`, resource materializer, bundled assets and preset-scoped skills | scaffold |
 | `compile-manifests` | Report-only compiler, automatic artifact observer, AutoReport filtering, external manifest projection | execution-policy, workspace-assets, workflow-state |
-| `integration-e2e` | assembled keyless smokes, cold-load tests, OpenRouter configuration/e2e, acceptance gates | all previous |
+| `integration-e2e` | assembled keyless smokes, cold-load tests, configured-provider live smoke, acceptance gates | all previous |
 
 Merge order is `dsh-ignorable-append` → `scaffold` → parallel `workflow-state`/
 `workspace-assets` → `execution-policy` and `roles-delegation` → `compile-manifests` →
@@ -832,7 +832,7 @@ this status.
 | Roles & delegation | `roles-delegation` | personas, Main preset, `send_to_agent`, `report_workflow`, global report router, observer |
 | Compile & manifests | `compile-manifests` ×3 lanes | `compile_report`, artifact policy ported from manifest.rs, observer, external manifest projection |
 | Settings layering (rev 7) | `settings-layering` | precedence resolution, DSH `autoreport` user namespace, project settings store, durable workflow snapshots |
-| Integration & e2e | `integration-e2e` | wiring fixes, assembled smokes, installer boot smoke, OpenRouter config + self-skipping e2e |
+| Integration & e2e | `integration-e2e` | wiring fixes, assembled smokes, installer boot smoke, configured-route self-skipping e2e |
 
 Remaining optional/product work (documented in README): browser card for the
 already-registered `autoreport` settings namespace, Windows support, MinerU network
