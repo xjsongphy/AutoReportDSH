@@ -16,7 +16,7 @@ import type { SessionEvent } from '@deepseek-ai/dsh-session'
 import { rolePolicy, type AutoReportRole } from '../roles.js'
 import type { ArtifactSnapshot } from '../workflow/events.js'
 import { AUTOREPORT_SCHEMA_VERSION } from '../workflow/events.js'
-import { diffSnapshots, shouldIgnore, snapshotDir } from './artifact-policy.js'
+import { type DirSnapshot, diffSnapshots, shouldIgnore, snapshotDir } from './artifact-policy.js'
 import { MUTATION_TOOL_NAMES } from '../policy/tool-guard.js'
 
 /** Process tools whose workspace writes are observed via before/after snapshots. */
@@ -49,7 +49,7 @@ interface PendingCall {
   /** Log position of the `tool/call`; results cite it through `sourceEventSeqs`. */
   readonly seq: number
   /** Pre-run snapshot for process tools; absent for filesystem tools. */
-  readonly before?: readonly string[]
+  readonly before?: DirSnapshot
 }
 
 /** Extract Codex-style patch targets without interpreting patch content. */
@@ -105,8 +105,7 @@ export function mutationTargetPaths(toolName: string, args: unknown): readonly s
 
 /** Workspace-relative POSIX spelling; outside roots stay absolute and visible. */
 function normalizePath(workspaceRoot: string, raw: string): string {
-  const absolute = resolve(raw)
-  if (!isAbsolute(raw)) return resolve(workspaceRoot, raw)
+  const absolute = isAbsolute(raw) ? resolve(raw) : resolve(workspaceRoot, raw)
   const rel = relative(workspaceRoot, absolute)
   return rel === '' || rel.startsWith('..') ? absolute : rel.split('\\').join('/')
 }
@@ -224,8 +223,8 @@ export function foldArtifact(
   const committed: ArtifactSnapshot[] = []
   if (pending.before !== undefined) {
     const after = snapshotDir(writableRoot(caller))
-    for (const raw of diffSnapshots(pending.before, after)) {
-      const path = processArtifactPath(caller, raw)
+    for (const change of diffSnapshots(pending.before, after)) {
+      const path = processArtifactPath(caller, change.path)
       if (shouldIgnore(path)) continue
       if (!state.dedup.first(pending.name, path, event.seq)) continue
       const attempt = caller.role === 'MAIN'
@@ -236,7 +235,7 @@ export function foldArtifact(
         path,
         producedBy: caller.role,
         origin: 'process',
-        status: 'created',
+        status: change.kind,
         recordedAt: Date.now(),
         ...(attempt !== undefined ? { taskId: attempt.taskId, delegationKey: attempt.key } : {}),
       }

@@ -102,6 +102,21 @@ export interface ScanBounds {
   readonly maxEntries?: number
 }
 
+/** Size and modification time collected during one directory walk. */
+export interface FileSnapshot {
+  readonly size: number
+  readonly mtimeMs: number
+}
+
+/** Workspace-relative POSIX path → file metadata for one scan. */
+export type DirSnapshot = ReadonlyMap<string, FileSnapshot>
+
+/** One artifact-eligible path that appeared or changed between two scans. */
+export interface SnapshotChange {
+  readonly path: string
+  readonly kind: 'created' | 'modified'
+}
+
 function toPosixRelative(root: string, absolute: string): string {
   return relative(root, absolute).split('\\').join('/')
 }
@@ -109,11 +124,11 @@ function toPosixRelative(root: string, absolute: string): string {
 function walkBounded(
   root: string,
   dir: string,
-  out: string[],
+  out: Map<string, FileSnapshot>,
   depth: number,
   bounds: Required<ScanBounds>,
 ): void {
-  if (depth > bounds.maxDepth || out.length >= bounds.maxEntries) return
+  if (depth > bounds.maxDepth || out.size >= bounds.maxEntries) return
   let entries
   try {
     entries = readdirSync(dir, { withFileTypes: true })
@@ -124,7 +139,7 @@ function walkBounded(
   }
   entries.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))
   for (const entry of entries) {
-    if (out.length >= bounds.maxEntries) return
+    if (out.size >= bounds.maxEntries) return
     const absolute = join(dir, entry.name)
     // Symlinks are skipped without following: a linked directory can cycle
     // and a linked file can point outside the project boundary (manifest.rs
@@ -138,7 +153,13 @@ function walkBounded(
     }
     if (!entry.isFile() || IGNORED_FILE_NAMES.has(entry.name)) continue
     if (IGNORED_FILE_SUFFIXES.some(suffix => entry.name.endsWith(suffix))) continue
-    out.push(toPosixRelative(root, absolute))
+    let stats
+    try {
+      stats = lstatSync(absolute)
+    } catch {
+      continue
+    }
+    out.set(toPosixRelative(root, absolute), { size: stats.size, mtimeMs: stats.mtimeMs })
   }
 }
 
@@ -149,9 +170,9 @@ function walkBounded(
  * @param root - absolute directory to scan.
  * @param bounds - optional bound overrides for tests; defaults are the
  *   authoritative Rust constants ({@link MAX_SCAN_DEPTH}/{@link MAX_SCAN_ENTRIES}).
- * @returns filtered relative paths, sorted ascending.
+ * @returns filtered relative paths mapped to size/mtime metadata.
  */
-export function snapshotDir(root: string, bounds: ScanBounds = {}): string[] {
+export function snapshotDir(root: string, bounds: ScanBounds = {}): DirSnapshot {
   const resolvedBounds: Required<ScanBounds> = {
     maxDepth: bounds.maxDepth ?? MAX_SCAN_DEPTH,
     maxEntries: bounds.maxEntries ?? MAX_SCAN_ENTRIES,
@@ -160,26 +181,40 @@ export function snapshotDir(root: string, bounds: ScanBounds = {}): string[] {
   try {
     stats = lstatSync(root)
   } catch {
-    return []
+    return new Map()
   }
-  if (stats.isSymbolicLink() || !stats.isDirectory()) return []
-  const out: string[] = []
+  if (stats.isSymbolicLink() || !stats.isDirectory()) return new Map()
+  const out = new Map<string, FileSnapshot>()
   walkBounded(root, root, out, 0, resolvedBounds)
-  return out.sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
+  const sorted = new Map<string, FileSnapshot>()
+  for (const path of [...out.keys()].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))) {
+    const meta = out.get(path)
+    if (meta !== undefined) sorted.set(path, meta)
+  }
+  return sorted
 }
 
 /**
- * Presence-based change set between two filtered snapshots: every path that
- * exists in `after` but not in `before` (creation detection). Modification of
- * an unchanged path set needs mtime- or content-aware snapshots and is owned
- * by the executors that observe their own runs.
+ * Change set between two metadata snapshots. New paths are `created`; paths
+ * present in both snapshots with a different size or mtime are `modified`.
+ * Deletions (present in `before` but absent in `after`) are ignored.
  * @param before - earlier snapshot.
  * @param after - later snapshot.
- * @returns paths unique to `after`, in `after` order.
+ * @returns changes in ascending path order.
  */
-export function diffSnapshots(before: readonly string[], after: readonly string[]): string[] {
-  const seen = new Set(before)
-  return after.filter(path => !seen.has(path))
+export function diffSnapshots(before: DirSnapshot, after: DirSnapshot): SnapshotChange[] {
+  const changes: SnapshotChange[] = []
+  for (const path of [...after.keys()].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))) {
+    const afterMeta = after.get(path)
+    if (afterMeta === undefined) continue
+    const beforeMeta = before.get(path)
+    if (beforeMeta === undefined) {
+      changes.push({ path, kind: 'created' })
+    } else if (beforeMeta.size !== afterMeta.size || beforeMeta.mtimeMs !== afterMeta.mtimeMs) {
+      changes.push({ path, kind: 'modified' })
+    }
+  }
+  return changes
 }
 
 /** Directory key for a root-level artifact in rendered manifests. */

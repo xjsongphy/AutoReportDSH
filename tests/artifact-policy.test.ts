@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
@@ -11,6 +11,8 @@ import {
   shouldIgnoreDir,
   shouldIgnoreFile,
   snapshotDir,
+  type DirSnapshot,
+  type FileSnapshot,
 } from '../src/artifacts/artifact-policy.js'
 
 let root: string
@@ -22,6 +24,14 @@ beforeAll(() => {
 afterAll(() => {
   // Temp roots are per-test-run scratch under the OS tempdir.
 })
+
+function snapshotPaths(root: string, bounds?: { maxDepth?: number; maxEntries?: number }): string[] {
+  return [...snapshotDir(root, bounds).keys()]
+}
+
+function makeSnapshot(entries: Readonly<Record<string, FileSnapshot>>): DirSnapshot {
+  return new Map(Object.entries(entries))
+}
 
 function file(relPath: string): void {
   const absolute = join(root, relPath)
@@ -79,7 +89,7 @@ describe('snapshotDir traversal', () => {
     file('target/stale.txt')
     file('Outline/.cache/mineru/out.md')
 
-    const snapshot = snapshotDir(root)
+    const snapshot = snapshotPaths(root)
     expect(snapshot).toEqual([
       'Plots/Fig/fig1.png',
       'Report/main.tex',
@@ -96,7 +106,7 @@ describe('snapshotDir traversal', () => {
     symlinkSync(join(outside, 'secret.txt'), join(root, 'Theory', 'leak.txt'))
     symlinkSync(outside, join(root, 'Theory', 'linked'))
 
-    const snapshot = snapshotDir(root)
+    const snapshot = snapshotPaths(root)
     expect(snapshot).not.toContain('Theory/leak.txt')
     expect(snapshot).not.toContain('Theory/linked/nested.txt')
     expect(snapshot).toEqual([
@@ -114,7 +124,7 @@ describe('snapshotDir traversal', () => {
       mkdirSync(deep, { recursive: true })
       writeFileSync(join(deep, 'leaf.txt'), 'x')
     }
-    const snapshot = snapshotDir(root)
+    const snapshot = snapshotPaths(root)
     // depth counts recursions below the root: with MAX_DEPTH = 16 the walk
     // enters directories d0..d15 (16 levels), so d15/leaf.txt is collected and
     // d16/leaf.txt is not — matching manifest.rs's `if depth > MAX_DEPTH` gate.
@@ -128,19 +138,52 @@ describe('snapshotDir traversal', () => {
       writeFileSync(join(boundedRoot, `f${index}.txt`), 'x')
     }
     const snapshot = snapshotDir(boundedRoot, { maxEntries: 5 })
-    expect(snapshot).toHaveLength(5)
+    expect(snapshot.size).toBe(5)
     expect(MAX_SCAN_ENTRIES).toBe(50_000)
   })
 
   it('returns empty for missing or non-directory roots', () => {
-    expect(snapshotDir(join(root, 'does-not-exist'))).toEqual([])
-    expect(snapshotDir(join(root, 'Report/main.tex'))).toEqual([])
+    expect(snapshotDir(join(root, 'does-not-exist')).size).toBe(0)
+    expect(snapshotDir(join(root, 'Report/main.tex')).size).toBe(0)
   })
 
-  it('diffSnapshots reports only newly present paths', () => {
-    expect(diffSnapshots(['a', 'b'], ['b', 'c', 'd'])).toEqual(['c', 'd'])
-    expect(diffSnapshots([], ['x'])).toEqual(['x'])
-    expect(diffSnapshots(['x'], ['x'])).toEqual([])
+  it('collects size and mtime metadata per file', () => {
+    const rel = 'Report/main.tex'
+    file(rel)
+    const absolute = join(root, rel)
+    const stats = statSync(absolute)
+    const snapshot = snapshotDir(root)
+    expect(snapshot.get(rel)).toEqual({ size: stats.size, mtimeMs: stats.mtimeMs })
+  })
+
+  it('diffSnapshots reports created, modified, unchanged, and ignores deletions', () => {
+    const before = makeSnapshot({
+      a: { size: 1, mtimeMs: 100 },
+      b: { size: 2, mtimeMs: 200 },
+      gone: { size: 9, mtimeMs: 900 },
+    })
+    const after = makeSnapshot({
+      a: { size: 1, mtimeMs: 100 },
+      b: { size: 3, mtimeMs: 200 },
+      c: { size: 4, mtimeMs: 400 },
+      d: { size: 5, mtimeMs: 500 },
+    })
+    expect(diffSnapshots(before, after)).toEqual([
+      { path: 'b', kind: 'modified' },
+      { path: 'c', kind: 'created' },
+      { path: 'd', kind: 'created' },
+    ])
+    expect(diffSnapshots(makeSnapshot({ x: { size: 1, mtimeMs: 1 } }), makeSnapshot({ x: { size: 1, mtimeMs: 1 } }))).toEqual([])
+    expect(diffSnapshots(makeSnapshot({}), makeSnapshot({ y: { size: 1, mtimeMs: 1 } }))).toEqual([
+      { path: 'y', kind: 'created' },
+    ])
+    expect(diffSnapshots(before, makeSnapshot({ a: { size: 1, mtimeMs: 100 } }))).toEqual([])
+  })
+
+  it('diffSnapshots treats mtime-only changes as modified', () => {
+    const before = makeSnapshot({ f: { size: 10, mtimeMs: 1000 } })
+    const after = makeSnapshot({ f: { size: 10, mtimeMs: 2000 } })
+    expect(diffSnapshots(before, after)).toEqual([{ path: 'f', kind: 'modified' }])
   })
 
   it('keys root-level files to "." in directoryOf', () => {

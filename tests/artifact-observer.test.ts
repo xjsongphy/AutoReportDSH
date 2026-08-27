@@ -68,6 +68,25 @@ describe('mutationTargetPaths', () => {
 })
 
 describe('foldArtifact', () => {
+  it('commits one artifact for a successful write with relative file_path', () => {
+    const state = emptyArtifactFoldState()
+    const committed: ArtifactSnapshot[] = []
+    const deps = {
+      sessionId: 'main-1',
+      currentDelegationKey: undefined,
+      commit: (_sessionId: string, snapshot: ArtifactSnapshot) => committed.push(snapshot),
+    }
+    const call = callEvent('write', { file_path: 'Outline/foo.md' })
+    foldArtifact(call, caller('MAIN'), state, deps)
+    foldArtifact(resultEvent((call as unknown as { seq: number }).seq, false), caller('MAIN'), state, deps)
+    expect(committed).toHaveLength(1)
+    expect(committed[0]).toMatchObject({
+      path: 'Outline/foo.md',
+      origin: 'fs-tool',
+      status: 'created',
+    })
+  })
+
   it('commits one artifact for a successful write with workspace-relative path and attempt keys', () => {
     const state = emptyArtifactFoldState()
     const committed: ArtifactSnapshot[] = []
@@ -157,6 +176,31 @@ describe('foldArtifact', () => {
       producedBy: 'MAIN',
       origin: 'process',
       status: 'created',
+    })])
+  })
+
+  it('observes bash modifications to existing files via snapshot diff', () => {
+    const root = mkdtempSync(join(tmpdir(), 'autoreport-bash-mod-'))
+    const outline = join(root, 'Outline')
+    mkdirSync(outline, { recursive: true })
+    writeFileSync(join(outline, 'existing.md'), 'short')
+    const state = emptyArtifactFoldState()
+    const committed: ArtifactSnapshot[] = []
+    const deps = {
+      sessionId: 'main-1',
+      currentDelegationKey: undefined,
+      commit: (_s: string, snapshot: ArtifactSnapshot) => committed.push(snapshot),
+    }
+    const mainCaller: ArtifactCaller = { role: 'MAIN', workspaceRoot: root }
+    const call = callEvent('bash', { command: 'sed -i s/short/longer/ existing.md' })
+    foldArtifact(call, mainCaller, state, deps)
+    writeFileSync(join(outline, 'existing.md'), 'much longer content')
+    foldArtifact(resultEvent((call as unknown as { seq: number }).seq, false), mainCaller, state, deps)
+    expect(committed).toEqual([expect.objectContaining({
+      path: 'Outline/existing.md',
+      producedBy: 'MAIN',
+      origin: 'process',
+      status: 'modified',
     })])
   })
 
