@@ -7,6 +7,14 @@
 </p>
 
 <p align="center">
+  <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Linux-3f7ecb?style=flat-square" alt="支持 macOS 和 Linux" />
+  <img src="https://img.shields.io/badge/runtime-Node%2022.19%2B-339933?style=flat-square" alt="Node.js 22.19 或更高版本" />
+  <img src="https://img.shields.io/badge/DeepSeek%20Harness-plugin-3366cc?style=flat-square" alt="DeepSeek Harness 插件" />
+  <img src="https://img.shields.io/badge/report-LaTeX%20%7C%20Typst-7560c8?style=flat-square" alt="支持 LaTeX 与 Typst" />
+  <img src="https://img.shields.io/badge/status-developer%20preview-f2a900?style=flat-square" alt="开发者预览版" />
+</p>
+
+<p align="center">
   <a href="README.md">English</a> | 中文
 </p>
 
@@ -36,6 +44,8 @@ report_task       当前工作流的状态与清单管理
 ```
 
 specialist 是 DSH continuable child session。它们会保留角色上下文，能够接收后续任务，并通过 `report_workflow` 返回结构化结果。用户直接与 specialist 对话时，那是普通对话；没有活跃 workflow delegation 上下文时，不会自动创建或完成任务。
+
+AutoReport 专属 skill 按角色隔离：THEORY 仅有 `mineru`；REPORT 有 `experiment-report-writer`、当前语言的编译 skill 与 `mineru`；DATA_ANALYSIS 和 PLOTTING 不获得这些领域 skill。DSH 的用户/项目 skill 仍遵循原本的 DSH 可见性。
 
 ## 与普通 DSH 共存
 
@@ -89,6 +99,16 @@ pnpm run build
 ```
 
 无密钥测试会覆盖 workflow 持久化、preset 成员判定、角色目录边界、网络隔离、报告资源、产物 manifest 和真实 Loader 启动。
+
+### 刷新外部维护的 skill
+
+运行时不会拉取资源。需要显式刷新外部维护的 MinerU skill 时，运行：
+
+```sh
+pnpm run sync:resources
+```
+
+脚本查询上游 Git tree，并在 `resources/.sync-state.json` 记录 commit/blob 状态。只有 blob 变化（或本地文件缺失）的受管文件会下载；未变化文件不会重复下载。目前受管集合为 `xjsongphy/skills:mineru/SKILL.md` → `resources/skills/mineru.md`。
 
 ### 3. 安装 AutoReport preset
 
@@ -167,33 +187,30 @@ MAIN 通过 `send_to_agent` 有界地委派工作；specialist 读取共享工�
 
 DSH 负责所有模型/provider 和凭证配置；AutoReportDSH 只使用 DSH 中已配置的模型路由，不维护自己的 provider 系统。
 
-AutoReportDSH 只管理报告工作流配置。每个字段按以下优先级解析一次：
+AutoReportDSH 只管理报告工作流配置。新工作流按以下优先级冻结设置：
 
 ```text
-显式 workflow override
-        ↓
 项目设置            <dshHome>/autoreport/<workspaceId>/project.json
         ↓
-AutoReport 用户设置
+DSH 用户设置        namespace: autoreport
         ↓
 Cordis composition 默认值
         ↓
 schema 默认值
 ```
 
-解析后的值会写入 durable `autoreport/workflow` event 的 `WorkflowSettingsSnapshot`。之后修改默认设置，不会改变正在执行的报告。
+解析后的值会写入 durable `autoreport/workflow` event 的 `WorkflowSettingsSnapshot`。之后修改设置，不会改变正在执行的报告。resolver 保留了内部 workflow override seam，供未来的结构化 command 使用；v1 故意不提供用户入口。
 
 当前 composition 默认值：
 
 ```text
 defaultReportLanguage   latex
 defaultLatexEngine      latexmk
-specialistModel         继承 MAIN（仅可选 DSH route 选择策略）
-defaultPythonEnv        环境 PATH
+specialistModel         继承 MAIN（可选的 shared DSH route 选择）
 executionTimeoutMs      600000
 ```
 
-可选的 AutoReport Web 设置卡与用户 namespace 集成，等待 `@deepseek-ai/dsh-settings` 能作为 out-of-tree dependency 使用后再加入。项目设置和 composition 默认值已可用。
+`autoreport` 用户设置 namespace 已通过 `@deepseek-ai/dsh-settings` 注册并持久化、校验 `defaultReportLanguage`、`defaultLatexEngine`、`specialistModel` 和 `executionTimeoutMs`。浏览器 settings card 属于可选发布体验优化，暂不实现。配置了 `specialistModel.reasoningEffort` 时，会通过 DSH 的 agent-scoped model-selection seam 真正生效，而非只记录快照。
 
 ## 安全模型
 
@@ -221,6 +238,10 @@ pnpm vitest run tests/e2e/openrouter.e2e.test.ts
 ```
 
 `stealth/ox-alpha` 的 Anthropic-compatible route 见 [docs/openrouter-testing.md](docs/openrouter-testing.md)。真实 e2e 在失败时会保留经过脱敏的 DSH retry 诊断；不会把凭证写入仓库或测试产物。
+
+### GitHub Actions CI
+
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml) 在 PR 和 `main` push 时分别于 Linux、macOS 运行。此开发预览包故意使用 sibling Harness 的 `link:` 依赖，因此 CI 会 checkout [docs/dependencies.md](docs/dependencies.md) 固定的 Harness、先构建 Harness，再执行 immutable install、keyless tests、typecheck 和 build。真实 API 测试仍为 opt-in；该 workflow 不接收凭证。
 
 ## 计划中的 npm / DSH bundle 发布方式
 
@@ -270,9 +291,10 @@ tests/                      unit、integration、boot、可选真实 API 测试
 ## 当前限制
 
 - Windows specialist 执行会 fail closed，直到验证等价网络隔离。
-- MinerU/联网文档提取不属于 v1 的离线执行策略。
+- MinerU 指令只提供给 THEORY 与 REPORT；`report_exec` 仍默认拒绝网络，实际 API 抽取须等待明确的联网执行策略。
 - artifact manifest 由运行时生成，agent 不能添加自由文本备注。
-- 当前保留 `report_task` 以维持现有 workflow 合约；后续会依据真实 trace，将更多任务生命周期记账收敛到 `send_to_agent` 与 report observer 内部。
+- 当前保留 `report_task` 以维持现有 workflow 合约；durable task/delegation event 是核心，model-facing bookkeeping API 只会在获得真实 trace 后再收缩。
+- role guard 为 defense in depth 识别若干 mutation-tool schema；preset 不挂载 `delete` 或 `apply_patch`。
 
 ## 许可证
 

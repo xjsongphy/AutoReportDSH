@@ -49,8 +49,9 @@ AutoReportDSH owns report semantics and policy.
 - Fixed roles communicate only through DSH’s authenticated parent→child `followup()` and
   child→parent `reportFrom()` paths. AutoReport does not add a broadcast bus or arbitrary
   peer mailbox.
-- Pinned remote resource synchronization is omitted; resources are bundled and versioned
-  with the plugin.
+- Runtime startup never synchronizes resources. An explicit development/release
+  sync command may compare upstream Git blobs and refresh only changed managed files;
+  the shipped runtime uses the last bundled copies.
 - DSH `todo_write` is not authoritative report state. AutoReport uses its own durable task
   events and task tool.
 - DSH’s stock sandbox is not treated as a network boundary. AutoReport owns report-execution
@@ -68,8 +69,9 @@ AutoReportDSH owns report semantics and policy.
   conversation reconstruction), no workspace-to-prompt injection at resume (no automatic
   scan/summarize/inject), and no requirement to preserve prior reasoning. A recreated or
   compacted agent recovers from: task state + workspace state + role ownership.
-- The MinerU / `mineru-open-api` skill path is omitted in v1. Default network denial would
-  conflict with it; restoring it is a later explicit network-policy change.
+- MinerU instructions are synchronized explicitly from the managed upstream skill and
+  registered only for THEORY and REPORT. Default network denial remains unchanged, so
+  actual `mineru-open-api` API execution still needs a later explicit network-policy change.
 - Agent-editable manifest descriptions/notes are omitted. Manifests are derived projections
   of `autoreport/artifact` events, not a model-facing annotation store.
 
@@ -576,10 +578,11 @@ cache/bundle is configured and verified, or `typst` for Typst reports. It return
 structured diagnostics and artifact paths. It never widens network policy. Missing local
 compiler resources fail loudly.
 
-Bundled AutoReport skills are registered in the `autoreport-main` preset scope rather than
-host-global. Specialist children inherit that scope through parent composition. Static
-bundled resources use DSH’s normal skill registration; a custom SkillProvider is reserved
-for a future return of dynamic remote resource synchronization.
+AutoReport-owned skills are registered in role-bound specialist child scopes rather than
+preset-wide: THEORY gets `mineru`; REPORT gets writing, active-language compilation, and
+`mineru`; DATA_ANALYSIS and PLOTTING get none. Static bundled resources use DSH’s normal
+skill registration. Runtime sessions never fetch remote content; `pnpm sync:resources`
+uses upstream Git blob state to refresh only changed managed resource files before build/release.
 
 ### 2.13 Model policy
 
@@ -604,21 +607,20 @@ approvals, sandbox/shell configuration, session lifecycle, and UI preferences.
 AutoReport owns ONLY report-workflow policy, layered as:
 
 ```text
-explicit workflow override
-        ↓
 project settings        (<dshHome>/autoreport/<workspaceId>/project.json — external,
                           never inside the experiment workspace)
         ↓
-AutoReport user settings (settings namespace 'autoreport')
+AutoReport user settings (DSH settings namespace 'autoreport')
         ↓
 Cordis composition Config (plugin defaults)
         ↓
 schema defaults
 ```
 
-Plugin `Config` fields are DEFAULTS (`defaultReportLanguage`, `defaultLatexEngine`,
-`specialistModel` with inherit-from-Main default, `defaultPythonEnv`,
-`executionTimeoutMs`), not live workflow inputs. When a workflow is created,
+The resolver retains an internal explicit-workflow-override layer above this chain,
+but v1 deliberately exposes no command or UI for it. Plugin `Config` fields are
+DEFAULTS (`defaultReportLanguage`, `defaultLatexEngine`, `specialistModel` with
+inherit-from-Main default, `executionTimeoutMs`), not live workflow inputs. When a workflow is created,
 `resolveWorkflowSettings()` resolves the full precedence chain and persists the
 effective values as a `WorkflowSettingsSnapshot` in the durable
 `autoreport/workflow` event; execution reads the snapshot, so later settings
@@ -684,14 +686,14 @@ and where it lives in the codebase:
 | # | Point | Disposition |
 |---|---|---|
 | 1 | Opt-in preset as mode switch | **By design** — installer only adds `autoreport-main` to `$DSH_HOME/.agent-presets`; deployment default preset and ordinary `standard` sessions untouched; no global `enabled` flag (PLAN §2.1) |
-| 2 | DSH-owned vs AutoReport-owned settings split | **Implemented** — `src/settings.ts`; composition `Config` reduced to defaults; user-settings schema ready (`AUTO_REPORT_USER_SETTINGS_SCHEMA`) |
-| 3 | Plugin config = defaults, not live workflow inputs | **Implemented** — fields renamed `defaultReportLanguage`/`defaultLatexEngine`/`defaultPythonEnv`/`specialistModel`; consumers read snapshots |
+| 2 | DSH-owned vs AutoReport-owned settings split | **Implemented** — `src/settings.ts`; composition `Config` contains report-policy defaults only; `autoreport` is a live DSH user-settings namespace |
+| 3 | Plugin config = defaults, not live workflow inputs | **Implemented** — `defaultReportLanguage`/`defaultLatexEngine`/`specialistModel`/`executionTimeoutMs` are snapshotted; the unused Python-environment abstraction was removed |
 | 4 | Project-scoped language selection | **Implemented** — external `<dshHome>/autoreport/<workspaceId>/project.json`; concurrent projects supported |
-| 5 | Persist resolved settings in workflow snapshot | **Implemented** — `WorkflowSettingsSnapshot` in `autoreport/workflow` payload (schema version 2); `resolveWorkflowSettings()` precedence chain |
+| 5 | Persist resolved settings in workflow snapshot | **Implemented** — `WorkflowSettingsSnapshot` in `autoreport/workflow` payload (schema version 3); `resolveWorkflowSettings()` precedence chain |
 | 6 | `/report-init --language latex\|typst` | **Implemented** — updates project settings + materializes missing resources only; other backend files never deleted |
 | 7 | Non-configurable authorization/execution policy | **By design** — fixed role table + immutable `network:'deny'`, no broadening knobs exposed |
-| 8 | Reuse DSH provider infrastructure | **Implemented** — specialists inherit Main route by default; single optional AutoReport-level specialist override (`reasoningEffort` carried in config but not forwarded: DSH `AgentOptions` accepts provider/model/maxTokens only) |
-| 9 | Web settings card via plugin settings seam | **Deferred** — DSH's `SettingsProvider.register` is in-tree but not linked out-of-tree; namespace registration deferred until `@deepseek-ai/dsh-settings` becomes a dependency; documented in README |
+| 8 | Reuse DSH provider infrastructure | **Implemented** — specialists inherit Main by default; one optional shared route override is applied through DSH agent-scoped model selection, including `reasoningEffort` |
+| 9 | Web settings card via plugin settings seam | **Partially deferred by choice** — the `autoreport` namespace is registered through out-of-tree `@deepseek-ai/dsh-settings`; only the optional browser card remains deferred |
 | 10 | Continuable children for four specialists | **Implemented** — one durable child per role, reserve→start→markActive protocol |
 | 11 | Direct human conversations with specialists | **Supported** — stock DSH subagent surfaces; no parallel transport |
 | 12 | Conversation ≠ delegation invariant | **Documented** — PLAN §2.15; enforced by observer correlation on `(task_id, revision)` context |
@@ -829,9 +831,11 @@ this status.
 | Execution policy | `execution-policy` | mutation guard matrix, seatbelt/bwrap isolation, `report_exec`, live macOS network-denial smoke |
 | Roles & delegation | `roles-delegation` | personas, Main preset, `send_to_agent`, `report_workflow`, global report router, observer |
 | Compile & manifests | `compile-manifests` ×3 lanes | `compile_report`, artifact policy ported from manifest.rs, observer, external manifest projection |
-| Settings layering (rev 7) | `settings-layering` | precedence resolution, project/user settings stores, durable workflow snapshots |
+| Settings layering (rev 7) | `settings-layering` | precedence resolution, DSH `autoreport` user namespace, project settings store, durable workflow snapshots |
 | Integration & e2e | `integration-e2e` | wiring fixes, assembled smokes, installer boot smoke, OpenRouter config + self-skipping e2e |
 
-Deferred (documented in README): `autoreport` settings namespace card (needs
-`@deepseek-ai/dsh-settings` out-of-tree), Windows support, MinerU network path,
-agent-editable manifest annotations.
+Remaining optional/product work (documented in README): browser card for the
+already-registered `autoreport` settings namespace, Windows support, MinerU network
+execution path, and agent-editable manifest annotations. Trace-driven work may later
+shrink the model-facing `report_task` API or add specialist allowlists; neither changes
+the durable `autoreport/*` workflow state.

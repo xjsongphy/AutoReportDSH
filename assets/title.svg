@@ -2,26 +2,54 @@
   <title id="title">AutoReportDSH</title>
   <desc id="subtitle">Physics experiment reports on DeepSeek Harness</desc>
   <defs>
-    <linearGradient id="bg" x1="0" x2="1" y1="0" y2="1"><stop stop-color="#07152f"/><stop offset=".5" stop-color="#102b68"/><stop offset="1" stop-color="#06112a"/></linearGradient>
-    <linearGradient id="cyan" x1="0" x2="1"><stop stop-color="#36e6ff"/><stop offset="1" stop-color="#588bff"/></linearGradient>
-    <filter id="glow"><feGaussianBlur stdDeviation="5" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    <linearGradient id="bg" x1="0" x2="1" y1="0" y2="1">
+      <stop stop-color="#07152f"/>
+      <stop offset=".5" stop-color="#102b68"/>
+      <stop offset="1" stop-color="#06112a"/>
+    </linearGradient>
+    <linearGradient id="cyan" x1="0" x2="1">
+      <stop stop-color="#36e6ff"/>
+      <stop offset="1" stop-color="#588bff"/>
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="5" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
   </defs>
+
   <rect width="1600" height="520" fill="url(#bg)"/>
+
   <g fill="none" stroke="#1f82d7" stroke-opacity=".32" stroke-width="2">
-    <path d="M60 130h330M60 170h330M60 210h330"/><path d="M80 250c24-70 48 70 72 0s48 70 72 0 48 70 72 0 48 70 72 0" filter="url(#glow)" stroke="#36e6ff" stroke-opacity=".8"/>
-    <path d="M1210 95h290M1210 145h290M1210 195h290"/><path d="M1220 208c40-40 78-75 115-45s85 10 145-82" stroke="url(#cyan)" stroke-opacity=".85"/>
-    <path d="M80 450C300 350 410 550 620 430S980 330 1190 460s260-40 390-5"/>
+    <path d="M60 130h330M60 170h330M60 210h330"/>
+    <path d="M1210 95h290M1210 145h290M1210 195h290"/>
+    <path d="M80 250c24-70 48 70 72 0s48 70 72 0 48 70 72 0 48 70 72 0" filter="url(#glow)" stroke="#36e6ff" stroke-opacity=".8"/>
+    <path d="M1220 208c40-40 78-75 115-45s85 10 145-82" stroke="url(#cyan)" stroke-opacity=".85"/>
+    <path d="M60 476C270 370 415 555 620 438s340-116 548 25 271-35 412-4"/>
   </g>
-  <g fill="#36e6ff" fill-opacity=".9" filter="url(#glow)">
-    <circle cx="620" cy="390" r="9"/><circle cx="760" cy="390" r="9"/><circle cx="900" cy="390" r="9"/><circle cx="1040" cy="390" r="9"/><circle cx="1180" cy="390" r="9"/>
-  </g>
-  <g stroke="url(#cyan)" stroke-width="3" fill="#081b42" fill-opacity=".9">
-    <circle cx="620" cy="390" r="38"/><circle cx="760" cy="390" r="38"/><circle cx="900" cy="390" r="38"/><circle cx="1040" cy="390" r="38"/><circle cx="1180" cy="390" r="38"/>
-  </g>
-  <g stroke="#37ddff" stroke-width="3" fill="none">
-    <path d="M605 382a15 15 0 1 0 0 16l13 13"/><path d="M744 403v-20m12 20v-31m12 31v-12"/><path d="M884 374h28v32h-28zM890 383h16M890 391h16"/><path d="M1026 376h23v29h-23zM1032 383h11M1032 391h11"/><path d="M1166 376h23v29h-23zM1172 383h11M1172 391h11"/>
-  </g>
+
   <text x="800" y="250" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="92" font-weight="700" fill="#fff">AutoReportDSH</text>
   <text x="800" y="304" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="31" fill="#3de7ff">Physics experiment reports on DeepSeek Harness</text>
-  <g fill="#8ccaff" font-family="Georgia, serif" font-size="28" opacity=".7"><text x="90" y="350">ℏ²∇²ψ / 2m</text><text x="1290" y="300">LaTeX · Typst</text></g>
+  <text x="1420" y="300" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="25" font-weight="600" fill="#8edcff">LaTeX · Typst</text>
+
+  <g stroke="url(#cyan)" stroke-width="3" fill="#081b42" fill-opacity=".92">
+    <circle cx="600" cy="385" r="34"/>
+    <circle cx="750" cy="385" r="34"/>
+    <circle cx="900" cy="385" r="34"/>
+    <circle cx="1050" cy="385" r="34"/>
+    <circle cx="1200" cy="385" r="34"/>
+  </g>
+  <g stroke="#37ddff" stroke-width="3" fill="none">
+    <path d="M586 384h28M600 370v28M588 372l24 24M612 372l-24 24"/>
+    <path d="M735 397c3-20 8-26 15-26s12 6 15 26M737 388h26"/>
+    <path d="M884 402v-18M896 402v-28M908 402v-12"/>
+    <path d="M1034 400c8-9 16-22 31-16M1034 400l9-2M1065 384l-2 9"/>
+    <path d="M1187 369h22v32h-22zM1193 379h10M1193 388h10"/>
+  </g>
+  <g fill="#b8eeff" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="700" letter-spacing="1.2">
+    <text x="600" y="448" text-anchor="middle">MAIN</text>
+    <text x="750" y="448" text-anchor="middle">THEORY</text>
+    <text x="900" y="448" text-anchor="middle">DATA</text>
+    <text x="1050" y="448" text-anchor="middle">PLOTS</text>
+    <text x="1200" y="448" text-anchor="middle">REPORT</text>
+  </g>
 </svg>

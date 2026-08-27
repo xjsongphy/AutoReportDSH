@@ -7,6 +7,14 @@
 </p>
 
 <p align="center">
+  <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Linux-3f7ecb?style=flat-square" alt="Supported platforms: macOS and Linux" />
+  <img src="https://img.shields.io/badge/runtime-Node%2022.19%2B-339933?style=flat-square" alt="Node.js 22.19 or later" />
+  <img src="https://img.shields.io/badge/DeepSeek%20Harness-plugin-3366cc?style=flat-square" alt="DeepSeek Harness plugin" />
+  <img src="https://img.shields.io/badge/report-LaTeX%20%7C%20Typst-7560c8?style=flat-square" alt="LaTeX and Typst reports" />
+  <img src="https://img.shields.io/badge/status-developer%20preview-f2a900?style=flat-square" alt="Developer preview" />
+</p>
+
+<p align="center">
   English | <a href="README.zh.md">中文</a>
 </p>
 
@@ -36,6 +44,8 @@ report_task       current workflow status/checklist management
 ```
 
 Specialist children are DSH continuable sessions. They keep role context across follow-ups and report structured outcomes through `report_workflow`. A direct human conversation with a specialist remains ordinary conversation; it does not create or complete a workflow task without an active delegation context.
+
+AutoReport-owned skills are role-scoped: THEORY receives `mineru`; REPORT receives `experiment-report-writer`, the active language compiler skill, and `mineru`; DATA_ANALYSIS and PLOTTING receive none of these domain skills. DSH user/project skills retain their normal DSH visibility.
 
 ## Coexistence with normal DSH
 
@@ -89,6 +99,16 @@ pnpm run build
 ```
 
 The keyless suite validates workflow persistence, preset membership, role boundaries, network isolation, report resources, artifact manifests, and real Loader boot behavior.
+
+### Refresh externally maintained skills
+
+Runtime sessions never fetch resources. To refresh the externally maintained MinerU skill explicitly, run:
+
+```sh
+pnpm run sync:resources
+```
+
+The script queries the upstream Git tree and records commit/blob state in `resources/.sync-state.json`. It downloads only a managed file whose blob changed (or whose local copy is missing); unchanged files are not fetched again. The current managed set is `xjsongphy/skills:mineru/SKILL.md` → `resources/skills/mineru.md`.
 
 ### 3. Install the AutoReport preset
 
@@ -167,33 +187,30 @@ MAIN delegates bounded work through `send_to_agent`; specialists read the shared
 
 DSH owns all model/provider and credential configuration; AutoReportDSH only uses the model routes configured in DSH and does not maintain its own provider system.
 
-AutoReportDSH owns report-workflow settings. Values resolve once when a workflow begins:
+AutoReportDSH owns report-workflow settings. A new workflow snapshots its values in this order:
 
 ```text
-explicit workflow override
-        ↓
 project settings     <dshHome>/autoreport/<workspaceId>/project.json
         ↓
-AutoReport user settings
+DSH user settings    namespace: autoreport
         ↓
 composition defaults
         ↓
 schema defaults
 ```
 
-The resolved snapshot is committed to the durable `autoreport/workflow` event. Changing defaults later does not change an in-flight report.
+The resolved snapshot is committed to the durable `autoreport/workflow` event. Changing settings later does not change an in-flight report. The resolver retains an internal workflow-override seam for future structured commands, but v1 intentionally has no user-facing override.
 
 Current composition defaults include:
 
 ```text
 defaultReportLanguage   latex
 defaultLatexEngine      latexmk
-specialistModel         inherit Main (optional DSH route selection only)
-defaultPythonEnv        ambient PATH
+specialistModel         inherit Main (optional shared DSH route selection)
 executionTimeoutMs      600000
 ```
 
-The optional `autoreport` DSH settings-card/user-namespace integration is deferred until `@deepseek-ai/dsh-settings` is supported as an out-of-tree dependency. Project settings and composition defaults work now.
+The `autoreport` user-settings namespace is registered through `@deepseek-ai/dsh-settings`; it persists and validates `defaultReportLanguage`, `defaultLatexEngine`, `specialistModel`, and `executionTimeoutMs`. A browser settings card is optional release-polish and remains deferred. `specialistModel.reasoningEffort`, when present, is applied through DSH's agent-scoped model-selection seam rather than merely recorded.
 
 ## Security model
 
@@ -221,6 +238,10 @@ pnpm vitest run tests/e2e/openrouter.e2e.test.ts
 ```
 
 See [docs/openrouter-testing.md](docs/openrouter-testing.md) for the verified `stealth/ox-alpha` Anthropic-compatible route. Gateway quota failures are reported with sanitized retry diagnostics; credentials are never written to the repository or test artifacts.
+
+### GitHub Actions CI
+
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs on pull requests and `main` pushes on Linux and macOS. Because this preview package intentionally links a sibling Harness checkout, CI checks out the exact Harness pin from [docs/dependencies.md](docs/dependencies.md), builds it, then runs immutable install, keyless tests, typecheck, and build. The real API test remains opt-in and receives no credential in this workflow.
 
 ## Planned npm / DSH bundle release
 
@@ -264,9 +285,10 @@ tests/                      unit, integration, boot, and opt-in real-API tests
 ## Current limitations
 
 - Windows specialist execution fails closed until network isolation is verified.
-- MinerU/network document extraction is intentionally outside v1's offline execution policy.
+- MinerU instructions are available only to THEORY and REPORT; actual API extraction still requires an explicit future network-execution policy because `report_exec` remains network-denied.
 - Artifact manifests are runtime-generated; agents cannot add free-form manifest notes.
-- `report_task` is retained for the current workflow contract. The next trace-driven simplification is to internalize more task lifecycle bookkeeping behind `send_to_agent` and report observers.
+- `report_task` is retained for the current workflow contract. Durable task/delegation events are core; the model-facing bookkeeping API will be reduced only after real workflow traces.
+- The role guard recognizes several mutation-tool schemas as defense in depth; `delete` and `apply_patch` are not mounted by this preset.
 
 ## License
 
