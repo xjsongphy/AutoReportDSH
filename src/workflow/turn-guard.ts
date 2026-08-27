@@ -19,13 +19,62 @@ const SPECIALIST_STEER_TEXT =
   'Finish the delegated task by calling report_workflow with the exact task_id and delegation_revision from your briefing.'
 
 const MAIN_BLOCKED_STEER_TEXT =
-  'A specialist task is blocked. Redispatch, repair a dependency, ask the user, or explicitly leave it blocked.'
+  'A specialist task is blocked. Redispatch, repair a dependency, or ask the user.'
 
 /** Maximum specialist steers per session turn. */
 export const MAX_SPECIALIST_STEERS = 2
 
 /** Maximum MAIN steers per session turn. */
 export const MAX_MAIN_STEERS = 1
+
+/** Blocked-task keys already surfaced to MAIN (`taskId#revision`). */
+const acknowledgedBlockedKeys = new Set<string>()
+
+function blockedTaskKey(taskId: string, revision: number): string {
+  return `${taskId}#${revision}`
+}
+
+function blockedKeysFromProjection(projection: WorkflowProjection): Set<string> {
+  const keys = new Set<string>()
+  for (const task of projection.tasks.values()) {
+    if (task.status === 'blocked') keys.add(blockedTaskKey(task.taskId, task.revision))
+  }
+  return keys
+}
+
+/**
+ * Blocked keys in `projection` not yet acknowledged for MAIN steering.
+ * @param projection - workflow fold for the Main session.
+ * @returns keys that would trigger a new MAIN steer.
+ */
+export function newlyBlockedTaskKeys(projection: WorkflowProjection | undefined): string[] {
+  if (projection === undefined) return []
+  const keys: string[] = []
+  for (const task of projection.tasks.values()) {
+    if (task.status !== 'blocked') continue
+    const key = blockedTaskKey(task.taskId, task.revision)
+    if (!acknowledgedBlockedKeys.has(key)) keys.push(key)
+  }
+  return keys
+}
+
+/**
+ * Acknowledge currently blocked keys and drop stale entries no longer blocked.
+ * @param projection - workflow fold for the Main session.
+ */
+export function acknowledgeCurrentBlockedKeys(projection: WorkflowProjection | undefined): void {
+  if (projection === undefined) return
+  const current = blockedKeysFromProjection(projection)
+  for (const key of acknowledgedBlockedKeys) {
+    if (!current.has(key)) acknowledgedBlockedKeys.delete(key)
+  }
+  for (const key of current) acknowledgedBlockedKeys.add(key)
+}
+
+/** Clear acknowledged blocked keys (test isolation). */
+export function resetAcknowledgedBlockedKeys(): void {
+  acknowledgedBlockedKeys.clear()
+}
 
 function activeDelegationForChild(
   projection: WorkflowProjection,
@@ -66,21 +115,20 @@ export function shouldSteerSpecialist(
 }
 
 /**
- * Whether MAIN should be steered when a specialist task is blocked.
+ * Whether MAIN should be steered for a newly blocked specialist task.
  * @param projection - workflow fold for the Main session.
  * @param steerCount - steers already sent this turn for this session.
+ * @param newlyBlocked - true when at least one blocked `taskId#revision` is unacknowledged.
  * @returns true when one more steer is warranted.
  */
 export function shouldSteerMain(
   projection: WorkflowProjection | undefined,
   steerCount: number,
+  newlyBlocked: boolean,
 ): boolean {
   if (steerCount >= MAX_MAIN_STEERS) return false
   if (projection === undefined) return false
-  for (const task of projection.tasks.values()) {
-    if (task.status === 'blocked') return true
-  }
-  return false
+  return newlyBlocked
 }
 
 /** Dependencies for {@link installTurnGuards}. */
@@ -107,12 +155,15 @@ export function installTurnGuards(ctx: Context, deps: TurnGuardDependencies): ()
 
     const projection = deps.getProjection(sessionId)
     if (deps.isMainSession(session.id)) {
-      if (!shouldSteerMain(projection, steerCount)) return
-      agent.steer(createUserMessage({
-        content: [{ type: 'text', text: MAIN_BLOCKED_STEER_TEXT }],
-        source: PLUGIN_SOURCE,
-      }))
-      steerCounts.set(turnKey, steerCount + 1)
+      const newlyBlocked = newlyBlockedTaskKeys(projection).length > 0
+      if (shouldSteerMain(projection, steerCount, newlyBlocked)) {
+        agent.steer(createUserMessage({
+          content: [{ type: 'text', text: MAIN_BLOCKED_STEER_TEXT }],
+          source: PLUGIN_SOURCE,
+        }))
+        steerCounts.set(turnKey, steerCount + 1)
+      }
+      acknowledgeCurrentBlockedKeys(projection)
       return
     }
 

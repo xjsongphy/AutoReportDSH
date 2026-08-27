@@ -1,9 +1,15 @@
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import { RoleRegistry } from '../src/workflow/role-registry.js'
 import { AUTOREPORT_SCHEMA_VERSION, type DelegationSnapshot, type TaskSnapshot } from '../src/workflow/events.js'
 import type { WorkflowProjection } from '../src/workflow/service.js'
-import { shouldSteerMain, shouldSteerSpecialist } from '../src/workflow/turn-guard.js'
+import {
+  acknowledgeCurrentBlockedKeys,
+  newlyBlockedTaskKeys,
+  resetAcknowledgedBlockedKeys,
+  shouldSteerMain,
+  shouldSteerSpecialist,
+} from '../src/workflow/turn-guard.js'
 
 function projection(tasks: TaskSnapshot[], delegations: DelegationSnapshot[]): WorkflowProjection {
   return {
@@ -16,7 +22,26 @@ function projection(tasks: TaskSnapshot[], delegations: DelegationSnapshot[]): W
   }
 }
 
+function blockedTask(overrides: Partial<TaskSnapshot> = {}): TaskSnapshot {
+  return {
+    version: AUTOREPORT_SCHEMA_VERSION,
+    taskId: 'task-9',
+    subject: 'Need data',
+    role: 'DATA_ANALYSIS',
+    dependencies: [],
+    status: 'blocked',
+    revision: 2,
+    steps: [],
+    scopes: ['Data/Processed'],
+    blockedReason: 'missing csv',
+    ...overrides,
+  }
+}
+
 describe('turn-stopping guards', () => {
+  beforeEach(() => {
+    resetAcknowledgedBlockedKeys()
+  })
   it('steers a bound specialist with an unanswered delegation up to twice', () => {
     const registry = new RoleRegistry()
     const child = SessionId('child-theory')
@@ -98,21 +123,39 @@ describe('turn-stopping guards', () => {
     expect(shouldSteerSpecialist(registry, child, fold, 0)).toBe(false)
   })
 
-  it('reminds MAIN once when a task is blocked', () => {
-    const fold = projection([{
-      version: AUTOREPORT_SCHEMA_VERSION,
-      taskId: 'task-9',
-      subject: 'Need data',
-      role: 'DATA_ANALYSIS',
-      dependencies: [],
-      status: 'blocked',
-      revision: 2,
-      steps: [],
-      scopes: ['Data/Processed'],
-      blockedReason: 'missing csv',
-    }], [])
-    expect(shouldSteerMain(fold, 0)).toBe(true)
-    expect(shouldSteerMain(fold, 1)).toBe(false)
-    expect(shouldSteerMain(projection([], []), 0)).toBe(false)
+  it('steers MAIN once when a blocked task is newly received', () => {
+    const fold = projection([blockedTask()], [])
+    expect(newlyBlockedTaskKeys(fold)).toEqual(['task-9#2'])
+    expect(shouldSteerMain(fold, 0, newlyBlockedTaskKeys(fold).length > 0)).toBe(true)
+    expect(shouldSteerMain(fold, 1, newlyBlockedTaskKeys(fold).length > 0)).toBe(false)
+    expect(shouldSteerMain(projection([], []), 0, false)).toBe(false)
+  })
+
+  it('does not steer MAIN for a historical blocked task already acknowledged', () => {
+    const fold = projection([blockedTask()], [])
+    acknowledgeCurrentBlockedKeys(fold)
+    expect(newlyBlockedTaskKeys(fold)).toEqual([])
+    expect(shouldSteerMain(fold, 0, newlyBlockedTaskKeys(fold).length > 0)).toBe(false)
+  })
+
+  it('does not re-steer MAIN after acknowledging the same blocked revision', () => {
+    const fold = projection([blockedTask()], [])
+    expect(shouldSteerMain(fold, 0, newlyBlockedTaskKeys(fold).length > 0)).toBe(true)
+    acknowledgeCurrentBlockedKeys(fold)
+    expect(shouldSteerMain(fold, 0, newlyBlockedTaskKeys(fold).length > 0)).toBe(false)
+  })
+
+  it('steers MAIN again when a blocked task is re-blocked at a new revision', () => {
+    const fold = projection([blockedTask()], [])
+    acknowledgeCurrentBlockedKeys(fold)
+    const reblocked = projection([blockedTask({ revision: 3 })], [])
+    expect(newlyBlockedTaskKeys(reblocked)).toEqual(['task-9#3'])
+    expect(shouldSteerMain(reblocked, 0, newlyBlockedTaskKeys(reblocked).length > 0)).toBe(true)
+  })
+
+  it('caps MAIN steers per turn even when a blocked task is newly received', () => {
+    const fold = projection([blockedTask()], [])
+    expect(shouldSteerMain(fold, 0, true)).toBe(true)
+    expect(shouldSteerMain(fold, 1, true)).toBe(false)
   })
 })
