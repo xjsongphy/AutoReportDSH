@@ -10,7 +10,7 @@
 import { randomUUID } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
-import { dirname, join, relative, resolve } from 'node:path'
+import { basename, dirname, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
@@ -99,7 +99,7 @@ async function loadState(path: string): Promise<SyncState> {
 
 async function atomicWrite(path: string, body: string): Promise<void> {
   await mkdir(dirname(path), { recursive: true })
-  const temporary = join(dirname(path), `.${String(path.split('/').at(-1) ?? 'resource')}.${process.pid}.${randomUUID()}.tmp`)
+  const temporary = join(dirname(path), `.${basename(path)}.${process.pid}.${randomUUID()}.tmp`)
   try {
     await writeFile(temporary, body)
     await rename(temporary, path)
