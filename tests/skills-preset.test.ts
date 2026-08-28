@@ -25,7 +25,6 @@ describe('AutoReport role-scoped domain skills', () => {
 
   it('registers REPORT runtime skills on the child context', () => {
     const skills: string[] = []
-    const sections: string[] = []
     const context = {
       skills: {
         register: (registration: { name: string }) => {
@@ -33,33 +32,14 @@ describe('AutoReport role-scoped domain skills', () => {
           return () => {}
         },
       },
-      systemPrompt: {
-        section: (section: { name: string }) => {
-          sections.push(section.name)
-          return () => {}
-        },
-      },
     }
     registerRoleSkills(context, 'REPORT', 'latex')
     expect(skills).toEqual(['experiment-report-writer', 'latex-compile'])
-    expect(sections).toEqual([])
   })
 
-  it('falls back to system prompt sections when child skills are unavailable', () => {
-    const sections: string[] = []
-    const context = {
-      systemPrompt: {
-        section: (section: { name: string }) => {
-          sections.push(section.name)
-          return () => {}
-        },
-      },
-    }
-    registerRoleSkills(context, 'REPORT', 'latex')
-    expect(sections).toEqual([
-      'autoreport:skill:experiment-report-writer',
-      'autoreport:skill:latex-compile',
-    ])
+  it('fails loud when the child skills service is missing', () => {
+    expect(() => registerRoleSkills({} as never, 'REPORT', 'latex')).toThrow(/ctx\.skills\.register/)
+    expect(() => registerMainSkills({} as never)).toThrow(/ctx\.skills\.register/)
   })
 
   it('registers MAIN-only pdf skills in the preset scope', () => {

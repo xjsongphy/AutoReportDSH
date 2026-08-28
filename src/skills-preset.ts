@@ -13,7 +13,7 @@ import type { SpecialistRole } from './roles.js'
 import { loadBundledSkills, type BundledSkill } from './workspace/skill-loader.js'
 
 export const name = 'autoreportdsh-skills'
-export const inject = ['systemPrompt' as const]
+export const inject = ['skills' as const]
 
 /** Language-specific compilation guidance selected for a REPORT child. */
 export type ReportSkillLanguage = 'latex' | 'typst'
@@ -33,16 +33,6 @@ export function skillNamesForRole(role: SpecialistRole, language: ReportSkillLan
   }
 }
 
-function section(skill: BundledSkill): { name: string; order: number; text: string } {
-  return {
-    name: `autoreport:skill:${skill.name}`,
-    // Role instructions should follow the base persona but precede ordinary
-    // deployment sections, and use deterministic ordering for stable prompts.
-    order: 10,
-    text: skill.content,
-  }
-}
-
 function registerBundledSkill(
   skill: BundledSkill,
   registerSkill: (registration: { name: string; description: string; source: string; content: string }) => () => void,
@@ -55,6 +45,19 @@ function registerBundledSkill(
   })
 }
 
+function requireSkillRegister(ctx: Context, owner: string): (registration: {
+  name: string
+  description: string
+  source: string
+  content: string
+}) => () => void {
+  const registerSkill = ctx.skills?.register
+  if (registerSkill === undefined) {
+    throw new Error(`AutoReport ${owner} skills require ctx.skills.register`)
+  }
+  return registerSkill
+}
+
 /**
  * Register MAIN-only bundled skills (`pdf-reference-reader`) in the preset scope
  * where `ctx.skills.register` is available.
@@ -64,8 +67,7 @@ function registerBundledSkill(
 export function registerMainSkills(ctx: Context): () => void {
   const available = new Map(loadBundledSkills().map(skill => [skill.name, skill]))
   const disposers: (() => void)[] = []
-  const registerSkill = ctx.skills?.register
-  if (registerSkill === undefined) return () => {}
+  const registerSkill = requireSkillRegister(ctx, 'MAIN')
 
   try {
     for (const name of MAIN_SKILL_NAMES) {
@@ -107,18 +109,12 @@ export function registerRoleSkills(
 ): () => void {
   const available = new Map(loadBundledSkills().map(skill => [skill.name, skill]))
   const disposers: (() => void)[] = []
-  const registerSkill = ctx.skills?.register
+  const registerSkill = requireSkillRegister(ctx, role)
   try {
     for (const name of skillNamesForRole(role, language)) {
       const skill = available.get(name)
       if (skill === undefined) throw new Error(`AutoReport bundled skill ${name} is missing for ${role}`)
-      if (registerSkill !== undefined) {
-        disposers.push(registerBundledSkill(skill, registerSkill))
-      } else {
-        // Temporary compatibility: unpublished child scopes without a skills service
-        // still receive full bodies as system-prompt sections until hosts expose skills.
-        disposers.push(ctx.systemPrompt.section(section(skill)))
-      }
+      disposers.push(registerBundledSkill(skill, registerSkill))
     }
   } catch (error: unknown) {
     for (const dispose of disposers.reverse()) dispose()
@@ -136,6 +132,3 @@ export function registerRoleSkills(
     if (failures.length > 0) throw new AggregateError(failures, 'failed to dispose AutoReport role skills')
   }
 }
-
-/** Compatibility entrypoint: role instructions are installed per child only. */
-export function apply(_ctx: Context): void {}
