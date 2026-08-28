@@ -26,7 +26,7 @@ AutoReportDSH 将 [AutoReportCLI](../autoreportcli) 的报告领域工作流迁�
 
 ## 功能概览
 
-选择可选的 **`autoreport-main`** agent preset 后，会启用一个固定的五角色团队：
+选择可选的 **`autoreport`** agent preset 后，会启用一个固定的五角色团队：
 
 | 角色 | 职责 | 可写目录 |
 |---|---|---|
@@ -53,10 +53,10 @@ AutoReport 专属 skill 按角色隔离：MAIN 有 `pdf-reference-reader`（Mine
 
 ```text
 standard           普通 DSH 行为
-autoreport-main    AutoReport 物理实验报告工作流
+autoreport    AutoReport 物理实验报告工作流
 ```
 
-只有有效 preset 为 `autoreport-main` 的顶层 session 才会进入 AutoReport runtime。普通 session 保留原有 shell、文件权限、子 agent report 工具和工作目录行为；这一共存约束已有集成测试。
+只有有效 preset 为 `autoreport` 的顶层 session 才会进入 AutoReport runtime。普通 session 保留原有 shell、文件权限、子 agent report 工具和工作目录行为；这一共存约束已有集成测试。
 
 ## 安装
 
@@ -110,7 +110,7 @@ pnpm test
 pnpm run build
 ```
 
-无密钥测试会覆盖 workflow 持久化、preset 成员判定、角色可写根目录、报告资源、产物 manifest 和真实 Loader 启动。
+无密钥测试会覆盖 workflow 持久化、preset 成员判定、角色可写根目录、报告资源、产物 manifest 和真实 Loader 启动。`tests/eval/workflow-eval.test.ts` 覆盖八条 assembled workflow eval（LaTeX/Typst 全链路、blocked 恢复、忘记 `report_workflow`、cold rebind、artifact `modified`、Python snapshot、coexistence）。
 
 ### 刷新外部维护的 skill
 
@@ -125,10 +125,10 @@ pnpm run install:preset
 该命令会写入渲染后的 user preset：
 
 ```text
-$DSH_HOME/.agent-presets/autoreport-main/   # 默认 home 是 ~/.dsh
+$DSH_HOME/.agent-presets/autoreport/   # 默认 home 是 ~/.dsh
 ```
 
-把本包装到 `$DSH_HOME/profiles/node_modules/autoreportdsh`（供 Web 加载设置卡片），并在本仓库生成 `cordis.overlay.generated.yml`。安装器会覆盖 AutoReport 自己管理的 preset 文件，并保留该目录下无关的用户文件。若要彻底替换过期安装，先删除 `$DSH_HOME/.agent-presets/autoreport-main/` 再重跑。
+把本包装到 `$DSH_HOME/profiles/node_modules/autoreportdsh`（供 Web 加载设置卡片），并在本仓库生成 `cordis.overlay.generated.yml`。安装器会覆盖 AutoReport 自己管理的 preset 文件，并保留该目录下无关的用户文件。若要彻底替换过期安装，先删除 `$DSH_HOME/.agent-presets/autoreport/` 再重跑。
 
 使用隔离的 harness home：
 
@@ -151,7 +151,7 @@ pnpm dsh web \
   --patch ../AutoReportDSH/cordis.overlay.generated.yml
 ```
 
-访问 `http://127.0.0.1:3081`，新建 session 后选择 **`autoreport-main`**。报告工作流默认值在 **设置 → 插件 → 插件配置 → AutoReport**。若已有 DSH Web 服务占用默认的 `3080` 端口，请使用其他端口。
+访问 `http://127.0.0.1:3081`，新建 session 后选择 **`autoreport`**。报告工作流默认值在 **设置 → 插件 → 插件配置 → AutoReport**。若已有 DSH Web 服务占用默认的 `3080` 端口，请使用其他端口。
 
 若 PATH 上已有全局 `dsh`（`npm i -g @deepseek-ai/dsh`），同一 `--patch` 只有在该 CLI 已包含上述两个 API 时才能用。在此之前请用 sibling checkout 里的 `pnpm dsh`，不要用全局二进制：
 
@@ -169,7 +169,7 @@ pnpm dsh headless \
 
 ## 第一次报告工作流
 
-选择 `autoreport-main` 后，可显式初始化工作目录；或者由 MAIN 的首个 workflow turn 自动、幂等地初始化：
+选择 `autoreport` 后，可显式初始化工作目录；或者由 MAIN 的首个 workflow turn 自动、幂等地初始化：
 
 ```text
 /report-init
@@ -221,12 +221,14 @@ schema 默认值
 
 ```text
 defaultReportLanguage   latex
-specialistModel         继承 MAIN（可选的 shared DSH route 选择）
+specialistModel         继承 MAIN（cordis/项目可选路由；运行中的工作智能体在对话窗口切换）
 delegationWaitTimeoutMs 600000
-pythonExecutable        可选，specialist bash 使用的解释器
+pythonExecutable        可选；AutoReport 托管 venv（`__managed__` → `$DSH_HOME/autoreport/venv`）、本机已检测的解释器，或自定义绝对路径
 ```
 
-`autoreport` 用户设置 namespace 已通过 `@deepseek-ai/dsh-settings` 注册并持久化、校验 `defaultReportLanguage`、`specialistModel`、`delegationWaitTimeoutMs` 和可选的 `pythonExecutable`。浏览器设置卡片在 **设置 → 插件 → 插件配置**。修改这些值不会改变已经在跑的报告。配置了 `specialistModel.reasoningEffort` 时，会通过 DSH 的 agent-scoped model-selection seam 真正生效，而非只记录快照。
+`autoreport` 用户设置 namespace 已通过 `@deepseek-ai/dsh-settings` 注册并持久化、校验 `defaultReportLanguage`、`delegationWaitTimeoutMs` 和可选的 `pythonExecutable`。浏览器设置卡片在 **设置 → 插件 → 插件配置**。修改这些值不会改变已经在跑的报告。工作智能体的模型、提供方和推理力度不在这张卡片上改：在 **设置 → 模型** 里新增提供方，把前台切到该工作智能体后用 DSH 对话窗口的模型列表切换（同一套 `session.models` / `selectModel`）。新建工作智能体默认继承 MAIN，除非在 cordis 或项目设置里写了 `specialistModel`。
+
+Python 选择与 AutoReportCLI 一样是三选一：**AutoReport 托管**（保存在 `$DSH_HOME/autoreport/venv`，保存时若不存在则用 `uv venv --seed` 或 `python3 -m venv` 创建）、**本机**（检测到的 conda / virtualenv / pyenv / PATH，若存在也会列出 AutoReportCLI 的 `~/.autoreport/venv`），或 **自定义路径**。选中的解释器会作为 `DSH_AUTOREPORT_PYTHON` 注入 owned bash，并将其 bin 目录前置到 `PATH`，因此 `"$DSH_AUTOREPORT_PYTHON"` 和裸的 `python3` 都会打到这个解释器。
 
 ## 安全模型
 
@@ -261,6 +263,8 @@ pnpm vitest run tests/e2e/configured-route.e2e.test.ts
 
 [`.github/workflows/ci.yml`](.github/workflows/ci.yml) 在 PR 和 `main` push 时分别于 Linux、macOS、Windows 运行。此开发预览包故意使用 sibling Harness 的 `link:` 依赖，因此 CI 会 checkout [docs/dependencies.md](docs/dependencies.md) 固定的 Harness、打上 `patches/` 中的两份补丁、先构建 Harness，再执行 immutable install、keyless tests、typecheck 和 build。真实 API 测试仍为 opt-in；该 workflow 不接收凭证。
 
+角色 writable-root 的 live confinement（真实 bash 经 DSH sandbox：允许路径成功、跨角色路径拒绝）只在 Linux 和 macOS 上跑。Windows CI 仍要求 DSH 的 windows-acl runner 可用——runner 或 Git Bash 缺失时任务失败而不是跳过——但该 probe 尚未让 AutoReport 角色经 Windows shell 做一次端到端禁写。
+
 ## 计划中的 npm / DSH bundle 发布方式
 
 **现在不要执行这些命令。** AutoReportDSH 尚未发布到 npm，也没有正式的 DSH bundle，因此 `dsh plugin add` 装不上。
@@ -274,7 +278,7 @@ dsh plugin --profile web add @xjsongphy/autoreportdsh
 # 从该 profile 里已安装的包生成 user preset。
 npx @xjsongphy/autoreportdsh setup --profile web
 
-# 正常启动 DSH；需要报告时选择 autoreport-main。
+# 正常启动 DSH；需要报告时选择 autoreport。
 # overlay 进入 profile 层之后不再需要 --patch。
 dsh web
 ```
@@ -294,7 +298,7 @@ Git 安装只会下载源代码，pnpm 需要用户明确允许 `prepare` build 
 ```text
 assets/title.svg            README 标题图
 cordis.template.yml         生成 host/router overlay 的模板
-presets/autoreport-main/    user preset 模板
+presets/autoreport/    user preset 模板
 resources/                  报告资源和 preset-scoped skills
 scripts/install-user-preset.ts
 src/
@@ -315,7 +319,8 @@ tests/                      unit、integration、boot、可选真实 API 测试
 
 ## 当前限制
 
-- Windows live bash 禁写测试走 DSH 的 windows-acl runner。GitHub `windows-latest` 在 runner 或 Git Bash 不可用时会失败，而不是跳过。
+- Windows CI 验证的是 DSH Windows ACL sandbox 是否可用。AutoReport 角色级 writable-root confinement 尚未在 Windows 上端到端跑过。
+- `/report-init` 注册在 host 全局 command catalog。handler 会在产生任何 workspace 副作用前拒绝非 AutoReport session；DSH 暂时没有 agent-scoped slash command 接口，因此命令名仍可能出现在 AutoReport 以外的 session 里。
 - MinerU 由 MAIN 通过 bash 与 `pdf-reference-reader` skill 调用（输出 `Outline/.cache/mineru/`），没有单独的 MinerU model tool。
 - artifact manifest 由运行时生成，agent 不能添加自由文本备注。
 - 任务生命周期已内化：MAIN 通过 `send_to_agent` 委派（省略 `task_id` 时自动创建任务）；specialist 通过 `report_workflow` 结束，report observer 负责 settle durable 状态。

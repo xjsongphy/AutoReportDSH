@@ -26,7 +26,7 @@ The detailed design and implementation record live in [PLAN.md](PLAN.md).
 
 ## What it does
 
-Selecting the opt-in **`autoreport-main`** agent preset enables one fixed team:
+Selecting the opt-in **`autoreport`** agent preset enables one fixed team:
 
 | Role | Responsibility | Writable location |
 |---|---|---|
@@ -53,10 +53,10 @@ Installing the overlay does **not** convert every DSH session into AutoReport:
 
 ```text
 standard           normal DSH behavior
-autoreport-main    AutoReport physics-report workflow
+autoreport    AutoReport physics-report workflow
 ```
 
-Only a top-level session whose effective preset is `autoreport-main` enters the AutoReport runtime. Ordinary sessions retain their stock shell, filesystem behavior, child-report tool, and workspace. This is covered by the integration suite.
+Only a top-level session whose effective preset is `autoreport` enters the AutoReport runtime. Ordinary sessions retain their stock shell, filesystem behavior, child-report tool, and workspace. This is covered by the integration suite.
 
 ## Installation
 
@@ -110,7 +110,7 @@ pnpm test
 pnpm run build
 ```
 
-The keyless suite validates workflow persistence, preset membership, role writable roots, report resources, artifact manifests, and real Loader boot behavior.
+The keyless suite validates workflow persistence, preset membership, role writable roots, report resources, artifact manifests, and real Loader boot behavior. `tests/eval/workflow-eval.test.ts` drives the eight assembled workflow traces (LaTeX/Typst pipelines, blocked recovery, forgotten `report_workflow`, cold rebind, artifact `modified`, Python snapshot, coexistence).
 
 ### Refresh externally maintained skills
 
@@ -125,10 +125,10 @@ pnpm run install:preset
 This writes the rendered user preset to:
 
 ```text
-$DSH_HOME/.agent-presets/autoreport-main/   # default home is ~/.dsh
+$DSH_HOME/.agent-presets/autoreport/   # default home is ~/.dsh
 ```
 
-links the package at `$DSH_HOME/profiles/node_modules/autoreportdsh` so the web client can load the settings card, and writes `cordis.overlay.generated.yml` in this repository. The installer overwrites AutoReport-owned preset files and keeps unrelated files under the user preset directory. To replace a stale install completely, delete `$DSH_HOME/.agent-presets/autoreport-main/` first, then rerun.
+links the package at `$DSH_HOME/profiles/node_modules/autoreportdsh` so the web client can load the settings card, and writes `cordis.overlay.generated.yml` in this repository. The installer overwrites AutoReport-owned preset files and keeps unrelated files under the user preset directory. To replace a stale install completely, delete `$DSH_HOME/.agent-presets/autoreport/` first, then rerun.
 
 For an isolated harness home:
 
@@ -151,7 +151,7 @@ pnpm dsh web \
   --patch ../AutoReportDSH/cordis.overlay.generated.yml
 ```
 
-Open `http://127.0.0.1:3081`, create a session, and select **`autoreport-main`**. Report-workflow defaults are under **Settings → Plugins → Plugin configuration → AutoReport**. Use another port when an existing DSH Web server already occupies the default `3080`.
+Open `http://127.0.0.1:3081`, create a session, and select **`autoreport`**. Report-workflow defaults are under **Settings → Plugins → Plugin configuration → AutoReport**. Use another port when an existing DSH Web server already occupies the default `3080`.
 
 If a global `dsh` is already on PATH (`npm i -g @deepseek-ai/dsh`), the same overlay flag works only when that CLI is new enough to include the two APIs. Until then, use `pnpm dsh` from the patched sibling checkout, not the global binary:
 
@@ -169,7 +169,7 @@ pnpm dsh headless \
 
 ## First report workflow
 
-After selecting `autoreport-main`, initialize the workspace explicitly or let the first admitted MAIN workflow turn initialize it idempotently:
+After selecting `autoreport`, initialize the workspace explicitly or let the first admitted MAIN workflow turn initialize it idempotently:
 
 ```text
 /report-init
@@ -221,12 +221,14 @@ Current composition defaults include:
 
 ```text
 defaultReportLanguage   latex
-specialistModel         inherit Main (optional shared DSH route selection)
+specialistModel         inherit Main (optional cordis/project route; switch live in the conversation window)
 delegationWaitTimeoutMs 600000
-pythonExecutable        optional interpreter for specialist bash
+pythonExecutable        optional; AutoReport-managed venv (`__managed__` → `$DSH_HOME/autoreport/venv`), a detected local interpreter, or a custom absolute path
 ```
 
-The `autoreport` user-settings namespace is registered through `@deepseek-ai/dsh-settings`; it persists and validates `defaultReportLanguage`, `specialistModel`, `delegationWaitTimeoutMs`, and optional `pythonExecutable`. The web settings card lives under **Settings → Plugins → Plugin configuration**. Changing those values does not alter a report that is already running. `specialistModel.reasoningEffort`, when present, is applied through DSH's agent-scoped model-selection seam rather than merely recorded.
+The `autoreport` user-settings namespace is registered through `@deepseek-ai/dsh-settings`; it persists and validates `defaultReportLanguage`, `delegationWaitTimeoutMs`, and optional `pythonExecutable`. The web settings card lives under **Settings → Plugins → Plugin configuration**. Changing those values does not alter a report that is already running. Worker model, provider, and reasoning effort are not edited on that card: add providers under **Settings → Models**, then switch a running worker from its conversation window using DSH's model picker (`session.models` / `selectModel`). New workers inherit Main unless a `specialistModel` route is set in cordis or project settings.
+
+The Python picker is three-way, matching AutoReportCLI: **AutoReport managed** (created on save at `$DSH_HOME/autoreport/venv` via `uv venv --seed` or `python3 -m venv`), **local** (detected conda / virtualenv / pyenv / PATH, including an existing AutoReportCLI `~/.autoreport/venv` if present), or a **custom path**. The selected interpreter is injected into owned bash as `DSH_AUTOREPORT_PYTHON` and its bin directory is prepended to `PATH`, so both `"$DSH_AUTOREPORT_PYTHON"` and a bare `python3` hit that interpreter.
 
 ## Security model
 
@@ -261,6 +263,8 @@ See [docs/live-provider-testing.md](docs/live-provider-testing.md). The test nev
 
 [`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs on pull requests and `main` pushes on Linux, macOS, and Windows. Because this preview package intentionally links a sibling Harness checkout, CI checks out the exact Harness pin from [docs/dependencies.md](docs/dependencies.md), applies the two patches in `patches/`, builds Harness, then runs immutable install, keyless tests, typecheck, and build. The real API test remains opt-in and receives no credential in this workflow.
 
+Live role-writable-root confinement (real bash through DSH sandbox: allowed path succeeds, sibling role path denied) runs on Linux and macOS. Windows CI still requires DSH's windows-acl runner to be usable — the job fails rather than skips if that runner or Git Bash is missing — but that probe does not yet drive an AutoReport role through the Windows shell.
+
 ## Planned npm / DSH bundle release
 
 **Do not run these yet.** AutoReportDSH is not on npm. There is no published DSH bundle, so `dsh plugin add` cannot install it.
@@ -274,7 +278,7 @@ dsh plugin --profile web add @xjsongphy/autoreportdsh
 # Render the user preset from the package installed in that profile.
 npx @xjsongphy/autoreportdsh setup --profile web
 
-# Start DSH normally; choose autoreport-main when needed. No --patch once the
+# Start DSH normally; choose autoreport when needed. No --patch once the
 # profile layer owns the overlay.
 dsh web
 ```
@@ -288,7 +292,7 @@ The published package will ship prebuilt `dist/` files, a DSH bundle manifest, h
 ```text
 assets/title.svg            README title banner
 cordis.template.yml         source for the generated host/router overlay
-presets/autoreport-main/    rendered user-preset template
+presets/autoreport/    rendered user-preset template
 resources/                  bundled report assets and preset-scoped skills
 scripts/install-user-preset.ts
 src/
@@ -309,7 +313,8 @@ tests/                      unit, integration, boot, and opt-in real-API tests
 
 ## Current limitations
 
-- Windows live bash confinement uses DSH's windows-acl runner. GitHub `windows-latest` fails the job when that runner or Git Bash is unavailable.
+- Windows CI verifies DSH Windows ACL sandbox availability. AutoReport role-level writable-root confinement is not yet exercised end-to-end on Windows.
+- `/report-init` is registered on the host-wide command catalog. Its handler rejects non-AutoReport sessions before any workspace side effect; DSH has no agent-scoped slash-command seam yet, so the command name may still appear outside AutoReport sessions.
 - MinerU runs through MAIN bash and the `pdf-reference-reader` skill (`Outline/.cache/mineru/`); there is no dedicated MinerU model tool.
 - Artifact manifests are runtime-generated; agents cannot add free-form manifest notes.
 - Task lifecycle is internal: MAIN dispatches with `send_to_agent` (auto-creating tasks when `task_id` is omitted); specialists finish through `report_workflow` and the report observer settles durable state.
