@@ -10,7 +10,6 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import { registerMainSkills } from './skills-preset.js'
-import { createReportTaskTool } from './tools/report-task.js'
 import { createSendToAgentTool } from './tools/send-to-agent.js'
 import type {} from './runtime.js'
 
@@ -29,5 +28,4 @@ export function apply(ctx: Context): void {
     workflow: ctx.autoreportWorkflow,
     config: ctx.autoreportWorkflow.config,
   }))
-  ctx.tools.register(createReportTaskTool(session => ctx.autoreportWorkflow.forSession(session).state))
 }

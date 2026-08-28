@@ -265,7 +265,7 @@ export function createSendToAgentTool(deps: SendToAgentDependencies): ToolDefini
                 ...(agentOptions === undefined ? {} : { agentOptions }),
                 maxDepth: 1,
                 persona: persona(role),
-                toolFilter: { deny: ['send_to_agent', 'report_task', 'ask_user_question'] },
+                toolFilter: { deny: ['send_to_agent', 'ask_user_question'] },
               },
               signal: exec.signal,
             })

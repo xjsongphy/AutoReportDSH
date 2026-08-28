@@ -179,7 +179,7 @@ async function assemble(options: { projectLanguage?: 'latex' | 'typst' } = {}): 
   // Overlay row 2: the single global continuable-child report router.
   reportRouterModule.apply(ctx)
   // The one preset-plane product contribution: its real apply() registers
-  // scoped bundled skills plus send_to_agent and report_task together.
+  // scoped bundled skills plus send_to_agent together.
   presetModule.apply(ctx)
 
   // A stand-in for the deployment's filesystem write tool: same tool NAME the
@@ -375,19 +375,10 @@ describe('integration: assembled host (real context)', () => {
     const assembled = await assemble()
     admitFirstTurn(assembled)
 
-    // Task creation through the real pipeline (preset-plane availability path).
-    const created = await execute(assembled.ctx, 'report_task', {
-      operation: 'create',
-      subject: 'Analyze the raw dataset',
-      role: 'DATA_ANALYSIS',
-      steps: [{ description: 'fit raw.csv' }],
-    }, assembled.mainAgent, assembled.mainSession)
-    expect(created.isError).toBe(false)
-
-    // Dispatch with wait:true: resolves ONLY when the child reports.
+    // Auto-create and dispatch with wait:true: resolves ONLY when the child reports.
     const dispatchPromise = execute(assembled.ctx, 'send_to_agent', {
       role: 'DATA_ANALYSIS',
-      task_id: 'task-1',
+      subject: 'Analyze the raw dataset',
       prompt: 'fit the raw data',
       wait: true,
       timeout_ms: 15_000,

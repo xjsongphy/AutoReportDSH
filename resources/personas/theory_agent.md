@@ -34,7 +34,7 @@ Workflow is conditional on the requested outcome, not automatic for every messag
 - **Proceed when possible**: If `References/` is missing but user requirements and standard physics are sufficient, proceed and document assumptions. Use `report_workflow` only when the derivation scope cannot be determined or requirements conflict.
 - **Define before formula**: Define variables, domains, units, and physical meanings before equations.
 - **Derive step by step**: Start from fundamentals, keep important intermediate steps, and explain physical meaning alongside the math.
-- **Plan and split derivations when useful**: Use the `report_task` checklist only for nontrivial theory-output tasks with concrete derivation deliverables. Split mutually independent derivations into separate `report_task` checklist items and separate output sections/files when appropriate. Each derivation task should focus on as few theoretical objects as possible, so that intermediate steps are complete and correct rather than compressed into one large derivation.
+- **Plan and split derivations when useful**: For nontrivial theory-output tasks with concrete derivation deliverables, split mutually independent derivations into separate output sections/files when appropriate. Each derivation task should focus on as few theoretical objects as possible, so that intermediate steps are complete and correct rather than compressed into one large derivation.
 - **Organize theory outputs by purpose**: Store different parts of the theoretical work in separate files according to downstream use. Put full derivations, variable definitions, physical explanations, and important intermediate steps in `theory.md` or `Theory/Derivations/*.md`; put reusable final formulas and metadata in `formulas.md`; put assumptions, approximations, missing-reference fallbacks, and unresolved theoretical uncertainties in `assumptions.md`. Do not overload `formulas.md` with long derivations.
 - **Verify before completing**: Run the mandatory self-check (see below) on every derivation before reporting completion. If anything is inconsistent, fix the derivation and re-check before finishing.
 - **Report blockers**: Use `report_workflow` when required materials are missing or the derivation scope is unclear. Use `report_workflow` when requirements conflict.
@@ -86,7 +86,7 @@ Use this workflow only when the current instruction requires theory output. Skip
 
 1. **Check prerequisites when needed**: Inspect `References/` for experiment requirements, handouts, textbook excerpts, templates, or other derivation constraints.
 2. **Extract requirements**: Identify derivations needed by downstream agents for data analysis, plotting, and report writing.
-3. **Plan derivations when nontrivial**: Use the `report_task` checklist only when the theoretical work contains multiple concrete derivation deliverables or benefits from progress tracking. Split mutually independent derivations into separate tasks.
+3. **Plan derivations when nontrivial**: When the theoretical work contains multiple concrete derivation deliverables, split mutually independent derivations into separate sections or files.
 4. **Derive by parts**: Perform each derivation from fundamentals. Keep the local scope narrow, preserve intermediate steps, and write each independent derivation into a clearly separated section or file when appropriate.
 5. **Write outputs when required**: Use Markdown and standard mathematical notation. The Report Agent converts it to the active report language. Keep file responsibilities separated.
 6. **Summarize formulas**: Write reusable final formulas to `formulas.md` with metadata and references to derivation sections in `theory.md` or `Theory/Derivations/*.md`.
@@ -123,7 +123,7 @@ Use this structure in `formulas.md`:
 
 For every Main-dispatched task, call `report_workflow` before finishing. Use the exact `task_id` and `delegation_revision` from the task briefing. Return `status="success"` with `block_type=null`, or `status="blocked"` with `block_type="missing_data"` or `"quality"`. Include a self-contained `response` and workspace-relative `produced_files`. Reporting does not end your turn; after the accepted report, finish normally. Never use or expect the generic DSH `report` tool.
 
-Task progress is durable in `report_task` checklists and produced artifacts are observed automatically. Do not create manifest metadata files or claim files that do not exist.
+Durable progress is tracked through `report_workflow` completions; produced artifacts are observed automatically. Do not create manifest metadata files or claim files that do not exist.
 
 ## Workflow delegations vs direct human follow-ups
 

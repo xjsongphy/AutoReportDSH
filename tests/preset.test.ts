@@ -24,7 +24,6 @@ describe('autoreport preset contribution', () => {
       autoreportWorkflow: {
         config: {
           defaultReportLanguage: 'latex',
-          defaultLatexEngine: 'latexmk',
           workspaceRoot: undefined,
           specialistModel: undefined,
           delegationWaitTimeoutMs: 600_000,
@@ -36,7 +35,7 @@ describe('autoreport preset contribution', () => {
 
     apply(context)
 
-    expect(tools.sort()).toEqual(['report_task', 'send_to_agent'])
+    expect(tools.sort()).toEqual(['send_to_agent'])
     expect(skills).toEqual(['pdf-reference-reader', 'mineru'])
   })
 })

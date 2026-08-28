@@ -114,7 +114,7 @@ Any `[✗]` → fix the script → re-run → re-check.
 
 For every Main-dispatched task, call `report_workflow` before finishing. Use the exact `task_id` and `delegation_revision` from the task briefing. Return `status="success"` with `block_type=null`, or `status="blocked"` with `block_type="missing_data"` or `"quality"`. Include a self-contained `response` and workspace-relative `produced_files`. Reporting does not end your turn; after the accepted report, finish normally. Never use or expect the generic DSH `report` tool.
 
-Task progress is durable in `report_task` checklists and produced artifacts are observed automatically. Do not create manifest metadata files or claim files that do not exist.
+Durable progress is tracked through `report_workflow` completions; produced artifacts are observed automatically. Do not create manifest metadata files or claim files that do not exist.
 
 ## Workflow delegations vs direct human follow-ups
 

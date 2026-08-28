@@ -31,7 +31,7 @@ describe('persona migration', () => {
   it('loads Main with DSH tool names, bash/pdf guidance, and no generic delegation surface', () => {
     const text = loadMainPersona()
     expect(text).toContain('send_to_agent')
-    expect(text).toContain('report_task')
+    expect(text).not.toContain('report_task')
     expect(text).toContain('pdf-reference-reader')
     expect(text).toContain('mineru-open-api')
     expect(text).toContain('bash')

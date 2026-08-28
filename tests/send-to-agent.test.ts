@@ -15,7 +15,6 @@ import { createSendToAgentTool, type SendToAgentWorkflow } from '../src/tools/se
 
 const CONFIG: Config = {
   defaultReportLanguage: 'latex',
-  defaultLatexEngine: 'latexmk',
   workspaceRoot: undefined,
   specialistModel: undefined,
   delegationWaitTimeoutMs: 600_000,
@@ -205,7 +204,7 @@ describe('send_to_agent', () => {
     // DSH applies this inherited-tool restriction in the child's creation
     // window; the role guard remains the execution authority.
     expect(startSpec.request?.toolFilter).toEqual({
-      deny: ['send_to_agent', 'report_task', 'ask_user_question'],
+      deny: ['send_to_agent', 'ask_user_question'],
     })
     expect(roleRegistry.lookup('child-theory')?.binding.provisioning).toBe('active')
     expect(state.currentDelegation('task-1')?.phase).toBe('waiting_for_child')
