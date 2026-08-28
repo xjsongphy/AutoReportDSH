@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -11,6 +11,7 @@ import {
   projectSettingsPath,
   resolveWorkflowSettings,
   saveProjectSettings,
+  validatePythonExecutableSetting,
   WORKFLOW_SETTINGS_SCHEMA_DEFAULTS,
   workspaceIdForRoot,
 } from '../src/settings.js'
@@ -65,6 +66,35 @@ describe('resolveWorkflowSettings precedence', () => {
       delegationWaitTimeoutMs: 600_000,
     })
     expect(WORKFLOW_SETTINGS_SCHEMA_DEFAULTS).toMatchObject({ reportLanguage: 'latex', delegationWaitTimeoutMs: 600_000 })
+  })
+
+  it('materializes __managed__ into the created DSH-owned interpreter', () => {
+    const root = tempDir('autoreport-resolve-managed-')
+    const dshHome = join(root, 'dsh')
+    const bin = join(root, 'bootstrap', 'bin')
+    mkdirSync(bin, { recursive: true })
+    const python3 = join(bin, 'python3')
+    writeFileSync(python3, `#!/bin/sh
+if [ "$1" = "--version" ]; then echo "Python 3.12.0-bootstrap"; exit 0; fi
+if [ "$1" = "-m" ] && [ "$2" = "venv" ]; then
+  dest="$3"
+  mkdir -p "$dest/bin"
+  printf '%s\\n' '#!/bin/sh' 'echo Python 3.12.0-managed' > "$dest/bin/python"
+  chmod +x "$dest/bin/python"
+  cp "$dest/bin/python" "$dest/bin/python3"
+  exit 0
+fi
+exit 1
+`)
+    chmodSync(python3, 0o755)
+    const resolved = resolveWorkflowSettings({
+      user: { pythonExecutable: '__managed__' },
+      dshHome,
+      pythonEnv: { PATH: [bin, '/usr/bin', '/bin'].join(process.platform === 'win32' ? ';' : ':') },
+    })
+    expect(realpathSync(resolved.pythonExecutable as string)).toBe(
+      realpathSync(join(dshHome, 'autoreport', 'venv', 'bin', 'python')),
+    )
   })
 
   it('applies each single layer above the schema defaults', () => {
@@ -314,5 +344,55 @@ describe('report-init --language coexistence', () => {
     expect(result.kind).toBe('error')
     if (result.kind === 'error') expect(result.text).toContain('corrupt settings')
     expect(existsSync(join(brokenHome, 'Report/main.tex'))).toBe(false)
+  })
+})
+
+describe('validatePythonExecutableSetting', () => {
+  it('accepts a detected executable without re-checking it', () => {
+    expect(() => validatePythonExecutableSetting({
+      defaultReportLanguage: 'latex',
+      delegationWaitTimeoutMs: 1,
+      pythonExecutable: '/not-a-real-python',
+      pythonEnvironments: [{
+        label: 'fake',
+        executable: '/not-a-real-python',
+        source: 'path',
+        version: 'Python 3',
+      }],
+    })).not.toThrow()
+  })
+
+  it('rejects a custom path that is not a runnable interpreter', () => {
+    expect(() => validatePythonExecutableSetting({
+      defaultReportLanguage: 'latex',
+      delegationWaitTimeoutMs: 1,
+      pythonExecutable: '/definitely-missing-python',
+    })).toThrow(/pythonExecutable/)
+  })
+
+  it('accepts __managed__ after creating the DSH-owned venv', () => {
+    const root = tempDir('autoreport-validate-managed-')
+    const dshHome = join(root, 'dsh')
+    const bin = join(root, 'bootstrap', 'bin')
+    mkdirSync(bin, { recursive: true })
+    const python3 = join(bin, 'python3')
+    writeFileSync(python3, `#!/bin/sh
+if [ "$1" = "--version" ]; then echo "Python 3.12.0-bootstrap"; exit 0; fi
+if [ "$1" = "-m" ] && [ "$2" = "venv" ]; then
+  dest="$3"
+  mkdir -p "$dest/bin"
+  printf '%s\\n' '#!/bin/sh' 'echo Python 3.12.0-managed' > "$dest/bin/python"
+  chmod +x "$dest/bin/python"
+  cp "$dest/bin/python" "$dest/bin/python3"
+  exit 0
+fi
+exit 1
+`)
+    chmodSync(python3, 0o755)
+    expect(() => validatePythonExecutableSetting({
+      defaultReportLanguage: 'latex',
+      delegationWaitTimeoutMs: 1,
+      pythonExecutable: '__managed__',
+    }, dshHome, { PATH: [bin, '/usr/bin', '/bin'].join(process.platform === 'win32' ? ';' : ':') })).not.toThrow()
   })
 })

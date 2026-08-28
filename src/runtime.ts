@@ -21,10 +21,12 @@ import {
   autoReportUserSettingsBase,
   loadProjectSettings,
   resolveWorkflowSettings,
+  validatePythonExecutableSetting,
   workspaceIdForRoot,
   type AutoReportUserSettings,
   type WorkflowSettingsSnapshot,
 } from './settings.js'
+import { detectPythonEnvironments } from './python-detect.js'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -89,10 +91,18 @@ export default class AutoReportWorkflowRuntime extends Service {
     this.config = config
     this.settingsHome = options.settingsHome
     this.manifestHome = options.manifestHome
-    const userSettingsBase = autoReportUserSettingsBase(config)
+    const dshHome = options.settingsHome ?? resolveDshHome()
+    const userSettingsBase = autoReportUserSettingsBase(
+      config,
+      detectPythonEnvironments({
+        ...(config.workspaceRoot === undefined ? {} : { workspace: config.workspaceRoot }),
+        dshHome,
+      }),
+    )
     this.userSettingsSource = () => userSettingsBase
     installSettingsSection(ctx, AUTOREPORT_SETTINGS_NAMESPACE, AUTO_REPORT_USER_SETTINGS_SCHEMA, userSettingsBase, {
       setSource: current => { this.userSettingsSource = current },
+      validate: value => validatePythonExecutableSetting(value, dshHome),
       // Settings are deliberately read only when a workflow is created;
       // existing snapshots must not change under an in-flight report.
       onChange: () => {},
@@ -219,7 +229,7 @@ export default class AutoReportWorkflowRuntime extends Service {
 
   /**
    * Whether one observed session belongs to this deployment: a top-level
-   * session actually running the `autoreport-main` preset, or a continuable
+   * session actually running the `autoreport` preset, or a continuable
    * child bound in the RoleRegistry (reserved before its publication).
    * Everything else — ordinary roots, ordinary DSH continuable children — is
    * foreign, and foreign sessions must keep their stock behavior untouched.
@@ -347,7 +357,7 @@ export default class AutoReportWorkflowRuntime extends Service {
    * @param session - Main session whose cwd (or configured root) is the experiment workspace.
    */
   maybeInitialize(session: Session): void {
-    // The host command wrapper admits only autoreport-main callers; retain
+    // The host command wrapper admits only autoreport callers; retain
     // this gate here as defense in depth for any future direct caller.
     if (!isAutoReportMainSession(session)) return
     const live = this.forSession(session)
@@ -357,7 +367,12 @@ export default class AutoReportWorkflowRuntime extends Service {
     let settings: WorkflowSettingsSnapshot
     try {
       const project = loadProjectSettings(this.settingsHome, workspaceIdForRoot(root))
-      settings = resolveWorkflowSettings({ user: this.userSettingsSource(), project, composition: this.config })
+      settings = resolveWorkflowSettings({
+        user: this.userSettingsSource(),
+        project,
+        composition: this.config,
+        dshHome: this.settingsHome ?? resolveDshHome(),
+      })
       ensureInitialized(root, settings.reportLanguage)
     } catch (error: unknown) {
       // A broken EXTERNAL settings document must not wedge every first turn;

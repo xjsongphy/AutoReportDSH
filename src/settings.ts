@@ -37,6 +37,12 @@ import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
 import { settingsNamespace } from '@deepseek-ai/dsh-settings'
 import z from '@deepseek-ai/schemastery'
 import type { Config, ReportLanguage, SpecialistRoute } from './config.js'
+import {
+  ensureManagedPython,
+  invalidCustomPythonPath,
+  isManagedPythonSetting,
+  type PythonCandidate,
+} from './python-detect.js'
 
 /** Schema-default workflow policy applied below every other layer. */
 export const WORKFLOW_SETTINGS_SCHEMA_DEFAULTS: Readonly<{
@@ -57,8 +63,21 @@ export interface AutoReportUserSettings {
   delegationWaitTimeoutMs: number
   /** Optional specialist route; absent inherits the Main route. */
   specialistModel?: SpecialistRoute
-  /** Optional absolute Python interpreter for specialist bash execution. */
+  /** Optional Python: `__managed__`, an absolute interpreter, or unset (PATH python3). */
   pythonExecutable?: string
+  /**
+   * Host-detected interpreters offered by the settings card. Composition-only:
+   * the card never writes this field.
+   */
+  pythonEnvironments?: readonly PythonEnvironmentOption[]
+}
+
+/** One detected interpreter published on the composition settings layer. */
+export interface PythonEnvironmentOption {
+  readonly label: string
+  readonly executable: string
+  readonly source: string
+  readonly version: string
 }
 
 /**
@@ -74,20 +93,68 @@ const SPECIALIST_ROUTE_SCHEMA = z.object({
 })
 
 /** Schemastery schema resolving the `'autoreport'` user-settings namespace standalone. */
+const PYTHON_ENVIRONMENT_SCHEMA = z.object({
+  label: z.string(),
+  executable: z.string(),
+  source: z.string(),
+  version: z.string(),
+})
+
+/** Schemastery schema resolving the `'autoreport'` user-settings namespace standalone. */
 export const AUTO_REPORT_USER_SETTINGS_SCHEMA: z<AutoReportUserSettings> = z.object({
   defaultReportLanguage: z.union(['latex', 'typst'] as const).default(WORKFLOW_SETTINGS_SCHEMA_DEFAULTS.reportLanguage),
   specialistModel: SPECIALIST_ROUTE_SCHEMA,
   delegationWaitTimeoutMs: z.number().default(WORKFLOW_SETTINGS_SCHEMA_DEFAULTS.delegationWaitTimeoutMs),
   pythonExecutable: z.string(),
+  pythonEnvironments: z.array(PYTHON_ENVIRONMENT_SCHEMA).default([]),
 }) as unknown as z<AutoReportUserSettings>
 
 /** Convert composition defaults into the base layer for DSH user settings. */
-export function autoReportUserSettingsBase(config: Config): AutoReportUserSettings {
+export function autoReportUserSettingsBase(
+  config: Config,
+  environments: readonly PythonCandidate[] = [],
+): AutoReportUserSettings {
   return {
     defaultReportLanguage: config.defaultReportLanguage,
     delegationWaitTimeoutMs: config.delegationWaitTimeoutMs,
     ...(config.specialistModel === undefined ? {} : { specialistModel: config.specialistModel }),
     ...(config.pythonExecutable === undefined ? {} : { pythonExecutable: config.pythonExecutable }),
+    pythonEnvironments: environments.map(asEnvironmentOption),
+  }
+}
+
+/** Reject a typed interpreter that is not a detected row and not a runnable Python. */
+export function validatePythonExecutableSetting(
+  value: AutoReportUserSettings,
+  dshHome?: string,
+  env?: NodeJS.ProcessEnv,
+): void {
+  const executable = value.pythonExecutable
+  if (executable === undefined || executable.trim().length === 0) return
+  if (isManagedPythonSetting(executable)) {
+    try {
+      ensureManagedPython({
+        dshHome: dshHome ?? resolveDshHome(),
+        ...(env === undefined ? {} : { env }),
+      })
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error)
+      throw new Error(`AutoReport settings pythonExecutable: ${message}`)
+    }
+    return
+  }
+  const detected = new Set((value.pythonEnvironments ?? []).map(option => option.executable))
+  if (detected.has(executable)) return
+  const reason = invalidCustomPythonPath(executable)
+  if (reason !== undefined) throw new Error(`AutoReport settings pythonExecutable: ${reason}`)
+}
+
+function asEnvironmentOption(candidate: PythonCandidate): PythonEnvironmentOption {
+  return {
+    label: `${candidate.label} · ${candidate.version}`,
+    executable: candidate.executable,
+    source: candidate.source,
+    version: candidate.version,
   }
 }
 
@@ -130,6 +197,7 @@ function compactSection<S extends Record<string, unknown>>(section: S): S {
   const kept: Record<string, unknown> = {}
   for (const [key, value] of Object.entries(section)) {
     if (value === undefined || (key === 'specialistModel' && isEmptyRoute(value))) continue
+    if (key === 'pythonEnvironments') continue
     kept[key] = value
   }
   return kept as S
@@ -189,6 +257,10 @@ export interface WorkflowSettingsLayers {
   readonly composition?: Partial<WorkflowCompositionDefaults> | undefined
   /** Explicit workflow inputs; beats everything. */
   readonly override?: Partial<WorkflowSettingsOverride> | undefined
+  /** DSH home used to materialize `__managed__`; absent uses {@link resolveDshHome}. */
+  readonly dshHome?: string
+  /** Env overlay for managed-venv creation (tests isolate PATH). */
+  readonly pythonEnv?: NodeJS.ProcessEnv
 }
 
 /** Recursively freeze a resolved snapshot so handed-out values stay immutable. */
@@ -249,6 +321,23 @@ function firstDefined<T>(...values: readonly T[]): T | undefined {
 }
 
 /**
+ * Map `__managed__` to a real interpreter, creating `$dshHome/autoreport/venv`
+ * when that sentinel is selected. Absolute paths pass through.
+ */
+function materializePythonExecutable(
+  raw: string | undefined,
+  dshHome: string | undefined,
+  env: NodeJS.ProcessEnv | undefined,
+): string | undefined {
+  if (raw === undefined || raw.trim().length === 0) return undefined
+  if (!isManagedPythonSetting(raw)) return raw
+  return ensureManagedPython({
+    dshHome: dshHome ?? resolveDshHome(),
+    ...(env === undefined ? {} : { env }),
+  })
+}
+
+/**
  * Resolve the full precedence chain into one immutable snapshot. Fields are
  * independent: a higher layer that omits a field defers to lower layers for
  * that field only.
@@ -271,11 +360,15 @@ export function resolveWorkflowSettings(layers: WorkflowSettingsLayers): Workflo
       composition?.delegationWaitTimeoutMs,
     ),
   ) ?? WORKFLOW_SETTINGS_SCHEMA_DEFAULTS.delegationWaitTimeoutMs
-  const pythonExecutable = firstDefined(
-    override?.pythonExecutable,
-    project?.pythonExecutable,
-    user?.pythonExecutable,
-    composition?.pythonExecutable,
+  const pythonExecutable = materializePythonExecutable(
+    firstDefined(
+      override?.pythonExecutable,
+      project?.pythonExecutable,
+      user?.pythonExecutable,
+      composition?.pythonExecutable,
+    ),
+    layers.dshHome,
+    layers.pythonEnv,
   )
   const specialistModel = firstDefined(
     routeField('override.specialistModel', override?.specialistModel),

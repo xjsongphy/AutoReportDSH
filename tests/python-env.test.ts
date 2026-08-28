@@ -2,10 +2,14 @@ import { describe, expect, it, vi } from 'vitest'
 import type { Context } from '@deepseek-ai/cordis'
 import { Session, SessionId } from '@deepseek-ai/dsh-session'
 import type { ToolExecution } from '@deepseek-ai/dsh-tools'
+import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
+import { dirname } from 'node:path'
 import {
   type AutoReportPythonEnvDeps,
   installAutoReportPythonEnv,
+  overlayPythonPath,
 } from '../src/python-env.js'
+import { managedPythonExecutable } from '../src/python-detect.js'
 
 function makeSession(id: string, cwd?: string): Session {
   return Session.create(SessionId(id), undefined, {
@@ -111,6 +115,45 @@ describe('installAutoReportPythonEnv', () => {
     }))
     expect(resolve(makeExecution(session))).toEqual({
       DSH_AUTOREPORT_PYTHON: 'python3',
+    })
+  })
+
+  it('maps a leftover __managed__ snapshot to the DSH-owned interpreter path', () => {
+    const ctx = {} as Context
+    const resolve = registerResolver(ctx)
+    const session = makeSession('owned')
+    const executable = managedPythonExecutable(resolveDshHome())
+    installAutoReportPythonEnv(ctx, baseDeps({
+      ownsSession: s => s.id === session.id,
+      snapshotPythonExecutable: () => '__managed__',
+    }))
+    expect(resolve(makeExecution(session))).toEqual({
+      DSH_AUTOREPORT_PYTHON: executable,
+      DSH_AUTOREPORT_PYTHON_BIN: dirname(executable),
+    })
+  })
+})
+
+describe('overlayPythonPath', () => {
+  it('prepends DSH_AUTOREPORT_PYTHON_BIN to PATH and sets VIRTUAL_ENV for bin layouts', () => {
+    const overlaid = overlayPythonPath({
+      env: { PATH: '/usr/bin' },
+      dshEnv: {
+        DSH_AUTOREPORT_PYTHON: '/opt/venv/bin/python3',
+        DSH_AUTOREPORT_PYTHON_BIN: '/opt/venv/bin',
+      },
+    })
+    expect(overlaid.env?.PATH.startsWith(`/opt/venv/bin${process.platform === 'win32' ? ';' : ':'}`)).toBe(true)
+    expect(overlaid.env?.VIRTUAL_ENV).toBe('/opt/venv')
+  })
+
+  it('leaves PATH alone when the interpreter is a bare command', () => {
+    expect(overlayPythonPath({
+      env: { PATH: '/usr/bin' },
+      dshEnv: { DSH_AUTOREPORT_PYTHON: 'python3' },
+    })).toEqual({
+      env: { PATH: '/usr/bin' },
+      dshEnv: { DSH_AUTOREPORT_PYTHON: 'python3' },
     })
   })
 })
