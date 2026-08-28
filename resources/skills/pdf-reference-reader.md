@@ -1,6 +1,6 @@
 ---
 name: pdf-reference-reader
-description: Use when References/ PDFs, lab manuals, or templates cannot be read with read() and need markdown extraction for MAIN coordination or specialist reference lookup.
+description: Use when References/ PDFs, lab manuals, handouts, or templates cannot be read with read() and need markdown extraction via MinerU (mineru-open-api) into Outline/.cache/mineru/ for MAIN coordination or specialist reference lookup.
 ---
 
 # PDF Reference Reader (MAIN)

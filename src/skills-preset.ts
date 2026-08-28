@@ -1,12 +1,9 @@
 /**
  * Role-scoped installation of AutoReport's bundled domain instructions.
  *
- * Continuable children expose only the tool and system-prompt services during
- * their unpublished setup window.  A runtime `ctx.skills.register()` call is
- * therefore unavailable there and would either fail or leak into the host
- * scope.  Install the bundled skill bodies as child-scoped system-prompt
- * sections instead; this retains the role boundary and disposes with the
- * child, without widening the shared skill catalogue.
+ * MAIN registers catalog skills in the preset scope. Specialist children register
+ * permitted bundled skills as runtime entries on the child context so bodies are
+ * loaded on demand instead of bloating every REPORT system prompt.
  * @module autoreportdsh-skills
  */
 
@@ -22,7 +19,7 @@ export const inject = ['systemPrompt' as const]
 export type ReportSkillLanguage = 'latex' | 'typst'
 
 /** MAIN-only bundled skills registered in the preset scope. */
-export const MAIN_SKILL_NAMES: readonly string[] = ['pdf-reference-reader', 'mineru']
+export const MAIN_SKILL_NAMES: readonly string[] = ['pdf-reference-reader']
 
 /** Return the AutoReport-owned instruction names permitted to one specialist. */
 export function skillNamesForRole(role: SpecialistRole, language: ReportSkillLanguage): readonly string[] {
@@ -59,8 +56,8 @@ function registerBundledSkill(
 }
 
 /**
- * Register MAIN-only bundled skills (`pdf-reference-reader` and `mineru` alias)
- * in the preset scope where `ctx.skills.register` is available.
+ * Register MAIN-only bundled skills (`pdf-reference-reader`) in the preset scope
+ * where `ctx.skills.register` is available.
  * @param ctx - `autoreport-main` preset context.
  * @returns composite disposer for registered skills.
  */
@@ -101,7 +98,7 @@ export function registerMainSkills(ctx: Context): () => void {
  * @param ctx - unpublished specialist child context.
  * @param role - role recorded in the synchronous RoleRegistry.
  * @param language - frozen workflow report language.
- * @returns composite disposer for the child-scoped prompt sections.
+ * @returns composite disposer for the child-scoped skill registrations.
  */
 export function registerRoleSkills(
   ctx: Context,
@@ -110,11 +107,18 @@ export function registerRoleSkills(
 ): () => void {
   const available = new Map(loadBundledSkills().map(skill => [skill.name, skill]))
   const disposers: (() => void)[] = []
+  const registerSkill = ctx.skills?.register
   try {
     for (const name of skillNamesForRole(role, language)) {
       const skill = available.get(name)
       if (skill === undefined) throw new Error(`AutoReport bundled skill ${name} is missing for ${role}`)
-      disposers.push(ctx.systemPrompt.section(section(skill)))
+      if (registerSkill !== undefined) {
+        disposers.push(registerBundledSkill(skill, registerSkill))
+      } else {
+        // Temporary compatibility: unpublished child scopes without a skills service
+        // still receive full bodies as system-prompt sections until hosts expose skills.
+        disposers.push(ctx.systemPrompt.section(section(skill)))
+      }
     }
   } catch (error: unknown) {
     for (const dispose of disposers.reverse()) dispose()

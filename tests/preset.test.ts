@@ -36,6 +36,6 @@ describe('autoreport preset contribution', () => {
     apply(context)
 
     expect(tools.sort()).toEqual(['send_to_agent'])
-    expect(skills).toEqual(['pdf-reference-reader', 'mineru'])
+    expect(skills).toEqual(['pdf-reference-reader'])
   })
 })

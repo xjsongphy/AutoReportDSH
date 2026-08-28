@@ -29,15 +29,7 @@ export interface ManagedResource {
 }
 
 /** The entire current external-sync surface. Add entries here intentionally. */
-export const MANAGED_RESOURCES: readonly ManagedResource[] = [
-  {
-    id: 'mineru-skill',
-    owner: 'xjsongphy',
-    repository: 'skills',
-    remotePath: 'mineru/SKILL.md',
-    destination: 'resources/skills/mineru.md',
-  },
-]
+export const MANAGED_RESOURCES: readonly ManagedResource[] = []
 
 interface SyncedResourceState {
   readonly commit: string
@@ -148,9 +140,6 @@ function validateSkill(body: string, resource: ManagedResource): void {
   const frontmatter = /^---\r?\n[\s\S]*?\r?\n---\r?\n/u.exec(body)
   if (frontmatter === null || !/^name:\s*[a-z0-9]+(?:-[a-z0-9]+)*\s*$/mu.test(frontmatter[0]) || !/^description:\s*\S/mu.test(frontmatter[0])) {
     throw new Error(`AutoReport resource sync rejected ${resource.id}: expected valid SKILL.md frontmatter`)
-  }
-  if (resource.id === 'mineru-skill' && !/^name:\s*mineru\s*$/mu.test(frontmatter[0])) {
-    throw new Error('AutoReport resource sync rejected mineru-skill: upstream skill name must remain mineru')
   }
 }
 

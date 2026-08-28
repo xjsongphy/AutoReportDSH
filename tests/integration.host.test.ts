@@ -35,7 +35,6 @@ import * as reportRouterModule from '../src/tools/report-router.js'
 
 const CONFIG: Config = {
   defaultReportLanguage: 'latex',
-  defaultLatexEngine: 'latexmk',
   workspaceRoot: undefined,
   specialistModel: undefined,
   delegationWaitTimeoutMs: 600_000,
@@ -343,8 +342,8 @@ describe('integration: assembled host (real context)', () => {
     const reporter = makeChildRecorder('it-report')
     setup(reporter.ctx)
     expect(reporter.toolNames).toEqual(['report_workflow'])
-    expect(reporter.skillNames).toEqual([])
-    expect(reporter.sections.map(section => section.name)).toEqual(expect.arrayContaining([
+    expect(reporter.skillNames).toEqual(['experiment-report-writer', 'latex-compile'])
+    expect(reporter.sections.map(section => section.name)).not.toEqual(expect.arrayContaining([
       'autoreport:skill:experiment-report-writer',
       'autoreport:skill:latex-compile',
     ]))
@@ -359,7 +358,7 @@ describe('integration: assembled host (real context)', () => {
 
   it('initializes the workspace once with the frozen settings snapshot on the workflow event', async () => {
     const assembled = await assemble({ projectLanguage: 'typst' })
-    expect(assembled.presetSkillNames).toEqual(['pdf-reference-reader', 'mineru'])
+    expect(assembled.presetSkillNames).toEqual(['pdf-reference-reader'])
     admitFirstTurn(assembled)
     for (const dir of REQUIRED_DIRS) expect(existsSync(join(assembled.workspaceRoot, dir))).toBe(true)
     const meta = assembled.runtime.forSession(assembled.mainSession).state.projection().meta

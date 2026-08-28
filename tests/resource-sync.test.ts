@@ -46,50 +46,57 @@ function upstream(blobs: Record<string, string>, bodies: Record<string, string>)
 const skill = (name: string) => `---\nname: ${name}\ndescription: synced ${name}\n---\n\n# ${name}\n`
 
 describe('incremental external resource sync', () => {
+  it('returns an empty outcome list when no managed resources are configured', async () => {
+    const root = tempRoot()
+    await mkdir(join(root, 'resources'), { recursive: true })
+    await expect(syncManagedResources({ root, resources: [], fetchFn: async () => response('') }))
+      .resolves.toEqual([])
+  })
+
   it('downloads every managed file on its first sync and records commit/blob state', async () => {
     const root = tempRoot()
     await mkdir(join(root, 'resources'), { recursive: true })
-    const a = resource('mineru-skill', 'mineru/SKILL.md', 'resources/skills/mineru.md')
-    const b = resource('other-skill', 'other/SKILL.md', 'resources/skills/other.md')
+    const a = resource('alpha-skill', 'alpha/SKILL.md', 'resources/skills/alpha.md')
+    const b = resource('beta-skill', 'beta/SKILL.md', 'resources/skills/beta.md')
     const remote = upstream({ [a.remotePath]: 'blob-a1', [b.remotePath]: 'blob-b1' }, {
-      [a.remotePath]: skill('mineru'), [b.remotePath]: skill('other'),
+      [a.remotePath]: skill('alpha'), [b.remotePath]: skill('beta'),
     })
 
     await expect(syncManagedResources({ root, resources: [a, b], fetchFn: remote.fetchFn, now: () => new Date('2026-01-02T03:04:05Z') }))
-      .resolves.toMatchObject([{ id: 'mineru-skill', status: 'updated' }, { id: 'other-skill', status: 'updated' }])
+      .resolves.toMatchObject([{ id: 'alpha-skill', status: 'updated' }, { id: 'beta-skill', status: 'updated' }])
 
-    expect(readFileSync(join(root, 'resources/skills/mineru.md'), 'utf8')).toBe(skill('mineru'))
+    expect(readFileSync(join(root, 'resources/skills/alpha.md'), 'utf8')).toBe(skill('alpha'))
     const state = JSON.parse(readFileSync(join(root, 'resources/.sync-state.json'), 'utf8'))
-    expect(state.resources['mineru-skill']).toMatchObject({ commit: 'commit-2', blob: 'blob-a1' })
-    expect(state.resources['other-skill']).toMatchObject({ commit: 'commit-2', blob: 'blob-b1' })
+    expect(state.resources['alpha-skill']).toMatchObject({ commit: 'commit-2', blob: 'blob-a1' })
+    expect(state.resources['beta-skill']).toMatchObject({ commit: 'commit-2', blob: 'blob-b1' })
   })
 
   it('checks the remote tree but downloads only files whose blob changed', async () => {
     const root = tempRoot()
     await mkdir(join(root, 'resources/skills'), { recursive: true })
-    const a = resource('mineru-skill', 'mineru/SKILL.md', 'resources/skills/mineru.md')
-    const b = resource('other-skill', 'other/SKILL.md', 'resources/skills/other.md')
-    writeFileSync(join(root, 'resources/skills/mineru.md'), skill('mineru'))
-    writeFileSync(join(root, 'resources/skills/other.md'), skill('other'))
+    const a = resource('alpha-skill', 'alpha/SKILL.md', 'resources/skills/alpha.md')
+    const b = resource('beta-skill', 'beta/SKILL.md', 'resources/skills/beta.md')
+    writeFileSync(join(root, 'resources/skills/alpha.md'), skill('alpha'))
+    writeFileSync(join(root, 'resources/skills/beta.md'), skill('beta'))
     writeFileSync(join(root, 'resources/.sync-state.json'), JSON.stringify({
       schemaVersion: 1,
       resources: {
-        'mineru-skill': { commit: 'commit-1', blob: 'blob-a1', remotePath: a.remotePath, destination: a.destination, syncedAt: 'old' },
-        'other-skill': { commit: 'commit-1', blob: 'blob-b1', remotePath: b.remotePath, destination: b.destination, syncedAt: 'old' },
+        'alpha-skill': { commit: 'commit-1', blob: 'blob-a1', remotePath: a.remotePath, destination: a.destination, syncedAt: 'old' },
+        'beta-skill': { commit: 'commit-1', blob: 'blob-b1', remotePath: b.remotePath, destination: b.destination, syncedAt: 'old' },
       },
     }))
     const remote = upstream({ [a.remotePath]: 'blob-a2', [b.remotePath]: 'blob-b1' }, {
-      [a.remotePath]: skill('mineru'), [b.remotePath]: skill('other'),
+      [a.remotePath]: skill('alpha'), [b.remotePath]: skill('beta'),
     })
 
     const outcome = await syncManagedResources({ root, resources: [a, b], fetchFn: remote.fetchFn })
     expect(outcome.map(entry => entry.status)).toEqual(['updated', 'unchanged'])
     expect(remote.calls.filter(url => url.startsWith('https://raw.githubusercontent.com/'))).toEqual([
-      expect.stringContaining('/mineru/SKILL.md'),
+      expect.stringContaining('/alpha/SKILL.md'),
     ])
     const state = JSON.parse(readFileSync(join(root, 'resources/.sync-state.json'), 'utf8'))
-    expect(state.resources['mineru-skill'].blob).toBe('blob-a2')
-    expect(state.resources['other-skill'].blob).toBe('blob-b1')
+    expect(state.resources['alpha-skill'].blob).toBe('blob-a2')
+    expect(state.resources['beta-skill'].blob).toBe('blob-b1')
     const stateAfterDelta = readFileSync(join(root, 'resources/.sync-state.json'), 'utf8')
     await syncManagedResources({ root, resources: [a, b], fetchFn: remote.fetchFn, now: () => new Date('2027-01-01T00:00:00Z') })
     // A repeat against the exact same remote state is a pure check: neither
