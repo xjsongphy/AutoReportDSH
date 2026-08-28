@@ -29,10 +29,6 @@ jobs:
     name: ${{ matrix.name }} / locked Harness / test + build
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
-    env:
-      GIT_CONFIG_COUNT: 1
-      GIT_CONFIG_KEY_0: core.autocrlf
-      GIT_CONFIG_VALUE_0: false
     strategy:
       fail-fast: false
       matrix:
@@ -64,11 +60,12 @@ jobs:
 
       - name: Apply required DSH compatibility patches
         working-directory: deepseek-harness
+        shell: bash
         run: |
-          git -c core.autocrlf=false apply --ignore-cr-at-eol --check ../AutoReportDSH/patches/deepseek-harness-ignorable-append.patch
-          git -c core.autocrlf=false apply --ignore-cr-at-eol ../AutoReportDSH/patches/deepseek-harness-ignorable-append.patch
-          git -c core.autocrlf=false apply --ignore-cr-at-eol --check ../AutoReportDSH/patches/deepseek-harness-sandbox-workspace-root.patch
-          git -c core.autocrlf=false apply --ignore-cr-at-eol ../AutoReportDSH/patches/deepseek-harness-sandbox-workspace-root.patch
+          git apply --ignore-whitespace --check ../AutoReportDSH/patches/deepseek-harness-ignorable-append.patch
+          git apply --ignore-whitespace ../AutoReportDSH/patches/deepseek-harness-ignorable-append.patch
+          git apply --ignore-whitespace --check ../AutoReportDSH/patches/deepseek-harness-sandbox-workspace-root.patch
+          git apply --ignore-whitespace ../AutoReportDSH/patches/deepseek-harness-sandbox-workspace-root.patch
 
       - name: Set up pnpm
         uses: pnpm/action-setup@v4
