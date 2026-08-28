@@ -38,7 +38,6 @@ const CONFIG: Config = {
   workspaceRoot: undefined,
   specialistModel: undefined,
   delegationWaitTimeoutMs: 600_000,
-  executionTimeoutMs: 600_000,
 }
 
 const SIGNAL = new AbortController().signal

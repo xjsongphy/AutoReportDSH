@@ -16,7 +16,6 @@ const CONFIG: Config = {
   workspaceRoot: undefined,
   specialistModel: undefined,
   delegationWaitTimeoutMs: 600_000,
-  executionTimeoutMs: 600_000,
 }
 
 function childContext(id = 'child-1', cwd?: string) {

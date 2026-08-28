@@ -18,7 +18,6 @@ const CONFIG: Config = {
   workspaceRoot: undefined,
   specialistModel: undefined,
   delegationWaitTimeoutMs: 600_000,
-  executionTimeoutMs: 600_000,
 }
 
 function task(overrides: Partial<TaskSnapshot> = {}): TaskSnapshot {
@@ -347,7 +346,7 @@ describe('send_to_agent', () => {
     }
     workflow.commit(session, 'autoreport/task', task())
     workflow.commit(session, 'autoreport/workflow', workflowMeta(resolveWorkflowSettings({
-      override: { specialistModel: { provider: 'route-provider', model: 'route-model' }, executionTimeoutMs: 30 },
+      override: { specialistModel: { provider: 'route-provider', model: 'route-model' }, delegationWaitTimeoutMs: 30 },
     })))
     const startContinuable = vi.fn(async (spec: { childId?: SessionId; request?: { agentOptions?: unknown } }) => ({ childId: spec.childId, messageId: 'msg-snap' }))
     const tool = createSendToAgentTool({

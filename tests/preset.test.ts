@@ -27,7 +27,6 @@ describe('autoreport preset contribution', () => {
           workspaceRoot: undefined,
           specialistModel: undefined,
           delegationWaitTimeoutMs: 600_000,
-          executionTimeoutMs: 600_000,
         },
         forSession: () => ({ state: {} }),
       },

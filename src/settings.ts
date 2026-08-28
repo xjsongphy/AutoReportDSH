@@ -55,8 +55,6 @@ export interface AutoReportUserSettings {
   defaultReportLanguage: ReportLanguage
   /** Bounded wait for `send_to_agent({ wait: true })` (schema default ten minutes). */
   delegationWaitTimeoutMs: number
-  /** Deprecated alias equal to {@link delegationWaitTimeoutMs}. */
-  executionTimeoutMs?: number
   /** Optional specialist route; absent inherits the Main route. */
   specialistModel?: SpecialistRoute
   /** Optional absolute Python interpreter for specialist bash execution. */
@@ -80,7 +78,6 @@ export const AUTO_REPORT_USER_SETTINGS_SCHEMA: z<AutoReportUserSettings> = z.obj
   defaultReportLanguage: z.union(['latex', 'typst'] as const).default(WORKFLOW_SETTINGS_SCHEMA_DEFAULTS.reportLanguage),
   specialistModel: SPECIALIST_ROUTE_SCHEMA,
   delegationWaitTimeoutMs: z.number().default(WORKFLOW_SETTINGS_SCHEMA_DEFAULTS.delegationWaitTimeoutMs),
-  executionTimeoutMs: z.number(),
   pythonExecutable: z.string(),
 }) as unknown as z<AutoReportUserSettings>
 
@@ -88,8 +85,7 @@ export const AUTO_REPORT_USER_SETTINGS_SCHEMA: z<AutoReportUserSettings> = z.obj
 export function autoReportUserSettingsBase(config: Config): AutoReportUserSettings {
   return {
     defaultReportLanguage: config.defaultReportLanguage,
-    delegationWaitTimeoutMs: config.delegationWaitTimeoutMs ?? config.executionTimeoutMs,
-    executionTimeoutMs: config.executionTimeoutMs,
+    delegationWaitTimeoutMs: config.delegationWaitTimeoutMs,
     ...(config.specialistModel === undefined ? {} : { specialistModel: config.specialistModel }),
     ...(config.pythonExecutable === undefined ? {} : { pythonExecutable: config.pythonExecutable }),
   }
@@ -105,8 +101,6 @@ export interface AutoReportProjectSettings {
   reportLanguage?: ReportLanguage
   /** Workspace delegation-wait bound. */
   delegationWaitTimeoutMs?: number
-  /** Deprecated alias equal to {@link delegationWaitTimeoutMs}. */
-  executionTimeoutMs?: number
   /** Workspace specialist route; absent inherits lower layers. */
   specialistModel?: SpecialistRoute
   /** Workspace Python interpreter override. */
@@ -118,7 +112,6 @@ export const AUTO_REPORT_PROJECT_SETTINGS_SCHEMA: z<AutoReportProjectSettings> =
   reportLanguage: z.union(['latex', 'typst'] as const),
   specialistModel: SPECIALIST_ROUTE_SCHEMA,
   delegationWaitTimeoutMs: z.number(),
-  executionTimeoutMs: z.number(),
   pythonExecutable: z.string(),
 }) as unknown as z<AutoReportProjectSettings>
 
@@ -145,15 +138,13 @@ function compactSection<S extends Record<string, unknown>>(section: S): S {
 /** Composition-layer fields that act as plugin DEFAULTS (see {@link Config}). */
 export type WorkflowCompositionDefaults = Pick<
   Config,
-  'defaultReportLanguage' | 'specialistModel' | 'delegationWaitTimeoutMs' | 'executionTimeoutMs' | 'pythonExecutable'
+  'defaultReportLanguage' | 'specialistModel' | 'delegationWaitTimeoutMs' | 'pythonExecutable'
 >
 
 /** Explicit per-workflow inputs; highest layer, owned by the creating turn. */
 export interface WorkflowSettingsOverride {
   reportLanguage?: ReportLanguage
   delegationWaitTimeoutMs?: number
-  /** Deprecated alias equal to {@link delegationWaitTimeoutMs}. */
-  executionTimeoutMs?: number
   pythonExecutable?: string
   /**
    * Concrete `{ provider, model, reasoningEffort? }` route shorthand or the
@@ -184,8 +175,6 @@ export interface WorkflowSettingsSnapshot {
   readonly specialistModel: SpecialistModelSelection
   /** Bounded wait applied to delegation waits. */
   readonly delegationWaitTimeoutMs: number
-  /** Deprecated alias equal to {@link delegationWaitTimeoutMs}. */
-  readonly executionTimeoutMs: number
   /** Resolved Python interpreter when configured at any layer. */
   readonly pythonExecutable?: string
 }
@@ -277,13 +266,9 @@ export function resolveWorkflowSettings(layers: WorkflowSettingsLayers): Workflo
     'delegationWaitTimeoutMs',
     firstDefined(
       override?.delegationWaitTimeoutMs,
-      override?.executionTimeoutMs,
       project?.delegationWaitTimeoutMs,
-      project?.executionTimeoutMs,
       user?.delegationWaitTimeoutMs,
-      user?.executionTimeoutMs,
       composition?.delegationWaitTimeoutMs,
-      composition?.executionTimeoutMs,
     ),
   ) ?? WORKFLOW_SETTINGS_SCHEMA_DEFAULTS.delegationWaitTimeoutMs
   const pythonExecutable = firstDefined(
@@ -302,7 +287,6 @@ export function resolveWorkflowSettings(layers: WorkflowSettingsLayers): Workflo
     reportLanguage,
     specialistModel,
     delegationWaitTimeoutMs,
-    executionTimeoutMs: delegationWaitTimeoutMs,
     ...(pythonExecutable === undefined ? {} : { pythonExecutable }),
   })
 }

@@ -15,18 +15,14 @@ type RoutedWorkflow = Pick<AutoReportWorkflowRuntime, 'roleRegistry' | 'config' 
 
 /**
  * Install DSH's agent-scoped selection seam for a concrete specialist route.
- * The workflow snapshot wins; composition is a compatibility fallback for logs
- * written before snapshots existed. Main inheritance installs nothing, leaving
- * DSH's normal parent-route inheritance untouched.
+ * Only the frozen workflow snapshot is consulted. Main inheritance installs
+ * nothing, leaving DSH's normal parent-route inheritance untouched.
  */
 export function installSpecialistModelSelection(childCtx: Context, workflow: RoutedWorkflow): (() => void) | undefined {
   const child = childCtx.agent as Agent
-  const snapshot = workflow.workflowForChild(child.id)?.runtime.state.projection().meta?.settings
-  const selected = snapshot?.specialistModel
-  const route = selected === undefined
-    ? workflow.config.specialistModel
-    : selected.inheritMain ? undefined : selected
-  if (route === undefined) return undefined
+  const selected = workflow.workflowForChild(child.id)?.runtime.state.projection().meta?.settings?.specialistModel
+  if (selected === undefined || selected.inheritMain) return undefined
+  const route = selected
   const selection: ModelSelection = {
     provider: route.provider,
     model: route.model,

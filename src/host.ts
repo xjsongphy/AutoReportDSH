@@ -27,7 +27,6 @@ const DEFAULT_CONFIG: Config = {
   workspaceRoot: undefined,
   specialistModel: undefined,
   delegationWaitTimeoutMs: DEFAULT_WAIT_MS,
-  executionTimeoutMs: DEFAULT_WAIT_MS,
 }
 
 /**
@@ -35,15 +34,11 @@ const DEFAULT_CONFIG: Config = {
  * @param raw - overlay/row config.
  */
 export function resolveHostConfig(raw: Partial<Config> = {}): Config {
-  const wait = raw.delegationWaitTimeoutMs
-    ?? raw.executionTimeoutMs
-    ?? DEFAULT_WAIT_MS
   return {
     defaultReportLanguage: raw.defaultReportLanguage ?? DEFAULT_CONFIG.defaultReportLanguage,
     workspaceRoot: raw.workspaceRoot ?? DEFAULT_CONFIG.workspaceRoot,
     specialistModel: raw.specialistModel ?? DEFAULT_CONFIG.specialistModel,
-    delegationWaitTimeoutMs: wait,
-    executionTimeoutMs: wait,
+    delegationWaitTimeoutMs: raw.delegationWaitTimeoutMs ?? DEFAULT_WAIT_MS,
     ...(raw.pythonExecutable === undefined ? {} : { pythonExecutable: raw.pythonExecutable }),
   }
 }
@@ -79,10 +74,6 @@ export function apply(ctx: Context, config: Partial<Config> = {}, options: Runti
     ownsSession: session => runtime.ownsSession(session),
     snapshotPythonExecutable: session =>
       runtime.projectionFor(String(session.id))?.meta?.settings?.pythonExecutable,
-    hasWorkflowSnapshot: session =>
-      runtime.projectionFor(String(session.id))?.meta?.initialized === true,
-    fallbackPythonExecutable: () =>
-      runtime.currentUserSettings().pythonExecutable ?? runtime.config.pythonExecutable,
   })
   const commands = ctx.get('commands')
   if (commands !== undefined) {

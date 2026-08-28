@@ -15,12 +15,8 @@ import type { ToolExecution } from '@deepseek-ai/dsh-tools'
 /** Session ownership and frozen workflow settings for Python shell-env resolution. */
 export interface AutoReportPythonEnvDeps {
   ownsSession(session: Session): boolean
-  /** Frozen workflow snapshot python, or undefined when this session has no snapshot. */
+  /** Frozen workflow snapshot python, or undefined when unset or not yet snapshotted. */
   snapshotPythonExecutable(session: Session): string | undefined
-  /** Whether a durable workflow snapshot exists (initialized), even when python is unset. */
-  hasWorkflowSnapshot(session: Session): boolean
-  /** Compatibility fallback used ONLY when no workflow snapshot exists yet. */
-  fallbackPythonExecutable(): string | undefined
 }
 
 /**
@@ -63,11 +59,6 @@ export function installAutoReportPythonEnv(
 function resolvePythonExecutable(deps: AutoReportPythonEnvDeps, session: Session): string {
   const fromSnapshot = deps.snapshotPythonExecutable(session)
   if (fromSnapshot !== undefined && fromSnapshot.length > 0) return fromSnapshot
-
-  if (!deps.hasWorkflowSnapshot(session)) {
-    const fromFallback = deps.fallbackPythonExecutable()
-    if (fromFallback !== undefined && fromFallback.length > 0) return fromFallback
-  }
 
   const fromEnv = process.env.DSH_AUTOREPORT_PYTHON
   if (fromEnv !== undefined && fromEnv.length > 0) return fromEnv

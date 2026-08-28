@@ -26,7 +26,6 @@ const CONFIG: Config = {
   workspaceRoot: undefined,
   specialistModel: undefined,
   delegationWaitTimeoutMs: 600_000,
-  executionTimeoutMs: 600_000,
 }
 
 /** Minimal persistent settings provider proving the out-of-tree namespace seam. */
@@ -106,7 +105,6 @@ describe('host workflow runtime', () => {
       reportLanguage: 'typst',
       specialistModel: { inheritMain: false, provider: 'specialist', model: 'reasoning-model', reasoningEffort: 'high' },
       delegationWaitTimeoutMs: 12_345,
-      executionTimeoutMs: 12_345,
     })
   })
 

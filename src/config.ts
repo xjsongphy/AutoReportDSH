@@ -40,12 +40,7 @@ export interface Config {
   /** Default fixed model route for every specialist child; absent inherits Main. */
   specialistModel: SpecialistRoute | undefined
   /** Default bounded wait for `send_to_agent({ wait: true })` (default ten minutes). */
-  delegationWaitTimeoutMs?: number
-  /**
-   * Deprecated alias equal to {@link delegationWaitTimeoutMs} when set; host
-   * plane still reads this field until send-to-agent switches.
-   */
-  executionTimeoutMs: number
+  delegationWaitTimeoutMs: number
   /** Optional absolute Python interpreter path for specialist bash execution. */
   pythonExecutable?: string
 }
@@ -58,7 +53,6 @@ export const Config: z<Config> = z.object({
     model: z.string(),
     reasoningEffort: z.string(),
   }),
-  delegationWaitTimeoutMs: z.number(),
-  executionTimeoutMs: z.number().default(600_000),
+  delegationWaitTimeoutMs: z.number().default(600_000),
   pythonExecutable: z.string(),
 }) as unknown as z<Config>

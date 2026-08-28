@@ -33,7 +33,6 @@ const COMPOSITION = {
   defaultReportLanguage: 'latex',
   specialistModel: { provider: 'comp-provider', model: 'comp-model' },
   delegationWaitTimeoutMs: 1000,
-  executionTimeoutMs: 1000,
   pythonExecutable: '/comp/python',
 } as const
 
@@ -41,7 +40,6 @@ const USER = {
   defaultReportLanguage: 'typst',
   specialistModel: { provider: 'user-provider', model: 'user-model', reasoningEffort: 'high' },
   delegationWaitTimeoutMs: 2000,
-  executionTimeoutMs: 2000,
   pythonExecutable: '/user/python',
 } as const
 
@@ -49,7 +47,6 @@ const PROJECT = {
   reportLanguage: 'latex',
   specialistModel: { provider: 'project-provider', model: 'project-model' },
   delegationWaitTimeoutMs: 3000,
-  executionTimeoutMs: 3000,
   pythonExecutable: '/project/python',
 } as const
 
@@ -57,7 +54,6 @@ const OVERRIDE = {
   reportLanguage: 'typst',
   specialistModel: { inheritMain: true },
   delegationWaitTimeoutMs: 4000,
-  executionTimeoutMs: 4000,
   pythonExecutable: '/override/python',
 } as const
 
@@ -67,7 +63,6 @@ describe('resolveWorkflowSettings precedence', () => {
       reportLanguage: 'latex',
       specialistModel: { inheritMain: true },
       delegationWaitTimeoutMs: 600_000,
-      executionTimeoutMs: 600_000,
     })
     expect(WORKFLOW_SETTINGS_SCHEMA_DEFAULTS).toMatchObject({ reportLanguage: 'latex', delegationWaitTimeoutMs: 600_000 })
   })
@@ -77,21 +72,18 @@ describe('resolveWorkflowSettings precedence', () => {
       reportLanguage: 'latex',
       specialistModel: { inheritMain: false, provider: 'comp-provider', model: 'comp-model' },
       delegationWaitTimeoutMs: 1000,
-      executionTimeoutMs: 1000,
       pythonExecutable: '/comp/python',
     })
     expect(resolveWorkflowSettings({ user: USER })).toEqual({
       reportLanguage: 'typst',
       specialistModel: { inheritMain: false, provider: 'user-provider', model: 'user-model', reasoningEffort: 'high' },
       delegationWaitTimeoutMs: 2000,
-      executionTimeoutMs: 2000,
       pythonExecutable: '/user/python',
     })
     expect(resolveWorkflowSettings({ project: PROJECT })).toEqual({
       reportLanguage: 'latex',
       specialistModel: { inheritMain: false, provider: 'project-provider', model: 'project-model' },
       delegationWaitTimeoutMs: 3000,
-      executionTimeoutMs: 3000,
       pythonExecutable: '/project/python',
     })
   })
@@ -101,7 +93,6 @@ describe('resolveWorkflowSettings precedence', () => {
     expect(resolveWorkflowSettings(all)).toMatchObject({
       reportLanguage: 'typst',
       delegationWaitTimeoutMs: 4000,
-      executionTimeoutMs: 4000,
       pythonExecutable: '/override/python',
       specialistModel: { inheritMain: true },
     })
@@ -109,7 +100,6 @@ describe('resolveWorkflowSettings precedence', () => {
     expect(resolveWorkflowSettings(withoutOverride)).toMatchObject({
       reportLanguage: 'latex',
       delegationWaitTimeoutMs: 3000,
-      executionTimeoutMs: 3000,
       pythonExecutable: '/project/python',
       specialistModel: { provider: 'project-provider' },
     })
@@ -117,7 +107,6 @@ describe('resolveWorkflowSettings precedence', () => {
     expect(resolveWorkflowSettings(withoutProject)).toMatchObject({
       reportLanguage: 'typst',
       delegationWaitTimeoutMs: 2000,
-      executionTimeoutMs: 2000,
       pythonExecutable: '/user/python',
       specialistModel: { provider: 'user-provider', reasoningEffort: 'high' },
     })
@@ -125,7 +114,6 @@ describe('resolveWorkflowSettings precedence', () => {
     expect(resolveWorkflowSettings(withoutUser)).toMatchObject({
       reportLanguage: 'latex',
       delegationWaitTimeoutMs: 1000,
-      executionTimeoutMs: 1000,
       pythonExecutable: '/comp/python',
       specialistModel: { provider: 'comp-provider' },
     })
@@ -142,14 +130,8 @@ describe('resolveWorkflowSettings precedence', () => {
       reportLanguage: 'typst',
       specialistModel: { inheritMain: false, provider: 'comp-provider', model: 'comp-model' },
       delegationWaitTimeoutMs: 42,
-      executionTimeoutMs: 42,
       pythonExecutable: '/override/python',
     })
-  })
-
-  it('accepts deprecated executionTimeoutMs alias in override layers', () => {
-    expect(resolveWorkflowSettings({ override: { executionTimeoutMs: 77 } }).delegationWaitTimeoutMs).toBe(77)
-    expect(resolveWorkflowSettings({ override: { executionTimeoutMs: 77 } }).executionTimeoutMs).toBe(77)
   })
 
   it('accepts a plain route shorthand on the override and fails loud on garbage', () => {
@@ -170,7 +152,6 @@ describe('specialist model resolution representation', () => {
     expect(resolveWorkflowSettings({}).specialistModel).toEqual({ inheritMain: true })
     expect(resolveWorkflowSettings({
       composition: { ...COMPOSITION, specialistModel: undefined },
-      project: { executionTimeoutMs: 1 },
     }).specialistModel).toEqual({ inheritMain: true })
   })
 
@@ -204,7 +185,6 @@ describe('snapshot immutability', () => {
 
     expect(resolved.reportLanguage).toBe('latex')
     expect(resolved.delegationWaitTimeoutMs).toBe(3000)
-    expect(resolved.executionTimeoutMs).toBe(3000)
     expect(resolved.specialistModel).toEqual({ inheritMain: false, provider: 'project-provider', model: 'project-model' })
   })
 })

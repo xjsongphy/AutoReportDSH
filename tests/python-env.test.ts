@@ -44,8 +44,6 @@ function baseDeps(overrides: Partial<AutoReportPythonEnvDeps> = {}): AutoReportP
   return {
     ownsSession: () => false,
     snapshotPythonExecutable: () => undefined,
-    hasWorkflowSnapshot: () => false,
-    fallbackPythonExecutable: () => undefined,
     ...overrides,
   }
 }
@@ -63,7 +61,6 @@ describe('installAutoReportPythonEnv', () => {
     installAutoReportPythonEnv(ctx, baseDeps({
       ownsSession: s => s.id === session.id,
       snapshotPythonExecutable: () => '/opt/venv/bin/python3',
-      hasWorkflowSnapshot: () => true,
     }))
     expect(resolve(makeExecution(session))).toEqual({
       DSH_AUTOREPORT_PYTHON: '/opt/venv/bin/python3',
@@ -77,7 +74,6 @@ describe('installAutoReportPythonEnv', () => {
     const stock = makeSession('stock', '/tmp/workspace')
     installAutoReportPythonEnv(ctx, baseDeps({
       ownsSession: () => false,
-      fallbackPythonExecutable: () => '/opt/venv/bin/python3',
     }))
     expect(resolve(makeExecution(stock))).toEqual({})
   })
@@ -88,52 +84,17 @@ describe('installAutoReportPythonEnv', () => {
     installAutoReportPythonEnv(ctx, baseDeps({
       ownsSession: () => true,
       snapshotPythonExecutable: () => '/opt/venv/bin/python3',
-      hasWorkflowSnapshot: () => true,
     }))
     expect(resolve(makeExecution())).toEqual({})
   })
 
-  it('prefers the frozen snapshot path over the compatibility fallback', () => {
-    const ctx = {} as Context
-    const resolve = registerResolver(ctx)
-    const session = makeSession('owned')
-    installAutoReportPythonEnv(ctx, baseDeps({
-      ownsSession: s => s.id === session.id,
-      snapshotPythonExecutable: () => '/opt/B/bin/python',
-      hasWorkflowSnapshot: () => true,
-      fallbackPythonExecutable: () => '/opt/A/bin/python',
-    }))
-    expect(resolve(makeExecution(session))).toEqual({
-      DSH_AUTOREPORT_PYTHON: '/opt/B/bin/python',
-      DSH_AUTOREPORT_PYTHON_BIN: '/opt/B/bin',
-    })
-  })
-
-  it('uses the fallback only when no workflow snapshot exists yet', () => {
+  it('uses python3 when the snapshot has no pythonExecutable', () => {
     const ctx = {} as Context
     const resolve = registerResolver(ctx)
     const session = makeSession('owned')
     installAutoReportPythonEnv(ctx, baseDeps({
       ownsSession: s => s.id === session.id,
       snapshotPythonExecutable: () => undefined,
-      hasWorkflowSnapshot: () => false,
-      fallbackPythonExecutable: () => '/opt/A/bin/python',
-    }))
-    expect(resolve(makeExecution(session))).toEqual({
-      DSH_AUTOREPORT_PYTHON: '/opt/A/bin/python',
-      DSH_AUTOREPORT_PYTHON_BIN: '/opt/A/bin',
-    })
-  })
-
-  it('does not use the fallback when a snapshot exists without pythonExecutable', () => {
-    const ctx = {} as Context
-    const resolve = registerResolver(ctx)
-    const session = makeSession('owned')
-    installAutoReportPythonEnv(ctx, baseDeps({
-      ownsSession: s => s.id === session.id,
-      snapshotPythonExecutable: () => undefined,
-      hasWorkflowSnapshot: () => true,
-      fallbackPythonExecutable: () => '/python/A',
     }))
     expect(resolve(makeExecution(session))).toEqual({
       DSH_AUTOREPORT_PYTHON: 'python3',
@@ -147,7 +108,6 @@ describe('installAutoReportPythonEnv', () => {
     installAutoReportPythonEnv(ctx, baseDeps({
       ownsSession: s => s.id === session.id,
       snapshotPythonExecutable: () => undefined,
-      hasWorkflowSnapshot: () => true,
     }))
     expect(resolve(makeExecution(session))).toEqual({
       DSH_AUTOREPORT_PYTHON: 'python3',

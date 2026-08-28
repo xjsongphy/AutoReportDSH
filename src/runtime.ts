@@ -40,7 +40,6 @@ const DEFAULT_CONFIG: Config = {
   workspaceRoot: undefined,
   specialistModel: undefined,
   delegationWaitTimeoutMs: DEFAULT_WAIT_MS,
-  executionTimeoutMs: DEFAULT_WAIT_MS,
 }
 
 /** Per-parent live synchronization state. Durable facts remain in the Session log. */
