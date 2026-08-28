@@ -87,6 +87,30 @@ describe('foldArtifact', () => {
     })
   })
 
+  it('marks filesystem edits of existing files as modified', () => {
+    const root = mkdtempSync(join(tmpdir(), 'autoreport-fs-edit-'))
+    mkdirSync(join(root, 'Report'), { recursive: true })
+    writeFileSync(join(root, 'Report', 'main.tex'), '\\documentclass{article}')
+    const state = emptyArtifactFoldState()
+    const committed: ArtifactSnapshot[] = []
+    const deps = {
+      sessionId: 'child-report',
+      currentDelegationKey: () => ({ taskId: 'task-9', key: 'task-9#1' }),
+      commit: (_sessionId: string, snapshot: ArtifactSnapshot) => committed.push(snapshot),
+    }
+    const reportCaller: ArtifactCaller = { role: 'REPORT', workspaceRoot: root }
+    const call = callEvent('edit', { file_path: join(root, 'Report', 'main.tex') })
+    foldArtifact(call, reportCaller, state, deps)
+    foldArtifact(resultEvent((call as unknown as { seq: number }).seq, false), reportCaller, state, deps)
+    expect(committed).toHaveLength(1)
+    expect(committed[0]).toMatchObject({
+      path: 'Report/main.tex',
+      origin: 'fs-tool',
+      status: 'modified',
+      producedBy: 'REPORT',
+    })
+  })
+
   it('commits one artifact for a successful write with workspace-relative path and attempt keys', () => {
     const state = emptyArtifactFoldState()
     const committed: ArtifactSnapshot[] = []

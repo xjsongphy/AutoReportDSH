@@ -2,7 +2,10 @@ import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import type { Context } from '@deepseek-ai/cordis'
+import { Context } from '@deepseek-ai/cordis'
+import SkillRegistry from '@deepseek-ai/dsh-skill'
+import type { Config } from '../src/config.js'
+import { apply as applyHost } from '../src/host.js'
 import {
   installReferencesSkills,
   REFERENCES_SKILL_PROVIDER,
@@ -137,5 +140,29 @@ describe('installReferencesSkills', () => {
     const [candidate] = await provider!.list({ cwd: experiment })
     const loaded = await provider!.get(candidate)
     expect(loaded?.content).toContain('# foo')
+  })
+})
+
+describe('References/skills coexistence', () => {
+  const hostConfig: Config = {
+    defaultReportLanguage: 'latex',
+    workspaceRoot: undefined,
+    specialistModel: undefined,
+    delegationWaitTimeoutMs: 600_000,
+  }
+
+  it('does not publish References/skills into the host catalog used by stock sessions', async () => {
+    const experiment = tempExperiment()
+    const skillsDir = join(experiment, 'References', 'skills')
+    mkdirSync(skillsDir, { recursive: true })
+    writeFileSync(join(skillsDir, 'foo.md'), skillMd('foo', 'Must stay AutoReport-scoped'))
+    const home = tempExperiment()
+    const ctx = new Context()
+    await ctx.plugin(SkillRegistry)
+    ctx.provide('tools', { guard: () => () => {} } as never)
+    applyHost(ctx, { ...hostConfig, workspaceRoot: experiment }, { settingsHome: home })
+    const listed = await ctx.skills.list({ cwd: experiment })
+    expect(listed.map(skill => skill.name)).not.toContain('foo')
+    expect(listed.some(skill => skill.provider === REFERENCES_SKILL_PROVIDER)).toBe(false)
   })
 })

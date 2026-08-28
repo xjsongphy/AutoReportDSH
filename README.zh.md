@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Linux-3f7ecb?style=flat-square" alt="支持 macOS 和 Linux" />
+  <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-3f7ecb?style=flat-square" alt="支持 macOS、Linux 和 Windows" />
   <img src="https://img.shields.io/badge/runtime-Node%2022.19%2B-339933?style=flat-square" alt="Node.js 22.19 或更高版本" />
   <img src="https://img.shields.io/badge/DeepSeek%20Harness-plugin-3366cc?style=flat-square" alt="DeepSeek Harness 插件" />
   <img src="https://img.shields.io/badge/report-LaTeX%20%7C%20Typst-7560c8?style=flat-square" alt="支持 LaTeX 与 Typst" />
@@ -58,34 +58,49 @@ autoreport-main    AutoReport 物理实验报告工作流
 
 只有有效 preset 为 `autoreport-main` 的顶层 session 才会进入 AutoReport runtime。普通 session 保留原有 shell、文件权限、子 agent report 工具和工作目录行为；这一共存约束已有集成测试。
 
+## 安装
+
+**现在：** 从源码安装（本节）。这是当前唯一支持的方式。
+
+**以后：** 包发布到 npm 后，用 `dsh plugin add` 安装。命令见 [计划中的 npm / DSH bundle 发布方式](#计划中的-npm--dsh-bundle-发布方式)，**现在还不能用**。
+
 ## 从源码运行
 
-这是当前支持的安装方式。两个仓库需要是相邻目录，因为开发版依赖本地 `deepseek-harness` checkout。
+两个仓库必须是相邻目录：开发版 `package.json` 用 `link:` 指向本地 harness checkout。
 
 ### 前置条件
 
 - Node.js `22.19+` 或 `24+`
 - 启用 Corepack 的 pnpm
-- 本地 DeepSeek Harness checkout，且版本与 [docs/dependencies.md](docs/dependencies.md) 中记录的版本兼容
+- 本地 DeepSeek Harness checkout，版本为 [docs/dependencies.md](docs/dependencies.md) 中的 pin，并已打上 `patches/` 里的两份补丁
 - DSH 原生 bash 与 workspace-write 沙箱（macOS Seatbelt、Linux bwrap/Landlock、Windows ACL）
 
-### 1. 获取并构建 DeepSeek Harness
+### 1. 将两个仓库克隆为相邻目录
 
 ```sh
 cd /path/to/your/development-directory
 
 git clone https://github.com/deepseek-ai/deepseek-harness.git deepseek-harness
-# 将本仓库克隆或放置为相邻目录 AutoReportDSH。
+git clone https://github.com/xjsongphy/AutoReportDSH.git AutoReportDSH
+```
 
+### 2. 给 DeepSeek Harness 打补丁并构建
+
+在 DSH 自身发布 `Session.append(..., { ignorable: true })` 和逐会话 `sandbox/workspace-root` 之前，打上与 CI 相同的补丁（见 [docs/dependencies.md](docs/dependencies.md)）：
+
+```sh
 cd deepseek-harness
+git checkout <docs/dependencies.md 中的 DSH_REF>
+git apply ../AutoReportDSH/patches/deepseek-harness-ignorable-append.patch
+git apply ../AutoReportDSH/patches/deepseek-harness-sandbox-workspace-root.patch
 corepack enable
 pnpm install
 pnpm run build
 ```
 
-> AutoReportDSH 目前需要 DSH 的 `Session.append(type, data, { ignorable: true })` 写入 API。正式发布前请使用 [docs/dependencies.md](docs/dependencies.md) 说明的兼容本地 checkout；发布版会将其约束到相应的 DSH 版本范围。
+PATH 上已有的 `@deepseek-ai/dsh` 全局 CLI **不能**代替这份打过补丁的 checkout，直到上述 API 进入已发布的 DSH 版本。
 
-### 2. 安装、测试并构建 AutoReportDSH
+### 3. 安装、测试并构建 AutoReportDSH
 
 ```sh
 cd ../AutoReportDSH
@@ -99,15 +114,9 @@ pnpm run build
 
 ### 刷新外部维护的 skill
 
-运行时不会拉取资源。需要显式刷新外部维护的 MinerU skill 时，运行：
+运行时不会拉取资源。`pnpm run sync:resources` 只下载 `scripts/sync-resources.ts` 里 `MANAGED_RESOURCES` 列出的文件。该列表目前为空；捆绑 skill 在本仓库的 `resources/skills/`。
 
-```sh
-pnpm run sync:resources
-```
-
-脚本查询上游 Git tree，并在 `resources/.sync-state.json` 记录 commit/blob 状态。只有 blob 变化（或本地文件缺失）的受管文件会下载；未变化文件不会重复下载。目前受管集合为 `xjsongphy/skills:mineru/SKILL.md` → `resources/skills/mineru.md`。
-
-### 3. 安装 AutoReport preset
+### 4. 安装 AutoReport preset
 
 ```sh
 pnpm run install:preset
@@ -116,10 +125,10 @@ pnpm run install:preset
 该命令会写入渲染后的 user preset：
 
 ```text
-$DSH_HOME/.agent-presets/autoreport-main/
+$DSH_HOME/.agent-presets/autoreport-main/   # 默认 home 是 ~/.dsh
 ```
 
-把本包装到 `$DSH_HOME/profiles/node_modules/autoreportdsh`（供 Web 加载设置卡片），并在本仓库生成 `cordis.overlay.generated.yml`。命令可重复运行：会更新 AutoReport 自己管理的 preset 文件，并保留 user preset 目录下无关的用户文件。
+把本包装到 `$DSH_HOME/profiles/node_modules/autoreportdsh`（供 Web 加载设置卡片），并在本仓库生成 `cordis.overlay.generated.yml`。安装器会覆盖 AutoReport 自己管理的 preset 文件，并保留该目录下无关的用户文件。若要彻底替换过期安装，先删除 `$DSH_HOME/.agent-presets/autoreport-main/` 再重跑。
 
 使用隔离的 harness home：
 
@@ -128,7 +137,11 @@ DSH_HOME=/tmp/autoreport-dsh-home \
   pnpm run install:preset -- --home "$DSH_HOME"
 ```
 
-### 4. 使用 overlay 启动本地 harness
+直接运行 `dsh web` **不会**加载 AutoReport。overlay 不在 stock 的 web/headless profile 里，每次启动都要带 `--patch`。
+
+### 5. 使用 overlay 启动本地 harness
+
+启动**打过补丁的 sibling** harness（在上述两个 API 进入 DSH 发布版之前必须如此）：
 
 ```sh
 cd ../deepseek-harness
@@ -139,6 +152,12 @@ pnpm dsh web \
 ```
 
 访问 `http://127.0.0.1:3081`，新建 session 后选择 **`autoreport-main`**。报告工作流默认值在 **设置 → 插件 → 插件配置 → AutoReport**。若已有 DSH Web 服务占用默认的 `3080` 端口，请使用其他端口。
+
+若 PATH 上已有全局 `dsh`（`npm i -g @deepseek-ai/dsh`），同一 `--patch` 只有在该 CLI 已包含上述两个 API 时才能用。在此之前请用 sibling checkout 里的 `pnpm dsh`，不要用全局二进制：
+
+```sh
+dsh web --port 3081 --patch /absolute/path/to/AutoReportDSH/cordis.overlay.generated.yml
+```
 
 单次 headless 运行：
 
@@ -240,22 +259,27 @@ pnpm vitest run tests/e2e/configured-route.e2e.test.ts
 
 ### GitHub Actions CI
 
-[`.github/workflows/ci.yml`](.github/workflows/ci.yml) 在 PR 和 `main` push 时分别于 Linux、macOS 运行。此开发预览包故意使用 sibling Harness 的 `link:` 依赖，因此 CI 会 checkout [docs/dependencies.md](docs/dependencies.md) 固定的 Harness、先构建 Harness，再执行 immutable install、keyless tests、typecheck 和 build。真实 API 测试仍为 opt-in；该 workflow 不接收凭证。
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml) 在 PR 和 `main` push 时分别于 Linux、macOS、Windows 运行。此开发预览包故意使用 sibling Harness 的 `link:` 依赖，因此 CI 会 checkout [docs/dependencies.md](docs/dependencies.md) 固定的 Harness、打上 `patches/` 中的两份补丁、先构建 Harness，再执行 immutable install、keyless tests、typecheck 和 build。真实 API 测试仍为 opt-in；该 workflow 不接收凭证。
 
 ## 计划中的 npm / DSH bundle 发布方式
 
-以下是**正式发布后**的预期流程，目前不要执行。只有当 AutoReportDSH 发布为 npm DSH bundle，且所需 DSH append API 已进入发布版本范围后，这些命令才可用：
+**现在不要执行这些命令。** AutoReportDSH 尚未发布到 npm，也没有正式的 DSH bundle，因此 `dsh plugin add` 装不上。
+
+等包发布**并且**某个 DSH 发布版包含所需的 append 与 sandbox API 之后，预期的用户安装方式是：
 
 ```sh
-# 计划中：将已发布 bundle 安装到 web profile。
-npx @deepseek-ai/dsh plugin --profile web add @xjsongphy/autoreportdsh
+# 把已发布 bundle 装进 web profile（npm 包名以发布时为准）。
+dsh plugin --profile web add @xjsongphy/autoreportdsh
 
-# 计划中：从 profile 中安装的包生成 user preset。
+# 从该 profile 里已安装的包生成 user preset。
 npx @xjsongphy/autoreportdsh setup --profile web
 
 # 正常启动 DSH；需要报告时选择 autoreport-main。
-npx @deepseek-ai/dsh web
+# overlay 进入 profile 层之后不再需要 --patch。
+dsh web
 ```
+
+在此之前请留在 [从源码运行](#从源码运行)：sibling checkout、补丁、`pnpm run build`、`pnpm run install:preset`，以及 `pnpm dsh … --patch ./cordis.overlay.generated.yml`。
 
 正式包将包含预构建 `dist/`、DSH bundle manifest、host/router patch 和 setup executable；会改用带版本范围的 DSH peer dependencies，而不是当前源码开发时的本地 `link:` 依赖。也可能支持：
 

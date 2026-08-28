@@ -27,8 +27,8 @@ export const MAX_SPECIALIST_STEERS = 2
 /** Maximum MAIN steers per session turn. */
 export const MAX_MAIN_STEERS = 1
 
-/** Blocked-task keys already surfaced to MAIN (`taskId#revision`). */
-const acknowledgedBlockedKeys = new Set<string>()
+/** Blocked-task keys already surfaced, isolated per Main session. */
+const acknowledgedBlockedKeysByMain = new Map<string, Set<string>>()
 
 function blockedTaskKey(taskId: string, revision: number): string {
   return `${taskId}#${revision}`
@@ -42,38 +42,55 @@ function blockedKeysFromProjection(projection: WorkflowProjection): Set<string> 
   return keys
 }
 
-/**
- * Blocked keys in `projection` not yet acknowledged for MAIN steering.
- * @param projection - workflow fold for the Main session.
- * @returns keys that would trigger a new MAIN steer.
- */
-export function newlyBlockedTaskKeys(projection: WorkflowProjection | undefined): string[] {
-  if (projection === undefined) return []
-  const keys: string[] = []
-  for (const task of projection.tasks.values()) {
-    if (task.status !== 'blocked') continue
-    const key = blockedTaskKey(task.taskId, task.revision)
-    if (!acknowledgedBlockedKeys.has(key)) keys.push(key)
+function acknowledgedSet(sessionId: string): Set<string> {
+  let keys = acknowledgedBlockedKeysByMain.get(sessionId)
+  if (keys === undefined) {
+    keys = new Set()
+    acknowledgedBlockedKeysByMain.set(sessionId, keys)
   }
   return keys
 }
 
 /**
- * Acknowledge currently blocked keys and drop stale entries no longer blocked.
- * @param projection - workflow fold for the Main session.
+ * Blocked keys in `projection` not yet acknowledged for this Main session.
+ * @param sessionId - Main session id owning the workflow.
+ * @param projection - workflow fold for that Main session.
+ * @returns keys that would trigger a new MAIN steer.
  */
-export function acknowledgeCurrentBlockedKeys(projection: WorkflowProjection | undefined): void {
-  if (projection === undefined) return
-  const current = blockedKeysFromProjection(projection)
-  for (const key of acknowledgedBlockedKeys) {
-    if (!current.has(key)) acknowledgedBlockedKeys.delete(key)
+export function newlyBlockedTaskKeys(sessionId: string, projection: WorkflowProjection | undefined): string[] {
+  if (projection === undefined) return []
+  const acknowledged = acknowledgedBlockedKeysByMain.get(sessionId) ?? new Set<string>()
+  const keys: string[] = []
+  for (const task of projection.tasks.values()) {
+    if (task.status !== 'blocked') continue
+    const key = blockedTaskKey(task.taskId, task.revision)
+    if (!acknowledged.has(key)) keys.push(key)
   }
-  for (const key of current) acknowledgedBlockedKeys.add(key)
+  return keys
+}
+
+/**
+ * Acknowledge currently blocked keys for one Main session and drop stale
+ * entries no longer blocked in that session's projection.
+ * @param sessionId - Main session id owning the workflow.
+ * @param projection - workflow fold for that Main session.
+ */
+export function acknowledgeCurrentBlockedKeys(sessionId: string, projection: WorkflowProjection | undefined): void {
+  if (projection === undefined) {
+    acknowledgedBlockedKeysByMain.delete(sessionId)
+    return
+  }
+  const current = blockedKeysFromProjection(projection)
+  const acknowledged = acknowledgedSet(sessionId)
+  for (const key of [...acknowledged]) {
+    if (!current.has(key)) acknowledged.delete(key)
+  }
+  for (const key of current) acknowledged.add(key)
 }
 
 /** Clear acknowledged blocked keys (test isolation). */
 export function resetAcknowledgedBlockedKeys(): void {
-  acknowledgedBlockedKeys.clear()
+  acknowledgedBlockedKeysByMain.clear()
 }
 
 function activeDelegationForChild(
@@ -145,25 +162,34 @@ export interface TurnGuardDependencies {
  * @returns disposer removing the listener.
  */
 export function installTurnGuards(ctx: Context, deps: TurnGuardDependencies): () => void {
-  const steerCounts = new Map<string, number>()
+  const steerState = new Map<string, { turn: number; count: number }>()
+
+  const steerCountFor = (sessionId: string, turn: number): number => {
+    const current = steerState.get(sessionId)
+    if (current === undefined || current.turn !== turn) return 0
+    return current.count
+  }
+
+  const bumpSteer = (sessionId: string, turn: number): void => {
+    steerState.set(sessionId, { turn, count: steerCountFor(sessionId, turn) + 1 })
+  }
 
   const listener = ({ agent, turn }: { agent: Agent; turn: number }): void => {
     const session = agent.session
     const sessionId = String(session.id)
-    const turnKey = `${sessionId}:${String(turn)}`
-    const steerCount = steerCounts.get(turnKey) ?? 0
+    const steerCount = steerCountFor(sessionId, turn)
 
     const projection = deps.getProjection(sessionId)
     if (deps.isMainSession(session.id)) {
-      const newlyBlocked = newlyBlockedTaskKeys(projection).length > 0
+      const newlyBlocked = newlyBlockedTaskKeys(sessionId, projection).length > 0
       if (shouldSteerMain(projection, steerCount, newlyBlocked)) {
         agent.steer(createUserMessage({
           content: [{ type: 'text', text: MAIN_BLOCKED_STEER_TEXT }],
           source: PLUGIN_SOURCE,
         }))
-        steerCounts.set(turnKey, steerCount + 1)
+        bumpSteer(sessionId, turn)
       }
-      acknowledgeCurrentBlockedKeys(projection)
+      acknowledgeCurrentBlockedKeys(sessionId, projection)
       return
     }
 
@@ -172,9 +198,12 @@ export function installTurnGuards(ctx: Context, deps: TurnGuardDependencies): ()
       content: [{ type: 'text', text: SPECIALIST_STEER_TEXT }],
       source: PLUGIN_SOURCE,
     }))
-    steerCounts.set(turnKey, steerCount + 1)
+    bumpSteer(sessionId, turn)
   }
 
   const dispose = ctx.on('agent/turn-stopping', listener)
-  return () => { dispose() }
+  return () => {
+    dispose()
+    steerState.clear()
+  }
 }

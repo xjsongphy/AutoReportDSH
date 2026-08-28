@@ -134,7 +134,9 @@ const referencesSkillProvider: SkillProvider = {
  * @returns disposer that unregisters the provider.
  */
 export function installReferencesSkills(ctx: Context): () => void {
-  const skills = ctx.get('skills') as { registerProvider?: (create: () => SkillProvider) => () => void } | undefined
+  const skills = typeof ctx.get === 'function'
+    ? ctx.get('skills') as { registerProvider?: (create: () => SkillProvider) => () => void } | undefined
+    : undefined
   if (typeof skills?.registerProvider !== 'function') return () => {}
   return skills.registerProvider(() => referencesSkillProvider)
 }

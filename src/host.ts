@@ -14,7 +14,6 @@ import { installAutoReportPythonEnv } from './python-env.js'
 import AutoReportWorkflowRuntime, { type RuntimeOptions } from './runtime.js'
 import { createReportInitCommand } from './workspace/command.js'
 import { loadProjectSettings, saveProjectSettings, workspaceIdForRoot } from './settings.js'
-import { installReferencesSkills } from './skills-references.js'
 import { installTurnGuards } from './workflow/turn-guard.js'
 
 export const name = 'autoreportdsh-host'
@@ -58,7 +57,6 @@ export function resolveHostConfig(raw: Partial<Config> = {}): Config {
  */
 export function apply(ctx: Context, config: Partial<Config> = {}, options: RuntimeOptions = {}): void {
   const resolved = resolveHostConfig(config)
-  installReferencesSkills(ctx)
   const runtime = new AutoReportWorkflowRuntime(ctx, resolved, options)
   ctx.tools.guard(createRoleToolGuard({
     registry: runtime.roleRegistry,

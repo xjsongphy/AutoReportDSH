@@ -59,8 +59,16 @@ function makeChildRecorder(id: string): ChildRecorder {
   const toolNames: string[] = []
   const skillNames: string[] = []
   const sections: RecordedSection[] = []
+  const skillsService = {
+    register: (skill: { name: string }) => {
+      skillNames.push(skill.name)
+      return () => {}
+    },
+    registerProvider: () => () => {},
+  }
   const ctx = {
     agent: { id: SessionId(`${id}`) } as Agent,
+    get: (name: string) => name === 'skills' ? skillsService : undefined,
     tools: {
       register: (tool: { name: string }) => {
         toolNames.push(tool.name)
@@ -73,12 +81,7 @@ function makeChildRecorder(id: string): ChildRecorder {
         return () => {}
       },
     },
-    skills: {
-      register: (skill: { name: string }) => {
-        skillNames.push(skill.name)
-        return () => {}
-      },
-    },
+    skills: skillsService,
   }
   return { ctx: ctx as ChildRecorder['ctx'], toolNames, skillNames, sections }
 }
@@ -156,6 +159,7 @@ async function assemble(options: { projectLanguage?: 'latex' | 'typst' } = {}): 
       presetSkillNames.push(registration.name)
       return () => {}
     },
+    registerProvider: () => () => {},
   } as never)
   ctx.provide('subprocess', {
     resolveExecutable: async (command: string) => command,

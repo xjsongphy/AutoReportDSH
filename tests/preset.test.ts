@@ -7,19 +7,26 @@ describe('autoreport preset contribution', () => {
   it('registers only the current fixed-workflow MAIN tools', () => {
     const tools: string[] = []
     const skills: string[] = []
+    let referencesProvider = 0
+    const skillsService = {
+      register: (registration: { name: string }) => {
+        skills.push(registration.name)
+        return () => {}
+      },
+      registerProvider: () => {
+        referencesProvider += 1
+        return () => {}
+      },
+    }
     const context = {
+      get: (name: string) => name === 'skills' ? skillsService : undefined,
       tools: {
         register: (definition: { name: string }) => {
           tools.push(definition.name)
           return () => {}
         },
       },
-      skills: {
-        register: (registration: { name: string }) => {
-          skills.push(registration.name)
-          return () => {}
-        },
-      },
+      skills: skillsService,
       subagents: {},
       autoreportWorkflow: {
         config: {
@@ -36,5 +43,6 @@ describe('autoreport preset contribution', () => {
 
     expect(tools.sort()).toEqual(['send_to_agent'])
     expect(skills).toEqual(['pdf-reference-reader'])
+    expect(referencesProvider).toBe(1)
   })
 })

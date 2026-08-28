@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Linux-3f7ecb?style=flat-square" alt="Supported platforms: macOS and Linux" />
+  <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-3f7ecb?style=flat-square" alt="Supported platforms: macOS, Linux, and Windows" />
   <img src="https://img.shields.io/badge/runtime-Node%2022.19%2B-339933?style=flat-square" alt="Node.js 22.19 or later" />
   <img src="https://img.shields.io/badge/DeepSeek%20Harness-plugin-3366cc?style=flat-square" alt="DeepSeek Harness plugin" />
   <img src="https://img.shields.io/badge/report-LaTeX%20%7C%20Typst-7560c8?style=flat-square" alt="LaTeX and Typst reports" />
@@ -58,34 +58,49 @@ autoreport-main    AutoReport physics-report workflow
 
 Only a top-level session whose effective preset is `autoreport-main` enters the AutoReport runtime. Ordinary sessions retain their stock shell, filesystem behavior, child-report tool, and workspace. This is covered by the integration suite.
 
+## Installation
+
+**Now:** install from source (this section). That is the only supported path.
+
+**Later:** after the package is published, install with `dsh plugin add` from npm. Those commands are listed under [Planned npm / DSH bundle release](#planned-npm--dsh-bundle-release) and are **not available yet**.
+
 ## Run from source
 
-This is the currently supported installation method. The two repositories must be sibling directories because the development package links the local harness checkout.
+The two repositories must be sibling directories: development `package.json` uses `link:` entries into the local harness checkout.
 
 ### Prerequisites
 
 - Node.js `22.19+` or `24+`
 - Corepack-enabled pnpm
-- A local DeepSeek Harness checkout compatible with the version pinned in [docs/dependencies.md](docs/dependencies.md)
+- A local DeepSeek Harness checkout at the pin in [docs/dependencies.md](docs/dependencies.md), with the two patches in `patches/` applied
 - DSH-native bash and workspace-write sandbox (macOS Seatbelt, Linux bwrap/Landlock, Windows ACL)
 
-### 1. Check out and build DeepSeek Harness
+### 1. Check out both repositories as siblings
 
 ```sh
 cd /path/to/your/development-directory
 
 git clone https://github.com/deepseek-ai/deepseek-harness.git deepseek-harness
-# Clone or enter this repository as the sibling directory AutoReportDSH.
+git clone https://github.com/xjsongphy/AutoReportDSH.git AutoReportDSH
+```
 
+### 2. Patch and build DeepSeek Harness
+
+Until DSH itself ships `Session.append(..., { ignorable: true })` and per-session `sandbox/workspace-root`, apply the same patches CI uses (see [docs/dependencies.md](docs/dependencies.md)):
+
+```sh
 cd deepseek-harness
+git checkout <DSH_REF from docs/dependencies.md>
+git apply ../AutoReportDSH/patches/deepseek-harness-ignorable-append.patch
+git apply ../AutoReportDSH/patches/deepseek-harness-sandbox-workspace-root.patch
 corepack enable
 pnpm install
 pnpm run build
 ```
 
-> AutoReportDSH currently requires the DSH `Session.append(type, data, { ignorable: true })` writer API. Use the compatible local checkout described in [docs/dependencies.md](docs/dependencies.md) until that API is included in the DSH release range used by the published plugin.
+A published `@deepseek-ai/dsh` CLI on PATH is not a substitute for this patched checkout until those APIs are in the released DSH version.
 
-### 2. Install, test, and build AutoReportDSH
+### 3. Install, test, and build AutoReportDSH
 
 ```sh
 cd ../AutoReportDSH
@@ -99,15 +114,9 @@ The keyless suite validates workflow persistence, preset membership, role writab
 
 ### Refresh externally maintained skills
 
-Runtime sessions never fetch resources. To refresh the externally maintained MinerU skill explicitly, run:
+Runtime sessions never fetch resources. `pnpm run sync:resources` only downloads files listed in `scripts/sync-resources.ts` (`MANAGED_RESOURCES`). That list is currently empty; bundled skills live in `resources/skills/` in this repository.
 
-```sh
-pnpm run sync:resources
-```
-
-The script queries the upstream Git tree and records commit/blob state in `resources/.sync-state.json`. It downloads only a managed file whose blob changed (or whose local copy is missing); unchanged files are not fetched again. The current managed set is `xjsongphy/skills:mineru/SKILL.md` → `resources/skills/mineru.md`.
-
-### 3. Install the AutoReport preset
+### 4. Install the AutoReport preset
 
 ```sh
 pnpm run install:preset
@@ -116,10 +125,10 @@ pnpm run install:preset
 This writes the rendered user preset to:
 
 ```text
-$DSH_HOME/.agent-presets/autoreport-main/
+$DSH_HOME/.agent-presets/autoreport-main/   # default home is ~/.dsh
 ```
 
-links the package at `$DSH_HOME/profiles/node_modules/autoreportdsh` so the web client can load the settings card, and writes `cordis.overlay.generated.yml` in this repository. The installer is idempotent: it updates AutoReport-owned preset files and keeps unrelated files under the user preset directory.
+links the package at `$DSH_HOME/profiles/node_modules/autoreportdsh` so the web client can load the settings card, and writes `cordis.overlay.generated.yml` in this repository. The installer overwrites AutoReport-owned preset files and keeps unrelated files under the user preset directory. To replace a stale install completely, delete `$DSH_HOME/.agent-presets/autoreport-main/` first, then rerun.
 
 For an isolated harness home:
 
@@ -128,7 +137,11 @@ DSH_HOME=/tmp/autoreport-dsh-home \
   pnpm run install:preset -- --home "$DSH_HOME"
 ```
 
-### 4. Start the local harness with the overlay
+Plain `dsh web` does **not** load AutoReport. The overlay is not part of the stock web/headless profile; pass `--patch` every time you boot.
+
+### 5. Start the local harness with the overlay
+
+Boot the **patched sibling** harness (required until the two APIs above are in a DSH release):
 
 ```sh
 cd ../deepseek-harness
@@ -139,6 +152,12 @@ pnpm dsh web \
 ```
 
 Open `http://127.0.0.1:3081`, create a session, and select **`autoreport-main`**. Report-workflow defaults are under **Settings → Plugins → Plugin configuration → AutoReport**. Use another port when an existing DSH Web server already occupies the default `3080`.
+
+If a global `dsh` is already on PATH (`npm i -g @deepseek-ai/dsh`), the same overlay flag works only when that CLI is new enough to include the two APIs. Until then, use `pnpm dsh` from the patched sibling checkout, not the global binary:
+
+```sh
+dsh web --port 3081 --patch /absolute/path/to/AutoReportDSH/cordis.overlay.generated.yml
+```
 
 For a one-shot harness profile:
 
@@ -240,22 +259,27 @@ See [docs/live-provider-testing.md](docs/live-provider-testing.md). The test nev
 
 ### GitHub Actions CI
 
-[`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs on pull requests and `main` pushes on Linux and macOS. Because this preview package intentionally links a sibling Harness checkout, CI checks out the exact Harness pin from [docs/dependencies.md](docs/dependencies.md), builds it, then runs immutable install, keyless tests, typecheck, and build. The real API test remains opt-in and receives no credential in this workflow.
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs on pull requests and `main` pushes on Linux, macOS, and Windows. Because this preview package intentionally links a sibling Harness checkout, CI checks out the exact Harness pin from [docs/dependencies.md](docs/dependencies.md), applies the two patches in `patches/`, builds Harness, then runs immutable install, keyless tests, typecheck, and build. The real API test remains opt-in and receives no credential in this workflow.
 
 ## Planned npm / DSH bundle release
 
-The following commands are the intended **future** release workflow. They are not available until AutoReportDSH is published as an npm DSH bundle and its required DSH append API is released:
+**Do not run these yet.** AutoReportDSH is not on npm. There is no published DSH bundle, so `dsh plugin add` cannot install it.
+
+After the package is published **and** a DSH release includes the required append and sandbox APIs, the intended user install will be:
 
 ```sh
-# Planned: install the published bundle into the normal web profile.
-npx @deepseek-ai/dsh plugin --profile web add @xjsongphy/autoreportdsh
+# Install the published bundle into the web profile (npm name may change at publish).
+dsh plugin --profile web add @xjsongphy/autoreportdsh
 
-# Planned: render the user preset from the package installed in that profile.
+# Render the user preset from the package installed in that profile.
 npx @xjsongphy/autoreportdsh setup --profile web
 
-# Start DSH normally; choose autoreport-main when needed.
-npx @deepseek-ai/dsh web
+# Start DSH normally; choose autoreport-main when needed. No --patch once the
+# profile layer owns the overlay.
+dsh web
 ```
+
+Until that release, stay on [Run from source](#run-from-source): sibling checkout, patches, `pnpm run build`, `pnpm run install:preset`, and `pnpm dsh … --patch ./cordis.overlay.generated.yml`.
 
 The published package will ship prebuilt `dist/` files, a DSH bundle manifest, host/router patch rows, and a setup executable. It will use versioned DSH peer dependencies rather than the local `link:` dependencies used during source development. Git installation may also be supported through `dsh plugin add github:…`, subject to pnpm's explicit build-script allowlist.
 

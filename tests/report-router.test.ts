@@ -22,6 +22,7 @@ function childContext(id = 'child-1', cwd?: string) {
   const tools: { name: string }[] = []
   const skills: { name: string }[] = []
   const sections: { name: string; text: string }[] = []
+  const providers: string[] = []
   const sessionId = SessionId(id)
   const session = Session.create(sessionId, undefined, {
     version: 0,
@@ -29,8 +30,19 @@ function childContext(id = 'child-1', cwd?: string) {
     createdAt: Date.now(),
     cwd: cwd ?? '/tmp/autoreport-workspace',
   })
+  const skillsService = {
+    register: (skill: { name: string }) => {
+      skills.push(skill)
+      return () => {}
+    },
+    registerProvider: (factory: () => { name: string }) => {
+      providers.push(factory().name)
+      return () => {}
+    },
+  }
   const ctx = {
     agent: { id: sessionId, session },
+    get: (name: string) => name === 'skills' ? skillsService : undefined,
     tools: {
       register: (tool: { name: string }) => {
         tools.push(tool)
@@ -43,14 +55,9 @@ function childContext(id = 'child-1', cwd?: string) {
         return () => {}
       },
     },
-    skills: {
-      register: (skill: { name: string }) => {
-        skills.push(skill)
-        return () => {}
-      },
-    },
+    skills: skillsService,
   }
-  return { ctx: ctx as unknown as Context, tools, skills, sections, session }
+  return { ctx: ctx as unknown as Context, tools, skills, sections, providers, session }
 }
 
 function hostContext() {
@@ -70,6 +77,7 @@ describe('report router', () => {
     installRoutedReportTool(child.ctx, host.ctx, { roleRegistry: new RoleRegistry(), config: CONFIG, workflowForChild: () => undefined })
     expect(child.tools.map(tool => tool.name)).toEqual(['report'])
     expect(child.sections.some(section => section.name === 'tool:report')).toBe(true)
+    expect(child.providers).toEqual([])
   })
 
   it('installs report_workflow and role sandbox for a pre-bound specialist', () => {
@@ -93,6 +101,7 @@ describe('report router', () => {
     expect(child.tools.some(tool => tool.name === 'report')).toBe(false)
     expect(effectiveSandboxMode(child.session.events)).toBe('workspace-write')
     expect(effectiveSandboxWorkspaceRoot(child.session.events)).toBe(`${workspaceRoot}/Theory`)
+    expect(child.providers).toEqual(['autoreport-references'])
   })
 
   it('installs report_workflow only for REPORT with compile skills', () => {
@@ -119,6 +128,7 @@ describe('report router', () => {
       'autoreport:skill:latex-compile',
     ]))
     expect(effectiveSandboxWorkspaceRoot(child.session.events)).toBe(`${workspaceRoot}/Report`)
+    expect(child.providers).toEqual(['autoreport-references'])
   })
 
   it('skips sandbox apply when the child has no session', () => {
@@ -142,6 +152,7 @@ describe('report router', () => {
       },
       systemPrompt: { section: () => () => {} },
       skills: { register: () => () => {} },
+      get: () => undefined,
     } as unknown as Context
     installRoutedReportTool(ctx, hostContext().ctx, { roleRegistry, config: CONFIG, workflowForChild: () => undefined })
     expect(tools.map(tool => tool.name)).toEqual(['report_workflow'])

@@ -125,37 +125,47 @@ describe('turn-stopping guards', () => {
 
   it('steers MAIN once when a blocked task is newly received', () => {
     const fold = projection([blockedTask()], [])
-    expect(newlyBlockedTaskKeys(fold)).toEqual(['task-9#2'])
-    expect(shouldSteerMain(fold, 0, newlyBlockedTaskKeys(fold).length > 0)).toBe(true)
-    expect(shouldSteerMain(fold, 1, newlyBlockedTaskKeys(fold).length > 0)).toBe(false)
+    expect(newlyBlockedTaskKeys('main-a', fold)).toEqual(['task-9#2'])
+    expect(shouldSteerMain(fold, 0, newlyBlockedTaskKeys('main-a', fold).length > 0)).toBe(true)
+    expect(shouldSteerMain(fold, 1, newlyBlockedTaskKeys('main-a', fold).length > 0)).toBe(false)
     expect(shouldSteerMain(projection([], []), 0, false)).toBe(false)
   })
 
   it('does not steer MAIN for a historical blocked task already acknowledged', () => {
     const fold = projection([blockedTask()], [])
-    acknowledgeCurrentBlockedKeys(fold)
-    expect(newlyBlockedTaskKeys(fold)).toEqual([])
-    expect(shouldSteerMain(fold, 0, newlyBlockedTaskKeys(fold).length > 0)).toBe(false)
+    acknowledgeCurrentBlockedKeys('main-a', fold)
+    expect(newlyBlockedTaskKeys('main-a', fold)).toEqual([])
+    expect(shouldSteerMain(fold, 0, newlyBlockedTaskKeys('main-a', fold).length > 0)).toBe(false)
   })
 
   it('does not re-steer MAIN after acknowledging the same blocked revision', () => {
     const fold = projection([blockedTask()], [])
-    expect(shouldSteerMain(fold, 0, newlyBlockedTaskKeys(fold).length > 0)).toBe(true)
-    acknowledgeCurrentBlockedKeys(fold)
-    expect(shouldSteerMain(fold, 0, newlyBlockedTaskKeys(fold).length > 0)).toBe(false)
+    expect(shouldSteerMain(fold, 0, newlyBlockedTaskKeys('main-a', fold).length > 0)).toBe(true)
+    acknowledgeCurrentBlockedKeys('main-a', fold)
+    expect(shouldSteerMain(fold, 0, newlyBlockedTaskKeys('main-a', fold).length > 0)).toBe(false)
   })
 
   it('steers MAIN again when a blocked task is re-blocked at a new revision', () => {
     const fold = projection([blockedTask()], [])
-    acknowledgeCurrentBlockedKeys(fold)
+    acknowledgeCurrentBlockedKeys('main-a', fold)
     const reblocked = projection([blockedTask({ revision: 3 })], [])
-    expect(newlyBlockedTaskKeys(reblocked)).toEqual(['task-9#3'])
-    expect(shouldSteerMain(reblocked, 0, newlyBlockedTaskKeys(reblocked).length > 0)).toBe(true)
+    expect(newlyBlockedTaskKeys('main-a', reblocked)).toEqual(['task-9#3'])
+    expect(shouldSteerMain(reblocked, 0, newlyBlockedTaskKeys('main-a', reblocked).length > 0)).toBe(true)
   })
 
   it('caps MAIN steers per turn even when a blocked task is newly received', () => {
     const fold = projection([blockedTask()], [])
     expect(shouldSteerMain(fold, 0, true)).toBe(true)
     expect(shouldSteerMain(fold, 1, true)).toBe(false)
+  })
+
+  it('isolates blocked acknowledgment per Main session', () => {
+    const fold = projection([blockedTask()], [])
+    acknowledgeCurrentBlockedKeys('main-a', fold)
+    expect(newlyBlockedTaskKeys('main-a', fold)).toEqual([])
+    expect(newlyBlockedTaskKeys('main-b', fold)).toEqual(['task-9#2'])
+    acknowledgeCurrentBlockedKeys('main-b', projection([], []))
+    expect(newlyBlockedTaskKeys('main-a', fold)).toEqual([])
+    expect(newlyBlockedTaskKeys('main-b', fold)).toEqual(['task-9#2'])
   })
 })

@@ -6,6 +6,7 @@ import type AutoReportWorkflowRuntime from '../runtime.js'
 import { applyRoleSandbox } from '../policy/sandbox-roots.js'
 import { installWorkflowReportTool } from './report-workflow.js'
 import { registerRoleSkills } from '../skills-preset.js'
+import { installReferencesSkills } from '../skills-references.js'
 
 export const name = 'autoreportdsh-report-router'
 export const inject = ['subagents', 'tools', 'systemPrompt', 'autoreportWorkflow']
@@ -57,6 +58,7 @@ export function installRoutedReportTool(
     const language = workflow.workflowForChild(child.id)?.runtime.state.projection().meta?.settings?.reportLanguage
       ?? workflow.config.defaultReportLanguage
     disposers.push(registerRoleSkills(childCtx, entry.binding.role, language))
+    disposers.push(installReferencesSkills(childCtx))
     const session = child.session
     if (session !== undefined) {
       const workspaceRoot = workflow.config.workspaceRoot ?? session.header.cwd

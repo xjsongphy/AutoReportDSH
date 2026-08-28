@@ -11,6 +11,7 @@
  * @module
  */
 
+import { existsSync } from 'node:fs'
 import { isAbsolute, relative, resolve } from 'node:path'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
 import { rolePolicy, type AutoReportRole } from '../roles.js'
@@ -50,6 +51,8 @@ interface PendingCall {
   readonly seq: number
   /** Pre-run snapshot for process tools; absent for filesystem tools. */
   readonly before?: DirSnapshot
+  /** Per-path existence at `tool/call` time for filesystem tools. */
+  readonly priorPresence?: readonly (boolean | undefined)[]
 }
 
 /** Extract Codex-style patch targets without interpreting patch content. */
@@ -108,6 +111,25 @@ function normalizePath(workspaceRoot: string, raw: string): string {
   const absolute = isAbsolute(raw) ? resolve(raw) : resolve(workspaceRoot, raw)
   const rel = relative(workspaceRoot, absolute)
   return rel === '' || rel.startsWith('..') ? absolute : rel.split('\\').join('/')
+}
+
+function absoluteTarget(workspaceRoot: string, raw: string): string {
+  return isAbsolute(raw) ? resolve(raw) : resolve(workspaceRoot, raw)
+}
+
+/** Whether `raw` existed at call time; undefined when the filesystem cannot be probed. */
+function pathExisted(workspaceRoot: string, raw: string): boolean | undefined {
+  try {
+    return existsSync(absoluteTarget(workspaceRoot, raw))
+  } catch {
+    return undefined
+  }
+}
+
+function filesystemArtifactStatus(prior: boolean | undefined): ArtifactSnapshot['status'] {
+  if (prior === true) return 'modified'
+  if (prior === false) return 'created'
+  return 'unknown'
 }
 
 /** Absolute writable root for one caller role (first policy entry). */
@@ -195,6 +217,7 @@ export function foldArtifact(
       paths = mutationTargetPaths(data.name, parsed)
     }
     const before = isProcess ? snapshotDir(writableRoot(caller)) : undefined
+    const priorPresence = isFs ? paths.map(path => pathExisted(caller.workspaceRoot, path)) : undefined
     state.pending.set(data.callId, {
       callId: data.callId,
       sessionId: deps.sessionId,
@@ -202,6 +225,7 @@ export function foldArtifact(
       paths,
       seq: event.seq,
       ...(before !== undefined ? { before } : {}),
+      ...(priorPresence !== undefined ? { priorPresence } : {}),
     })
     return []
   }
@@ -245,7 +269,7 @@ export function foldArtifact(
     return committed
   }
 
-  for (const raw of pending.paths) {
+  for (const [index, raw] of pending.paths.entries()) {
     const path = normalizePath(caller.workspaceRoot, raw)
     if (shouldIgnore(path)) continue
     if (!state.dedup.first(pending.name, path, event.seq)) continue
@@ -257,7 +281,7 @@ export function foldArtifact(
       path,
       producedBy: caller.role,
       origin: 'fs-tool',
-      status: 'created',
+      status: filesystemArtifactStatus(pending.priorPresence?.[index]),
       recordedAt: Date.now(),
       ...(attempt !== undefined ? { taskId: attempt.taskId, delegationKey: attempt.key } : {}),
     }
