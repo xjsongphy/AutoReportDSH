@@ -1,5 +1,5 @@
+# pnpm 11: onlyBuiltDependencies is gone. allowBuilds is the review list;
+# unreviewed lifecycle scripts fail install (strictDepBuilds defaults to true).
 allowBuilds:
-  esbuild: set this to true or false
-onlyBuiltDependencies:
-  - esbuild
+  esbuild: true
 verifyDepsBeforeRun: false
