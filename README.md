@@ -40,13 +40,12 @@ The model uses DSH-native `read` / `write` / `edit` / `bash` / `skill` primitive
 
 ```text
 send_to_agent     fixed-role delegation with durable task/revision tracking
-report_task       current workflow status/checklist management (to be internalized)
 ask_user_question DSH-native structured questions for requirement gaps
 ```
 
 Specialist children are DSH continuable sessions. They keep role context across follow-ups and report structured outcomes through `report_workflow`. A direct human conversation with a specialist remains ordinary conversation; it does not create or complete a workflow task without an active delegation context.
 
-AutoReport-owned skills are role-scoped: MAIN receives `pdf-reference-reader` (and a `mineru` alias) for References PDF extraction into `Outline/.cache/mineru/`; REPORT receives `experiment-report-writer` plus the active language compile skill (`latex-compile` or `typst-compile`); THEORY, DATA_ANALYSIS, and PLOTTING receive none of these domain skills. DSH user/project skills retain their normal DSH visibility.
+AutoReport-owned skills are role-scoped: MAIN receives `pdf-reference-reader` (MinerU / mineru-open-api) for References PDF extraction into `Outline/.cache/mineru/`; REPORT receives `experiment-report-writer` plus the active language compile skill (`latex-compile` or `typst-compile`) through progressive disclosure; THEORY, DATA_ANALYSIS, and PLOTTING receive none of these domain skills. Experiment `References/skills` is a cwd-sensitive DSH skill root. DSH user/project skills retain their normal DSH visibility.
 
 ## Coexistence with normal DSH
 
@@ -203,13 +202,12 @@ Current composition defaults include:
 
 ```text
 defaultReportLanguage   latex
-defaultLatexEngine      latexmk
 specialistModel         inherit Main (optional shared DSH route selection)
 delegationWaitTimeoutMs 600000
 pythonExecutable        optional interpreter for specialist bash
 ```
 
-The `autoreport` user-settings namespace is registered through `@deepseek-ai/dsh-settings`; it persists and validates `defaultReportLanguage`, `defaultLatexEngine`, `specialistModel`, `delegationWaitTimeoutMs`, and optional `pythonExecutable`. The web settings card lives under **Settings → Plugins → Plugin configuration**. Changing those values does not alter a report that is already running. `specialistModel.reasoningEffort`, when present, is applied through DSH's agent-scoped model-selection seam rather than merely recorded.
+The `autoreport` user-settings namespace is registered through `@deepseek-ai/dsh-settings`; it persists and validates `defaultReportLanguage`, `specialistModel`, `delegationWaitTimeoutMs`, and optional `pythonExecutable`. The web settings card lives under **Settings → Plugins → Plugin configuration**. Changing those values does not alter a report that is already running. `specialistModel.reasoningEffort`, when present, is applied through DSH's agent-scoped model-selection seam rather than merely recorded.
 
 ## Security model
 
@@ -275,7 +273,7 @@ src/
 ├── client/                 web settings card (Plugins → Plugin configuration)
 ├── runtime.ts              workflow state, artifacts, manifests, settings snapshot
 ├── workflow/               events, projections, registry, waiters, report observer
-├── tools/                  send_to_agent, report_workflow, report_task
+├── tools/                  send_to_agent, report_workflow
 ├── policy/                 role guard and per-role DSH sandbox roots
 ├── python-env.ts           DSH_AUTOREPORT_PYTHON shell-env facts
 ├── workspace/              directories, resources, command, skill loader
@@ -287,12 +285,12 @@ tests/                      unit, integration, boot, and opt-in real-API tests
 
 ## Current limitations
 
-- Windows CI is not in the matrix yet; custom network-isolation is gone, so Windows should be re-verified against DSH bash/pwsh sandbox rather than treated as permanently unsupported.
+- Windows is in the CI matrix; live bash confinement tests skip there because DSH has no seatbelt/bwrap equivalent in that job. Treat Windows sandbox behavior as DSH bash/pwsh, not AutoReport-specific isolation.
 - MinerU runs through MAIN bash and the `pdf-reference-reader` skill (`Outline/.cache/mineru/`); there is no dedicated MinerU model tool.
 - Artifact manifests are runtime-generated; agents cannot add free-form manifest notes.
-- `report_task` is retained for the current workflow contract. `send_to_agent` already auto-creates tasks; the remaining bookkeeping API will shrink after real workflow traces.
+- Task lifecycle is internal: MAIN dispatches with `send_to_agent` (auto-creating tasks when `task_id` is omitted); specialists finish through `report_workflow` and the report observer settles durable state.
 - The role guard still checks write/edit paths as defense in depth; `delete` and `apply_patch` are not mounted by this preset.
-- `References/skills` AutoReportCLI project-skill compatibility is not wired as a per-session DSH skill root yet.
+- Specialist skills fall back to full prompt injection only when a child context has no `ctx.skills` service.
 
 ## License
 

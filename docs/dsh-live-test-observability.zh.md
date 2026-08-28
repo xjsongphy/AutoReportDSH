@@ -66,7 +66,7 @@ cd ~/Develop/AutoReportDSH
 - **模型选择器**：确认 MAIN 路由为 `openai-codex / gpt-5.6-luna`。已开始的 session 保留其已记录的路由。
 - **子 agent 面包屑/会话**：specialist 是持久的 continuable child sessions；可查看各角色对话。它们保持角色权限，不能获得 MAIN 的任意写入权。
 - **工具卡片**：检查 `bash`、`send_to_agent`、`report_workflow` 的参数与结果。REPORT 通过 bash 按 `latex-compile` / `typst-compile` skill 编译。
-- **报告任务状态**：`report_task` 的工具结果和 `autoreport/*` 事件给出 task、revision、waiting/completed/blocked/timeout 状态；不要以 UI todo 取代该工作流状态。
+- **报告任务状态**：`autoreport/*` 事件与 `send_to_agent` / `report_workflow` 结果给出 task、revision、waiting/completed/blocked/timeout 状态；不要以 UI todo 取代该工作流状态。
 
 ## 5. 持久化日志、产物和最终报告
 

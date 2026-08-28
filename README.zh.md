@@ -40,13 +40,12 @@ AutoReportDSH 将 [AutoReportCLI](../autoreportcli) 的报告领域工作流迁�
 
 ```text
 send_to_agent     向固定角色委派任务，并持久化任务/版本状态
-report_task       当前工作流的状态与清单管理（将逐步内化）
 ask_user_question DSH 原生结构化提问，用于需求缺口
 ```
 
 specialist 是 DSH continuable child session。它们会保留角色上下文，能够接收后续任务，并通过 `report_workflow` 返回结构化结果。用户直接与 specialist 对话时，那是普通对话；没有活跃 workflow delegation 上下文时，不会自动创建或完成任务。
 
-AutoReport 专属 skill 按角色隔离：MAIN 有 `pdf-reference-reader`（及 `mineru` 别名），把 References 中的 PDF 抽到 `Outline/.cache/mineru/`；REPORT 有 `experiment-report-writer` 和当前语言的编译 skill（`latex-compile` 或 `typst-compile`）；THEORY、DATA_ANALYSIS、PLOTTING 不获得这些领域 skill。DSH 的用户/项目 skill 仍遵循原本的 DSH 可见性。
+AutoReport 专属 skill 按角色隔离：MAIN 有 `pdf-reference-reader`（MinerU / mineru-open-api），把 References 中的 PDF 抽到 `Outline/.cache/mineru/`；REPORT 通过渐进披露获得 `experiment-report-writer` 和当前语言的编译 skill（`latex-compile` 或 `typst-compile`）；THEORY、DATA_ANALYSIS、PLOTTING 不获得这些领域 skill。实验目录 `References/skills` 是按 cwd 发现的 DSH skill 根。DSH 的用户/项目 skill 仍遵循原本的 DSH 可见性。
 
 ## 与普通 DSH 共存
 
@@ -68,7 +67,7 @@ autoreport-main    AutoReport 物理实验报告工作流
 - Node.js `22.19+` 或 `24+`
 - 启用 Corepack 的 pnpm
 - 本地 DeepSeek Harness checkout，且版本与 [docs/dependencies.md](docs/dependencies.md) 中记录的版本兼容
-- DSH 原生 bash 与 workspace-write 沙箱（macOS、Linux；Windows 应在该主机上验证 DSH bash/pwsh 沙箱后再正式纳入）
+- DSH 原生 bash 与 workspace-write 沙箱（macOS、Linux；Windows CI 已加入矩阵，live 禁写用例在无 OS sandbox 时跳过）
 
 ### 1. 获取并构建 DeepSeek Harness
 
@@ -203,13 +202,12 @@ schema 默认值
 
 ```text
 defaultReportLanguage   latex
-defaultLatexEngine      latexmk
 specialistModel         继承 MAIN（可选的 shared DSH route 选择）
 delegationWaitTimeoutMs 600000
 pythonExecutable        可选，specialist bash 使用的解释器
 ```
 
-`autoreport` 用户设置 namespace 已通过 `@deepseek-ai/dsh-settings` 注册并持久化、校验 `defaultReportLanguage`、`defaultLatexEngine`、`specialistModel`、`delegationWaitTimeoutMs` 和可选的 `pythonExecutable`。浏览器设置卡片在 **设置 → 插件 → 插件配置**。修改这些值不会改变已经在跑的报告。配置了 `specialistModel.reasoningEffort` 时，会通过 DSH 的 agent-scoped model-selection seam 真正生效，而非只记录快照。
+`autoreport` 用户设置 namespace 已通过 `@deepseek-ai/dsh-settings` 注册并持久化、校验 `defaultReportLanguage`、`specialistModel`、`delegationWaitTimeoutMs` 和可选的 `pythonExecutable`。浏览器设置卡片在 **设置 → 插件 → 插件配置**。修改这些值不会改变已经在跑的报告。配置了 `specialistModel.reasoningEffort` 时，会通过 DSH 的 agent-scoped model-selection seam 真正生效，而非只记录快照。
 
 ## 安全模型
 
@@ -281,7 +279,7 @@ src/
 ├── client/                 Web 设置卡片（插件配置 tab）
 ├── runtime.ts              workflow state、waiters、artifacts、manifests、settings snapshot
 ├── workflow/               events、projections、registry、waiters、report observer
-├── tools/                  send_to_agent、report_workflow、report_task
+├── tools/                  send_to_agent、report_workflow
 ├── policy/                 role guard 与按角色的 DSH sandbox 根目录
 ├── python-env.ts           DSH_AUTOREPORT_PYTHON shell-env 事实
 ├── workspace/              目录、资源、命令和 skill loader
@@ -293,12 +291,12 @@ tests/                      unit、integration、boot、可选真实 API 测试
 
 ## 当前限制
 
-- CI 尚未包含 Windows；自定义网络隔离已删除，应对照 DSH bash/pwsh 沙箱重新验证，而不是永久标记为不支持。
+- CI 已包含 Windows；该作业上 live bash 禁写测试会跳过（没有 seatbelt/bwrap）。Windows 沙箱行为以 DSH bash/pwsh 为准，而不是 AutoReport 自定义隔离。
 - MinerU 由 MAIN 通过 bash 与 `pdf-reference-reader` skill 调用（输出 `Outline/.cache/mineru/`），没有单独的 MinerU model tool。
 - artifact manifest 由运行时生成，agent 不能添加自由文本备注。
-- 当前保留 `report_task` 以维持现有 workflow 合约；`send_to_agent` 已能自动创建任务，其余 bookkeeping API 会在获得真实 trace 后再收缩。
+- 任务生命周期已内化：MAIN 通过 `send_to_agent` 委派（省略 `task_id` 时自动创建任务）；specialist 通过 `report_workflow` 结束，report observer 负责 settle durable 状态。
 - role guard 仍对 write/edit 路径做 defense in depth；preset 不挂载 `delete` 或 `apply_patch`。
-- AutoReportCLI 的 `References/skills` 尚未作为按 session cwd 的 DSH skill 根接入。
+- 仅当 child context 没有 `ctx.skills` 时，specialist skill 才会退回整段 prompt 注入。
 
 ## 许可证
 

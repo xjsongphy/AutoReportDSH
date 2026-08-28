@@ -146,7 +146,6 @@ report surface:
 Main catalog
 ├── read/search
 ├── send_to_agent
-├── report_task
 ├── ask_user
 └── local planning/report context tools as needed
 ```
@@ -630,7 +629,7 @@ schema defaults
 
 The resolver retains an internal explicit-workflow-override layer above this chain,
 but v1 deliberately exposes no command or UI for it. Plugin `Config` fields are
-DEFAULTS (`defaultReportLanguage`, `defaultLatexEngine`, `specialistModel` with
+DEFAULTS (`defaultReportLanguage`, `specialistModel` with
 inherit-from-Main default, `executionTimeoutMs`), not live workflow inputs. When a workflow is created,
 `resolveWorkflowSettings()` resolves the full precedence chain and persists the
 effective values as a `WorkflowSettingsSnapshot` in the durable
@@ -672,17 +671,14 @@ reimplementing or removing mature infrastructure for aesthetic reasons.
 
 The three formerly separate AutoReport preset rows are structurally merged into
 one preset-plane `autoreport` plugin contribution. It registers, in the same
-preset scope: bundled AutoReport skills, `send_to_agent`, and the current
-`report_task` tool. This changes neither skill visibility nor tool behavior;
-ordinary DSH sessions still see neither AutoReport skills nor AutoReport tools.
+preset scope: bundled AutoReport skills and `send_to_agent`. This changes
+neither skill visibility nor tool behavior; ordinary DSH sessions still see
+neither AutoReport skills nor AutoReport tools.
 
-`send_to_agent` remains the core AutoReport model-facing primitive. `report_task`
-remains temporarily exposed for the current E2E workflow contract, but its
-lifecycle operations are a planned simplification target after real workflow
-traces: create/dispatch/complete/block/fail bookkeeping should move behind
-`send_to_agent` and the report observer, leaving at most status/query/cancel
-management visible to MAIN. Do not perform that state-machine refactor without
-trace evidence and a dedicated compatibility review.
+`send_to_agent` is the sole AutoReport model-facing primitive on MAIN. Task
+create/dispatch/complete/block bookkeeping lives behind `send_to_agent`, the
+report observer, and durable `autoreport/*` events; there is no model-facing
+task checklist tool.
 
 Specialist tool scoping currently uses DSH's tested inherited-tool filter plus
 the role guard as authority. Future allowlist-based specialist catalogs are a
@@ -698,7 +694,7 @@ and where it lives in the codebase:
 |---|---|---|
 | 1 | Opt-in preset as mode switch | **By design** — installer only adds `autoreport-main` to `$DSH_HOME/.agent-presets`; deployment default preset and ordinary `standard` sessions untouched; no global `enabled` flag (PLAN §2.1) |
 | 2 | DSH-owned vs AutoReport-owned settings split | **Implemented** — `src/settings.ts`; composition `Config` contains report-policy defaults only; `autoreport` is a live DSH user-settings namespace |
-| 3 | Plugin config = defaults, not live workflow inputs | **Implemented** — `defaultReportLanguage`/`defaultLatexEngine`/`specialistModel`/`executionTimeoutMs` are snapshotted; the unused Python-environment abstraction was removed |
+| 3 | Plugin config = defaults, not live workflow inputs | **Implemented** — `defaultReportLanguage`/`specialistModel`/`executionTimeoutMs` are snapshotted; the unused Python-environment abstraction was removed |
 | 4 | Project-scoped language selection | **Implemented** — external `<dshHome>/autoreport/<workspaceId>/project.json`; concurrent projects supported |
 | 5 | Persist resolved settings in workflow snapshot | **Implemented** — `WorkflowSettingsSnapshot` in `autoreport/workflow` payload (schema version 3); `resolveWorkflowSettings()` precedence chain |
 | 6 | `/report-init --language latex\|typst` | **Implemented** — updates project settings + materializes missing resources only; other backend files never deleted |
@@ -848,5 +844,5 @@ this status.
 Remaining optional/product work (documented in README): browser card for the
 already-registered `autoreport` settings namespace, Windows support, MinerU network
 execution path, and agent-editable manifest annotations. Trace-driven work may later
-shrink the model-facing `report_task` API or add specialist allowlists; neither changes
+shrink the model-facing surface further or add specialist allowlists; neither changes
 the durable `autoreport/*` workflow state.
