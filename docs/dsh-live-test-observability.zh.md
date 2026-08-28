@@ -51,7 +51,7 @@ cd ~/Develop/AutoReportDSH
 ./.autoreportdsh-local/start-cv-web.sh
 ```
 
-打开 `http://127.0.0.1:3081`，创建 session 时选择 `autoreport-main`，工作目录选择 `~/Develop/CV`。首个报告工作流 turn 会自动、幂等地完成初始化；需要单独检查时也可运行：
+打开 `http://127.0.0.1:3081`，创建 session 时选择 `autoreport`，工作目录选择 `~/Develop/CV`。首个报告工作流 turn 会自动、幂等地完成初始化；需要单独检查时也可运行：
 
 ```text
 /report-init --language typst

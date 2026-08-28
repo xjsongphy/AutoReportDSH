@@ -51,7 +51,7 @@ AutoReportDSH owns report semantics and policy.
 
 - Session membership is explicit (compatibility invariant): loading the AutoReportDSH
   overlay must not change the behavior of sessions that did not explicitly select it.
-  Only top-level sessions actually running the `autoreport-main` preset (header value or a
+  Only top-level sessions actually running the `autoreport` preset (header value or a
   later logged `agent-preset/selected`, matching DSH's `resolveSessionPreset`) join the
   workflow runtime as MAIN, and only RoleRegistry-bound children are specialists. Every
   other session keeps stock DSH behavior: no initialization, no workflow events, stock
@@ -125,7 +125,7 @@ AutoReportDSH/
 │   │   └── execution-isolation.ts      # root/network isolation over ctx.subprocess
 │   └── skills-preset.ts                # preset-scoped bundled skill registration
 ├── presets/
-│   └── autoreport-main/agent.cordis.yml
+│   └── autoreport/agent.cordis.yml
 ├── resources/
 │   ├── personas/*.md
 │   ├── report-languages/*.md
@@ -137,7 +137,7 @@ AutoReportDSH/
 
 The plugin host plane registers the workflow service, durable projections, `/report-init`,
 role policy guard, report-execution capability, and lifecycle observers. Model-facing tools
-are mounted through the `autoreport-main` agent-plane composition rather than globally.
+are mounted through the `autoreport` agent-plane composition rather than globally.
 
 The Main preset is derived from DSH’s `standard` composition but exposes only the fixed
 report surface:
@@ -165,12 +165,12 @@ not mounted alongside the AutoReport contribution. The overlay must patch/disabl
 an unstructured `report("done")` bypass beside `report_workflow(...)`.
 
 The preset is installed into DSH’s existing writable user preset root:
-`$DSH_HOME/.agent-presets/autoreport-main/`. The install script copies the preset
+`$DSH_HOME/.agent-presets/autoreport/`. The install script copies the preset
 composition and static resources before the profile starts; it is idempotent and fails
 loudly if the deployment disables `includeUserRoot`. No `agent-presets.roots` patch or
 launcher-owned roots concat is required. The required smoke is: after installation, both
-shipped `standard` and user `autoreport-main` resolve. The plugin does not change the
-deployment default preset; users select `autoreport-main`.
+shipped `standard` and user `autoreport` resolve. The plugin does not change the
+deployment default preset; users select `autoreport`.
 
 If package installation cannot run the materializer, the documented explicit command is
 `autoreportdsh install-preset`; runtime boot must not silently create a preset after the
@@ -525,7 +525,7 @@ AutoReportCLI initializes/materializes the project during normal startup. AutoRe
 preserves that behavior at the domain boundary: the first admitted report workflow turn
 calls idempotent `ensureInitialized()`. `/report-init` remains an explicit idempotent
 recovery/reinitialization command registered through `ctx.commands`. Because that
-command registry is host-global, its handler verifies effective `autoreport-main`
+command registry is host-global, its handler verifies effective `autoreport`
 membership before parsing input, saving project settings, or materializing files.
 
 Initialization creates AutoReportCLI’s `REQUIRED_DIRS` (`loader.rs`):
@@ -599,7 +599,7 @@ uses upstream Git blob state to refresh only changed managed resource files befo
 DSH owns provider implementations, credentials, and route execution. AutoReport preserves
 separate Main/specialist binding as a lightweight policy:
 
-- Main uses the DSH model route selected for the `autoreport-main` session.
+- Main uses the DSH model route selected for the `autoreport` session.
 - `specialistRoute` is an optional AutoReport configuration passed as the child
   `provider/model` request for every specialist role.
 - If `specialistRoute` is unset, specialists inherit the Main route, matching DSH defaults.
@@ -664,7 +664,7 @@ MAIN's persona documents that specialists also answer humans directly.
 
 ### 2.16 Model-interface minimization (rev 8)
 
-Composition rows are not model-facing tool count. The `autoreport-main` preset
+Composition rows are not model-facing tool count. The `autoreport` preset
 therefore retains DSH's generic primitives (`tool-fs`, `tool-fs-search`,
 skill discovery/loading, compaction, and `ask_user_question`) rather than
 reimplementing or removing mature infrastructure for aesthetic reasons.
@@ -692,7 +692,7 @@ and where it lives in the codebase:
 
 | # | Point | Disposition |
 |---|---|---|
-| 1 | Opt-in preset as mode switch | **By design** — installer only adds `autoreport-main` to `$DSH_HOME/.agent-presets`; deployment default preset and ordinary `standard` sessions untouched; no global `enabled` flag (PLAN §2.1) |
+| 1 | Opt-in preset as mode switch | **By design** — installer only adds `autoreport` to `$DSH_HOME/.agent-presets`; deployment default preset and ordinary `standard` sessions untouched; no global `enabled` flag (PLAN §2.1) |
 | 2 | DSH-owned vs AutoReport-owned settings split | **Implemented** — `src/settings.ts`; composition `Config` contains report-policy defaults only; `autoreport` is a live DSH user-settings namespace |
 | 3 | Plugin config = defaults, not live workflow inputs | **Implemented** — `defaultReportLanguage`/`specialistModel`/`executionTimeoutMs` are snapshotted; the unused Python-environment abstraction was removed |
 | 4 | Project-scoped language selection | **Implemented** — external `<dshHome>/autoreport/<workspaceId>/project.json`; concurrent projects supported |
@@ -750,7 +750,7 @@ Recovery acceptance (keyless):
 
 - Install the preset under `$DSH_HOME/.agent-presets` before booting the real Loader
   composition; verify the original shipped roster remains present.
-- Select `autoreport-main`; verify Main tools and absence of generic delegation, shell,
+- Select `autoreport`; verify Main tools and absence of generic delegation, shell,
   compile, and stock report tools.
 - Provision a child before `startContinuable`; verify role guard authorization from the
   first child tool call.

@@ -49,7 +49,7 @@ describe('install-user-preset', () => {
     const entry = builtEntry()
     const result = install({ home, repoRoot: ROOT, entry })
 
-    expect(result.presetDir).toBe(join(home, '.agent-presets', 'autoreport-main'))
+    expect(result.presetDir).toBe(join(home, '.agent-presets', 'autoreport'))
     const composed = readFileSync(join(result.presetDir, 'agent.cordis.yml'), 'utf8')
     expect(composed).toContain('You coordinate automated physics experiment report writing')
     expect(composed).not.toContain('__AUTOREPORT_MAIN_PERSONA__')
@@ -64,6 +64,11 @@ describe('install-user-preset', () => {
     expect(composed).not.toContain('dsh-tool-workflow')
     expect(composed).not.toContain('dsh-tool-web')
     expect(composed).not.toContain('dsh-tool-todo')
+
+    const metadata = readFileSync(join(result.presetDir, 'preset.yml'), 'utf8')
+    expect(metadata).toContain('name: AutoReport')
+    expect(metadata).toContain('description: 面向物理实验报告的固定团队 Agent。')
+    expect(metadata).not.toMatch(/^name: autoreport$/m)
 
     const overlay = readFileSync(result.overlayFile, 'utf8')
     expect(overlay).toContain('name: autoreportdsh')
@@ -80,7 +85,7 @@ describe('install-user-preset', () => {
   it('is idempotent: a rerun overwrites ours and keeps foreign files', () => {
     ensureBuilt()
     const home = makeTemp()
-    const presetDir = join(home, '.agent-presets', 'autoreport-main')
+    const presetDir = join(home, '.agent-presets', 'autoreport')
     mkdirSync(presetDir, { recursive: true })
     const foreign = join(presetDir, 'user-notes.md')
     writeFileSync(foreign, 'keep me')

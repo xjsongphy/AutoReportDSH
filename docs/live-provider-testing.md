@@ -35,7 +35,7 @@ pnpm vitest run tests/e2e/configured-route.e2e.test.ts
 The test:
 
 1. builds AutoReportDSH if its `dist/` entries are absent;
-2. idempotently materializes `autoreport-main` into the explicitly selected DSH home;
+2. idempotently materializes `autoreport` into the explicitly selected DSH home;
 3. starts the local source Harness with its normal selected profile and the generated AutoReport overlay;
 4. sends one short headless task through the profile's current default model route;
 5. verifies that a non-empty assistant response is returned.

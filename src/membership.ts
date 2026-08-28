@@ -25,7 +25,7 @@
 import type { Session } from '@deepseek-ai/dsh-session'
 
 /** The only agent preset whose root sessions join the AutoReport runtime. */
-export const AUTOREPORT_MAIN_PRESET = 'autoreport-main'
+export const AUTOREPORT_MAIN_PRESET = 'autoreport'
 
 declare module '@deepseek-ai/dsh-session/types' {
   interface SessionEventMap {
@@ -54,7 +54,7 @@ export function resolveAgentPreset(session: Session): string | undefined {
 
 /**
  * Whether one session is an AutoReport MAIN root: top-level AND running the
- * `autoreport-main` preset (header value or a later logged selection).
+ * `autoreport` preset (header value or a later logged selection).
  * @param session - candidate root session.
  */
 export function isAutoReportMainSession(session: Session): boolean {

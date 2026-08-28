@@ -1,5 +1,5 @@
 /**
- * The single AutoReport contribution mounted in the `autoreport-main` preset.
+ * The single AutoReport contribution mounted in the `autoreport` preset.
  *
  * It keeps report-domain registrations preset-scoped: ordinary DSH sessions
  * retain their stock skill catalog and do not see AutoReport model tools.
@@ -20,7 +20,7 @@ export const inject = ['tools', 'skills', 'subagents', 'autoreportWorkflow'] as 
 /**
  * Register AutoReport's current MAIN tools. Domain skills are registered only
  * in role-bound specialist child scopes by the continuable router.
- * @param ctx - The `autoreport-main` preset scope.
+ * @param ctx - The `autoreport` preset scope.
  */
 export function apply(ctx: Context): void {
   installReferencesSkills(ctx)

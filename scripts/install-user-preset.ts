@@ -1,8 +1,8 @@
 /**
  * Materialize the AutoReportDSH user preset and render the patch overlay.
  *
- * Copies presets/autoreport-main into the DeepSeek Harness home's writable
- * user preset root (`<home>/.agent-presets/autoreport-main`) so the shipped
+ * Copies presets/autoreport into the DeepSeek Harness home's writable
+ * user preset root (`<home>/.agent-presets/autoreport`) so the shipped
  * agent-presets roster discovers it through DSH's ordinary `includeUserRoot`
  * discovery, then renders cordis.overlay.generated.yml from
  * cordis.template.yml with the package-name host row (`autoreportdsh`) and
@@ -22,7 +22,7 @@ import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
 
-const PRESET_SOURCE_DIR = 'presets/autoreport-main'
+const PRESET_SOURCE_DIR = 'presets/autoreport'
 const USER_PRESET_ROOT = '.agent-presets'
 const TEMPLATE_FILE = 'cordis.template.yml'
 const GENERATED_OVERLAY_FILE = 'cordis.overlay.generated.yml'
@@ -122,7 +122,7 @@ export function install(options: InstallOptions = {}): {
     throw new Error(`autoreportdsh: preset composition missing at ${join(sourceDir, 'agent.cordis.yml')}`)
   }
 
-  const presetDir = join(home, USER_PRESET_ROOT, 'autoreport-main')
+  const presetDir = join(home, USER_PRESET_ROOT, 'autoreport')
   try {
     mergeCopy(sourceDir, presetDir)
     const compositionTemplate = readFileSync(join(sourceDir, 'agent.cordis.yml'), 'utf8')

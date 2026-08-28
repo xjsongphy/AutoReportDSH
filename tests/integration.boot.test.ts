@@ -2,7 +2,7 @@
  * Loader-level boot smoke (PLAN.md §3 keyless assembled smokes): run
  * `scripts/install-user-preset.ts` as the real CLI against a temporary
  * harness home with the BUILT dist, then verify the deployment contract —
- * preset materialized under `<home>/.agent-presets/autoreport-main` with
+ * preset materialized under `<home>/.agent-presets/autoreport` with
  * substituted persona text and absolute entry paths, and a rendered overlay
  * that disables the stock child-report row and inserts both AutoReport rows.
  *
@@ -69,10 +69,10 @@ describe.skipIf(skipReason !== undefined)('integration: installer CLI against a 
       '--repo-root', REPO_ROOT,
     ], { cwd: REPO_ROOT, encoding: 'utf8', timeout: 120_000 })
     expect(run.status, `installer failed: ${run.stderr}`).toBe(0)
-    expect(run.stdout).toContain(`preset installed at ${join(home, '.agent-presets', 'autoreport-main')}`)
+    expect(run.stdout).toContain(`preset installed at ${join(home, '.agent-presets', 'autoreport')}`)
 
     // Preset composition: persona substituted, absolute tool paths, no tokens.
-    const composed = readFileSync(join(home, '.agent-presets', 'autoreport-main', 'agent.cordis.yml'), 'utf8')
+    const composed = readFileSync(join(home, '.agent-presets', 'autoreport', 'agent.cordis.yml'), 'utf8')
     expect(composed).toContain('You coordinate automated physics experiment report writing')
     expect(composed).not.toMatch(/__AUTOREPORT_[A-Z_]+__/)
     expect(composed).toContain(join(REPO_ROOT, 'dist', 'src', 'preset.js'))

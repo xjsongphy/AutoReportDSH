@@ -98,7 +98,7 @@ export function apply(ctx: Context, config: Partial<Config> = {}, options: Runti
         if (!isAutoReportMainSession(invocation.agent.session)) {
           return {
             kind: 'error',
-            text: "report-init is available only in an 'autoreport-main' session.",
+            text: "report-init is available only in an 'autoreport' session.",
           }
         }
         const result = await definition.handler(invocation)

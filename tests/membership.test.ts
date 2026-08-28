@@ -13,7 +13,7 @@ function rootSession(id: string, preset: string | undefined): Session {
 }
 
 describe('AutoReport session membership', () => {
-  it('treats only top-level autoreport-main sessions as MAIN roots', () => {
+  it('treats only top-level autoreport sessions as MAIN roots', () => {
     expect(isAutoReportMainSession(rootSession('main', AUTOREPORT_MAIN_PRESET))).toBe(true)
     // Any other preset — including the stock composition — stays foreign.
     expect(isAutoReportMainSession(rootSession('stock', undefined))).toBe(false)

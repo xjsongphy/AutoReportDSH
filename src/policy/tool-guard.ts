@@ -8,7 +8,7 @@
  * workspace symlink cannot escape a role's writable roots.
  *
  * Coexistence: only AutoReport-owned sessions are restricted — a MAIN root is
- * one actually running the `autoreport-main` preset (or explicitly wired as
+ * one actually running the `autoreport` preset (or explicitly wired as
  * Main), and a specialist child is one bound in the RoleRegistry. Every other
  * caller passes through untouched so stock DSH sessions keep their native
  * policy when the overlay is loaded.

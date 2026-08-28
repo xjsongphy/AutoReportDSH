@@ -78,7 +78,7 @@ describe('AutoReport role tool guard', () => {
     expect(guard(execution('bash', { command: 'true' }, main))).toBeUndefined()
   })
 
-  it('recognizes a MAIN root through the autoreport-main preset alone', () => {
+  it('recognizes a MAIN root through the autoreport preset alone', () => {
     const root = workspace()
     const main = agent('preset-main', root, { agentPreset: AUTOREPORT_MAIN_PRESET })
     const guard = createRoleToolGuard({ registry: new RoleRegistry() })

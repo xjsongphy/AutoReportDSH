@@ -163,10 +163,10 @@ describe('host workflow runtime', () => {
     expect(stock.events.some(event => event.type.startsWith('autoreport/'))).toBe(false)
     expect(stock.events.some(event => event.type === 'sandbox/mode')).toBe(false)
     expect(stock.events.some(event => event.type === 'sandbox/workspace-root')).toBe(false)
-    expect(() => runtime.forSession(stock)).toThrow(/requires the 'autoreport-main' preset/)
+    expect(() => runtime.forSession(stock)).toThrow(/requires the 'autoreport' preset/)
   })
 
-  it('admits autoreport-main roots and releases Main membership after a later preset switch', () => {
+  it('admits autoreport roots and releases Main membership after a later preset switch', () => {
     const ctx = new Context()
     const runtime = new AutoReportWorkflowRuntime(ctx, CONFIG)
     const session = rootSession('switchable', AUTOREPORT_MAIN_PRESET)
@@ -182,7 +182,7 @@ describe('host workflow runtime', () => {
     expect(runtime.ownsSession(session)).toBe(false)
   })
 
-  it('does not pin MAIN sandbox when autoreport-main is selected then switched before any turn', () => {
+  it('does not pin MAIN sandbox when autoreport is selected then switched before any turn', () => {
     const root = mkdtempSync(join(tmpdir(), 'autoreport-runtime-'))
     tempDirs.push(root)
     const ctx = new Context()
@@ -201,7 +201,7 @@ describe('host workflow runtime', () => {
     expect(runtime.ownsSession(session)).toBe(false)
   })
 
-  it('pins MAIN sandbox to Outline after the first user message on autoreport-main', () => {
+  it('pins MAIN sandbox to Outline after the first user message on autoreport', () => {
     const root = mkdtempSync(join(tmpdir(), 'autoreport-runtime-'))
     tempDirs.push(root)
     const ctx = new Context()
