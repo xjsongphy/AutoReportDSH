@@ -187,9 +187,12 @@ describe('bash role write confinement (live)', () => {
     },
   )
 
-  // Local machines without seatbelt/bwrap skip the probes. GitHub Linux/macOS
-  // must not: the availability test above fails instead of silently skipping.
-  describe.skipIf(!SANDBOX_USABLE)('role writable roots', () => {
+  // Local machines without a sandbox skip the probes. CI must not: the
+  // availability test above fails instead of silently skipping.
+  // DSH disables bash-sandbox / tool-bash on win32 (pwsh + ACL is the
+  // Windows shell). Role-root bash probes run on Linux/macOS; Windows CI
+  // still asserts the ACL backend via SANDBOX_USABLE.
+  describe.skipIf(!SANDBOX_USABLE || process.platform === 'win32')('role writable roots', () => {
   it('DATA_ANALYSIS writes inside Data/Processed and denies Report', async () => {
     const experimentRoot = experimentWorkspace()
     const harness = await setupHarness(experimentRoot)

@@ -10,6 +10,7 @@ import type { Config } from '../src/config.js'
 import type { RoleBindingSnapshot } from '../src/workflow/events.js'
 import { installRoutedReportTool } from '../src/tools/report-router.js'
 import { installWorkflowReportTool } from '../src/tools/report-workflow.js'
+import { roleWritableRoot } from '../src/policy/sandbox-roots.js'
 
 const CONFIG: Config = {
   defaultReportLanguage: 'latex',
@@ -100,7 +101,7 @@ describe('report router', () => {
     expect(child.sections.some(section => section.text.includes('THEORY'))).toBe(true)
     expect(child.tools.some(tool => tool.name === 'report')).toBe(false)
     expect(effectiveSandboxMode(child.session.events)).toBe('workspace-write')
-    expect(effectiveSandboxWorkspaceRoot(child.session.events)).toBe(`${workspaceRoot}/Theory`)
+    expect(effectiveSandboxWorkspaceRoot(child.session.events)).toBe(roleWritableRoot(workspaceRoot, 'THEORY'))
     expect(child.providers).toEqual(['autoreport-references'])
   })
 
@@ -127,7 +128,7 @@ describe('report router', () => {
       'autoreport:skill:experiment-report-writer',
       'autoreport:skill:latex-compile',
     ]))
-    expect(effectiveSandboxWorkspaceRoot(child.session.events)).toBe(`${workspaceRoot}/Report`)
+    expect(effectiveSandboxWorkspaceRoot(child.session.events)).toBe(roleWritableRoot(workspaceRoot, 'REPORT'))
     expect(child.providers).toEqual(['autoreport-references'])
   })
 

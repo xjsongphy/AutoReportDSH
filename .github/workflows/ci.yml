@@ -86,11 +86,16 @@ jobs:
 
       # Live bash confinement tests need an OS sandbox. ubuntu-latest does not
       # ship bubblewrap; without it the suite would skip the P0 write-denial
-      # cases. macOS runners already have sandbox-exec.
+      # cases. Ubuntu 24.04 also gates unprivileged user namespaces behind
+      # AppArmor — lift that or `bwrap` cannot confine. macOS runners already
+      # have sandbox-exec.
       - name: Install Linux bubblewrap
         if: runner.os == 'Linux'
         working-directory: ${{ github.workspace }}
-        run: sudo apt-get update && sudo apt-get install -y bubblewrap
+        run: |
+          sudo apt-get update && sudo apt-get install -y bubblewrap
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 \
+            || echo 'apparmor userns knob absent — the functional probe decides'
 
       - name: Install and build the pinned Harness
         working-directory: deepseek-harness
@@ -101,13 +106,15 @@ jobs:
       - name: Install plugin dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Run keyless test suite
-        run: pnpm test
-
+      # Installer tests and boot smokes require dist/. Build before the suite
+      # so a clean CI checkout does not depend on test-order side effects.
       - name: Type-check and build plugin
         run: |
           pnpm run typecheck
           pnpm run build
+
+      - name: Run keyless test suite
+        run: pnpm test
 
       - name: Verify generated artifacts do not dirty tracked files
         run: git diff --exit-code -- .

@@ -1,6 +1,6 @@
 import { mkdirSync, mkdtempSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
   MAX_SCAN_DEPTH,
@@ -35,7 +35,7 @@ function makeSnapshot(entries: Readonly<Record<string, FileSnapshot>>): DirSnaps
 
 function file(relPath: string): void {
   const absolute = join(root, relPath)
-  mkdirSync(absolute.slice(0, absolute.lastIndexOf('/')), { recursive: true })
+  mkdirSync(dirname(absolute), { recursive: true })
   writeFileSync(absolute, 'x')
 }
 

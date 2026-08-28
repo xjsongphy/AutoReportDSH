@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { loadMainPersona, loadSpecialistPersona } from '../src/personas.js'
@@ -62,7 +62,32 @@ const ROLE_PERSONA_FILES: Readonly<Record<string, string>> = {
     }
   })
 
-  it('keeps AutoReportCLI quality gates while translating tool names', () => {
+  it('embeds AutoReport quality gates in DSH personas with translated tool names', () => {
+    const dshTheory = readFileSync(join(REPO_PERSONAS, 'theory_agent.md'), 'utf8')
+    for (const gate of QUALITY_GATES.THEORY ?? []) {
+      expect(dshTheory).toContain(gate)
+    }
+    expect(dshTheory).toContain('`report_workflow`')
+
+    const dshData = readFileSync(join(REPO_PERSONAS, 'data_analysis_agent.md'), 'utf8')
+    for (const gate of QUALITY_GATES.DATA_ANALYSIS ?? []) {
+      expect(dshData).toContain(gate)
+    }
+
+    const dshPlot = readFileSync(join(REPO_PERSONAS, 'plotting_agent.md'), 'utf8')
+    for (const gate of QUALITY_GATES.PLOTTING ?? []) {
+      expect(dshPlot).toContain(gate)
+    }
+
+    const dshReport = readFileSync(join(REPO_PERSONAS, 'report_agent.md'), 'utf8')
+    for (const gate of QUALITY_GATES.REPORT ?? []) {
+      expect(dshReport).toContain(gate)
+    }
+  })
+
+  const CLI_AVAILABLE = existsSync(join(CLI_AGENTS, 'theory_agent.md'))
+
+  it.skipIf(!CLI_AVAILABLE)('keeps AutoReportCLI quality gates while translating tool names', () => {
     const cliTheory = readFileSync(join(CLI_AGENTS, 'theory_agent.md'), 'utf8')
     const dshTheory = readFileSync(join(REPO_PERSONAS, 'theory_agent.md'), 'utf8')
     for (const gate of QUALITY_GATES.THEORY ?? []) {

@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { basename, join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { renderManifest, writeManifests, type ManifestWriter } from '../src/artifacts/manifest.js'
 import type { ArtifactSnapshot } from '../src/workflow/events.js'
@@ -125,7 +125,7 @@ describe('writeManifests', () => {
   it('never writes inside an experiment workspace passed as cwd context', () => {
     const workspace = mkdtempSync(join(tmpdir(), 'autoreport-experiment-'))
     const home = mkdtempSync(join(tmpdir(), 'autoreport-home-'))
-    writeManifests(home, workspace.slice(workspace.lastIndexOf('/') + 1), renderManifest([
+    writeManifests(home, basename(workspace), renderManifest([
       artifact('Report/main.pdf'),
     ]))
     // The projection only ever touches <home>; the workspace stays untouched

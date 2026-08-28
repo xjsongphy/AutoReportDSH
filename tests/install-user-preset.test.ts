@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process'
 import { mkdtempSync, readFileSync, rmSync, writeFileSync, existsSync, mkdirSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -29,8 +30,21 @@ function builtEntry(): string {
   return join(ROOT, 'dist', 'src', 'index.js')
 }
 
+function ensureBuilt(): void {
+  if (existsSync(builtEntry())) return
+  const build = spawnSync('pnpm', ['run', 'build'], {
+    cwd: ROOT,
+    encoding: 'utf8',
+    timeout: 180_000,
+  })
+  if (build.status !== 0 || !existsSync(builtEntry())) {
+    throw new Error(`autoreportdsh test: pnpm run build failed (${build.status}): ${(build.stderr ?? '').slice(-400)}`)
+  }
+}
+
 describe('install-user-preset', () => {
   it('copies the preset, substitutes persona and tool paths, and renders the overlay', () => {
+    ensureBuilt()
     const home = makeTemp()
     const entry = builtEntry()
     const result = install({ home, repoRoot: ROOT, entry })
@@ -64,6 +78,7 @@ describe('install-user-preset', () => {
   })
 
   it('is idempotent: a rerun overwrites ours and keeps foreign files', () => {
+    ensureBuilt()
     const home = makeTemp()
     const presetDir = join(home, '.agent-presets', 'autoreport-main')
     mkdirSync(presetDir, { recursive: true })
@@ -86,7 +101,9 @@ describe('install-user-preset', () => {
 
   it('fails loud when the preset composition is missing', () => {
     const home = makeTemp()
+    const dummyEntry = join(home, 'fake-entry.js')
+    writeFileSync(dummyEntry, '')
     const emptyRoot = makeTemp()
-    expect(() => install({ home, repoRoot: emptyRoot, entry: builtEntry() })).toThrowError(/preset composition missing/)
+    expect(() => install({ home, repoRoot: emptyRoot, entry: dummyEntry })).toThrowError(/preset composition missing/)
   })
 })
