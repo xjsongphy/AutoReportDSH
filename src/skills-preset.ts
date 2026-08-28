@@ -51,17 +51,19 @@ function requireSkillRegister(ctx: Context, owner: string): (registration: {
   source: string
   content: string
 }) => () => void {
-  const registerSkill = ctx.skills?.register
-  if (registerSkill === undefined) {
+  const skills = ctx.skills
+  if (skills?.register === undefined) {
     throw new Error(`AutoReport ${owner} skills require ctx.skills.register`)
   }
-  return registerSkill
+  // Call through the service object. Extracting `register` as a free function
+  // drops `this`, and DSH's SkillService reads `this.ctx`.
+  return registration => skills.register(registration)
 }
 
 /**
  * Register MAIN-only bundled skills (`pdf-reference-reader`) in the preset scope
  * where `ctx.skills.register` is available.
- * @param ctx - `autoreport-main` preset context.
+ * @param ctx - `autoreport` preset context.
  * @returns composite disposer for registered skills.
  */
 export function registerMainSkills(ctx: Context): () => void {

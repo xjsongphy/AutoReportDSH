@@ -55,4 +55,19 @@ describe('AutoReport role-scoped domain skills', () => {
     registerMainSkills(context)
     expect(skills).toEqual([...MAIN_SKILL_NAMES])
   })
+
+  it('invokes skills.register as a method so DSH SkillService keeps this.ctx', () => {
+    class FakeSkills {
+      ctx = { ok: true }
+      names: string[] = []
+      register(registration: { name: string }) {
+        if (this.ctx === undefined) throw new Error('lost this')
+        this.names.push(registration.name)
+        return () => {}
+      }
+    }
+    const skills = new FakeSkills()
+    registerMainSkills({ skills } as never)
+    expect(skills.names).toEqual([...MAIN_SKILL_NAMES])
+  })
 })
