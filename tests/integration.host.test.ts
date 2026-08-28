@@ -13,81 +13,34 @@
  * @module tests/integration.host
  */
 
-import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { Context } from '@deepseek-ai/cordis'
-import ToolRuntime from '@deepseek-ai/dsh-tools'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import type { Agent } from '@deepseek-ai/dsh-agent'
-import { CallId, createUserMessage } from '@deepseek-ai/dsh-llm'
-import { Session, SessionId, type SessionEvent } from '@deepseek-ai/dsh-session'
-import type { Config } from '../src/config.js'
-import { apply as applyHost } from '../src/host.js'
-import AutoReportWorkflowRuntime from '../src/runtime.js'
-import { AUTOREPORT_MAIN_PRESET } from '../src/membership.js'
+import { createUserMessage } from '@deepseek-ai/dsh-llm'
+import { Session, SessionId } from '@deepseek-ai/dsh-session'
 import { REQUIRED_DIRS } from '../src/workspace/init.js'
-import { resolveWorkflowSettings, saveProjectSettings, workspaceIdForRoot } from '../src/settings.js'
+import { resolveWorkflowSettings, workspaceIdForRoot } from '../src/settings.js'
 import { AUTOREPORT_SCHEMA_VERSION, type RoleBindingSnapshot } from '../src/workflow/events.js'
-import * as presetModule from '../src/preset.js'
-import * as reportRouterModule from '../src/tools/report-router.js'
+import {
+  ASSEMBLED_CONFIG as CONFIG,
+  admitFirstTurn,
+  assemble,
+  type Assembled,
+  disposeAssembled,
+  execute,
+  makeChildRecorder,
+  publish,
+  userTurn,
+  waitUntil,
+} from './helpers/assembled-host.js'
 
-const CONFIG: Config = {
-  defaultReportLanguage: 'latex',
-  workspaceRoot: undefined,
-  specialistModel: undefined,
-  delegationWaitTimeoutMs: 600_000,
-}
-
-const SIGNAL = new AbortController().signal
-
-interface RecordedSection {
-  readonly name: string
-  readonly text: string
-}
-
-/** Recorder standing in for one unpublished continuable child scope. */
-interface ChildRecorder {
-  readonly ctx: Parameters<typeof reportRouterModule.installRoutedReportTool>[0]
-  readonly toolNames: string[]
-  readonly skillNames: string[]
-  readonly sections: RecordedSection[]
-}
-
-function makeChildRecorder(id: string): ChildRecorder {
-  const toolNames: string[] = []
-  const skillNames: string[] = []
-  const sections: RecordedSection[] = []
-  const skillsService = {
-    register: (skill: { name: string }) => {
-      skillNames.push(skill.name)
-      return () => {}
-    },
-    registerProvider: () => () => {},
-  }
-  const ctx = {
-    agent: { id: SessionId(`${id}`) } as Agent,
-    get: (name: string) => name === 'skills' ? skillsService : undefined,
-    tools: {
-      register: (tool: { name: string }) => {
-        toolNames.push(tool.name)
-        return () => {}
-      },
-    },
-    systemPrompt: {
-      section: (section: { name: string; text: string }) => {
-        sections.push(section)
-        return () => {}
-      },
-    },
-    skills: skillsService,
-  }
-  return { ctx: ctx as ChildRecorder['ctx'], toolNames, skillNames, sections }
-}
-
+const live: Assembled[] = []
 const tempDirs: string[] = []
-afterEach(() => {
+afterEach(async () => {
+  for (const assembled of live.splice(0)) await disposeAssembled(assembled)
   for (const dir of tempDirs.splice(0)) rmSync(dir, { recursive: true, force: true })
 })
 
@@ -97,222 +50,15 @@ function makeTemp(prefix: string): string {
   return dir
 }
 
-/** One assembled context plus every handle a scenario needs. */
-interface Assembled {
-  ctx: Context
-  runtime: AutoReportWorkflowRuntime
-  workspaceRoot: string
-  home: string
-  mainAgent: Agent
-  mainSession: Session
-  continuableSetups: ((childCtx: Parameters<typeof reportRouterModule.installRoutedReportTool>[0]) => () => void)[]
-  startedSpecs: { childId: unknown; label: string }[]
-  reportInitCommand: { handler: (invocation: unknown) => Promise<{ kind: string; text?: string }> } | undefined
-  presetSkillNames: string[]
-}
-
-/**
- * Boot the assembled stack on a real Context: fake transport services first,
- * then the REAL tool pipeline, then the host plugin (runtime + guard +
- * `/report-init`) and the global report router — the same rows the generated
- * overlay installs, plus the single preset-plane product contribution mounted
- * through its production `apply()` function.
- */
-async function assemble(options: { projectLanguage?: 'latex' | 'typst' } = {}): Promise<Assembled> {
-  const ctx = new Context()
-  const workspaceRoot = makeTemp('autoreport-it-ws-')
-  const home = makeTemp('autoreport-it-home-')
-
-  // Transport-plane fakes (the Loader would supply these services; the
-  // harness's own specs substitute plain objects the same way).
-  const continuableSetups: Assembled['continuableSetups'] = []
-  const startedSpecs: Assembled['startedSpecs'] = []
-  const presetSkillNames: string[] = []
-  ctx.provide('subagents', {
-    registerContinuableSetup: (contribution: Assembled['continuableSetups'][number]) => {
-      continuableSetups.push(contribution)
-      return () => {}
-    },
-    startContinuable: async (spec: { childId: unknown; label: string }) => {
-      // Reservation MUST precede materialization: the synchronous registry
-      // authorizes the child's first tool call before this promise resolves.
-      expect(ctx.autoreportWorkflow.roleRegistry.lookup(spec.childId as never)).toBeDefined()
-      startedSpecs.push({ childId: spec.childId, label: spec.label })
-      return { childId: spec.childId, messageId: 'accepted-msg-1' }
-    },
-    followup: async () => 'followup-msg-1',
-    reportFrom: async () => 'report-msg-1',
-  } as never)
-  let reportInitCommand: Assembled['reportInitCommand']
-  ctx.provide('commands', {
-    register: (definition: Assembled['reportInitCommand']) => {
-      reportInitCommand = definition
-      return () => {}
-    },
-  } as never)
-  ctx.provide('systemPrompt', {
-    tools: () => () => {},
-    section: () => () => {},
-  } as never)
-  ctx.provide('skills', {
-    register: (registration: { name: string }) => {
-      presetSkillNames.push(registration.name)
-      return () => {}
-    },
-    registerProvider: () => () => {},
-  } as never)
-  ctx.provide('subprocess', {
-    resolveExecutable: async (command: string) => command,
-    spawn: () => {
-      throw new Error('process spawning is unused in integration smokes')
-    },
-  } as never)
-
-  // The REAL model-facing tool pipeline, guards included.
-  await ctx.plugin(ToolRuntime)
-
-  if (options.projectLanguage !== undefined) {
-    saveProjectSettings(home, workspaceIdForRoot(workspaceRoot), { reportLanguage: options.projectLanguage })
-  }
-
-  // Overlay row 1: the host plane (runtime service, guard, /report-init,
-  // artifact observation, manifest projection).
-  applyHost(ctx, { ...CONFIG, workspaceRoot }, { settingsHome: home, manifestHome: home })
-  // Overlay row 2: the single global continuable-child report router.
-  reportRouterModule.apply(ctx)
-  // The one preset-plane product contribution: its real apply() registers
-  // scoped bundled skills plus send_to_agent together.
-  presetModule.apply(ctx)
-
-  // A stand-in for the deployment's filesystem write tool: same tool NAME the
-  // role guard parses, backed by a real file mutation so success results feed
-  // the artifact observer.
-  ctx.tools.register(defineTool({
-    name: 'write',
-    description: 'fixture filesystem write',
-    parameters: {
-      file_path: { type: 'string', required: true },
-      content: { type: 'string', required: true },
-    },
-    output: {
-      schema: { type: 'object', additionalProperties: true, properties: {} },
-      render: () => [{ type: 'text', text: 'written' }],
-    },
-    async execute(args) {
-      writeFileSync(String(args.file_path), String(args.content))
-      return { path: args.file_path }
-    },
-  }))
-
-  const mainSession = Session.create(SessionId('it-main'), undefined, {
-    version: 0,
-    id: SessionId('it-main'),
-    createdAt: Date.now(),
-    cwd: workspaceRoot,
-    // Membership contract: the overlay owns ONLY sessions composed from this
-    // preset; everything else stays stock DSH.
-    agentPreset: AUTOREPORT_MAIN_PRESET,
-  })
-  const mainAgent = { id: SessionId('it-main'), session: mainSession } as Agent
-
-  return {
-    ctx,
-    runtime: ctx.autoreportWorkflow,
-    workspaceRoot,
-    home,
-    mainAgent,
-    mainSession,
-    continuableSetups,
-    startedSpecs,
-    reportInitCommand,
-    presetSkillNames,
-  }
-}
-
-let callCounter = 0
-
-/**
- * Execute one tool call through the REAL pipeline the way the agent loop
- * does: append the durable `tool/call`, dispatch through the guard pipeline,
- * then append the correlated `tool/result`. The session-log pair is exactly
- * what the artifact observer folds in production.
- */
-async function execute(
-  ctx: Context,
-  name: string,
-  args: Record<string, unknown>,
-  agent: Agent,
-  session?: Session,
-): Promise<{ isError: boolean; text: string; value: unknown }> {
-  callCounter += 1
-  const callId = CallId(`it-${callCounter}`)
-  const callSeq = session === undefined
-    ? undefined
-    : publish(ctx, session, 'tool/call', {
-        turn: 1,
-        step: callCounter,
-        callId: String(callId),
-        name,
-        arguments: JSON.stringify(args),
-      }).seq
-  const result = await ctx.tools.execute({
-    signal: SIGNAL,
-    callId,
-    name,
-    arguments: args,
-    agent,
-  })
-  if (session !== undefined && callSeq !== undefined) {
-    publish(ctx, session, 'tool/result', {
-      turn: 1,
-      step: callCounter,
-      message: {
-        role: 'user',
-        id: `it-msg-${callCounter}`,
-        content: [{
-          type: 'tool-result',
-          toolCallId: String(callId),
-          content: result.content,
-          isError: result.isError ?? false,
-        }],
-        source: { kind: 'tool', callId: String(callId) },
-      },
-    }, { surfaceOp: 'append', sourceEventSeqs: [callSeq] })
-  }
-  const text = result.content.flatMap(block => block.type === 'text' ? [block.text ?? ''] : []).join('')
-  return { isError: result.isError ?? false, text, value: result.value }
-}
-
-/** Append one event to a session and publish it on the context stream. */
-function publish(
-  ctx: Context,
-  session: Session,
-  type: Parameters<Session['append']>[0],
-  data: unknown,
-  opts?: { surfaceOp?: 'append' },
-): SessionEvent {
-  const event = session.append(type as never, data as never, opts as never) as SessionEvent
-  ctx.emit('session/event', session, event)
-  return event
-}
-
-/** Deliver one plain human text message to any root session on the context. */
-function userTurn(ctx: Context, session: Session, text: string): SessionEvent {
-  const message = createUserMessage({
-    content: [{ type: 'text', text }],
-    source: { kind: 'user' },
-  })
-  return publish(ctx, session, 'user/message', message, { surfaceOp: 'append' })
-}
-
-/** Deliver the first user turn so the workflow initializes. */
-function admitFirstTurn(assembled: Assembled): void {
-  userTurn(assembled.ctx, assembled.mainSession, 'start the physics report')
+async function boot(options: Parameters<typeof assemble>[0] = {}): Promise<Assembled> {
+  const assembled = await assemble(options)
+  live.push(assembled)
+  return assembled
 }
 
 describe('integration: assembled host (real context)', () => {
   it('registers exactly ONE continuable setup and routes it by RoleRegistry', async () => {
-    const assembled = await assemble()
+    const assembled = await boot()
     expect(assembled.continuableSetups).toHaveLength(1)
     const setup = assembled.continuableSetups[0]
     if (setup === undefined) throw new Error('router registered no continuable setup')
@@ -360,7 +106,7 @@ describe('integration: assembled host (real context)', () => {
   })
 
   it('initializes the workspace once with the frozen settings snapshot on the workflow event', async () => {
-    const assembled = await assemble({ projectLanguage: 'typst' })
+    const assembled = await boot({ projectLanguage: 'typst' })
     expect(assembled.presetSkillNames).toEqual(['pdf-reference-reader'])
     admitFirstTurn(assembled)
     for (const dir of REQUIRED_DIRS) expect(existsSync(join(assembled.workspaceRoot, dir))).toBe(true)
@@ -374,7 +120,7 @@ describe('integration: assembled host (real context)', () => {
   })
 
   it('runs the whole delegation round trip: reserve -> authorized first call -> denial -> report -> artifacts -> manifests', async () => {
-    const assembled = await assemble()
+    const assembled = await boot()
     admitFirstTurn(assembled)
 
     // Auto-create and dispatch with wait:true: resolves ONLY when the child reports.
@@ -385,7 +131,7 @@ describe('integration: assembled host (real context)', () => {
       wait: true,
       timeout_ms: 15_000,
     }, assembled.mainAgent, assembled.mainSession)
-    await vi_waitUntil(() => assembled.startedSpecs.length > 0)
+    await waitUntil(() => assembled.startedSpecs.length > 0)
     const childId = assembled.startedSpecs[0]?.childId
     expect(typeof childId).toBe('string')
     // markActive ran after acceptance; the binding is live and active.
@@ -473,7 +219,7 @@ describe('integration: assembled host (real context)', () => {
   })
 
   it('/report-init is membership-gated, then switches languages without deleting either backend', async () => {
-    const assembled = await assemble()
+    const assembled = await boot()
     const command = assembled.reportInitCommand
     if (command === undefined) throw new Error('/report-init was not registered by the host plugin')
 
@@ -491,7 +237,7 @@ describe('integration: assembled host (real context)', () => {
       agent: { session: stockSession },
     }) as { kind: string; text?: string }
     expect(rejected.kind).toBe('error')
-    expect(rejected.text).toContain("only in an 'autoreport-main' session")
+    expect(rejected.text).toContain("only in an 'autoreport' session")
     for (const dir of REQUIRED_DIRS) expect(existsSync(join(stockCwd, dir))).toBe(false)
     expect(existsSync(join(assembled.home, 'autoreport', workspaceIdForRoot(stockCwd), 'project.json'))).toBe(false)
 
@@ -524,8 +270,8 @@ describe('integration: assembled host (real context)', () => {
     expect(after).toEqual(before)
   })
 
-  it('releases Main guard restrictions when an admitted root switches away from autoreport-main', async () => {
-    const assembled = await assemble()
+  it('releases Main guard restrictions when an admitted root switches away from autoreport', async () => {
+    const assembled = await boot()
     admitFirstTurn(assembled)
     const initiallyDenied = await execute(assembled.ctx, 'write', {
       file_path: join(assembled.workspaceRoot, 'Report', 'main.tex'),
@@ -549,7 +295,7 @@ describe('integration: assembled host (real context)', () => {
   })
 
   it('stock-session-is-untouched: a standard session in a loaded deployment keeps stock behavior', async () => {
-    const assembled = await assemble()
+    const assembled = await boot()
     const ctx = assembled.ctx
 
     // A fixture unrestricted shell tool, as stock presets mount and AutoReport
@@ -599,7 +345,7 @@ describe('integration: assembled host (real context)', () => {
     const shell = await execute(ctx, 'bash', { command: 'true' }, stockAgent, stockSession)
     expect(shell.isError).toBe(false)
 
-    // Coexistence both ways: the autoreport-main session still initializes on
+    // Coexistence both ways: the autoreport session still initializes on
     // ITS first turn, and the guard still restricts it to Outline writes.
     admitFirstTurn(assembled)
     for (const dir of REQUIRED_DIRS) expect(existsSync(join(assembled.workspaceRoot, dir))).toBe(true)
@@ -618,12 +364,3 @@ describe('integration: assembled host (real context)', () => {
     await ctx.fiber?.dispose()
   })
 })
-
-/** Tiny polling helper; avoids importing vitest's waitFor into every test. */
-async function vi_waitUntil(predicate: () => boolean, timeoutMs = 2_000): Promise<void> {
-  const deadline = Date.now() + timeoutMs
-  while (!predicate()) {
-    if (Date.now() > deadline) throw new Error('condition not met before timeout')
-    await new Promise(resolve => setTimeout(resolve, 10))
-  }
-}
