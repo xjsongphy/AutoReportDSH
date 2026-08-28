@@ -7,7 +7,6 @@ import { installSpecialistModelSelection } from '../src/tools/report-router.js'
 
 const CONFIG: Config = {
   defaultReportLanguage: 'latex',
-  defaultLatexEngine: 'latexmk',
   workspaceRoot: undefined,
   specialistModel: undefined,
   delegationWaitTimeoutMs: 600_000,

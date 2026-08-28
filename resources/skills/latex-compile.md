@@ -46,7 +46,7 @@ xelatex -synctex=1 -interaction=nonstopmode -file-line-error main.tex
 xelatex -synctex=1 -interaction=nonstopmode -file-line-error main.tex
 ```
 
-**Engine choice:** check what is installed (`command -v latexmk`, `command -v tectonic`). User/workspace `latexEngine` setting (`latexmk` vs `tectonic`) is a hint — prefer it when the binary exists.
+**Engine choice:** check what is installed (`command -v latexmk`, `command -v tectonic`, `command -v xelatex`). Prefer the first available option in this order: latexmk → tectonic → xelatex.
 
 **Parameters (XeLaTeX):**
 - `-synctex=1`: generate SyncTeX data for PDF viewer synchronization

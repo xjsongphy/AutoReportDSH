@@ -37,7 +37,6 @@ const DEFAULT_WAIT_MS = 600_000
 
 const DEFAULT_CONFIG: Config = {
   defaultReportLanguage: 'latex',
-  defaultLatexEngine: 'latexmk',
   workspaceRoot: undefined,
   specialistModel: undefined,
   delegationWaitTimeoutMs: DEFAULT_WAIT_MS,

@@ -42,20 +42,6 @@ export function AutoReportCard(props: AutoReportCardProps) {
         onEdit={(text) => { props.edit('defaultReportLanguage', text) }}
         onReset={() => { props.resetField('defaultReportLanguage') }}
       />
-      <SelectField
-        id="plugin-config-autoreport-engine"
-        label={t('latexEngine')}
-        hint={t('latexEngineHint')}
-        invalidLabel={t('invalidChoice')}
-        options={[
-          { value: 'latexmk', label: t('engineLatexmk') },
-          { value: 'tectonic', label: t('engineTectonic') },
-        ]}
-        {...shared}
-        {...state.defaultLatexEngine}
-        onEdit={(text) => { props.edit('defaultLatexEngine', text) }}
-        onReset={() => { props.resetField('defaultLatexEngine') }}
-      />
       <ValueField
         id="plugin-config-autoreport-timeout"
         label={t('timeoutMs')}

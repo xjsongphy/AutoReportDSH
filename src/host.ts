@@ -23,7 +23,6 @@ const DEFAULT_WAIT_MS = 600_000
 
 const DEFAULT_CONFIG: Config = {
   defaultReportLanguage: 'latex',
-  defaultLatexEngine: 'latexmk',
   workspaceRoot: undefined,
   specialistModel: undefined,
   delegationWaitTimeoutMs: DEFAULT_WAIT_MS,
@@ -40,7 +39,6 @@ export function resolveHostConfig(raw: Partial<Config> = {}): Config {
     ?? DEFAULT_WAIT_MS
   return {
     defaultReportLanguage: raw.defaultReportLanguage ?? DEFAULT_CONFIG.defaultReportLanguage,
-    defaultLatexEngine: raw.defaultLatexEngine ?? DEFAULT_CONFIG.defaultLatexEngine,
     workspaceRoot: raw.workspaceRoot ?? DEFAULT_CONFIG.workspaceRoot,
     specialistModel: raw.specialistModel ?? DEFAULT_CONFIG.specialistModel,
     delegationWaitTimeoutMs: wait,

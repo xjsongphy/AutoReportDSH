@@ -23,7 +23,6 @@ afterEach(() => {
 
 const CONFIG: Config = {
   defaultReportLanguage: 'latex',
-  defaultLatexEngine: 'latexmk',
   workspaceRoot: undefined,
   specialistModel: undefined,
   delegationWaitTimeoutMs: 600_000,
@@ -91,7 +90,6 @@ describe('host workflow runtime', () => {
       doc: {
         autoreport: {
           defaultReportLanguage: 'typst',
-          defaultLatexEngine: 'tectonic',
           specialistModel: { provider: 'specialist', model: 'reasoning-model', reasoningEffort: 'high' },
           delegationWaitTimeoutMs: 12_345,
         },
@@ -106,7 +104,6 @@ describe('host workflow runtime', () => {
     runtime.maybeInitialize(session)
     expect(runtime.forSession(session).state.projection().meta?.settings).toEqual({
       reportLanguage: 'typst',
-      latexEngine: 'tectonic',
       specialistModel: { inheritMain: false, provider: 'specialist', model: 'reasoning-model', reasoningEffort: 'high' },
       delegationWaitTimeoutMs: 12_345,
       executionTimeoutMs: 12_345,

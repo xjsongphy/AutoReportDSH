@@ -8,14 +8,12 @@ export type AutoReportLocaleKey =
   | 'save' | 'saving' | 'discard' | 'unsaved' | 'saveFailed'
   | 'invalidChoice' | 'invalidNumber' | 'invalidRoute'
   | 'reportLanguage' | 'reportLanguageHint'
-  | 'latexEngine' | 'latexEngineHint'
   | 'timeoutMs' | 'timeoutMsHint'
   | 'python' | 'pythonHint'
   | 'specialistProvider' | 'specialistProviderHint'
   | 'specialistModel' | 'specialistModelHint'
   | 'specialistEffort' | 'specialistEffortHint'
   | 'languageLatex' | 'languageTypst'
-  | 'engineLatexmk' | 'engineTectonic'
 
 /** English copy. */
 export const en: Record<AutoReportLocaleKey, string> = {
@@ -36,8 +34,6 @@ export const en: Record<AutoReportLocaleKey, string> = {
   invalidRoute: 'Provide both a provider and a model, or leave both blank to inherit Main.',
   reportLanguage: 'Report language',
   reportLanguageHint: 'Source language for newly initialized workspaces.',
-  latexEngine: 'LaTeX engine',
-  latexEngineHint: 'Compiler used when the report language is LaTeX.',
   timeoutMs: 'Delegation wait (ms)',
   timeoutMsHint: 'How long Main may wait for a specialist that was sent with wait: true.',
   python: 'Python interpreter',
@@ -50,8 +46,6 @@ export const en: Record<AutoReportLocaleKey, string> = {
   specialistEffortHint: 'Optional adapter-owned effort. Leave blank for the provider default.',
   languageLatex: 'LaTeX',
   languageTypst: 'Typst',
-  engineLatexmk: 'latexmk',
-  engineTectonic: 'Tectonic',
 }
 
 /** Simplified Chinese copy. */
@@ -73,8 +67,6 @@ export const zh: Record<AutoReportLocaleKey, string> = {
   invalidRoute: 'provider 和 model 需要一起填写，或都留空以继承 MAIN。',
   reportLanguage: '报告语言',
   reportLanguageHint: '新初始化工作区使用的源码语言。',
-  latexEngine: 'LaTeX 引擎',
-  latexEngineHint: '报告语言为 LaTeX 时使用的编译器。',
   timeoutMs: '委派等待（毫秒）',
   timeoutMsHint: 'MAIN 以 wait: true 委派 specialist 时最多等待多久。',
   python: 'Python 解释器',
@@ -87,6 +79,4 @@ export const zh: Record<AutoReportLocaleKey, string> = {
   specialistEffortHint: '可选，由适配器解释。留空则使用提供方默认。',
   languageLatex: 'LaTeX',
   languageTypst: 'Typst',
-  engineLatexmk: 'latexmk',
-  engineTectonic: 'Tectonic',
 }

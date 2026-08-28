@@ -18,9 +18,6 @@ import z from '@deepseek-ai/schemastery'
 /** Report source language for materialization and compilation. */
 export type ReportLanguage = 'latex' | 'typst'
 
-/** LaTeX engine hint for bash-driven compilation. Tectonic requires a verified local cache. */
-export type LatexEngine = 'latexmk' | 'tectonic'
-
 /** Optional specialist model route; DSH owns credentials and execution. */
 export interface SpecialistRoute {
   /** DSH provider id the specialist requests. */
@@ -35,8 +32,6 @@ export interface SpecialistRoute {
 export interface Config {
   /** Default report source language (schema default `latex`). */
   defaultReportLanguage: ReportLanguage
-  /** Default LaTeX compiler selection (schema default `latexmk`). */
-  defaultLatexEngine: LatexEngine
   /**
    * Experiment workspace root; absent resolves to the calling session cwd at
    * use time, never a build-time constant.
@@ -57,7 +52,6 @@ export interface Config {
 
 export const Config: z<Config> = z.object({
   defaultReportLanguage: z.union(['latex', 'typst'] as const).default('latex'),
-  defaultLatexEngine: z.union(['latexmk', 'tectonic'] as const).default('latexmk'),
   workspaceRoot: z.string(),
   specialistModel: z.object({
     provider: z.string(),

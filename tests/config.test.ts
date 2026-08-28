@@ -5,12 +5,10 @@ describe('autoreportdsh Config', () => {
   it('fills deployment defaults', () => {
     const config = Config({}) as unknown as {
       defaultReportLanguage: string
-      defaultLatexEngine: string
       delegationWaitTimeoutMs: number
       executionTimeoutMs: number
     }
     expect(config.defaultReportLanguage).toBe('latex')
-    expect(config.defaultLatexEngine).toBe('latexmk')
     expect(config.executionTimeoutMs).toBe(600_000)
     expect(config.delegationWaitTimeoutMs ?? config.executionTimeoutMs).toBe(600_000)
   })
@@ -18,7 +16,6 @@ describe('autoreportdsh Config', () => {
   it('accepts a full explicit configuration', () => {
     const config = Config({
       defaultReportLanguage: 'typst',
-      defaultLatexEngine: 'tectonic',
       workspaceRoot: '/tmp/exp',
       specialistModel: { provider: 'openrouter', model: 'stealth/ox-alpha' },
       delegationWaitTimeoutMs: 1000,

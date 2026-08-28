@@ -18,8 +18,6 @@ export const AUTOREPORT_SETTINGS_NAMESPACE = 'autoreport'
 export interface AutoReportCardSettings {
   /** Default report source language. */
   defaultReportLanguage?: 'latex' | 'typst'
-  /** Default LaTeX compiler. */
-  defaultLatexEngine?: 'latexmk' | 'tectonic'
   /** Bounded wait for `send_to_agent({ wait: true })`. */
   delegationWaitTimeoutMs?: number
   /** Optional absolute Python interpreter for specialist bash. */
@@ -36,8 +34,6 @@ export interface AutoReportCardSettings {
 export interface AutoReportCardState extends CardShell {
   /** Default report source language. */
   defaultReportLanguage: CardFieldState
-  /** Default LaTeX compiler. */
-  defaultLatexEngine: CardFieldState
   /** Delegation wait bound. */
   delegationWaitTimeoutMs: CardFieldState
   /** Optional Python interpreter. */
@@ -59,7 +55,6 @@ export interface AutoReportCardFace extends CardActions {
 }
 
 const LANGUAGE_VALUES = ['latex', 'typst'] as const
-const ENGINE_VALUES = ['latexmk', 'tectonic'] as const
 
 /** A specialist route is either absent or a complete provider+model pair. */
 function routeIncomplete(provider: string, model: string, effort: string): boolean {
@@ -79,7 +74,6 @@ export class AutoReportCardController {
   constructor(scope: SettingsScope<AutoReportCardSettings>) {
     this.form = new CardForm(scope, [
       enumField('defaultReportLanguage', LANGUAGE_VALUES),
-      enumField('defaultLatexEngine', ENGINE_VALUES),
       numberField('delegationWaitTimeoutMs'),
       textField('pythonExecutable'),
       textField('specialistModel.provider'),
@@ -97,7 +91,6 @@ export class AutoReportCardController {
     return {
       ...this.form.shell(),
       defaultReportLanguage: this.form.field('defaultReportLanguage'),
-      defaultLatexEngine: this.form.field('defaultLatexEngine'),
       delegationWaitTimeoutMs: this.form.field('delegationWaitTimeoutMs'),
       pythonExecutable: this.form.field('pythonExecutable'),
       specialistProvider: { ...provider, invalid: provider.invalid || incomplete },

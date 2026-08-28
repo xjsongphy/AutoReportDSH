@@ -131,8 +131,8 @@ describe('AutoReportCardController', () => {
     host.publish({
       status: 'ready',
       writable: true,
-      value: { defaultReportLanguage: 'typst', defaultLatexEngine: 'tectonic', delegationWaitTimeoutMs: 1_000 },
-      base: { defaultReportLanguage: 'latex', defaultLatexEngine: 'latexmk', delegationWaitTimeoutMs: 600_000 },
+      value: { defaultReportLanguage: 'typst', delegationWaitTimeoutMs: 1_000 },
+      base: { defaultReportLanguage: 'latex', delegationWaitTimeoutMs: 600_000 },
       user: { defaultReportLanguage: 'typst' },
     })
 
@@ -140,7 +140,6 @@ describe('AutoReportCardController', () => {
     const state = face.hooks.autoreportCard.getSnapshot()
     expect(state.available).toBe(true)
     expect(state.defaultReportLanguage).toEqual({ text: 'typst', overridden: true, invalid: false })
-    expect(state.defaultLatexEngine).toEqual({ text: 'tectonic', overridden: false, invalid: false })
     expect(Object.keys(face.hooks)).toEqual(['autoreportCard'])
   })
 

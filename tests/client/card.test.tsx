@@ -46,7 +46,6 @@ function renderCard(state: Partial<AutoReportCardState> = {}) {
   const store = snapshotStore<AutoReportCardState>({
     ...settled,
     defaultReportLanguage: field('latex'),
-    defaultLatexEngine: field('latexmk'),
     delegationWaitTimeoutMs: field('600000'),
     pythonExecutable: field(''),
     specialistProvider: field(''),

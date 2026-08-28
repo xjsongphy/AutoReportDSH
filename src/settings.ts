@@ -36,16 +36,14 @@ import { dirname, join, resolve } from 'node:path'
 import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
 import { settingsNamespace } from '@deepseek-ai/dsh-settings'
 import z from '@deepseek-ai/schemastery'
-import type { Config, LatexEngine, ReportLanguage, SpecialistRoute } from './config.js'
+import type { Config, ReportLanguage, SpecialistRoute } from './config.js'
 
 /** Schema-default workflow policy applied below every other layer. */
 export const WORKFLOW_SETTINGS_SCHEMA_DEFAULTS: Readonly<{
   reportLanguage: ReportLanguage
-  latexEngine: LatexEngine
   delegationWaitTimeoutMs: number
 }> = Object.freeze({
   reportLanguage: 'latex',
-  latexEngine: 'latexmk',
   delegationWaitTimeoutMs: 600_000,
 })
 
@@ -55,8 +53,6 @@ export const AUTOREPORT_SETTINGS_NAMESPACE = settingsNamespace('autoreport')
 export interface AutoReportUserSettings {
   /** Default report source language (schema default `latex`). */
   defaultReportLanguage: ReportLanguage
-  /** Default LaTeX compiler (schema default `latexmk`). */
-  defaultLatexEngine: LatexEngine
   /** Bounded wait for `send_to_agent({ wait: true })` (schema default ten minutes). */
   delegationWaitTimeoutMs: number
   /** Deprecated alias equal to {@link delegationWaitTimeoutMs}. */
@@ -82,7 +78,6 @@ const SPECIALIST_ROUTE_SCHEMA = z.object({
 /** Schemastery schema resolving the `'autoreport'` user-settings namespace standalone. */
 export const AUTO_REPORT_USER_SETTINGS_SCHEMA: z<AutoReportUserSettings> = z.object({
   defaultReportLanguage: z.union(['latex', 'typst'] as const).default(WORKFLOW_SETTINGS_SCHEMA_DEFAULTS.reportLanguage),
-  defaultLatexEngine: z.union(['latexmk', 'tectonic'] as const).default(WORKFLOW_SETTINGS_SCHEMA_DEFAULTS.latexEngine),
   specialistModel: SPECIALIST_ROUTE_SCHEMA,
   delegationWaitTimeoutMs: z.number().default(WORKFLOW_SETTINGS_SCHEMA_DEFAULTS.delegationWaitTimeoutMs),
   executionTimeoutMs: z.number(),
@@ -93,7 +88,6 @@ export const AUTO_REPORT_USER_SETTINGS_SCHEMA: z<AutoReportUserSettings> = z.obj
 export function autoReportUserSettingsBase(config: Config): AutoReportUserSettings {
   return {
     defaultReportLanguage: config.defaultReportLanguage,
-    defaultLatexEngine: config.defaultLatexEngine,
     delegationWaitTimeoutMs: config.delegationWaitTimeoutMs ?? config.executionTimeoutMs,
     executionTimeoutMs: config.executionTimeoutMs,
     ...(config.specialistModel === undefined ? {} : { specialistModel: config.specialistModel }),
@@ -109,8 +103,6 @@ export function autoReportUserSettingsBase(config: Config): AutoReportUserSettin
 export interface AutoReportProjectSettings {
   /** Authoritative report language for this workspace once set. */
   reportLanguage?: ReportLanguage
-  /** Workspace LaTeX compiler preference. */
-  latexEngine?: LatexEngine
   /** Workspace delegation-wait bound. */
   delegationWaitTimeoutMs?: number
   /** Deprecated alias equal to {@link delegationWaitTimeoutMs}. */
@@ -124,7 +116,6 @@ export interface AutoReportProjectSettings {
 /** Schemastery schema validating the external project-settings document. */
 export const AUTO_REPORT_PROJECT_SETTINGS_SCHEMA: z<AutoReportProjectSettings> = z.object({
   reportLanguage: z.union(['latex', 'typst'] as const),
-  latexEngine: z.union(['latexmk', 'tectonic'] as const),
   specialistModel: SPECIALIST_ROUTE_SCHEMA,
   delegationWaitTimeoutMs: z.number(),
   executionTimeoutMs: z.number(),
@@ -154,13 +145,12 @@ function compactSection<S extends Record<string, unknown>>(section: S): S {
 /** Composition-layer fields that act as plugin DEFAULTS (see {@link Config}). */
 export type WorkflowCompositionDefaults = Pick<
   Config,
-  'defaultReportLanguage' | 'defaultLatexEngine' | 'specialistModel' | 'delegationWaitTimeoutMs' | 'executionTimeoutMs' | 'pythonExecutable'
+  'defaultReportLanguage' | 'specialistModel' | 'delegationWaitTimeoutMs' | 'executionTimeoutMs' | 'pythonExecutable'
 >
 
 /** Explicit per-workflow inputs; highest layer, owned by the creating turn. */
 export interface WorkflowSettingsOverride {
   reportLanguage?: ReportLanguage
-  latexEngine?: LatexEngine
   delegationWaitTimeoutMs?: number
   /** Deprecated alias equal to {@link delegationWaitTimeoutMs}. */
   executionTimeoutMs?: number
@@ -190,8 +180,6 @@ export type SpecialistModelSelection =
 export interface WorkflowSettingsSnapshot {
   /** Resolved report source language. */
   readonly reportLanguage: ReportLanguage
-  /** Resolved LaTeX compiler (unused for Typst reports). */
-  readonly latexEngine: LatexEngine
   /** Concrete specialist route or explicit Main inheritance. */
   readonly specialistModel: SpecialistModelSelection
   /** Bounded wait applied to delegation waits. */
@@ -266,7 +254,6 @@ function routeField(
 }
 
 const REPORT_LANGUAGES: readonly ReportLanguage[] = ['latex', 'typst']
-const LATEX_ENGINES: readonly LatexEngine[] = ['latexmk', 'tectonic']
 
 function firstDefined<T>(...values: readonly T[]): T | undefined {
   return values.find(value => value !== undefined)
@@ -286,11 +273,6 @@ export function resolveWorkflowSettings(layers: WorkflowSettingsLayers): Workflo
     firstDefined(override?.reportLanguage, project?.reportLanguage, user?.defaultReportLanguage, composition?.defaultReportLanguage),
     REPORT_LANGUAGES,
   ) ?? WORKFLOW_SETTINGS_SCHEMA_DEFAULTS.reportLanguage
-  const latexEngine = enumField(
-    'latexEngine',
-    firstDefined(override?.latexEngine, project?.latexEngine, user?.defaultLatexEngine, composition?.defaultLatexEngine),
-    LATEX_ENGINES,
-  ) ?? WORKFLOW_SETTINGS_SCHEMA_DEFAULTS.latexEngine
   const delegationWaitTimeoutMs = positiveIntegerField(
     'delegationWaitTimeoutMs',
     firstDefined(
@@ -318,7 +300,6 @@ export function resolveWorkflowSettings(layers: WorkflowSettingsLayers): Workflo
   ) ?? deepFreeze({ inheritMain: true }) satisfies SpecialistModelSelection
   return deepFreeze({
     reportLanguage,
-    latexEngine,
     specialistModel,
     delegationWaitTimeoutMs,
     executionTimeoutMs: delegationWaitTimeoutMs,

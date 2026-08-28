@@ -13,7 +13,6 @@ import { installWorkflowReportTool } from '../src/tools/report-workflow.js'
 
 const CONFIG: Config = {
   defaultReportLanguage: 'latex',
-  defaultLatexEngine: 'latexmk',
   workspaceRoot: undefined,
   specialistModel: undefined,
   delegationWaitTimeoutMs: 600_000,
@@ -112,7 +111,11 @@ describe('report router', () => {
     })
     installRoutedReportTool(child.ctx, host.ctx, { roleRegistry, config: CONFIG, workflowForChild: () => undefined })
     expect(child.tools.map(tool => tool.name)).toEqual(['report_workflow'])
-    expect(child.sections.map(section => section.name)).toEqual(expect.arrayContaining([
+    expect(child.skills.map(skill => skill.name)).toEqual([
+      'experiment-report-writer',
+      'latex-compile',
+    ])
+    expect(child.sections.map(section => section.name)).not.toEqual(expect.arrayContaining([
       'autoreport:skill:experiment-report-writer',
       'autoreport:skill:latex-compile',
     ]))
