@@ -84,7 +84,7 @@ describe('specialist model selection', () => {
         reportLanguage: 'latex',
         specialistModel: { inheritMain: true },
         delegationWaitTimeoutMs: 600_000,
-      }),
+      }) as never,
     })
 
     expect(dispose).toBeUndefined()

@@ -67,7 +67,7 @@ This is the currently supported installation method. The two repositories must b
 - Node.js `22.19+` or `24+`
 - Corepack-enabled pnpm
 - A local DeepSeek Harness checkout compatible with the version pinned in [docs/dependencies.md](docs/dependencies.md)
-- DSH-native bash and workspace-write sandbox (macOS, Linux; Windows should work once DSH bash/pwsh sandbox is verified on that host)
+- DSH-native bash and workspace-write sandbox (macOS Seatbelt, Linux bwrap/Landlock, Windows ACL)
 
 ### 1. Check out and build DeepSeek Harness
 
@@ -285,12 +285,11 @@ tests/                      unit, integration, boot, and opt-in real-API tests
 
 ## Current limitations
 
-- Windows is in the CI matrix; live bash confinement tests skip there because DSH has no seatbelt/bwrap equivalent in that job. Treat Windows sandbox behavior as DSH bash/pwsh, not AutoReport-specific isolation.
+- Windows live bash confinement uses DSH's windows-acl runner. GitHub `windows-latest` fails the job when that runner or Git Bash is unavailable.
 - MinerU runs through MAIN bash and the `pdf-reference-reader` skill (`Outline/.cache/mineru/`); there is no dedicated MinerU model tool.
 - Artifact manifests are runtime-generated; agents cannot add free-form manifest notes.
 - Task lifecycle is internal: MAIN dispatches with `send_to_agent` (auto-creating tasks when `task_id` is omitted); specialists finish through `report_workflow` and the report observer settles durable state.
 - The role guard still checks write/edit paths as defense in depth; `delete` and `apply_patch` are not mounted by this preset.
-- Specialist skills fall back to full prompt injection only when a child context has no `ctx.skills` service.
 
 ## License
 

@@ -1,6 +1,7 @@
 import { spawnSync } from 'node:child_process'
 import { createServer } from 'node:http'
 import { existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs'
+import { createRequire } from 'node:module'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -30,9 +31,35 @@ import type { AutoReportRole } from '../src/roles.js'
  */
 
 const testToolSignal = new AbortController().signal
+const requireFromHere = createRequire(import.meta.url)
+const SANDBOX_DENIAL = /file access denied|access is denied|access to the path|permission denied|sandbox.*denied/i
+
+function probeWindowsAcl(): boolean {
+  const workspace = mkdtempSync(join(tmpdir(), 'autoreport-acl-ws-'))
+  const temp = mkdtempSync(join(tmpdir(), 'autoreport-acl-tmp-'))
+  try {
+    const sandboxLocalPkg = requireFromHere.resolve('@deepseek-ai/dsh-sandbox-local/package.json')
+    const requireSandbox = createRequire(sandboxLocalPkg)
+    const runner = requireSandbox.resolve('@deepseek-ai/dsh-sandbox-windows-acl/runner')
+    const probe = spawnSync(
+      process.execPath,
+      [runner, '--workspace', workspace, '--temp', temp, '--mode', 'read-only', '--', 'cmd', '/c', 'exit', '0'],
+      { timeout: 10_000, stdio: 'ignore' },
+    )
+    return probe.status === 0
+  } catch {
+    return false
+  } finally {
+    rmSync(workspace, { recursive: true, force: true })
+    rmSync(temp, { recursive: true, force: true })
+  }
+}
 
 function sandboxUsable(): boolean {
-  if (process.platform === 'win32') return false
+  if (process.platform === 'win32') {
+    const bash = spawnSync('bash', ['-lc', 'exit 0'], { timeout: 5_000, stdio: 'ignore' })
+    return bash.status === 0 && probeWindowsAcl()
+  }
   if (process.platform === 'darwin') {
     const probe = spawnSync(
       'sandbox-exec',
@@ -70,7 +97,7 @@ function text(result: { content: { type: string; text?: string }[] }): string {
 }
 
 function expectsSandboxDenial(output: string): void {
-  expect(output).toMatch(/file access denied|sandbox.*denied/i)
+  expect(output).toMatch(SANDBOX_DENIAL)
 }
 
 async function setupHarness(experimentRoot: string): Promise<Context> {
@@ -153,7 +180,7 @@ const SANDBOX_USABLE = sandboxUsable()
 const CURL_AVAILABLE = spawnSync('curl', ['--version'], { timeout: 5_000, stdio: 'ignore' }).status === 0
 
 describe('bash role write confinement (live)', () => {
-  it.skipIf(process.platform === 'win32' || process.env.CI !== 'true')(
+  it.skipIf(process.env.CI !== 'true')(
     'CI provides a working OS sandbox so confinement cases are not skipped',
     () => {
       expect(SANDBOX_USABLE).toBe(true)
@@ -170,7 +197,7 @@ describe('bash role write confinement (live)', () => {
 
     const allowed = await callBash(harness, 'echo ok > Data/Processed/a.txt', agent)
     expect(allowed.isError).toBe(false)
-    expect(text(allowed)).not.toMatch(/file access denied/i)
+    expect(text(allowed)).not.toMatch(SANDBOX_DENIAL)
     expect(existsSync(join(experimentRoot, 'Data/Processed/a.txt'))).toBe(true)
 
     const denied = await callBash(harness, 'echo blocked > Report/a.txt', agent)
@@ -185,7 +212,7 @@ describe('bash role write confinement (live)', () => {
 
     const allowed = await callBash(harness, 'echo ok > Report/a.txt', agent)
     expect(allowed.isError).toBe(false)
-    expect(text(allowed)).not.toMatch(/file access denied/i)
+    expect(text(allowed)).not.toMatch(SANDBOX_DENIAL)
     expect(existsSync(join(experimentRoot, 'Report/a.txt'))).toBe(true)
   }, 30_000)
 
@@ -196,7 +223,7 @@ describe('bash role write confinement (live)', () => {
 
     const allowed = await callBash(harness, 'echo ok > Outline/cache.txt', agent)
     expect(allowed.isError).toBe(false)
-    expect(text(allowed)).not.toMatch(/file access denied/i)
+    expect(text(allowed)).not.toMatch(SANDBOX_DENIAL)
     expect(existsSync(join(experimentRoot, 'Outline/cache.txt'))).toBe(true)
 
     const denied = await callBash(harness, 'echo blocked > Theory/foo.md', agent)
@@ -237,7 +264,7 @@ describe('bash role write confinement (live)', () => {
         agent,
       )
       expect(result.isError).toBe(false)
-      expect(text(result)).not.toMatch(/file access denied|sandbox.*denied/i)
+      expect(text(result)).not.toMatch(SANDBOX_DENIAL)
       expect(text(result)).toContain('ok')
     } finally {
       await new Promise<void>((resolve, reject) => server.close(err => (err ? reject(err) : resolve())))

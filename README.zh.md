@@ -67,7 +67,7 @@ autoreport-main    AutoReport 物理实验报告工作流
 - Node.js `22.19+` 或 `24+`
 - 启用 Corepack 的 pnpm
 - 本地 DeepSeek Harness checkout，且版本与 [docs/dependencies.md](docs/dependencies.md) 中记录的版本兼容
-- DSH 原生 bash 与 workspace-write 沙箱（macOS、Linux；Windows CI 已加入矩阵，live 禁写用例在无 OS sandbox 时跳过）
+- DSH 原生 bash 与 workspace-write 沙箱（macOS Seatbelt、Linux bwrap/Landlock、Windows ACL）
 
 ### 1. 获取并构建 DeepSeek Harness
 
@@ -291,12 +291,11 @@ tests/                      unit、integration、boot、可选真实 API 测试
 
 ## 当前限制
 
-- CI 已包含 Windows；该作业上 live bash 禁写测试会跳过（没有 seatbelt/bwrap）。Windows 沙箱行为以 DSH bash/pwsh 为准，而不是 AutoReport 自定义隔离。
+- Windows live bash 禁写测试走 DSH 的 windows-acl runner。GitHub `windows-latest` 在 runner 或 Git Bash 不可用时会失败，而不是跳过。
 - MinerU 由 MAIN 通过 bash 与 `pdf-reference-reader` skill 调用（输出 `Outline/.cache/mineru/`），没有单独的 MinerU model tool。
 - artifact manifest 由运行时生成，agent 不能添加自由文本备注。
 - 任务生命周期已内化：MAIN 通过 `send_to_agent` 委派（省略 `task_id` 时自动创建任务）；specialist 通过 `report_workflow` 结束，report observer 负责 settle durable 状态。
 - role guard 仍对 write/edit 路径做 defense in depth；preset 不挂载 `delete` 或 `apply_patch`。
-- 仅当 child context 没有 `ctx.skills` 时，specialist skill 才会退回整段 prompt 注入。
 
 ## 许可证
 
