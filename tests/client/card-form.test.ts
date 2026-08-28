@@ -143,22 +143,31 @@ describe('AutoReportCardController', () => {
     expect(Object.keys(face.hooks)).toEqual(['autoreportCard'])
   })
 
-  it('marks an incomplete specialist pair invalid in the projection', () => {
+  it('treats a typed relative Python path as invalid and a detected path as valid', () => {
     const host = stubSettingsScope<AutoReportCardSettings>()
     const subject = new AutoReportCardController(host.scope)
     host.publish({
       status: 'ready',
       writable: true,
-      value: {},
+      value: {
+        pythonEnvironments: [{
+          label: 'Workspace venv · Python 3.12',
+          executable: '/opt/venv/bin/python3',
+          source: 'virtualenv',
+          version: 'Python 3.12.0',
+        }],
+      },
       base: {},
       user: {},
     })
     const face = subject.inject()
-    face.edit('specialistModel.provider', 'openai-codex')
-
+    face.edit('pythonExecutable', 'python3')
+    expect(face.hooks.autoreportCard.getSnapshot().pythonExecutable.invalid).toBe(true)
+    face.edit('pythonExecutable', '/opt/venv/bin/python3')
     const state = face.hooks.autoreportCard.getSnapshot()
-    expect(state.specialistProvider.invalid).toBe(true)
-    expect(state.specialistModel.invalid).toBe(true)
-    expect(state.invalid).toBe(true)
+    expect(state.pythonExecutable.invalid).toBe(false)
+    expect(state.pythonEnvironments).toHaveLength(1)
+    face.edit('pythonExecutable', '__managed__')
+    expect(face.hooks.autoreportCard.getSnapshot().pythonExecutable.invalid).toBe(false)
   })
 })

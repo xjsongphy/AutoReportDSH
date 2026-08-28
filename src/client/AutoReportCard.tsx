@@ -2,7 +2,7 @@
 
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { AutoReportCardFace } from './controller.js'
-import { SelectField, ValueField } from './fields.js'
+import { SelectField, ValueField, PythonField } from './fields.js'
 import { PluginCard } from './PluginCard.js'
 import type {} from '@deepseek-ai/dsh-client-ui-settings-plugins/client'
 
@@ -53,45 +53,19 @@ export function AutoReportCard(props: AutoReportCardProps) {
         onEdit={(text) => { props.edit('delegationWaitTimeoutMs', text) }}
         onReset={() => { props.resetField('delegationWaitTimeoutMs') }}
       />
-      <ValueField
+      <PythonField
         id="plugin-config-autoreport-python"
         label={t('python')}
         hint={t('pythonHint')}
-        invalidLabel={t('pythonHint')}
+        invalidLabel={t('invalidPython')}
+        environments={state.pythonEnvironments}
+        managedLabel={t('pythonManaged')}
+        pickLabel={t('pythonPick')}
+        customLabel={t('pythonCustom')}
         {...shared}
         {...state.pythonExecutable}
         onEdit={(text) => { props.edit('pythonExecutable', text) }}
         onReset={() => { props.resetField('pythonExecutable') }}
-      />
-      <ValueField
-        id="plugin-config-autoreport-provider"
-        label={t('specialistProvider')}
-        hint={t('specialistProviderHint')}
-        invalidLabel={t('invalidRoute')}
-        {...shared}
-        {...state.specialistProvider}
-        onEdit={(text) => { props.edit('specialistModel.provider', text) }}
-        onReset={() => { props.resetField('specialistModel.provider') }}
-      />
-      <ValueField
-        id="plugin-config-autoreport-model"
-        label={t('specialistModel')}
-        hint={t('specialistModelHint')}
-        invalidLabel={t('invalidRoute')}
-        {...shared}
-        {...state.specialistModel}
-        onEdit={(text) => { props.edit('specialistModel.model', text) }}
-        onReset={() => { props.resetField('specialistModel.model') }}
-      />
-      <ValueField
-        id="plugin-config-autoreport-effort"
-        label={t('specialistEffort')}
-        hint={t('specialistEffortHint')}
-        invalidLabel={t('invalidRoute')}
-        {...shared}
-        {...state.specialistEffort}
-        onEdit={(text) => { props.edit('specialistModel.reasoningEffort', text) }}
-        onReset={() => { props.resetField('specialistModel.reasoningEffort') }}
       />
     </PluginCard>
   )

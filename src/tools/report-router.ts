@@ -15,21 +15,35 @@ export const inject = ['subagents', 'tools', 'systemPrompt', 'autoreportWorkflow
 type RoutedWorkflow = Pick<AutoReportWorkflowRuntime, 'roleRegistry' | 'config' | 'workflowForChild'>
 
 /**
- * Install DSH's agent-scoped selection seam for a concrete specialist route.
- * Only the frozen workflow snapshot is consulted. Main inheritance installs
- * nothing, leaving DSH's normal parent-route inheritance untouched.
+ * Seed DSH's agent-scoped selection from the frozen workflow snapshot, then
+ * release it after the child's first request so a later composer `selectModel`
+ * can retarget that child. A continuing pin would win over the Host selection
+ * the conversation-window picker writes. Main inheritance installs nothing.
  */
 export function installSpecialistModelSelection(childCtx: Context, workflow: RoutedWorkflow): (() => void) | undefined {
   const child = childCtx.agent as Agent
   const selected = workflow.workflowForChild(child.id)?.runtime.state.projection().meta?.settings?.specialistModel
   if (selected === undefined || selected.inheritMain) return undefined
   const route = selected
-  const selection: ModelSelection = {
-    provider: route.provider,
-    model: route.model,
-    ...(route.reasoningEffort === undefined ? {} : { reasoningEffort: ReasoningEffortId(route.reasoningEffort) }),
+  const selection: { current: ModelSelection | undefined; assembled: ModelSelection | undefined } = {
+    current: {
+      provider: route.provider,
+      model: route.model,
+      ...(route.reasoningEffort === undefined ? {} : { reasoningEffort: ReasoningEffortId(route.reasoningEffort) }),
+    },
+    assembled: undefined,
   }
-  return installModelSelection(childCtx, { current: selection, assembled: undefined })
+  const disposeInstall = installModelSelection(childCtx, selection)
+  const disposeRelease = childCtx.on('agent/request', async (_payload, next) => {
+    const result = await next()
+    selection.current = undefined
+    selection.assembled = undefined
+    return result
+  })
+  return () => {
+    disposeRelease()
+    disposeInstall()
+  }
 }
 
 /**

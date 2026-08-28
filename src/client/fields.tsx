@@ -5,6 +5,8 @@
  */
 
 import type { ReactNode } from 'react'
+import { useState } from 'react'
+import { SelectMenu } from './SelectMenu.js'
 import { css } from './styles.js'
 
 /** What every field control needs regardless of its value type. */
@@ -13,7 +15,7 @@ export interface FieldProps {
   id: string
   /** Visible label. */
   label: string
-  /** One-line explanation rendered under the control. */
+  /** One-line explanation rendered under the title. */
   hint: string
   /** Draft text this control renders. */
   text: string
@@ -35,9 +37,9 @@ export interface FieldProps {
   onReset: () => void
 }
 
-function FieldChrome(props: FieldProps & { children: ReactNode }) {
+function FieldHead(props: FieldProps) {
   return (
-    <div className={css.field}>
+    <>
       <div className={css.fieldHead}>
         <label className={css.label} htmlFor={props.id}>{props.label}</label>
         {props.overridden
@@ -56,10 +58,37 @@ function FieldChrome(props: FieldProps & { children: ReactNode }) {
           )
           : null}
       </div>
-      {props.children}
       <p className={props.invalid ? css.invalid : css.hint}>
         {props.invalid ? props.invalidLabel : props.hint}
       </p>
+    </>
+  )
+}
+
+function FieldChrome(props: FieldProps & {
+  children: ReactNode
+  /** Title and hint on the left, control on the right (General Settings rows). */
+  split?: boolean
+  /** Extra controls under the row (typed Python path). */
+  footer?: ReactNode
+}) {
+  const copy = <FieldHead {...props} />
+  return (
+    <div className={css.field}>
+      {props.split === true
+        ? (
+          <div className={css.fieldSplit}>
+            <div className={css.fieldText}>{copy}</div>
+            {props.children}
+          </div>
+        )
+        : (
+          <>
+            {copy}
+            {props.children}
+          </>
+        )}
+      {props.footer}
     </div>
   )
 }
@@ -113,19 +142,86 @@ export function SelectField(props: FieldProps & {
   options: readonly SelectOption[]
 }) {
   return (
-    <FieldChrome {...props}>
-      <select
+    <FieldChrome {...props} split>
+      <SelectMenu
         id={props.id}
-        className={props.invalid ? `${css.input} ${css.inputInvalid}` : css.input}
         value={props.text}
+        options={props.options}
         disabled={props.disabled}
-        {...props.invalid ? { 'aria-invalid': true } : {}}
-        onChange={(event) => { props.onEdit(event.target.value) }}
-      >
-        {props.options.map(option => (
-          <option key={option.value} value={option.value}>{option.label}</option>
-        ))}
-      </select>
+        invalid={props.invalid}
+        onChange={props.onEdit}
+      />
+    </FieldChrome>
+  )
+}
+
+const CUSTOM_PYTHON = '__custom__'
+/** Must match Host `MANAGED_PYTHON_SENTINEL` in python-detect.ts. */
+const MANAGED_PYTHON = '__managed__'
+
+/**
+ * Python environment picker: AutoReport-managed, detected local rows, and
+ * a typed absolute path. Picking managed writes `__managed__`; the Host
+ * creates `$DSH_HOME/autoreport/venv` on save if it is missing.
+ */
+export function PythonField(props: FieldProps & {
+  /** Host-detected interpreters, in display order (managed first when published). */
+  environments: readonly { executable: string; label: string; source?: string }[]
+  /** Copy for the AutoReport-managed row when the Host has not published one. */
+  managedLabel: string
+  /** Empty-trigger copy before the user picks. */
+  pickLabel: string
+  /** Copy for the typed-path row. */
+  customLabel: string
+}) {
+  const managedFromHost = props.environments.find(option => option.source === 'managed')
+  const local = props.environments.filter(option => option.source !== 'managed')
+  const detected = props.environments.some(option => option.executable === props.text)
+    || props.text === MANAGED_PYTHON
+  const [forceCustom, setForceCustom] = useState(false)
+  const isCustomValue = props.text !== '' && props.text !== MANAGED_PYTHON && !props.environments.some(option => option.executable === props.text)
+  const showCustom = forceCustom || isCustomValue
+  const mode = showCustom ? CUSTOM_PYTHON : (props.text === MANAGED_PYTHON ? MANAGED_PYTHON : props.text)
+  const options: SelectOption[] = [
+    { value: MANAGED_PYTHON, label: managedFromHost?.label ?? props.managedLabel },
+    ...local.map(option => ({ value: option.executable, label: option.label })),
+    { value: CUSTOM_PYTHON, label: props.customLabel },
+  ]
+  return (
+    <FieldChrome
+      {...props}
+      split
+      footer={showCustom
+        ? (
+          <input
+            className={props.invalid ? `${css.input} ${css.inputInvalid}` : css.input}
+            type="text"
+            value={props.text}
+            placeholder="/usr/bin/python3"
+            disabled={props.disabled}
+            {...props.invalid ? { 'aria-invalid': true } : {}}
+            onChange={(event) => { props.onEdit(event.target.value) }}
+          />
+        )
+        : null}
+    >
+      <SelectMenu
+        id={props.id}
+        value={mode}
+        options={options}
+        placeholder={props.pickLabel}
+        disabled={props.disabled}
+        invalid={props.invalid}
+        onChange={(next) => {
+          if (next === CUSTOM_PYTHON) {
+            setForceCustom(true)
+            if (detected) props.onEdit('')
+            return
+          }
+          setForceCustom(false)
+          props.onEdit(next)
+        }}
+      />
     </FieldChrome>
   )
 }

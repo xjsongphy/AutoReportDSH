@@ -1,6 +1,7 @@
 /**
  * Browser half of AutoReportDSH: the settings card for the `autoreport`
- * namespace, registered into DSH's plugin-configuration tab.
+ * namespace, registered into DSH's plugin-configuration tab, plus a
+ * conversation-window model picker for AutoReport workers.
  *
  * Host registration of the namespace already lives in `src/runtime.ts`. This
  * file only owns chrome, controls, and copy. Cross-plugin collaboration is
@@ -8,13 +9,15 @@
  * bundle-purity gate.
  */
 
-import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
+import type { ClientContext, ISessions, SessionId } from '@deepseek-ai/dsh-client-runtime/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings-plugins/client'
+import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import { AutoReportCard } from './AutoReportCard.js'
 import { AUTOREPORT_SETTINGS_NAMESPACE, AutoReportCardController } from './controller.js'
 import { en, zh, type AutoReportLocaleKey } from './locales.js'
+import { SubagentModelSelect, type SubagentModelChoice, type SubagentModelInjected } from './SubagentModelSelect.js'
 import { installCardStyles } from './styles.js'
 
 export type { AutoReportCardProps } from './AutoReportCard.js'
@@ -24,6 +27,9 @@ export type { AutoReportLocaleKey } from './locales.js'
 
 /** Dictionary namespace owned by this card. */
 export const SETTINGS_NS = 'settings.autoreport'
+
+/** Agent preset whose children get the conversation-window model picker. */
+const AUTOREPORT_PRESET = 'autoreport'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap {
@@ -49,4 +55,96 @@ export function apply(ctx: ClientContext): void {
     locale: SETTINGS_NS,
     inject: () => card.inject(),
   }, AutoReportCard))
+  ctx.inject(['sessions'], (scope: ClientContext) => {
+    installSubagentModelSeat(scope)
+  })
+}
+
+function installSubagentModelSeat(ctx: ClientContext): void {
+  const sessions = ctx.get('sessions') as ISessions
+  const connection = ctx.get('connection') as { api: { sessions: SessionModelsApi } }
+  const modelsApi = connection.api.sessions
+  ctx.slots.inject('conversation.input.right', () => ctx.slots.register({
+    name: 'conversation.input.right',
+    id: 'autoreport-subagent-model',
+    order: 40,
+    locale: SETTINGS_NS,
+    inject: (sessionId: SessionId): SubagentModelInjected => {
+      const available = isAutoReportSubagent(sessions, sessionId)
+      return {
+        available,
+        load: () => available ? loadDirectory(modelsApi, sessionId) : Promise.resolve(undefined),
+        select: (selection) => available ? selectModel(modelsApi, sessionId, selection) : Promise.resolve(false),
+      }
+    },
+  }, SubagentModelSelect))
+}
+
+function isAutoReportSubagent(sessions: ISessions, sessionId: SessionId): boolean {
+  const address = sessions.subagentAddress(sessionId)
+  if (address === undefined) return false
+  const parent = sessions.list.getSnapshot().byId[address.parentSessionId]
+  return parent?.agentPreset === AUTOREPORT_PRESET
+}
+
+interface SessionModelsApi {
+  models(payload: { sessionId: SessionId }): Promise<{
+    result: {
+      ok: boolean
+      value?: {
+        current: { provider: string; model: string; reasoningEffort?: string }
+        groups: readonly {
+          id: string
+          name: string
+          models: readonly {
+            id: string
+            name: string
+            reasoning?: { defaultEffort?: string; efforts: readonly { id: string; name: string }[] }
+          }[]
+        }[]
+      }
+      error?: { message: string }
+    }
+  }>
+  selectModel(payload: {
+    sessionId: SessionId
+    provider: string
+    model: string
+    reasoningEffort?: string
+  }): Promise<{ result: { ok: boolean; value?: { selected: { provider: string; model: string; reasoningEffort?: string } } } }>
+}
+
+async function loadDirectory(
+  api: SessionModelsApi,
+  sessionId: SessionId,
+): Promise<{ current: { provider: string; model: string; reasoningEffort?: string } | null; choices: readonly SubagentModelChoice[] } | undefined> {
+  const { result } = await api.models({ sessionId })
+  if (!result.ok || result.value === undefined) return undefined
+  const choices: SubagentModelChoice[] = []
+  for (const group of result.value.groups) {
+    for (const model of group.models) {
+      choices.push({
+        provider: group.id,
+        model: model.id,
+        label: `${group.name} · ${model.name}`,
+        ...model.reasoning?.defaultEffort === undefined ? {} : { defaultEffort: model.reasoning.defaultEffort },
+        efforts: model.reasoning?.efforts ?? [],
+      })
+    }
+  }
+  return { current: result.value.current, choices }
+}
+
+async function selectModel(
+  api: SessionModelsApi,
+  sessionId: SessionId,
+  selection: { provider: string; model: string; reasoningEffort?: string },
+): Promise<boolean> {
+  const { result } = await api.selectModel({
+    sessionId,
+    provider: selection.provider,
+    model: selection.model,
+    ...selection.reasoningEffort === undefined ? {} : { reasoningEffort: selection.reasoningEffort },
+  })
+  return result.ok
 }

@@ -14,20 +14,24 @@ import {
 /** Namespace of AutoReport's user-owned workflow defaults. */
 export const AUTOREPORT_SETTINGS_NAMESPACE = 'autoreport'
 
+/** One Host-detected interpreter the Python picker can offer. */
+export interface PythonEnvironmentOption {
+  label: string
+  executable: string
+  source: string
+  version: string
+}
+
 /** The AutoReport fields this card edits. */
 export interface AutoReportCardSettings {
   /** Default report source language. */
   defaultReportLanguage?: 'latex' | 'typst'
   /** Bounded wait for `send_to_agent({ wait: true })`. */
   delegationWaitTimeoutMs?: number
-  /** Optional absolute Python interpreter for specialist bash. */
+  /** Optional absolute Python interpreter for subagent bash. */
   pythonExecutable?: string
-  /** Optional specialist route; absence inherits Main. */
-  specialistModel?: {
-    provider?: string
-    model?: string
-    reasoningEffort?: string
-  }
+  /** Host-detected interpreters; composition-only, never written by the card. */
+  pythonEnvironments?: readonly PythonEnvironmentOption[]
 }
 
 /** What the AutoReport card renders. */
@@ -38,12 +42,8 @@ export interface AutoReportCardState extends CardShell {
   delegationWaitTimeoutMs: CardFieldState
   /** Optional Python interpreter. */
   pythonExecutable: CardFieldState
-  /** Specialist provider id. */
-  specialistProvider: CardFieldState
-  /** Specialist model id. */
-  specialistModel: CardFieldState
-  /** Optional specialist reasoning effort. */
-  specialistEffort: CardFieldState
+  /** Detected interpreters from the Host composition layer. */
+  pythonEnvironments: readonly PythonEnvironmentOption[]
 }
 
 /** The registration-side face the AutoReport card's slot entry injects. */
@@ -56,46 +56,60 @@ export interface AutoReportCardFace extends CardActions {
 
 const LANGUAGE_VALUES = ['latex', 'typst'] as const
 
-/** A specialist route is either absent or a complete provider+model pair. */
-function routeIncomplete(provider: string, model: string, effort: string): boolean {
-  const hasProvider = provider.trim().length > 0
-  const hasModel = model.trim().length > 0
-  const hasEffort = effort.trim().length > 0
-  if (!hasProvider && !hasModel) return hasEffort
-  return !hasProvider || !hasModel
+/** Must match Host `MANAGED_PYTHON_SENTINEL` in python-detect.ts. */
+const MANAGED_PYTHON = '__managed__'
+
+function isAbsolutePath(path: string): boolean {
+  return path.startsWith('/') || /^[A-Za-z]:[\\/]/u.test(path)
 }
 
 /** Bridges the `autoreport` scope onto the card's staged form. */
 export class AutoReportCardController {
+  private readonly scope: SettingsScope<AutoReportCardSettings>
   private readonly form: CardForm<AutoReportCardSettings>
   private readonly store: SnapshotStore<AutoReportCardState>
 
   /** @param scope - the bound settings scope for the `autoreport` namespace. */
   constructor(scope: SettingsScope<AutoReportCardSettings>) {
+    this.scope = scope
     this.form = new CardForm(scope, [
       enumField('defaultReportLanguage', LANGUAGE_VALUES),
       numberField('delegationWaitTimeoutMs'),
       textField('pythonExecutable'),
-      textField('specialistModel.provider'),
-      textField('specialistModel.model'),
-      textField('specialistModel.reasoningEffort'),
     ])
     this.store = this.form.bind(() => this.projection())
   }
 
+  private environments(): readonly PythonEnvironmentOption[] {
+    const value = this.scope.getSnapshot().value
+    const fromValue = value?.pythonEnvironments
+    if (fromValue !== undefined && fromValue.length > 0) return fromValue
+    const base = this.scope.getSnapshot().base
+    if (base !== undefined && typeof base === 'object' && base !== null && 'pythonEnvironments' in base) {
+      const listed = (base as AutoReportCardSettings).pythonEnvironments
+      if (listed !== undefined) return listed
+    }
+    return []
+  }
+
   private projection(): AutoReportCardState {
-    const provider = this.form.field('specialistModel.provider')
-    const model = this.form.field('specialistModel.model')
-    const effort = this.form.field('specialistModel.reasoningEffort')
-    const incomplete = routeIncomplete(provider.text, model.text, effort.text)
+    const python = this.form.field('pythonExecutable')
+    const environments = this.environments()
+    const pythonText = python.text.trim()
+    const detected = environments.some(option => option.executable === pythonText)
+    const pythonInvalid = python.invalid
+      || (pythonText.length > 0
+        && pythonText !== MANAGED_PYTHON
+        && !detected
+        && !isAbsolutePath(pythonText))
+    const shell = this.form.shell()
     return {
-      ...this.form.shell(),
+      ...shell,
+      invalid: shell.invalid || pythonInvalid,
       defaultReportLanguage: this.form.field('defaultReportLanguage'),
       delegationWaitTimeoutMs: this.form.field('delegationWaitTimeoutMs'),
-      pythonExecutable: this.form.field('pythonExecutable'),
-      specialistProvider: { ...provider, invalid: provider.invalid || incomplete },
-      specialistModel: { ...model, invalid: model.invalid || incomplete },
-      specialistEffort: { ...effort, invalid: effort.invalid || incomplete },
+      pythonExecutable: { ...python, invalid: pythonInvalid },
+      pythonEnvironments: environments,
     }
   }
 
