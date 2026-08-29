@@ -95,6 +95,46 @@ describe('specialist model selection', () => {
     dispose?.()
   })
 
+  it('releases the snapshot pin when the first agent request throws', async () => {
+    const { child, invoke } = childContext()
+
+    const dispose = installSpecialistModelSelection(child, {
+      roleRegistry: new RoleRegistry(),
+      config: CONFIG,
+      workflowForChild: () => workflowWithSettings({
+        reportLanguage: 'latex',
+        specialistModel: {
+          inheritMain: false,
+          provider: 'specialist',
+          model: 'reasoning-model',
+          reasoningEffort: 'high',
+        },
+        delegationWaitTimeoutMs: 600_000,
+      }) as never,
+    })
+
+    await invoke(
+      'system-prompt/assemble',
+      async () => ({ variables: { provider: 'main', model: 'main-model' } }),
+    )
+    await expect(invoke('agent/request', async () => {
+      throw new Error('first request failed')
+    })).rejects.toThrow(/first request failed/)
+
+    const assembledAgain = await invoke(
+      'system-prompt/assemble',
+      async () => ({ variables: { provider: 'main', model: 'main-model' } }),
+    )
+    expect(assembledAgain).toMatchObject({ variables: { provider: 'main', model: 'main-model' } })
+
+    const routedAgain = await invoke(
+      'agent/request',
+      async () => ({ provider: 'openai-codex', model: 'gpt-5.6-luna', reasoningEffort: 'low' }),
+    )
+    expect(routedAgain).toEqual({ provider: 'openai-codex', model: 'gpt-5.6-luna', reasoningEffort: 'low' })
+    dispose?.()
+  })
+
   it('does not install a route when the snapshot inherits Main', () => {
     const { child, listeners } = childContext()
 

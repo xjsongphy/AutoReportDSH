@@ -16,9 +16,10 @@ type RoutedWorkflow = Pick<AutoReportWorkflowRuntime, 'roleRegistry' | 'config' 
 
 /**
  * Seed DSH's agent-scoped selection from the frozen workflow snapshot, then
- * release it after the child's first request so a later composer `selectModel`
- * can retarget that child. A continuing pin would win over the Host selection
- * the conversation-window picker writes. Main inheritance installs nothing.
+ * release it after the child's first request — success or throw — so a later
+ * composer `selectModel` can retarget that child. A continuing pin would win
+ * over the Host selection the conversation-window picker writes. Main
+ * inheritance installs nothing.
  */
 export function installSpecialistModelSelection(childCtx: Context, workflow: RoutedWorkflow): (() => void) | undefined {
   const child = childCtx.agent as Agent
@@ -35,10 +36,12 @@ export function installSpecialistModelSelection(childCtx: Context, workflow: Rou
   }
   const disposeInstall = installModelSelection(childCtx, selection)
   const disposeRelease = childCtx.on('agent/request', async (_payload, next) => {
-    const result = await next()
-    selection.current = undefined
-    selection.assembled = undefined
-    return result
+    try {
+      return await next()
+    } finally {
+      selection.current = undefined
+      selection.assembled = undefined
+    }
   })
   return () => {
     disposeRelease()
