@@ -10,6 +10,11 @@
  * `<home>/profiles/node_modules/autoreportdsh` so Node and the client-module
  * scan can resolve `exports["./client"]`.
  *
+ * A leftover `<home>/.agent-presets/autoreport-main` from the preset-id
+ * rename is retired after the new directory is written: foreign files that
+ * the new install does not already own are copied across, then the old
+ * directory is removed so the roster does not list two AutoReport presets.
+ *
  * Idempotent: our own files are overwritten in place; foreign files inside an
  * existing preset directory are never removed. Run after `pnpm run build` so
  * dist/src/index.js and dist/client.js exist.
@@ -17,13 +22,16 @@
  * @module autoreportdsh/install-user-preset
  */
 
-import { cpSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, statSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
+import { cpSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
 
 const PRESET_SOURCE_DIR = 'presets/autoreport'
 const USER_PRESET_ROOT = '.agent-presets'
+const PRESET_DIR_NAME = 'autoreport'
+/** Retired directory name from before the preset id rename. */
+const LEGACY_PRESET_DIR_NAME = 'autoreport-main'
 const TEMPLATE_FILE = 'cordis.template.yml'
 const GENERATED_OVERLAY_FILE = 'cordis.overlay.generated.yml'
 const MAIN_PERSONA_FILE = 'resources/personas/main_agent.md'
@@ -94,6 +102,33 @@ function mergeCopy(sourceDir: string, targetDir: string): void {
 }
 
 /**
+ * Copy files from a leftover `autoreport-main` install that the new
+ * directory does not already own, then delete the old directory so the roster
+ * does not list two AutoReport presets.
+ */
+function retireLegacyPreset(home: string, presetDir: string): string | undefined {
+  const legacyDir = join(home, USER_PRESET_ROOT, LEGACY_PRESET_DIR_NAME)
+  if (!existsSync(legacyDir)) return undefined
+  mergeMissing(legacyDir, presetDir)
+  rmSync(legacyDir, { recursive: true, force: true })
+  return legacyDir
+}
+
+/** Copy source files that do not already exist at the destination. */
+function mergeMissing(sourceDir: string, targetDir: string): void {
+  mkdirSync(targetDir, { recursive: true })
+  for (const entry of readdirSync(sourceDir)) {
+    const sourcePath = join(sourceDir, entry)
+    const targetPath = join(targetDir, entry)
+    if (statSync(sourcePath).isDirectory()) {
+      mergeMissing(sourcePath, targetPath)
+    } else if (!existsSync(targetPath)) {
+      cpSync(sourcePath, targetPath)
+    }
+  }
+}
+
+/**
  * Install the AutoReport Main preset and render the overlay file.
  * @param options - optional home/repoRoot/entry overrides for testing.
  * @returns a report of every written path for callers and tests.
@@ -103,6 +138,7 @@ export function install(options: InstallOptions = {}): {
   overlayFile: string
   entry: string
   packageLink: string
+  retiredLegacyPresetDir?: string
 } {
   const repoRoot = options.repoRoot !== undefined ? resolve(options.repoRoot) : resolve(dirname(fileURLToPath(import.meta.url)), '..')
   const home = options.home !== undefined ? resolve(options.home) : resolveDshHome()
@@ -122,7 +158,7 @@ export function install(options: InstallOptions = {}): {
     throw new Error(`autoreportdsh: preset composition missing at ${join(sourceDir, 'agent.cordis.yml')}`)
   }
 
-  const presetDir = join(home, USER_PRESET_ROOT, 'autoreport')
+  const presetDir = join(home, USER_PRESET_ROOT, PRESET_DIR_NAME)
   try {
     mergeCopy(sourceDir, presetDir)
     const compositionTemplate = readFileSync(join(sourceDir, 'agent.cordis.yml'), 'utf8')
@@ -134,6 +170,7 @@ export function install(options: InstallOptions = {}): {
   } catch (error: unknown) {
     throw new Error(`autoreportdsh: failed to materialize preset under ${presetDir}: ${String(error)}`)
   }
+  const retiredLegacyPresetDir = retireLegacyPreset(home, presetDir)
 
   const templatePath = join(repoRoot, TEMPLATE_FILE)
   let template: string
@@ -148,7 +185,13 @@ export function install(options: InstallOptions = {}): {
   writeFileSync(overlayFile, template.replaceAll('__AUTOREPORT_REPORT_ROUTER__', reportRouter))
   const packageLink = linkPackage(home, repoRoot)
 
-  return { presetDir, overlayFile, entry, packageLink }
+  return {
+    presetDir,
+    overlayFile,
+    entry,
+    packageLink,
+    ...(retiredLegacyPresetDir === undefined ? {} : { retiredLegacyPresetDir }),
+  }
 }
 
 /** CLI entry: `pnpm install:preset [--home <path>] [--repo-root <path>] [--entry <path>]`. */
@@ -174,6 +217,9 @@ function main(argv: readonly string[]): void {
   }
   const result = install(options)
   console.log(`autoreportdsh: preset installed at ${result.presetDir}`)
+  if (result.retiredLegacyPresetDir !== undefined) {
+    console.log(`autoreportdsh: retired leftover preset at ${result.retiredLegacyPresetDir}`)
+  }
   console.log(`autoreportdsh: overlay rendered at ${result.overlayFile}`)
   console.log(`autoreportdsh: package linked at ${result.packageLink}`)
   console.log('autoreportdsh: boot with `pnpm dsh web --patch ./cordis.overlay.generated.yml`')

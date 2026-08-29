@@ -9,10 +9,11 @@
  * select AutoReport.
  *
  * Root membership therefore follows the agent preset a session actually runs:
- * only sessions composed from {@link AUTOREPORT_MAIN_PRESET} are AutoReport
- * MAIN roots. Continuable children are NOT covered by the preset; their
- * membership is the synchronous RoleRegistry binding that `send_to_agent`
- * reserves BEFORE publishing the child.
+ * only sessions composed from {@link AUTOREPORT_MAIN_PRESET} (or the retired
+ * {@link AUTOREPORT_LEGACY_PRESET} id) are AutoReport MAIN roots. Continuable
+ * children are NOT covered by the preset; their membership is the
+ * synchronous RoleRegistry binding that `send_to_agent` reserves BEFORE
+ * publishing the child.
  *
  * Preset resolution mirrors DSH's canonical `resolveSessionPreset`
  * (`@deepseek-ai/dsh-agent-presets/session`): the creation header supplies
@@ -26,6 +27,17 @@ import type { Session } from '@deepseek-ai/dsh-session'
 
 /** The only agent preset whose root sessions join the AutoReport runtime. */
 export const AUTOREPORT_MAIN_PRESET = 'autoreport'
+
+/**
+ * Preset id used before the rename to {@link AUTOREPORT_MAIN_PRESET}. Saved
+ * sessions still carry this string in the header or a selection event.
+ */
+export const AUTOREPORT_LEGACY_PRESET = 'autoreport-main'
+
+/** Whether a preset id is AutoReport (current or retired). */
+export function isAutoReportPreset(preset: string | undefined): boolean {
+  return preset === AUTOREPORT_MAIN_PRESET || preset === AUTOREPORT_LEGACY_PRESET
+}
 
 declare module '@deepseek-ai/dsh-session/types' {
   interface SessionEventMap {
@@ -54,10 +66,11 @@ export function resolveAgentPreset(session: Session): string | undefined {
 
 /**
  * Whether one session is an AutoReport MAIN root: top-level AND running the
- * `autoreport` preset (header value or a later logged selection).
+ * `autoreport` preset (or the retired `autoreport-main` id) via header value
+ * or a later logged selection.
  * @param session - candidate root session.
  */
 export function isAutoReportMainSession(session: Session): boolean {
   return session.header.parentSession === undefined
-    && resolveAgentPreset(session) === AUTOREPORT_MAIN_PRESET
+    && isAutoReportPreset(resolveAgentPreset(session))
 }

@@ -8,10 +8,11 @@
  * workspace symlink cannot escape a role's writable roots.
  *
  * Coexistence: only AutoReport-owned sessions are restricted — a MAIN root is
- * one actually running the `autoreport` preset (or explicitly wired as
- * Main), and a specialist child is one bound in the RoleRegistry. Every other
- * caller passes through untouched so stock DSH sessions keep their native
- * policy when the overlay is loaded.
+ * one actually running the `autoreport` preset (or the retired
+ * `autoreport-main` id), or explicitly wired as Main, and a specialist child
+ * is one bound in the RoleRegistry. Every other caller passes through
+ * untouched so stock DSH sessions keep their native policy when the overlay is
+ * loaded.
  * @module
  */
 
@@ -19,7 +20,7 @@ import { existsSync, realpathSync } from 'node:fs'
 import { basename, dirname, isAbsolute, relative, resolve, sep } from 'node:path'
 import type { SessionId } from '@deepseek-ai/dsh-session'
 import type { ToolExecution, ToolGuard } from '@deepseek-ai/dsh-tools'
-import { AUTOREPORT_MAIN_PRESET, resolveAgentPreset } from '../membership.js'
+import { isAutoReportPreset, resolveAgentPreset } from '../membership.js'
 import { rolePolicy, type AutoReportRole, type ReportRolePolicy } from '../roles.js'
 import type { RoleRegistry } from '../workflow/role-registry.js'
 
@@ -183,7 +184,7 @@ function resolveRole(
   // stock DSH session whose native behavior must be preserved.
   const explicitMain = (options.mainSessionId !== undefined && session.id === options.mainSessionId)
     || options.isMainSession?.(session.id) === true
-  if (!explicitMain && resolveAgentPreset(session) !== AUTOREPORT_MAIN_PRESET) return FOREIGN
+  if (!explicitMain && !isAutoReportPreset(resolveAgentPreset(session))) return FOREIGN
   if (configuredRoot === undefined) return undefined
   return { role: 'MAIN', policy: rolePolicy('MAIN'), workspaceRoot: canonicalPath(configuredRoot) }
 }

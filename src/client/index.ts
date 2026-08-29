@@ -30,6 +30,8 @@ export const SETTINGS_NS = 'settings.autoreport'
 
 /** Agent preset whose children get the conversation-window model picker. */
 const AUTOREPORT_PRESET = 'autoreport'
+/** Retired preset id; saved sessions and parent headers may still carry it. */
+const AUTOREPORT_LEGACY_PRESET = 'autoreport-main'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap {
@@ -84,7 +86,7 @@ function isAutoReportSubagent(sessions: ISessions, sessionId: SessionId): boolea
   const address = sessions.subagentAddress(sessionId)
   if (address === undefined) return false
   const parent = sessions.list.getSnapshot().byId[address.parentSessionId]
-  return parent?.agentPreset === AUTOREPORT_PRESET
+  return parent?.agentPreset === AUTOREPORT_PRESET || parent?.agentPreset === AUTOREPORT_LEGACY_PRESET
 }
 
 interface SessionModelsApi {

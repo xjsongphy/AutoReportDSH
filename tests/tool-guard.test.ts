@@ -7,7 +7,7 @@ import type { Session } from '@deepseek-ai/dsh-session'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { ToolExecution } from '@deepseek-ai/dsh-tools'
 import { AUTOREPORT_SCHEMA_VERSION, type RoleBindingSnapshot } from '../src/workflow/events.js'
-import { AUTOREPORT_MAIN_PRESET } from '../src/membership.js'
+import { AUTOREPORT_LEGACY_PRESET, AUTOREPORT_MAIN_PRESET } from '../src/membership.js'
 import { RoleRegistry } from '../src/workflow/role-registry.js'
 import { createRoleToolGuard } from '../src/policy/tool-guard.js'
 
@@ -85,6 +85,14 @@ describe('AutoReport role tool guard', () => {
     expect(guard(execution('edit', { file_path: 'Outline/report.md' }, main))).toBeUndefined()
     expect(guard(execution('write', { file_path: 'Theory/notes.md' }, main))).toContain('Outline')
     expect(guard(execution('bash', { command: 'true' }, main))).toBeUndefined()
+  })
+
+  it('recognizes a MAIN root through the retired autoreport-main id', () => {
+    const root = workspace()
+    const main = agent('legacy-main', root, { agentPreset: AUTOREPORT_LEGACY_PRESET })
+    const guard = createRoleToolGuard({ registry: new RoleRegistry() })
+    expect(guard(execution('edit', { file_path: 'Outline/report.md' }, main))).toBeUndefined()
+    expect(guard(execution('write', { file_path: 'Theory/notes.md' }, main))).toContain('Outline')
   })
 
   it('identifies Main through isMainSession for multiple parent sessions', () => {

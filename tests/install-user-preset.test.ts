@@ -99,6 +99,23 @@ describe('install-user-preset', () => {
     expect(readFileSync(foreign, 'utf8')).toBe('keep me')
   })
 
+  it('retires a leftover autoreport-main directory and keeps foreign files', () => {
+    ensureBuilt()
+    const home = makeTemp()
+    const legacyDir = join(home, '.agent-presets', 'autoreport-main')
+    mkdirSync(legacyDir, { recursive: true })
+    writeFileSync(join(legacyDir, 'agent.cordis.yml'), 'stale composition')
+    writeFileSync(join(legacyDir, 'user-notes.md'), 'keep me')
+
+    const result = install({ home, repoRoot: ROOT, entry: builtEntry() })
+
+    expect(result.retiredLegacyPresetDir).toBe(legacyDir)
+    expect(existsSync(legacyDir)).toBe(false)
+    expect(existsSync(join(result.presetDir, 'user-notes.md'))).toBe(true)
+    expect(readFileSync(join(result.presetDir, 'user-notes.md'), 'utf8')).toBe('keep me')
+    expect(readFileSync(join(result.presetDir, 'agent.cordis.yml'), 'utf8')).toContain('You coordinate automated physics experiment report writing')
+  })
+
   it('fails loud when the built entry is missing', () => {
     const home = makeTemp()
     expect(() => install({ home, repoRoot: ROOT, entry: join(home, 'does-not-exist.js') })).toThrowError(/built plugin entry not found/)
