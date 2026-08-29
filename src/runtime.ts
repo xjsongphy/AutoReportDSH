@@ -15,6 +15,7 @@ import { appendWorkflowEvent } from './workflow/store.js'
 import { observeWorkflowMessage } from './workflow/report-observer.js'
 import { applyRoleSandbox } from './policy/sandbox-roots.js'
 import { ensureInitialized } from './workspace/init.js'
+import { syncedResourcesRoot } from './workspace/resource-sync.js'
 import {
   AUTO_REPORT_USER_SETTINGS_SCHEMA,
   AUTOREPORT_SETTINGS_NAMESPACE,
@@ -56,6 +57,8 @@ export interface RuntimeOptions {
   readonly settingsHome?: string
   /** Root receiving external manifest projections; absent resolves the DSH home lazily. */
   readonly manifestHome?: string
+  /** Skip GitHub overlay sync (tests seed stubs instead). */
+  readonly skipResourceSync?: boolean
 }
 
 /**
@@ -70,6 +73,8 @@ export default class AutoReportWorkflowRuntime extends Service {
   readonly config: Config
   /** Harness home override for external project settings; absent resolves the DSH home. */
   readonly settingsHome: string | undefined
+  /** Global overlay for synced remotes (`$dshHome/autoreport/resources`). */
+  readonly overlayRoot: string
   private readonly manifestHome: string | undefined
   private readonly parents = new Map<string, ParentWorkflowRuntime>()
   // Retain admitted parent sessions for workflow/artifact ownership, but do
@@ -92,6 +97,7 @@ export default class AutoReportWorkflowRuntime extends Service {
     this.settingsHome = options.settingsHome
     this.manifestHome = options.manifestHome
     const dshHome = options.settingsHome ?? resolveDshHome()
+    this.overlayRoot = syncedResourcesRoot(dshHome)
     const userSettingsBase = autoReportUserSettingsBase(
       config,
       detectPythonEnvironments({
@@ -373,7 +379,7 @@ export default class AutoReportWorkflowRuntime extends Service {
         composition: this.config,
         dshHome: this.settingsHome ?? resolveDshHome(),
       })
-      ensureInitialized(root, settings.reportLanguage)
+      ensureInitialized(root, settings.reportLanguage, this.overlayRoot)
     } catch (error: unknown) {
       // A broken EXTERNAL settings document must not wedge every first turn;
       // the next user message retries after repair. The /report-init command

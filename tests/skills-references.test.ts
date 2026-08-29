@@ -160,7 +160,7 @@ describe('References/skills coexistence', () => {
     const ctx = new Context()
     await ctx.plugin(SkillRegistry)
     ctx.provide('tools', { guard: () => () => {} } as never)
-    applyHost(ctx, { ...hostConfig, workspaceRoot: experiment }, { settingsHome: home })
+    await applyHost(ctx, { ...hostConfig, workspaceRoot: experiment }, { settingsHome: home, skipResourceSync: true })
     const listed = await ctx.skills.list({ cwd: experiment })
     expect(listed.map(skill => skill.name)).not.toContain('foo')
     expect(listed.some(skill => skill.provider === REFERENCES_SKILL_PROVIDER)).toBe(false)

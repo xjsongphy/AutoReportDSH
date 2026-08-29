@@ -15,6 +15,7 @@ import AutoReportWorkflowRuntime, { type RuntimeOptions } from './runtime.js'
 import { createReportInitCommand } from './workspace/command.js'
 import { loadProjectSettings, saveProjectSettings, workspaceIdForRoot } from './settings.js'
 import { installTurnGuards } from './workflow/turn-guard.js'
+import { syncManagedResources } from './workspace/resource-sync.js'
 
 export const name = 'autoreportdsh-host'
 export const inject = ['tools']
@@ -55,9 +56,29 @@ export function resolveHostConfig(raw: Partial<Config> = {}): Config {
  * @param options - optional home overrides for tests; production resolves
  *   the DSH home itself.
  */
-export function apply(ctx: Context, config: Partial<Config> = {}, options: RuntimeOptions = {}): void {
+export async function apply(ctx: Context, config: Partial<Config> = {}, options: RuntimeOptions = {}): Promise<void> {
   const resolved = resolveHostConfig(config)
   const runtime = new AutoReportWorkflowRuntime(ctx, resolved, options)
+  if (options.skipResourceSync !== true) {
+    try {
+      const outcomes = await syncManagedResources({ overlayRoot: runtime.overlayRoot })
+      const failed = outcomes.filter(entry => entry.status === 'failed').length
+      if (failed > 0) {
+        try {
+          ctx.logger.warn('autoreportdsh: resource sync kept overlay copies for %d failed file(s)', failed)
+        } catch {
+          // A bare test Context may lack a working logger.
+        }
+      }
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error)
+      try {
+        ctx.logger.warn('autoreportdsh: resource sync skipped: %s', message)
+      } catch {
+        // A bare test Context may lack a working logger.
+      }
+    }
+  }
   ctx.tools.guard(createRoleToolGuard({
     registry: runtime.roleRegistry,
     isMainSession: sessionId => runtime.isMainSession(sessionId),
@@ -86,6 +107,7 @@ export function apply(ctx: Context, config: Partial<Config> = {}, options: Runti
         load: () => loadProjectSettings(options.settingsHome, workspaceIdForRoot(root)),
         save: next => saveProjectSettings(options.settingsHome, workspaceIdForRoot(root), next),
       }),
+      overlayRoot: runtime.overlayRoot,
     })
     commands.register({
       ...definition,

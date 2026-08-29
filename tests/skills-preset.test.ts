@@ -1,5 +1,20 @@
-import { describe, expect, it } from 'vitest'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { afterEach, describe, expect, it } from 'vitest'
 import { skillNamesForRole, registerMainSkills, registerRoleSkills, MAIN_SKILL_NAMES } from '../src/skills-preset.js'
+import { seedSyncedResourceStubs } from './helpers/synced-resource-stubs.js'
+
+const overlays: string[] = []
+afterEach(() => {
+  for (const dir of overlays.splice(0)) rmSync(dir, { recursive: true, force: true })
+})
+
+function overlay(): string {
+  const root = mkdtempSync(join(tmpdir(), 'autoreport-skills-overlay-'))
+  overlays.push(root)
+  return seedSyncedResourceStubs(root)
+}
 
 describe('AutoReport role-scoped domain skills', () => {
   it('keeps domain skills out of unrelated specialists', () => {
@@ -19,7 +34,7 @@ describe('AutoReport role-scoped domain skills', () => {
       'experiment-report-writer', 'latex-compile',
     ])
     expect(skillNamesForRole('REPORT', 'typst')).toEqual([
-      'experiment-report-writer', 'typst-compile',
+      'experiment-report-writer', 'typst', 'typst-compile',
     ])
   })
 
@@ -33,8 +48,11 @@ describe('AutoReport role-scoped domain skills', () => {
         },
       },
     }
-    registerRoleSkills(context, 'REPORT', 'latex')
+    registerRoleSkills(context, 'REPORT', 'latex', overlay())
     expect(skills).toEqual(['experiment-report-writer', 'latex-compile'])
+    skills.length = 0
+    registerRoleSkills(context, 'REPORT', 'typst', overlay())
+    expect(skills).toEqual(['experiment-report-writer', 'typst', 'typst-compile'])
   })
 
   it('fails loud when the child skills service is missing', () => {

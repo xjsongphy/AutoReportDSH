@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { ensureInitialized, ensureWorkspaceDirs, REQUIRED_DIRS, resourcesRoot, materializeResources } from '../src/workspace/init.js'
+import { seedSyncedResourceStubs } from './helpers/synced-resource-stubs.js'
 
 const cleanup: string[] = []
 
@@ -10,6 +11,10 @@ function tempRoot(): string {
   const root = mkdtempSync(join(tmpdir(), 'autoreport-workspace-'))
   cleanup.push(root)
   return root
+}
+
+function overlayRoot(): string {
+  return seedSyncedResourceStubs(tempRoot())
 }
 
 afterEach(() => {
@@ -59,7 +64,7 @@ describe('materializeResources', () => {
 
   it('writes every typst resource into Report/ for a fresh workspace', () => {
     const root = tempRoot()
-    const { written, skipped } = materializeResources(root, 'typst')
+    const { written, skipped } = materializeResources(root, 'typst', overlayRoot())
     expect(written.sort()).toEqual([
       'Report/american-physics-society.csl',
       'Report/bibli.bib',
@@ -92,8 +97,8 @@ describe('ensureInitialized', () => {
 
   it('converges to a no-op with only skips after the first pass', () => {
     const root = tempRoot()
-    ensureInitialized(root, 'typst')
-    const second = ensureInitialized(root, 'typst')
+    ensureInitialized(root, 'typst', overlayRoot())
+    const second = ensureInitialized(root, 'typst', overlayRoot())
     expect(second.createdDirs).toEqual([])
     expect(second.writtenFiles).toEqual([])
     expect(second.skippedFiles.sort().length).toBeGreaterThan(0)
@@ -104,7 +109,7 @@ describe('resourcesRoot', () => {
   it('resolves to a directory containing the bundled assets', () => {
     const root = resourcesRoot()
     expect(existsSync(join(root, 'latex/templates/main.tex'))).toBe(true)
-    expect(existsSync(join(root, 'typst/themes/mplts.typ'))).toBe(true)
     expect(existsSync(join(root, 'skills/experiment-report-writer.md'))).toBe(true)
+    expect(existsSync(join(root, 'typst/themes/mplts.typ'))).toBe(false)
   })
 })

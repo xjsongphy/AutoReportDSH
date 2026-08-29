@@ -1,6 +1,6 @@
 /**
  * Experiment workspace initialization: directory scaffold plus
- * create-missing-only materialization of bundled report resources.
+ * create-missing-only materialization of bundled and synced report resources.
  *
  * AutoReportCLI creates this layout on startup and never overwrites existing
  * project files; AutoReportDSH preserves both properties. This module is pure
@@ -33,20 +33,20 @@ export const REQUIRED_DIRS: readonly string[] = Object.freeze([
 interface ResourceFile {
   /** Workspace-relative destination under `Report/`. */
   readonly destination: string
-  /** Path inside `resources/` of the bundled source asset. */
+  /** Path inside bundled or overlay `resources/` of the source asset. */
   readonly resourcePath: string
 }
 
-/** LaTeX assets installed at the `Report/` root. */
+/** LaTeX assets installed at the `Report/` root (bundled in this package). */
 const LATEX_FILES: readonly ResourceFile[] = Object.freeze([
   { destination: 'Report/main.tex', resourcePath: 'latex/templates/main.tex' },
   { destination: 'Report/mpltx.cls', resourcePath: 'latex/themes/mpltx.cls' },
 ])
 
-/** Typst assets installed at the `Report/` root. */
+/** Typst assets installed at the `Report/` root (synced into the overlay). */
 const TYPST_FILES: readonly ResourceFile[] = Object.freeze([
   { destination: 'Report/main.typ', resourcePath: 'typst/templates/main.typ' },
-  { destination: 'Report/mplts.typ', resourcePath: 'typst/templates/mplts.typ' },
+  { destination: 'Report/mplts.typ', resourcePath: 'typst/themes/mplts.typ' },
   { destination: 'Report/american-physics-society.csl', resourcePath: 'typst/templates/american-physics-society.csl' },
   { destination: 'Report/bibli.bib', resourcePath: 'typst/templates/bibli.bib' },
 ])
@@ -85,21 +85,50 @@ export function ensureWorkspaceDirs(root: string): string[] {
  * output (`dist/src/workspace/`).
  * @returns absolute path to the package's `resources/` directory.
  */
-export function resourcesRoot(): string {
+export function bundledResourcesRoot(): string {
   // src/workspace/init.ts → package root is two levels up; dist/src/workspace/
   // keeps the same depth because tsc preserves the `src/` segment.
   return resolve(dirname(fileURLToPath(import.meta.url)), '../../resources')
 }
 
 /**
- * Copy every bundled resource for `language` into `root`, skipping files that
- * already exist. Never overwrites: an existing user report file wins over the
- * bundled template, matching AutoReportCLI's create-missing-only rule.
+ * Resolve the bundled `resources/` directory. Synced remotes live in the
+ * global overlay (`$DSH_HOME/autoreport/resources`), not here.
+ * @returns absolute path to the package's `resources/` directory.
+ */
+export function resourcesRoot(): string {
+  return bundledResourcesRoot()
+}
+
+/**
+ * Resolve one resource file: overlay copy wins when present, otherwise the
+ * package-bundled file. Missing from both returns `undefined`.
+ * @param resourcePath - path inside `resources/`.
+ * @param overlayRoot - `$dshHome/autoreport/resources`, when configured.
+ */
+export function resolveResourceFile(resourcePath: string, overlayRoot?: string): string | undefined {
+  if (overlayRoot !== undefined) {
+    const overlay = join(overlayRoot, resourcePath)
+    if (existsSync(overlay)) return overlay
+  }
+  const bundled = join(bundledResourcesRoot(), resourcePath)
+  return existsSync(bundled) ? bundled : undefined
+}
+
+/**
+ * Copy every bundled/synced resource for `language` into `root`, skipping
+ * files that already exist. Never overwrites: an existing user report file
+ * wins over the template, matching AutoReportCLI's create-missing-only rule.
  * @param root - absolute experiment workspace root.
  * @param language - report engine selecting the resource set.
+ * @param overlayRoot - global synced overlay; required for Typst templates.
  * @returns result record separating writes from skips.
  */
-export function materializeResources(root: string, language: ReportLanguage): { written: string[], skipped: string[] } {
+export function materializeResources(
+  root: string,
+  language: ReportLanguage,
+  overlayRoot?: string,
+): { written: string[], skipped: string[] } {
   const written: string[] = []
   const skipped: string[] = []
   for (const file of language === 'latex' ? LATEX_FILES : TYPST_FILES) {
@@ -108,8 +137,15 @@ export function materializeResources(root: string, language: ReportLanguage): { 
       skipped.push(file.destination)
       continue
     }
+    const source = resolveResourceFile(file.resourcePath, overlayRoot)
+    if (source === undefined) {
+      throw new Error(
+        `AutoReport resource ${file.resourcePath} is missing`
+        + ` (overlay ${overlayRoot ?? 'unset'}; run plugin sync into $DSH_HOME/autoreport/resources)`,
+      )
+    }
     mkdirSync(dirname(target), { recursive: true })
-    copyFileSync(join(resourcesRoot(), file.resourcePath), target)
+    copyFileSync(source, target)
     written.push(file.destination)
   }
   return { written, skipped }
@@ -120,10 +156,15 @@ export function materializeResources(root: string, language: ReportLanguage): { 
  * then materialize missing resources for `language`.
  * @param root - absolute experiment workspace root.
  * @param language - report engine selecting the resource set.
+ * @param overlayRoot - global synced overlay for Typst (and any overlay skills).
  * @returns combined action manifest for callers that surface a summary.
  */
-export function ensureInitialized(root: string, language: ReportLanguage): InitializationResult {
+export function ensureInitialized(
+  root: string,
+  language: ReportLanguage,
+  overlayRoot?: string,
+): InitializationResult {
   const createdDirs = ensureWorkspaceDirs(root)
-  const { written, skipped } = materializeResources(root, language)
+  const { written, skipped } = materializeResources(root, language, overlayRoot)
   return { createdDirs, writtenFiles: written, skippedFiles: skipped }
 }

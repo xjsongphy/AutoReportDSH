@@ -23,6 +23,15 @@ import { installWorkflowReportTool } from '../../src/tools/report-workflow.js'
 import * as presetModule from '../../src/preset.js'
 import * as reportRouterModule from '../../src/tools/report-router.js'
 import type { SpecialistRole } from '../../src/roles.js'
+import { syncedResourcesRoot } from '../../src/workspace/resource-sync.js'
+import { seedSyncedResourceStubs } from './synced-resource-stubs.js'
+import { AUTOREPORT_MAIN_PRESET } from '../../src/membership.js'
+import AutoReportWorkflowRuntime from '../../src/runtime.js'
+import { saveProjectSettings, workspaceIdForRoot } from '../../src/settings.js'
+import { installWorkflowReportTool } from '../../src/tools/report-workflow.js'
+import * as presetModule from '../../src/preset.js'
+import * as reportRouterModule from '../../src/tools/report-router.js'
+import type { SpecialistRole } from '../../src/roles.js'
 
 export const ASSEMBLED_CONFIG: Config = {
   defaultReportLanguage: 'latex',
@@ -119,6 +128,7 @@ export async function assemble(options: AssembleOptions = {}): Promise<Assembled
     ownedDirs.push(dir)
     return dir
   })()
+  seedSyncedResourceStubs(syncedResourcesRoot(home))
 
   const continuableSetups: Assembled['continuableSetups'] = []
   const startedSpecs: Assembled['startedSpecs'] = []
@@ -209,7 +219,7 @@ export async function assemble(options: AssembleOptions = {}): Promise<Assembled
     saveProjectSettings(home, workspaceIdForRoot(workspaceRoot), projectPatch)
   }
 
-  applyHost(ctx, { ...ASSEMBLED_CONFIG, workspaceRoot }, { settingsHome: home, manifestHome: home })
+  await applyHost(ctx, { ...ASSEMBLED_CONFIG, workspaceRoot }, { settingsHome: home, manifestHome: home, skipResourceSync: true })
   reportRouterModule.apply(ctx)
   presetModule.apply(ctx)
 

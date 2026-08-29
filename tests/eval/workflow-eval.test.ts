@@ -138,6 +138,7 @@ describe('workflow eval', () => {
     const report = await dispatch(assembled, { role: 'REPORT', prompt: 'write and compile typst' })
     expect(specialistSkills(assembled, report.childId).skillNames).toEqual([
       'experiment-report-writer',
+      'typst',
       'typst-compile',
     ])
     expect(specialistSkills(assembled, report.childId).skillNames).not.toContain('latex-compile')

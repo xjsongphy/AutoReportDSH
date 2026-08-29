@@ -114,7 +114,9 @@ The keyless suite validates workflow persistence, preset membership, role writab
 
 ### Refresh externally maintained skills
 
-Runtime sessions never fetch resources. `pnpm run sync:resources` only downloads files listed in `scripts/sync-resources.ts` (`MANAGED_RESOURCES`). That list is currently empty; bundled skills live in `resources/skills/` in this repository.
+Runtime plugin start incrementally syncs listed remotes into **`$DSH_HOME/autoreport/resources`** (the DSH analog of AutoReportCLI's `~/.autoreport`). Git blob ids decide the pull: only files whose blob changed are downloaded. A missing remote path or a failed fetch keeps the last overlay copy. Those files are **not** committed to this repository.
+
+`pnpm run sync:resources` performs the same refresh without booting DSH. The live list covers AutoReportCLI remotes that still exist, except cc-switch (DSH owns providers) and the frozen `experiment-report-writer` projection. Typst keeps only `SKILL.md` plus basics/styling/tables/academic. Bundled (git-tracked) skills stay under `resources/skills/`.
 
 ### 4. Install the AutoReport preset
 
@@ -128,7 +130,7 @@ This writes the rendered user preset to:
 $DSH_HOME/.agent-presets/autoreport/   # default home is ~/.dsh
 ```
 
-links the package at `$DSH_HOME/profiles/node_modules/autoreportdsh` so the web client can load the settings card, and writes `cordis.overlay.generated.yml` in this repository. The installer overwrites AutoReport-owned preset files and keeps unrelated files under the user preset directory. To replace a stale install completely, delete `$DSH_HOME/.agent-presets/autoreport/` first, then rerun.
+links the package at `$DSH_HOME/profiles/node_modules/autoreportdsh` so the web client can load the settings card, and writes `cordis.overlay.generated.yml` in this repository. The installer overwrites AutoReport-owned preset files and keeps unrelated files under the user preset directory. A leftover `$DSH_HOME/.agent-presets/autoreport-main/` from the preset-id rename is retired after the new directory is written (foreign files that the new install does not already own are copied across). Sessions saved under `autoreport-main` still count as AutoReport. To replace a stale install completely, delete `$DSH_HOME/.agent-presets/autoreport/` first, then rerun.
 
 For an isolated harness home:
 

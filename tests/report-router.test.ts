@@ -1,4 +1,7 @@
-import { describe, expect, it, vi } from 'vitest'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { afterAll, describe, expect, it, vi } from 'vitest'
 import type { Context } from '@deepseek-ai/cordis'
 import { Session, SessionId } from '@deepseek-ai/dsh-session'
 import {
@@ -11,6 +14,10 @@ import type { RoleBindingSnapshot } from '../src/workflow/events.js'
 import { installRoutedReportTool } from '../src/tools/report-router.js'
 import { installWorkflowReportTool } from '../src/tools/report-workflow.js'
 import { roleWritableRoot } from '../src/policy/sandbox-roots.js'
+import { seedSyncedResourceStubs } from './helpers/synced-resource-stubs.js'
+
+const overlayRoot = seedSyncedResourceStubs(mkdtempSync(join(tmpdir(), 'autoreport-router-overlay-')))
+afterAll(() => rmSync(overlayRoot, { recursive: true, force: true }))
 
 const CONFIG: Config = {
   defaultReportLanguage: 'latex',
@@ -75,7 +82,7 @@ describe('report router', () => {
   it('installs stock report for ordinary DSH children', () => {
     const child = childContext()
     const host = hostContext()
-    installRoutedReportTool(child.ctx, host.ctx, { roleRegistry: new RoleRegistry(), config: CONFIG, workflowForChild: () => undefined })
+    installRoutedReportTool(child.ctx, host.ctx, { roleRegistry: new RoleRegistry(), config: CONFIG, workflowForChild: () => undefined, overlayRoot })
     expect(child.tools.map(tool => tool.name)).toEqual(['report'])
     expect(child.sections.some(section => section.name === 'tool:report')).toBe(true)
     expect(child.providers).toEqual([])
@@ -95,7 +102,7 @@ describe('report router', () => {
       provisioning: 'reserved',
     }
     roleRegistry.registerReserved(binding)
-    installRoutedReportTool(child.ctx, host.ctx, { roleRegistry, config: CONFIG, workflowForChild: () => undefined })
+    installRoutedReportTool(child.ctx, host.ctx, { roleRegistry, config: CONFIG, workflowForChild: () => undefined, overlayRoot })
     expect(child.tools.map(tool => tool.name)).toEqual(['report_workflow'])
     expect(child.skills).toEqual([])
     expect(child.sections.some(section => section.text.includes('THEORY'))).toBe(true)
@@ -118,7 +125,7 @@ describe('report router', () => {
       workflowId: 'wf',
       provisioning: 'reserved',
     })
-    installRoutedReportTool(child.ctx, host.ctx, { roleRegistry, config: CONFIG, workflowForChild: () => undefined })
+    installRoutedReportTool(child.ctx, host.ctx, { roleRegistry, config: CONFIG, workflowForChild: () => undefined, overlayRoot })
     expect(child.tools.map(tool => tool.name)).toEqual(['report_workflow'])
     expect(child.skills.map(skill => skill.name)).toEqual([
       'experiment-report-writer',
@@ -155,7 +162,7 @@ describe('report router', () => {
       skills: { register: () => () => {} },
       get: () => undefined,
     } as unknown as Context
-    installRoutedReportTool(ctx, hostContext().ctx, { roleRegistry, config: CONFIG, workflowForChild: () => undefined })
+    installRoutedReportTool(ctx, hostContext().ctx, { roleRegistry, config: CONFIG, workflowForChild: () => undefined, overlayRoot })
     expect(tools.map(tool => tool.name)).toEqual(['report_workflow'])
   })
 })

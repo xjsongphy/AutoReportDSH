@@ -114,7 +114,9 @@ pnpm run build
 
 ### 刷新外部维护的 skill
 
-运行时不会拉取资源。`pnpm run sync:resources` 只下载 `scripts/sync-resources.ts` 里 `MANAGED_RESOURCES` 列出的文件。该列表目前为空；捆绑 skill 在本仓库的 `resources/skills/`。
+插件启动时把清单里的远端文件增量同步到 **`$DSH_HOME/autoreport/resources`**（对应 AutoReportCLI 的 `~/.autoreport`）。按 Git blob 判断：只下载变过的文件。远端路径消失或拉取失败则保留上次 overlay 副本。这些文件**不进本仓库**。
+
+`pnpm run sync:resources` 做同样的刷新，不必启动 DSH。清单覆盖 AutoReportCLI 仍存在的上游（不包括 cc-switch，provider 由 DSH 管）以及已冻结的 `experiment-report-writer` 投影。Typst 只保留 `SKILL.md` 和 basics/styling/tables/academic。仓库里捆绑的 skill 仍在 `resources/skills/`。
 
 ### 4. 安装 AutoReport preset
 
@@ -128,7 +130,7 @@ pnpm run install:preset
 $DSH_HOME/.agent-presets/autoreport/   # 默认 home 是 ~/.dsh
 ```
 
-把本包装到 `$DSH_HOME/profiles/node_modules/autoreportdsh`（供 Web 加载设置卡片），并在本仓库生成 `cordis.overlay.generated.yml`。安装器会覆盖 AutoReport 自己管理的 preset 文件，并保留该目录下无关的用户文件。若要彻底替换过期安装，先删除 `$DSH_HOME/.agent-presets/autoreport/` 再重跑。
+把本包装到 `$DSH_HOME/profiles/node_modules/autoreportdsh`（供 Web 加载设置卡片），并在本仓库生成 `cordis.overlay.generated.yml`。安装器会覆盖 AutoReport 自己管理的 preset 文件，并保留该目录下无关的用户文件。preset id 更名后残留的 `$DSH_HOME/.agent-presets/autoreport-main/` 会在写入新目录后退役（新安装尚未拥有的用户文件会一并迁过去）。以 `autoreport-main` 保存的旧 session 仍视为 AutoReport。若要彻底替换过期安装，先删除 `$DSH_HOME/.agent-presets/autoreport/` 再重跑。
 
 使用隔离的 harness home：
 

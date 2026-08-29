@@ -64,19 +64,66 @@ export function parseBundledSkill(raw: string): BundledSkill | undefined {
   return { name, description, content: parsed.body }
 }
 
-/**
- * Load every bundled skill from `<resources>/skills/*.md`, sorted by name.
- * Report-language guidance files live in a separate directory and are not
- * part of the runtime skill catalog.
- * @returns parsed skills with unique names.
- */
-export function loadBundledSkills(): BundledSkill[] {
-  const dir = join(resourcesRoot(), 'skills')
-  const skills: BundledSkill[] = []
-  for (const entry of readdirSync(dir).sort()) {
-    if (!entry.endsWith('.md')) continue
-    const skill = parseBundledSkill(readFileSync(join(dir, entry), 'utf8'))
-    if (skill !== undefined) skills.push(skill)
+function collectSkillsFromRoot(root: string, add: (skill: BundledSkill | undefined, path: string) => void): void {
+  let skillEntries: string[]
+  try {
+    skillEntries = readdirSync(join(root, 'skills')).sort()
+  } catch (error: unknown) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+    skillEntries = []
   }
-  return skills
+  for (const entry of skillEntries) {
+    if (!entry.endsWith('.md')) continue
+    const path = join(root, 'skills', entry)
+    add(parseBundledSkill(readFileSync(path, 'utf8')), path)
+  }
+  for (const language of ['latex', 'typst'] as const) {
+    const nestedRoot = join(root, language, 'skills')
+    let entries: string[]
+    try {
+      entries = readdirSync(nestedRoot, { withFileTypes: true })
+        .filter(entry => entry.isDirectory())
+        .map(entry => entry.name)
+        .sort()
+    } catch {
+      continue
+    }
+    for (const name of entries) {
+      const path = join(nestedRoot, name, 'SKILL.md')
+      try {
+        add(parseBundledSkill(readFileSync(path, 'utf8')), path)
+      } catch (error: unknown) {
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+      }
+    }
+  }
+}
+
+/**
+ * Load every skill: package-bundled files under `resources/skills`, plus the
+ * global overlay (`$DSH_HOME/autoreport/resources`) for synced remotes such as
+ * `latex-compile` and `typst`. Overlay names replace a bundled file of the
+ * same name. Report-language guidance files under `report-languages/` are
+ * not part of the runtime catalog.
+ * @param overlayRoot - global synced overlay directory.
+ * @returns parsed skills with unique names, sorted by name.
+ */
+export function loadBundledSkills(overlayRoot?: string): BundledSkill[] {
+  const skills: BundledSkill[] = []
+  const seen = new Set<string>()
+
+  const add = (skill: BundledSkill | undefined, path: string, replace: boolean): void => {
+    if (skill === undefined) return
+    if (seen.has(skill.name)) {
+      if (!replace) throw new Error(`AutoReport bundled skill ${skill.name} is duplicated at ${path}`)
+      const index = skills.findIndex(entry => entry.name === skill.name)
+      if (index !== -1) skills.splice(index, 1)
+    }
+    seen.add(skill.name)
+    skills.push(skill)
+  }
+
+  collectSkillsFromRoot(resourcesRoot(), (skill, path) => add(skill, path, false))
+  if (overlayRoot !== undefined) collectSkillsFromRoot(overlayRoot, (skill, path) => add(skill, path, true))
+  return skills.sort((left, right) => left.name.localeCompare(right.name))
 }

@@ -48,6 +48,8 @@ export interface ReportInitCommandOptions {
    * (factory-only tests) keeps the command persistence-free.
    */
   readonly projectStore?: (root: string) => ProjectSettingsStore
+  /** `$dshHome/autoreport/resources` for Typst (and other overlay) assets. */
+  readonly overlayRoot?: string
 }
 
 /** One-line summary of one initialization pass, rendered by the command. */
@@ -162,7 +164,7 @@ export function createReportInitCommand(options: ReportInitCommandOptions): Comm
           store.save({ ...project, reportLanguage: parsed.language })
           saved = ' (saved to project settings)'
         }
-        const initialization = ensureInitialized(root, language)
+        const initialization = ensureInitialized(root, language, options.overlayRoot)
         return {
           kind: 'success',
           text: `${renderInitialization(initialization)}\nreport language: ${language}${saved}`,

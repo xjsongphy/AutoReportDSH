@@ -24,7 +24,7 @@ export const inject = ['tools', 'skills', 'subagents', 'autoreportWorkflow'] as 
  */
 export function apply(ctx: Context): void {
   installReferencesSkills(ctx)
-  registerMainSkills(ctx)
+  registerMainSkills(ctx, ctx.autoreportWorkflow.overlayRoot)
   ctx.tools.register(createSendToAgentTool({
     subagents: ctx.subagents,
     workflow: ctx.autoreportWorkflow,

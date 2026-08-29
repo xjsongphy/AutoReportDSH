@@ -12,7 +12,7 @@ export const name = 'autoreportdsh-report-router'
 export const inject = ['subagents', 'tools', 'systemPrompt', 'autoreportWorkflow']
 
 /** Router inputs shared by every specialist branch. */
-type RoutedWorkflow = Pick<AutoReportWorkflowRuntime, 'roleRegistry' | 'config' | 'workflowForChild'>
+type RoutedWorkflow = Pick<AutoReportWorkflowRuntime, 'roleRegistry' | 'config' | 'workflowForChild' | 'overlayRoot'>
 
 /**
  * Seed DSH's agent-scoped selection from the frozen workflow snapshot, then
@@ -74,7 +74,7 @@ export function installRoutedReportTool(
     if (disposeModelSelection !== undefined) disposers.push(disposeModelSelection)
     const language = workflow.workflowForChild(child.id)?.runtime.state.projection().meta?.settings?.reportLanguage
       ?? workflow.config.defaultReportLanguage
-    disposers.push(registerRoleSkills(childCtx, entry.binding.role, language))
+    disposers.push(registerRoleSkills(childCtx, entry.binding.role, language, workflow.overlayRoot))
     disposers.push(installReferencesSkills(childCtx))
     const session = child.session
     if (session !== undefined) {

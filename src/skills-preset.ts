@@ -29,7 +29,9 @@ export function skillNamesForRole(role: SpecialistRole, language: ReportSkillLan
     case 'PLOTTING':
       return []
     case 'REPORT':
-      return ['experiment-report-writer', language === 'latex' ? 'latex-compile' : 'typst-compile']
+      return language === 'latex'
+        ? ['experiment-report-writer', 'latex-compile']
+        : ['experiment-report-writer', 'typst', 'typst-compile']
   }
 }
 
@@ -66,8 +68,8 @@ function requireSkillRegister(ctx: Context, owner: string): (registration: {
  * @param ctx - `autoreport` preset context.
  * @returns composite disposer for registered skills.
  */
-export function registerMainSkills(ctx: Context): () => void {
-  const available = new Map(loadBundledSkills().map(skill => [skill.name, skill]))
+export function registerMainSkills(ctx: Context, overlayRoot?: string): () => void {
+  const available = new Map(loadBundledSkills(overlayRoot).map(skill => [skill.name, skill]))
   const disposers: (() => void)[] = []
   const registerSkill = requireSkillRegister(ctx, 'MAIN')
 
@@ -108,8 +110,9 @@ export function registerRoleSkills(
   ctx: Context,
   role: SpecialistRole,
   language: ReportSkillLanguage,
+  overlayRoot?: string,
 ): () => void {
-  const available = new Map(loadBundledSkills().map(skill => [skill.name, skill]))
+  const available = new Map(loadBundledSkills(overlayRoot).map(skill => [skill.name, skill]))
   const disposers: (() => void)[] = []
   const registerSkill = requireSkillRegister(ctx, role)
   try {

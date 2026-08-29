@@ -1,5 +1,20 @@
-import { describe, expect, it } from 'vitest'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { afterEach, describe, expect, it } from 'vitest'
 import { loadBundledSkills, parseBundledSkill } from '../src/workspace/skill-loader.js'
+import { seedSyncedResourceStubs } from './helpers/synced-resource-stubs.js'
+
+const overlays: string[] = []
+afterEach(() => {
+  for (const dir of overlays.splice(0)) rmSync(dir, { recursive: true, force: true })
+})
+
+function overlay(): string {
+  const root = mkdtempSync(join(tmpdir(), 'autoreport-overlay-'))
+  overlays.push(root)
+  return seedSyncedResourceStubs(root)
+}
 
 describe('parseBundledSkill', () => {
   it('parses name and description frontmatter with the body', () => {
@@ -24,7 +39,6 @@ describe('loadBundledSkills', () => {
   it('loads every bundled skill document', () => {
     expect(skills.map(skill => skill.name)).toEqual([
       'experiment-report-writer',
-      'latex-compile',
       'pdf-reference-reader',
       'typst-compile',
     ])
@@ -51,9 +65,19 @@ describe('loadBundledSkills', () => {
   })
 
   it('documents bash-driven LaTeX compilation without compile_report', () => {
-    const latex = skills.find(skill => skill.name === 'latex-compile')
+    const latex = loadBundledSkills(overlay()).find(skill => skill.name === 'latex-compile')
     expect(latex?.content).toContain('latexmk')
-    expect(latex?.content).not.toContain('compile_report')
+    expect(latex?.content).toContain('Do not use `compile_report`')
+  })
+
+  it('merges overlay typst and latex-compile with bundled skills', () => {
+    expect(loadBundledSkills(overlay()).map(skill => skill.name)).toEqual([
+      'experiment-report-writer',
+      'latex-compile',
+      'pdf-reference-reader',
+      'typst',
+      'typst-compile',
+    ])
   })
 
   it('includes pdf-reference-reader for MAIN PDF extraction', () => {

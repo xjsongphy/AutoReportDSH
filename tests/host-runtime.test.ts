@@ -15,6 +15,8 @@ import { AUTOREPORT_MAIN_PRESET, isAutoReportMainSession } from '../src/membersh
 import { REQUIRED_DIRS } from '../src/workspace/init.js'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import { resolveWorkflowSettings, saveProjectSettings, workspaceIdForRoot } from '../src/settings.js'
+import { syncedResourcesRoot } from '../src/workspace/resource-sync.js'
+import { seedSyncedResourceStubs } from './helpers/synced-resource-stubs.js'
 
 const tempDirs: string[] = []
 afterEach(() => {
@@ -83,7 +85,9 @@ describe('host workflow runtime', () => {
 
   it('snapshots the registered DSH autoreport user settings for a new workflow', async () => {
     const root = mkdtempSync(join(tmpdir(), 'autoreport-runtime-'))
-    tempDirs.push(root)
+    const home = mkdtempSync(join(tmpdir(), 'autoreport-home-'))
+    tempDirs.push(root, home)
+    seedSyncedResourceStubs(syncedResourcesRoot(home))
     const ctx = new Context()
     await ctx.plugin(MemorySettings, {
       doc: {
@@ -94,7 +98,7 @@ describe('host workflow runtime', () => {
         },
       },
     })
-    const runtime = new AutoReportWorkflowRuntime(ctx, { ...CONFIG, workspaceRoot: root })
+    const runtime = new AutoReportWorkflowRuntime(ctx, { ...CONFIG, workspaceRoot: root }, { settingsHome: home })
     await vi.waitFor(() => {
       const section = ctx.settings.describe().find(entry => entry.ns === 'autoreport')
       expect(section?.value).toMatchObject({ defaultReportLanguage: 'typst', delegationWaitTimeoutMs: 12_345 })
@@ -113,6 +117,7 @@ describe('host workflow runtime', () => {
     const home = mkdtempSync(join(tmpdir(), 'autoreport-home-'))
     tempDirs.push(root, home)
     saveProjectSettings(home, workspaceIdForRoot(root), { reportLanguage: 'typst' })
+    seedSyncedResourceStubs(syncedResourcesRoot(home))
     const ctx = new Context()
     const runtime = new AutoReportWorkflowRuntime(ctx, { ...CONFIG, workspaceRoot: root }, { settingsHome: home })
     const session = rootSession('main', AUTOREPORT_MAIN_PRESET)
