@@ -76,19 +76,13 @@ DSH session 是追加事件日志。每条 MAIN/child session 都记录：
 - `assistant/message`：对话内容和可用 token usage；
 - `tool/call` / `tool/result`：工具参数、结果及错误；
 - `user/message`：用户输入、subagent `report_workflow`（`source.kind = subagent-report`）、以及 turn-stopping 二次启动（`source.plugin = autoreportdsh/turn-guard`，`summary` 为用户可读的 AutoReport resumed 文案）；
-- `autoreport/workflow`、`autoreport/task`、`autoreport/delegation`、`autoreport/role-binding`、`autoreport/artifact`、`autoreport/file-note`：AutoReport 的 durable 状态。
+- `autoreport/workflow`、`autoreport/task`、`autoreport/delegation`、`autoreport/role-binding`、`autoreport/artifact`、`autoreport/file-note`、`autoreport/role-note`：AutoReport 的 durable 状态。
 
 不要另写一套 debug log。导出或打开原始 session 文件即可定位委派、报告、产物和为何 turn 被再次拉起。
 
 Web 的历史页、Chat 与 Trajectory 都从这些事件投影。会话导出功能可导出原始 session log，适合离线审计。
 
-AutoReport 产物 manifest 不写入实验目录，而在：
-
-```text
-$DSH_HOME/autoreport/<workspace-id>/manifests/
-```
-
-它列出每个目录中的 agent 产物、producer role、来源工具、任务 id 和 delegation revision。最终交付仍在工作区：
+Agent-facing manifest 由 session 中的 artifact、file-note 和 role-note 事件即时投影，不另写旁路 JSON；它保留原始 AutoReport 的 `agent_type`、`files`、`description_updated_at`、`file_updated_at` 和 role-level `notes` 字段，时间以 ISO 8601 UTC 字符串呈现。最终交付仍在工作区：
 
 ```text
 ~/Develop/CV/Report/main.typ
@@ -111,7 +105,7 @@ $DSH_HOME/autoreport/<workspace-id>/manifests/
 2. 四个 subagent 都有可追踪的 delegation revision 与结构化 `report_workflow` 结论；
 3. 每个角色只写自己的目录；
 4. `Report/main.pdf` 存在且 Typst 编译无失败；
-5. external manifest 与最终文件对应，且对话/Trajectory 中无未处理 blocker。
+5. 各 subagent 的 `manifest` 与最终文件对应，且对话/Trajectory 中无未处理 blocker。
 
 ## 7. OpenCLI 浏览器可见性结论
 
@@ -124,7 +118,7 @@ opencli browser autoreport state
 opencli browser autoreport screenshot /tmp/autoreportdsh.png
 ```
 
-自动化检查应将截图写入 `/tmp/`，并以 DSH 的 session log、导出 ZIP 与 manifest 作为可审计的权威记录；OpenCLI 页面快照仅用于验证 UI 投影。
+自动化检查应将截图写入 `/tmp/`，并以 DSH 的 session log、导出 ZIP 与 `manifest` 工具结果作为可审计的权威记录；OpenCLI 页面快照仅用于验证 UI 投影。
 
 ## 8. 本次实测结果（2026-08-27）
 

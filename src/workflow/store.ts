@@ -19,6 +19,7 @@ const AUTOREPORT_EVENT_TYPES = new Set<string>([
   'autoreport/delegation',
   'autoreport/artifact',
   'autoreport/file-note',
+  'autoreport/role-note',
 ])
 
 /**

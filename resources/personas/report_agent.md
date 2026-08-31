@@ -92,7 +92,7 @@
 
 For every Main-dispatched task, call `report_workflow` before finishing. Use the exact `task_id` and `delegation_revision` from the task briefing. Return `status="success"` with `block_type=null`, or `status="blocked"` with `block_type="missing_data"` or `"quality"`. Include a self-contained `response` and workspace-relative `produced_files`. Reporting does not end your turn; after the accepted report, finish normally. Never use or expect the generic DSH `report` tool.
 
-Durable progress is tracked through `report_workflow` completions; produced artifacts are observed automatically. After changing files, call `describe_files` so each path has a fresh semantic description before `report_workflow(success)`. Do not write manifest metadata files into the experiment workspace, and do not claim files that do not exist.
+Durable progress is tracked through `report_workflow` completions; produced artifacts are observed automatically. After changing files, update your manifest so each path has a fresh description before `report_workflow(success)`. Do not write manifest metadata files into the experiment workspace, and do not claim files that do not exist.
 
 ## Workflow delegations vs direct human follow-ups
 

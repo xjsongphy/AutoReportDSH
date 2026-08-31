@@ -35,7 +35,7 @@ import {
   disposeAssembled,
   execute,
   eventTypes,
-  describeFiles,
+  updateManifest,
   messageSource,
   messageText,
   publish,
@@ -87,11 +87,11 @@ async function finishRole(
     await specialistWrite(assembled, child, file.path, file.content)
   }
   const taskId = String(child.value.task_id)
-  const described = await describeFiles(assembled, child, produced.map(file => ({
+  const described = await updateManifest(assembled, child, produced.map(file => ({
     path: file.path,
     description: `${role} output ${file.path}`,
   })))
-  expect(described.isError).toBe(false)
+  expect(described.isError, described.text).toBe(false)
   const reported = await reportWorkflow(assembled, child, {
     task_id: taskId,
     delegation_revision: Number(child.value.delegation_revision),
@@ -126,7 +126,7 @@ describe('workflow eval', () => {
     ])
     await specialistWrite(assembled, report, 'Report/main.tex', '\\documentclass{article}\\begin{document}ok\\end{document}\n')
     await specialistWrite(assembled, report, 'Report/main.pdf', '%PDF-eval\n')
-    expect((await describeFiles(assembled, report, [
+    expect((await updateManifest(assembled, report, [
       { path: 'Report/main.tex', description: 'LaTeX source' },
       { path: 'Report/main.pdf', description: 'compiled PDF' },
     ])).isError).toBe(false)
@@ -174,7 +174,7 @@ describe('workflow eval', () => {
     expect(specialistSkills(assembled, report.childId).skillNames).not.toContain('latex-compile')
     await specialistWrite(assembled, report, 'Report/main.typ', '#set page(paper: "a4")\nHello\n')
     await specialistWrite(assembled, report, 'Report/main.pdf', '%PDF-typst-eval\n')
-    expect((await describeFiles(assembled, report, [
+    expect((await updateManifest(assembled, report, [
       { path: 'Report/main.typ', description: 'Typst source' },
       { path: 'Report/main.pdf', description: 'compiled PDF' },
     ])).isError).toBe(false)
@@ -224,7 +224,7 @@ describe('workflow eval', () => {
     })
     expect(retry.childId).toBe(child.childId)
     await specialistWrite(assembled, retry, 'Data/Processed/out.csv', 'ok\n')
-    expect((await describeFiles(assembled, retry, [
+    expect((await updateManifest(assembled, retry, [
       { path: 'Data/Processed/out.csv', description: 'fitted results' },
     ])).isError).toBe(false)
     await reportWorkflow(assembled, retry, {
@@ -272,7 +272,7 @@ describe('workflow eval', () => {
     stopTurn(assembled, child.childAgent, 1)
     const afterManifest = turnGuardSteers(child.childSession)
     expect(afterManifest).toHaveLength(1)
-    expect(messageText(afterManifest[0])).toMatch(/describe_files/)
+    expect(messageText(afterManifest[0])).toMatch(/manifest/)
     expect(messageSource(afterManifest[0])).toMatchObject({
       kind: 'plugin',
       plugin: 'autoreportdsh/turn-guard',
@@ -300,9 +300,9 @@ describe('workflow eval', () => {
       produced_files: ['Theory/theory.md'],
     })
     expect(rejected.isError).toBe(true)
-    expect(rejected.text).toMatch(/semantic manifest is stale/)
+    expect(rejected.text).toMatch(/manifest descriptions are stale/)
 
-    expect((await describeFiles(assembled, child, [
+    expect((await updateManifest(assembled, child, [
       { path: 'Theory/theory.md', description: 'leftover derivation' },
     ])).isError).toBe(false)
     await reportWorkflow(assembled, child, {

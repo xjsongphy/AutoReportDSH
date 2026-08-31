@@ -35,13 +35,13 @@ Plotting 和 Report。未选择该 preset 的 `standard` session 仍是原样 DS
 - **LaTeX 与 Typst 报告** — 支持语言选择、内置模板/主题、参考文献资源、编译 skill，以及基于 Python 的数据分析和绘图
 - **使用 DSH 的 Provider** — 只用 DSH 里已配置的模型路由；AutoReportDSH 不维护自己的凭证或 provider 列表
 - **资源同步** — 插件启动时把清单中的远端刷新到 `$DSH_HOME/autoreport/resources`；`pnpm run sync:resources` 不必启动 DSH 也能做同样的事
-- **任务与产物追踪** — `send_to_agent` 记录持久化任务和版本；subagent 用 `describe_files` 更新文件说明、用 `report_workflow` 结束；机械 manifest 写在 `$DSH_HOME` 下，不进实验目录
+- **任务与产物追踪** — `send_to_agent` 记录持久化任务和版本；artifact 事件记录实际变更；各 agent 用 `manifest` 读取其他角色的文件说明、更新自己的说明和 role notes，再用 `report_workflow` 结束
 - **安全执行** — DSH `workspace-write` 把每个角色钉在各自的可写根目录；AutoReport session 不能通过 `sandbox_permissions` 提权；网络允许访问
 - **内置默认资源** — 自带 persona、模板和 skills，新项目开箱即用
 
 ### 工作流
 - **可选 preset** — 只有顶层 `autoreport` session 进入 runtime；加载 overlay 不会改变普通 DSH session
-- **很小的模型接口** — MAIN 只增加 `send_to_agent`（外加 DSH 的 `ask_user_question`）；subagent 增加 `describe_files` 和 `report_workflow`；其余是 DSH 的 `read` / `write` / `edit` / `bash` / `skill`
+- **很小的模型接口** — MAIN 只增加 `send_to_agent` 和 `manifest`（外加 DSH 的 `ask_user_question`）；subagent 增加 `manifest` 和 `report_workflow`；其余是 DSH 的 `read` / `write` / `edit` / `bash` / `skill`
 - **可续写的 subagent** — child 在后续任务中保留角色上下文；用户直接与 subagent 对话是普通对话，不会自动变成 workflow 任务
 - **按角色隔离的 skill** — MAIN 有 `pdf-reference-reader`；REPORT 有 `experiment-report-writer` 以及 `latex-compile` 或 `typst-compile`；实验目录 `References/skills` 是按 cwd 发现的 DSH skill 根
 - **设置与实时模型** — 语言、等待超时和 Python 在 **设置 → 插件 → 插件配置**；运行中的 subagent 在对话窗口切换模型
@@ -135,7 +135,6 @@ $DSH_HOME/
     ├── venv/                      AutoReport 托管的 Python（可选）
     └── <workspaceId>/
         ├── project.json           语言、Python、subagent 路由
-        └── manifests/             派生的产物投影
 ```
 
 ## 开发

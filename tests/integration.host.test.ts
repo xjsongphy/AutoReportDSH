@@ -9,11 +9,11 @@
  * `startContinuable`, first-call authorization through the assembled guard,
  * cross-role write denial, the full delegation round trip with artifact
  * facts, `/report-init` language coexistence against external project
- * settings, and external manifest projection.
+ * settings, and agent-facing manifest projection.
  * @module tests/integration.host
  */
 
-import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -81,7 +81,7 @@ describe('integration: assembled host (real context)', () => {
     assembled.runtime.roleRegistry.registerReserved(binding)
     const theory = makeChildRecorder('it-theory')
     setup(theory.ctx)
-    expect(theory.toolNames).toEqual(['describe_files', 'report_workflow'])
+    expect(theory.toolNames).toEqual(['manifest', 'report_workflow'])
     expect(theory.skillNames).toEqual([])
     expect(theory.toolNames).not.toContain('report')
     expect(theory.sections.some(section => section.text.includes('THEORY'))).toBe(true)
@@ -90,7 +90,7 @@ describe('integration: assembled host (real context)', () => {
     assembled.runtime.roleRegistry.registerReserved(reportBinding)
     const reporter = makeChildRecorder('it-report')
     setup(reporter.ctx)
-    expect(reporter.toolNames).toEqual(['describe_files', 'report_workflow'])
+    expect(reporter.toolNames).toEqual(['manifest', 'report_workflow'])
     expect(reporter.skillNames).toEqual(['experiment-report-writer', 'latex-compile'])
     expect(reporter.sections.map(section => section.name)).not.toEqual(expect.arrayContaining([
       'autoreport:skill:experiment-report-writer',
@@ -101,7 +101,7 @@ describe('integration: assembled host (real context)', () => {
       ...binding, role: 'PLOTTING', childSessionId: SessionId('it-plotting-bound'),
     })
     setup(plotter.ctx)
-    expect(plotter.toolNames).toEqual(['describe_files', 'report_workflow'])
+    expect(plotter.toolNames).toEqual(['manifest', 'report_workflow'])
     expect(plotter.skillNames).toEqual([])
   })
 
@@ -119,7 +119,7 @@ describe('integration: assembled host (real context)', () => {
     }))
   })
 
-  it('runs the whole delegation round trip: reserve -> authorized first call -> denial -> report -> artifacts -> manifests', async () => {
+  it('runs the whole delegation round trip: reserve -> authorized first call -> denial -> report -> artifacts -> manifest', async () => {
     const assembled = await boot()
     admitFirstTurn(assembled)
 
@@ -205,15 +205,21 @@ describe('integration: assembled host (real context)', () => {
       delegationKey: 'task-1#1',
     })
 
-    // External manifest projection landed under the temp HOME, keyed by the
-    // workspace id — never inside the experiment workspace.
-    const manifestsDir = join(assembled.home, 'autoreport', workspaceIdForRoot(assembled.workspaceRoot), 'manifests')
-    const manifest = readFileSync(join(manifestsDir, 'Data', 'Processed', 'Data_Processed.json'), 'utf8')
-    expect(manifest).toContain('"Data/Processed/out.csv"')
-    expect(manifest).toContain('"origin": "fs-tool"')
-    for (const entryName of readdirSync(assembled.workspaceRoot, { recursive: true })) {
-      expect(String(entryName)).not.toMatch(/manifest/i)
-    }
+    const manifestResult = await execute(assembled.ctx, 'manifest', { action: 'read' }, childAgent, childSession)
+    expect(manifestResult.isError, manifestResult.text).toBe(false)
+    expect(manifestResult.value).toMatchObject({
+      agent_type: 'data_analysis',
+      files: [{
+        path: 'Data/Processed/out.csv',
+        description: '',
+        description_updated_at: null,
+      }],
+      notes: '',
+      notes_updated_at: null,
+    })
+    expect((manifestResult.value as { files: { file_updated_at: string }[] }).files[0]?.file_updated_at)
+      .toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\+00:00$/u)
+    expect(existsSync(join(assembled.home, 'autoreport', workspaceIdForRoot(assembled.workspaceRoot), 'manifests'))).toBe(false)
 
     await assembled.ctx.fiber?.dispose()
   })

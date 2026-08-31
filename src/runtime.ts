@@ -4,7 +4,6 @@ import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
 import { installSettingsSection } from '@deepseek-ai/dsh-settings'
 import type { Config } from './config.js'
 import { AUTOREPORT_MAIN_PRESET, isAutoReportMainSession } from './membership.js'
-import { renderManifest, writeManifests } from './artifacts/manifest.js'
 import { emptyArtifactFoldState, foldArtifact, type ArtifactCaller, type ArtifactFoldState } from './artifacts/observer.js'
 import { AUTOREPORT_SCHEMA_VERSION, type WorkflowMetaSnapshot } from './workflow/events.js'
 import { delegationKey } from './workflow/protocol.js'
@@ -55,8 +54,6 @@ export interface ParentWorkflowRuntime {
 export interface RuntimeOptions {
   /** Harness home override for external project settings; absent resolves the DSH home. */
   readonly settingsHome?: string
-  /** Root receiving external manifest projections; absent resolves the DSH home lazily. */
-  readonly manifestHome?: string
   /** Skip GitHub overlay sync (tests seed stubs instead). */
   readonly skipResourceSync?: boolean
   /** Interpreter discovery overlay; tests disable conda/PATH scans. */
@@ -77,7 +74,6 @@ export default class AutoReportWorkflowRuntime extends Service {
   readonly settingsHome: string | undefined
   /** Global overlay for synced remotes (`$dshHome/autoreport/resources`). */
   readonly overlayRoot: string
-  private readonly manifestHome: string | undefined
   private readonly parents = new Map<string, ParentWorkflowRuntime>()
   // Retain admitted parent sessions for workflow/artifact ownership, but do
   // not use historical admission as current Main authorization: the effective
@@ -97,7 +93,6 @@ export default class AutoReportWorkflowRuntime extends Service {
     super(ctx, 'autoreportWorkflow')
     this.config = config
     this.settingsHome = options.settingsHome
-    this.manifestHome = options.manifestHome
     const dshHome = options.settingsHome ?? resolveDshHome()
     this.overlayRoot = syncedResourcesRoot(dshHome)
     const userSettingsBase = autoReportUserSettingsBase(
@@ -189,7 +184,7 @@ export default class AutoReportWorkflowRuntime extends Service {
     })
   }
 
-  /** Current open attempt key for one specialist child, when one is waiting. */
+  /** Current open attempt key for one subagent child, when one is waiting. */
   private currentDelegationKey(childSessionId: string): { taskId: string; key: string } | undefined {
     const owner = this.workflowForChild(childSessionId as SessionId)
     if (owner === undefined) return undefined
@@ -200,31 +195,6 @@ export default class AutoReportWorkflowRuntime extends Service {
       return { taskId: task.taskId, key: delegationKey(task.taskId, current.delegationRevision) }
     }
     return undefined
-  }
-
-  /**
-   * Project the accumulated artifact snapshots into the EXTERNAL manifest
-   * cache under the harness home (`<home>/autoreport/<workspaceId>/manifests/`),
-   * never inside the experiment workspace. Failures are contained: the
-   * durable artifact facts are already committed, and a projection hiccup
-   * must never break the tool pipeline that produced them.
-   */
-  private projectManifests(session: Session): void {
-    try {
-      const home = this.manifestHome ?? resolveDshHome()
-      const live = this.forSession(session).state.projection()
-      if (live.meta?.initialized !== true) return
-      const artifacts = live.artifacts
-      if (artifacts.length === 0) return
-      writeManifests(home, workspaceIdForRoot(live.meta.workspaceRoot), renderManifest(artifacts))
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : String(error)
-      try {
-        this.ctx.logger.warn('autoreportdsh: manifest projection failed: %s', message)
-      } catch {
-        // A bare test Context may lack a working logger; containment already happened.
-      }
-    }
   }
 
   /**
@@ -312,7 +282,6 @@ export default class AutoReportWorkflowRuntime extends Service {
   ): SessionEvent<T> {
     const event = appendWorkflowEvent(session, type, data)
     this.forSession(session).state.apply(event as SessionEvent<SessionEventType>)
-    if (type === 'autoreport/artifact') this.projectManifests(session)
     return event
   }
 

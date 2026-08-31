@@ -63,7 +63,6 @@ describe('semantic file notes', () => {
       description: 'linearized pendulum',
       descriptionUpdatedAt: 30,
       producedBy: 'THEORY',
-      notes: 'small-angle',
     })
     const state = WorkflowState.fromEvents(session.events)
     expect(state.projection().fileNotes.get('Theory/model.md')?.description).toBe('linearized pendulum')
@@ -112,9 +111,14 @@ describe('semantic file notes', () => {
       description: 'linearized model',
       descriptionUpdatedAt: 25,
       producedBy: 'THEORY',
-      notes: 'neglect friction',
     }
     appendWorkflowEvent(session, 'autoreport/file-note', note)
+    appendWorkflowEvent(session, 'autoreport/role-note', {
+      version: AUTOREPORT_SCHEMA_VERSION,
+      role: 'THEORY',
+      notes: 'neglect friction',
+      updatedAt: 26,
+    })
     appendWorkflowEvent(session, 'autoreport/task', {
       version: AUTOREPORT_SCHEMA_VERSION,
       taskId: 'task-1',

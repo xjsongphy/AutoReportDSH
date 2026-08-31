@@ -18,7 +18,7 @@ export const MAIN_STEER_SUMMARY = 'AutoReport resumed MAIN because a subagent is
 /** Collapsed notice: subagent turn resumed to call report_workflow. */
 export const REPORT_STEER_SUMMARY = 'AutoReport resumed subagent to report results'
 
-/** Collapsed notice: subagent turn resumed to refresh describe_files. */
+/** Collapsed notice: subagent turn resumed to refresh its manifest. */
 export const MANIFEST_STEER_SUMMARY = 'AutoReport resumed subagent to refresh file descriptions'
 
 /**
@@ -46,7 +46,7 @@ export function formatManifestSteer(paths: readonly string[]): string {
   const listed = paths.map(path => `- ${path}`).join('\n')
   return [
     'You changed files whose manifest descriptions are stale.',
-    'Update the semantic manifest for these files with describe_files before finishing:',
+    'Update your manifest for these files before finishing:',
     listed,
   ].join('\n')
 }

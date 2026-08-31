@@ -53,7 +53,7 @@ const ROLE_PERSONA_FILES: Readonly<Record<string, string>> = {
       const roleFile = readFileSync(join(REPO_PERSONAS, ROLE_PERSONA_FILES[role] ?? ''), 'utf8')
       expect(text.startsWith(common)).toBe(true)
       expect(text).toContain('report_workflow')
-      expect(text).toContain('describe_files')
+      expect(text).toContain('manifest')
       expect(text).toContain('task_id')
       expect(text).toContain('delegation_revision')
       expect(roleFile).toContain('bash')

@@ -14,10 +14,10 @@ import type { ArtifactSnapshot, DelegationSnapshot, FileNoteSnapshot } from './e
 import { delegationKey } from './protocol.js'
 import type { WorkflowProjection } from './service.js'
 
-/** Maximum description length accepted by `describe_files`. */
+/** Maximum description length accepted by `manifest(action="update")`. */
 export const MAX_FILE_DESCRIPTION = 2_048
 
-/** Maximum optional notes length accepted by `describe_files`. */
+/** Maximum role-note length accepted by `manifest(action="update")`. */
 export const MAX_FILE_NOTES = 4_096
 
 const MAX_HANDOFF_FILES = 24
@@ -156,8 +156,9 @@ export function roleHandoffText(projection: WorkflowProjection, role: Specialist
   const open = owned.filter(
     task => task.status === 'pending' || task.status === 'running' || task.status === 'blocked',
   )
+  const roleNotes = projection.roleNotes.get(role)?.notes.trim()
 
-  if (files.length === 0 && previous.length === 0) return undefined
+  if (files.length === 0 && previous.length === 0 && (roleNotes === undefined || roleNotes.length === 0)) return undefined
 
   const sections: string[] = [
     `Role memory for ${role} (survives child rebind; do not treat as a new conversation):`,
@@ -165,12 +166,13 @@ export function roleHandoffText(projection: WorkflowProjection, role: Specialist
 
   if (files.length > 0) {
     const lines = files.map(note => {
-      const notes = note.notes === undefined || note.notes.trim().length === 0
-        ? ''
-        : `\n  notes: ${clip(note.notes, HANDOFF_FIELD)}`
-      return `- ${note.path}: ${clip(note.description, HANDOFF_FIELD)}${notes}`
+      return `- ${note.path}: ${clip(note.description, HANDOFF_FIELD)}`
     })
     sections.push(`Files:\n${lines.join('\n')}`)
+  }
+
+  if (roleNotes !== undefined && roleNotes.length > 0) {
+    sections.push(`Manifest notes:\n${clip(roleNotes, HANDOFF_FIELD)}`)
   }
 
   if (previous.length > 0) {

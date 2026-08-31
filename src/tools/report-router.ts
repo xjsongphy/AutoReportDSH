@@ -5,6 +5,7 @@ import { installReportTool } from '@deepseek-ai/dsh-tool-subagent-report'
 import type AutoReportWorkflowRuntime from '../runtime.js'
 import { applyRoleSandbox } from '../policy/sandbox-roots.js'
 import { installWorkflowReportTool } from './report-workflow.js'
+import { installManifestTool } from './manifest.js'
 import { registerRoleSkills } from '../skills-preset.js'
 import { installReferencesSkills } from '../skills-references.js'
 
@@ -67,9 +68,10 @@ export function installRoutedReportTool(
   const entry = workflow.roleRegistry.lookup(child.id)
   if (entry === undefined) return installReportTool(childCtx, hostCtx, 'next-step')
 
-  const disposeReport = installWorkflowReportTool(childCtx, hostCtx, entry.binding.role)
   const disposers: (() => void)[] = []
   try {
+    disposers.push(installManifestTool(childCtx, hostCtx, entry.binding.role))
+    disposers.push(installWorkflowReportTool(childCtx, hostCtx, entry.binding.role))
     const disposeModelSelection = installSpecialistModelSelection(childCtx, workflow)
     if (disposeModelSelection !== undefined) disposers.push(disposeModelSelection)
     const language = workflow.workflowForChild(child.id)?.runtime.state.projection().meta?.settings?.reportLanguage
@@ -84,7 +86,7 @@ export function installRoutedReportTool(
       }
     }
   } catch (error: unknown) {
-    for (const dispose of [...disposers.reverse(), disposeReport]) {
+    for (const dispose of [...disposers].reverse()) {
       try {
         dispose()
       } catch {
@@ -95,7 +97,7 @@ export function installRoutedReportTool(
   }
   return () => {
     const failures: unknown[] = []
-    for (const dispose of [...disposers.reverse(), disposeReport]) {
+    for (const dispose of [...disposers].reverse()) {
       try {
         dispose()
       } catch (caught: unknown) {

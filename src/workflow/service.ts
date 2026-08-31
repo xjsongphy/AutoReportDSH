@@ -11,13 +11,14 @@
  */
 
 import type { Session, SessionEvent, SessionEventType } from '@deepseek-ai/dsh-session'
-import type { SpecialistRole } from '../roles.js'
+import type { AutoReportRole, SpecialistRole } from '../roles.js'
 import { isAutoreportEvent } from './store.js'
 import { delegationKey } from './protocol.js'
 import type {
   ArtifactSnapshot,
   DelegationSnapshot,
   FileNoteSnapshot,
+  RoleNoteSnapshot,
   RoleBindingSnapshot,
   TaskSnapshot,
   WorkflowMetaSnapshot,
@@ -39,6 +40,8 @@ export interface WorkflowProjection {
   readonly artifacts: readonly ArtifactSnapshot[]
   /** Latest semantic description per workspace-relative path. */
   readonly fileNotes: ReadonlyMap<string, FileNoteSnapshot>
+  /** Latest agent-level manifest notes per role. */
+  readonly roleNotes: ReadonlyMap<AutoReportRole, RoleNoteSnapshot>
 }
 
 /**
@@ -53,6 +56,7 @@ interface ProjectionBuilder {
   bindingsByRole: Map<SpecialistRole, RoleBindingSnapshot>
   artifacts: ArtifactSnapshot[]
   fileNotes: Map<string, FileNoteSnapshot>
+  roleNotes: Map<AutoReportRole, RoleNoteSnapshot>
 }
 
 function emptyProjection(): ProjectionBuilder {
@@ -64,6 +68,7 @@ function emptyProjection(): ProjectionBuilder {
     bindingsByRole: new Map(),
     artifacts: [],
     fileNotes: new Map(),
+    roleNotes: new Map(),
   }
 }
 
@@ -125,6 +130,9 @@ export class WorkflowState {
       case 'autoreport/file-note':
         this.builder.fileNotes.set(event.data.path, event.data)
         break
+      case 'autoreport/role-note':
+        this.builder.roleNotes.set(event.data.role, event.data)
+        break
     }
   }
 
@@ -141,6 +149,7 @@ export class WorkflowState {
       bindingsByRole: this.builder.bindingsByRole,
       artifacts: [...this.builder.artifacts],
       fileNotes: new Map(this.builder.fileNotes),
+      roleNotes: new Map(this.builder.roleNotes),
     }
   }
 

@@ -49,8 +49,8 @@ export function resolveHostConfig(raw: Partial<Config> = {}): Config {
  * This single registration owns every host-plane piece (PLAN.md §2): the
  * workflow runtime service (`autoreportWorkflow`, provided via the Service
  * effect), the global monotonic role guard, first-turn settings-snapshot
- * initialization plus `/report-init`, and artifact observation with external
- * manifest projection over every session's committed tool stream.
+ * initialization plus `/report-init`, and artifact observation over every
+ * session's committed tool stream.
  * @param ctx - host-plane context the Loader activates this plugin under.
  * @param config - optional overlay configuration.
  * @param options - optional home overrides for tests; production resolves

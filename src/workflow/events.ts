@@ -151,14 +151,24 @@ export interface FileNoteSnapshot {
   readonly description: string
   /** Epoch ms the description was last written; stale when an artifact is newer. */
   readonly descriptionUpdatedAt: number
-  /** Optional durable notes (assumptions, decisions, unfinished issues). */
-  readonly notes?: string
   /** Role that authored the note, when known. */
   readonly producedBy?: AutoReportRole
   /** Owning task when known. */
   readonly taskId?: string
   /** Owning attempt key `taskId#revision` when known. */
   readonly delegationKey?: string
+}
+
+/** Agent-level manifest notes, authored only by the owning role. */
+export interface RoleNoteSnapshot {
+  /** Schema version ({@link AUTOREPORT_SCHEMA_VERSION}). */
+  readonly version: number
+  /** Role whose manifest owns these notes. */
+  readonly role: AutoReportRole
+  /** Free-form relationships, assumptions, and handoff notes. */
+  readonly notes: string
+  /** Epoch ms the notes were last written. */
+  readonly updatedAt: number
 }
 
 /** One produced file recorded by runtime observers (never by model claim). */
@@ -240,5 +250,7 @@ declare module '@deepseek-ai/dsh-session/types' {
      * workspace.
      */
     'autoreport/file-note': FileNoteSnapshot
+    /** Agent-authored role-level manifest notes; last-write-wins per role. */
+    'autoreport/role-note': RoleNoteSnapshot
   }
 }

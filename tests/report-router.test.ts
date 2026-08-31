@@ -12,6 +12,7 @@ import { RoleRegistry } from '../src/workflow/role-registry.js'
 import type { Config } from '../src/config.js'
 import { AUTOREPORT_SCHEMA_VERSION, type RoleBindingSnapshot } from '../src/workflow/events.js'
 import { installRoutedReportTool } from '../src/tools/report-router.js'
+import { installManifestTool } from '../src/tools/manifest.js'
 import { installWorkflowReportTool } from '../src/tools/report-workflow.js'
 import { roleWritableRoot } from '../src/policy/sandbox-roots.js'
 import { seedSyncedResourceStubs } from './helpers/synced-resource-stubs.js'
@@ -106,7 +107,7 @@ describe('report router', () => {
     }
     roleRegistry.registerReserved(binding)
     installRoutedReportTool(child.ctx, host.ctx, { roleRegistry, config: CONFIG, workflowForChild: () => undefined, overlayRoot })
-    expect(child.tools.map(tool => tool.name)).toEqual(['describe_files', 'report_workflow'])
+    expect(child.tools.map(tool => tool.name)).toEqual(['manifest', 'report_workflow'])
     expect(child.skills).toEqual([])
     expect(child.sections.some(section => section.text.includes('THEORY'))).toBe(true)
     expect(child.tools.some(tool => tool.name === 'report')).toBe(false)
@@ -129,7 +130,7 @@ describe('report router', () => {
       provisioning: 'reserved',
     })
     installRoutedReportTool(child.ctx, host.ctx, { roleRegistry, config: CONFIG, workflowForChild: () => undefined, overlayRoot })
-    expect(child.tools.map(tool => tool.name)).toEqual(['describe_files', 'report_workflow'])
+    expect(child.tools.map(tool => tool.name)).toEqual(['manifest', 'report_workflow'])
     expect(child.skills.map(skill => skill.name)).toEqual([
       'experiment-report-writer',
       'latex-compile',
@@ -166,7 +167,7 @@ describe('report router', () => {
       get: () => undefined,
     } as unknown as Context
     installRoutedReportTool(ctx, hostContext().ctx, { roleRegistry, config: CONFIG, workflowForChild: () => undefined, overlayRoot })
-    expect(tools.map(tool => tool.name)).toEqual(['describe_files', 'report_workflow'])
+    expect(tools.map(tool => tool.name)).toEqual(['manifest', 'report_workflow'])
   })
 })
 
@@ -284,9 +285,10 @@ describe('report_workflow', () => {
     }
   }
 
-  it('rejects success while semantic descriptions are stale, then accepts after describe_files', async () => {
+  it('rejects success while manifest descriptions are stale, then accepts after manifest update', async () => {
     const child = childContext()
     const host = hostWithDirtyTheory()
+    installManifestTool(child.ctx, host.ctx, 'THEORY')
     installWorkflowReportTool(child.ctx, host.ctx, 'THEORY')
     const exec = { agent: { id: SessionId('child-1') }, signal: new AbortController().signal }
     const report = {
@@ -297,18 +299,60 @@ describe('report_workflow', () => {
       produced_files: ['Theory/model.md'],
     }
     await expect(toolNamed(child.tools, 'report_workflow').execute(report, exec))
-      .rejects.toThrow(/semantic manifest is stale/)
+      .rejects.toThrow(/manifest descriptions are stale/)
     expect(host.reportFrom).not.toHaveBeenCalled()
 
-    const described = await toolNamed(child.tools, 'describe_files').execute({
-      files: [{ path: 'Theory/model.md', description: 'linearized pendulum', notes: 'small-angle' }],
+    const described = await toolNamed(child.tools, 'manifest').execute({
+      action: 'update',
+      files: [{ path: 'Theory/model.md', description_new: 'linearized pendulum' }],
     }, exec)
-    expect(described).toEqual({ paths: ['Theory/model.md'] })
+    expect(described).toMatchObject({
+      status: 'ok',
+      description_changes: [{ path: 'Theory/model.md', old: '', new: 'linearized pendulum' }],
+      not_found: [],
+      description_mismatches: [],
+      notes_diff: null,
+    })
     expect(host.state.projection().fileNotes.get('Theory/model.md')?.description).toBe('linearized pendulum')
 
     await expect(toolNamed(child.tools, 'report_workflow').execute(report, exec))
       .resolves.toEqual({ messageId: 'report-msg' })
     expect(host.reportFrom).toHaveBeenCalledOnce()
+  })
+
+  it('reads another role manifest but only updates its bound role', async () => {
+    const child = childContext()
+    const host = hostWithDirtyTheory()
+    installManifestTool(child.ctx, host.ctx, 'THEORY')
+    const exec = { agent: { id: SessionId('child-1') }, signal: new AbortController().signal }
+    const readOther = await toolNamed(child.tools, 'manifest').execute({
+      action: 'read',
+      agent: 'report',
+    }, exec)
+    expect(readOther).toMatchObject({
+      agent_type: 'report',
+      files: [],
+      notes: '',
+    })
+
+    await expect(toolNamed(child.tools, 'manifest').execute({
+      action: 'update',
+      agent: 'report',
+      files: [],
+    }, exec)).rejects.toThrow(/only update theory/)
+
+    const updated = await toolNamed(child.tools, 'manifest').execute({
+      action: 'update',
+      notes_patch: '+Keep the small-angle assumption visible.\n',
+    }, exec)
+    expect(updated).toMatchObject({
+      status: 'ok',
+      notes_diff: '- \n+ Keep the small-angle assumption visible.',
+      manifest: {
+        agent_type: 'theory',
+        notes: 'Keep the small-angle assumption visible.',
+      },
+    })
   })
 
   it('returns the accepted reportMessageId without calling reportFrom again', async () => {

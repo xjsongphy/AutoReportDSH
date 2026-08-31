@@ -37,13 +37,13 @@ DSH sessions. Stock `standard` sessions stay stock DSH.
 - **LaTeX and Typst reports** — language selection, bundled templates/themes, bibliography assets, compile skills, and Python-based analysis and plotting
 - **DSH providers** — uses the model routes already configured in DSH; AutoReportDSH does not ship its own credentials or provider list
 - **Resource synchronization** — on plugin start, listed remotes refresh into `$DSH_HOME/autoreport/resources`; `pnpm run sync:resources` does the same without booting DSH
-- **Task and artifact tracking** — `send_to_agent` records durable tasks and revisions; subagents describe files with `describe_files` and finish with `report_workflow`; mechanical manifests live under `$DSH_HOME`, not in the experiment folder
+- **Task and artifact tracking** — `send_to_agent` records durable tasks and revisions; artifact events record observed changes; agents use `manifest` for cross-agent file descriptions and role notes, then finish with `report_workflow`
 - **Safe execution** — DSH `workspace-write` pins each role to its writable root; AutoReport sessions cannot escalate via `sandbox_permissions`; network is allowed
 - **Built-in defaults** — bundled personas, templates, and skills so a fresh workspace can run immediately
 
 ### Workflow
 - **Opt-in preset** — only a top-level `autoreport` session joins the runtime; overlay load does not change ordinary DSH sessions
-- **Small model surface** — MAIN adds `send_to_agent` (plus DSH `ask_user_question`); subagents add `describe_files` and `report_workflow`; everything else is DSH `read` / `write` / `edit` / `bash` / `skill`
+- **Small model surface** — MAIN adds `send_to_agent` and `manifest` (plus DSH `ask_user_question`); subagents add `manifest` and `report_workflow`; everything else is DSH `read` / `write` / `edit` / `bash` / `skill`
 - **Continuable subagents** — children keep role context across follow-ups; a direct human chat with a subagent is ordinary conversation, not a workflow task
 - **Role-scoped skills** — MAIN gets `pdf-reference-reader`; REPORT gets `experiment-report-writer` plus `latex-compile` or `typst-compile`; experiment `References/skills` is a cwd-sensitive DSH skill root
 - **Settings and live model** — language, wait timeout, and Python live under **Settings → Plugins → Plugin configuration**; switch a running subagent’s model in the conversation window
@@ -140,7 +140,6 @@ $DSH_HOME/
     ├── venv/                      AutoReport-managed Python (optional)
     └── <workspaceId>/
         ├── project.json           language, python, subagent route
-        └── manifests/             derived artifact projections
 ```
 
 ## Development

@@ -27,6 +27,7 @@ describe('autoreport preset contribution', () => {
         },
       },
       skills: skillsService,
+      systemPrompt: { section: () => () => {} },
       subagents: {},
       autoreportWorkflow: {
         config: {
@@ -41,7 +42,7 @@ describe('autoreport preset contribution', () => {
 
     apply(context)
 
-    expect(tools.sort()).toEqual(['send_to_agent'])
+    expect(tools.sort()).toEqual(['manifest', 'send_to_agent'])
     expect(skills).toEqual(['pdf-reference-reader'])
     expect(referencesProvider).toBe(1)
   })

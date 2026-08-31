@@ -190,7 +190,6 @@ describe('send_to_agent', () => {
       description: 'linearized pendulum',
       descriptionUpdatedAt: 4,
       producedBy: 'THEORY',
-      notes: 'small-angle',
     })
     await expect(call({ role: 'THEORY', task_id: 'task-1', prompt: 'second', wait: false }))
       .resolves.toMatchObject({ status: 'delegated', delegation_revision: 2, message_id: 'msg-rebind' })

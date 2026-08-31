@@ -32,7 +32,7 @@ AutoReportDSH owns report semantics and policy.
 - Role binding, durable report task/delegation state, and structured child reports.
 - Experiment workspace initialization and create-missing-only asset materialization.
 - LaTeX/Typst templates, themes, bibliography assets, and compilation workflow.
-- Runtime-generated artifact events and external manifest projections.
+- Runtime-generated artifact events and the agent-facing AutoReport manifest projection.
 - Physics/report-writing skills and report-specific execution policy.
 - Default network denial for report execution, with fail-closed behavior where it cannot be
   established by the host platform.
@@ -82,10 +82,12 @@ AutoReportDSH owns report semantics and policy.
 - MinerU instructions are synchronized explicitly from the managed upstream skill and
   registered only for THEORY and REPORT. Default network denial remains unchanged, so
   actual `mineru-open-api` API execution still needs a later explicit network-policy change.
-- Semantic file notes are agent-authored (`describe_files`) and last-write-wins per path.
-  Mechanical create/modify facts stay on `autoreport/artifact`. A description is stale when
-  `artifact.recordedAt > descriptionUpdatedAt`. Turn-stopping steers stale notes before a
-  forgotten `report_workflow`, once per reason; `report_workflow(success)` rejects stale notes.
+- Semantic file descriptions and role notes are agent-authored through `manifest(action="update")`
+  and last-write-wins per path/role. Mechanical create/modify facts stay on
+  `autoreport/artifact`. A description is stale when `artifact.recordedAt > descriptionUpdatedAt`.
+  Turn-stopping steers stale notes before a forgotten `report_workflow`, once per reason;
+  `report_workflow(success)` rejects stale notes. `manifest(action="read")` can read any role,
+  while updates are restricted to the caller's own role.
 
 No existing community dsh plugin covers this physics-report domain. `dsh-overleaf` and
 similar UI/LaTeX helpers are not substitutes for the five-role workflow.
@@ -111,10 +113,10 @@ AutoReportDSH/
 │   ├── config.ts                      # validated report/model configuration
 │   ├── roles.ts                       # fixed role table and policy metadata
 │   ├── workflow/                      # tasks, delegations, bindings, turn/report observers
-│   ├── tools/                         # send_to_agent, report_workflow, report router
+│   ├── tools/                         # manifest, send_to_agent, report_workflow, router
 │   ├── workspace/                     # init, /report-init, bundled skill loader
 │   ├── policy/                        # role guard and per-role sandbox roots
-│   ├── artifacts/                     # observation and external manifest projection
+│   ├── artifacts/                     # automatic filesystem observation and filtering
 │   ├── python-detect.ts               # local / managed / custom interpreter discovery
 │   ├── python-env.ts                  # DSH_AUTOREPORT_PYTHON facts and PATH overlay
 │   └── settings.ts                    # project/user/default settings resolution
@@ -386,9 +388,8 @@ raw session file. Critical control flow must appear there with a stable source:
 - `report_workflow` is the parent `user/message` with `source.kind = subagent-report`
   plus the folded `autoreport/delegation`;
 - task and delegation mutations are `autoreport/task` / `autoreport/delegation`;
-- filesystem/process observations are `autoreport/artifact`; semantic descriptions are
-  `autoreport/file-note`; directory manifests under `$DSH_HOME` are projections of those
-  artifact events, not a second log.
+- filesystem/process observations are `autoreport/artifact`; agent-authored descriptions
+  and role notes are `autoreport/file-note` and `autoreport/role-note`.
 
 **Persistence gate (P0).** `KNOWN_SESSION_EVENT_TYPES` is generated from the DSH repo only.
 Out-of-tree plugin types are excluded by construction. AutoReport records must be
@@ -562,22 +563,25 @@ It materializes only missing resources for the selected language:
 Existing files are never overwritten. Assets are copied from
 `autoreportcli/templates/{latex,typst}` with license headers retained.
 
-### 2.11 Runtime-generated artifacts and external manifests
+### 2.11 Runtime-generated artifacts and the AutoReport manifest
 
 Mechanical tracking is automatic; semantic descriptions are a separate subagent tool:
 
 - Successful filesystem mutation tools produce `autoreport/artifact` events through the
   tool lifecycle observer.
-- Subagents call `describe_files` to write `autoreport/file-note` snapshots (path,
-  description, `descriptionUpdatedAt`, optional notes). These never land in the experiment
-  workspace.
+- Subagents call `manifest(action="update")` to write `autoreport/file-note` snapshots
+  (path, description, `descriptionUpdatedAt`) and optional `autoreport/role-note` snapshots.
+  These never land in the experiment workspace.
 - `report_exec` snapshots the relevant readable/writable roots before and after successful
   processes and emits normalized changed-file artifacts.
 - Failed, denied, or ambiguous results never claim success; ambiguous process changes are
   represented as `unknown` artifacts.
-- Session events are the source of truth. A projection may materialize an atomic cache under
-  `$DSH_HOME/autoreport/<workspace-id>/manifests/`, never inside the experiment workspace.
-  The workspace remains limited to user/report content directories.
+- Session events are the source of truth. `projectManifest(role)` combines artifact, file-note,
+  and role-note snapshots in memory and exposes the original AutoReport shape: `agent_type`,
+  `updated_at`, `files`, `notes`, and the corresponding ISO 8601 UTC timestamp fields.
+  Internal event timestamps remain epoch milliseconds for comparison/replay; the tool converts
+  them to second-precision strings such as `2026-08-31T08:45:32+00:00`. No manifest cache is
+  written under `$DSH_HOME` or inside the experiment workspace.
 
 The artifact policy preserves AutoReportCLI behavior:
 
@@ -741,7 +745,7 @@ and where it lives in the codebase:
 - Duplicate, malformed, missing, and stale report handling.
 - Role write matrix across filesystem, edit, delete, patch, compile, and execution tools.
 - Explicit `cwd`/readable/writable policy resolution.
-- Artifact filtering, bounded traversal, symlink handling, and external manifest projection.
+- Artifact filtering, bounded traversal, symlink handling, and AutoReport manifest projection.
 - Create-missing-only materialization, including `Data/Processed/` and the full
   `REQUIRED_DIRS` set, model-route resolution, and config validation.
 - Cold load of a session log containing `autoreport/*` events, with and without the plugin;
@@ -783,14 +787,15 @@ Recovery acceptance (keyless):
   initialization and every resource.
 - Attempt cross-role filesystem/process writes and verify actual denial.
 - Run a harmless report process and verify localhost network isolation.
-- Verify manifests appear under the DSH home cache after fs and process mutations without any
-  agent manifest call, and that compiler intermediates are filtered.
+- Verify artifact/file-note/role-note events project to the AutoReport manifest shape, that
+  `manifest(read)` supports cross-role inspection while `manifest(update)` is own-role only,
+  and that compiler intermediates are filtered.
 
 ### Real API milestone
 
 Only after all keyless acceptance tests pass, run the selected DSH profile's configured
 provider route to drive: initialization → Main task creation/dispatch → Theory/Data/Plotting
-continuations → Report compilation. Assert durable events, files, external manifests, write
+continuations → Report compilation. Assert durable events, files, projected manifests, write
 denials, and PDF output; never accept a model’s textual claim as evidence.
 
 ## 4. Delivery plan
@@ -803,7 +808,7 @@ denials, and PDF output; never accept a model’s textual claim as evidence.
 | `roles-delegation` | Main preset, fixed personas, thin `send_to_agent` with wait modes, continuable report router | scaffold, workflow-state |
 | `execution-policy` | actual mutation guard, explicit execution policy, `report_exec` over ctx.subprocess, Linux/macOS network isolation and smokes | scaffold, workflow-state |
 | `workspace-assets` | startup `ensureInitialized`, `/report-init`, resource materializer, bundled assets and preset-scoped skills | scaffold |
-| `compile-manifests` | Report-only compiler, automatic artifact observer, AutoReport filtering, external manifest projection | execution-policy, workspace-assets, workflow-state |
+| `compile-manifests` | Report-only compiler, automatic artifact observer, AutoReport filtering, manifest projection/tool | execution-policy, workspace-assets, workflow-state |
 | `integration-e2e` | assembled keyless smokes, cold-load tests, configured-provider live smoke, acceptance gates | all previous |
 
 Merge order is `dsh-ignorable-append` → `scaffold` → parallel `workflow-state`/
@@ -859,7 +864,7 @@ this status.
 | Workspace assets | `workspace-assets` | REQUIRED_DIRS init, create-missing-only materializer, `/report-init`, bundled skills |
 | Execution policy | `execution-policy` | mutation guard matrix, seatbelt/bwrap isolation, `report_exec`, live macOS network-denial smoke |
 | Roles & delegation | `roles-delegation` | personas, Main preset, `send_to_agent`, `report_workflow`, global report router, observer |
-| Compile & manifests | `compile-manifests` ×3 lanes | `compile_report`, artifact policy ported from manifest.rs, observer, external manifest projection |
+| Compile & manifests | `compile-manifests` ×3 lanes | `compile_report`, artifact policy ported from manifest.rs, observer, AutoReport manifest projection/tool |
 | Settings layering (rev 7) | `settings-layering` | precedence resolution, DSH `autoreport` user namespace, project settings store, durable workflow snapshots |
 | Integration & e2e | `integration-e2e` | wiring fixes, assembled smokes, installer boot smoke, configured-route self-skipping e2e |
 

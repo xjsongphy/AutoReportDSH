@@ -224,7 +224,6 @@ export async function assemble(options: AssembleOptions = {}): Promise<Assembled
 
   await applyHost(ctx, { ...ASSEMBLED_CONFIG, workspaceRoot }, {
     settingsHome: home,
-    manifestHome: home,
     skipResourceSync: true,
     pythonDetect: ISOLATED_PYTHON_DETECT,
   })
@@ -423,12 +422,15 @@ export async function reportWorkflow(
   }, child.childAgent, child.childSession)
 }
 
-export async function describeFiles(
+export async function updateManifest(
   assembled: Assembled,
   child: { childAgent: Agent; childSession: Session },
-  files: ReadonlyArray<{ path: string; description: string; notes?: string }>,
+  files: ReadonlyArray<{ path: string; description: string }>,
 ): Promise<{ isError: boolean; text: string; value: unknown }> {
-  return execute(assembled.ctx, 'describe_files', { files }, child.childAgent, child.childSession)
+  return execute(assembled.ctx, 'manifest', {
+    action: 'update',
+    files: files.map(file => ({ path: file.path, description_new: file.description })),
+  }, child.childAgent, child.childSession)
 }
 
 export function stopTurn(assembled: Assembled, agent: Agent, turn = 1): void {
