@@ -65,7 +65,7 @@ export function installWorkflowReportTool(childCtx: Context, hostCtx: Context, r
   const disposeSection = childCtx.systemPrompt.section({
     name: 'tool:report-workflow',
     order: 117,
-    text: `You are the ${role} specialist. After changing files, call describe_files so each path has a fresh semantic description. Before finishing any Main-dispatched task, call report_workflow once with the exact task_id and delegation_revision from your briefing. Success reports are rejected while descriptions are stale. Reporting does not end the turn. The generic report tool is unavailable.`,
+    text: `You are the ${role} subagent. After changing files, call describe_files so each path has a fresh semantic description. Before finishing any Main-dispatched task, call report_workflow once with the exact task_id and delegation_revision from your briefing. Success reports are rejected while descriptions are stale. Reporting does not end the turn. The generic report tool is unavailable.`,
   })
   const disposers: (() => void)[] = []
   try {
@@ -98,9 +98,9 @@ export function installWorkflowReportTool(childCtx: Context, hostCtx: Context, r
       async execute(args, exec) {
         const runtime = runtimeOf(hostCtx)
         const agent = exec.agent as Agent
-        if (runtime === undefined) throw new Error('describe_files requires an AutoReport specialist session')
+        if (runtime === undefined) throw new Error('describe_files requires an AutoReport subagent session')
         const owner = runtime.workflowForChild(agent.id)
-        if (owner === undefined) throw new Error('describe_files requires an AutoReport specialist session')
+        if (owner === undefined) throw new Error('describe_files requires an AutoReport subagent session')
         const open = openDelegationForChild(owner.runtime.state.projection(), agent.id)
         const now = Date.now()
         const paths: string[] = []
@@ -206,7 +206,7 @@ export function installWorkflowReportTool(childCtx: Context, hostCtx: Context, r
       failures.push(caught)
     }
     if (failures.length > 0) {
-      throw new AggregateError(failures, 'failed to revoke AutoReport specialist workflow tools')
+      throw new AggregateError(failures, 'failed to revoke AutoReport subagent workflow tools')
     }
   }
 }

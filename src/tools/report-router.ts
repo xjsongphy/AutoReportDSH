@@ -103,7 +103,7 @@ export function installRoutedReportTool(
       }
     }
     if (failures.length > 0) {
-      throw new AggregateError(failures, 'failed to revoke AutoReport specialist child tools')
+      throw new AggregateError(failures, 'failed to revoke AutoReport subagent child tools')
     }
   }
 }

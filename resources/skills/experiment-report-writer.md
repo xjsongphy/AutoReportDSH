@@ -20,7 +20,7 @@ its abstract and keywords.
 
 This skill does not prescribe agent roles, task/workflow tools, workspace
 layout, data-analysis or plotting procedures, or compiler invocation. Those
-concerns belong to the calling environment, specialist prompts, and dedicated
+concerns belong to the calling environment, subagent prompts, and dedicated
 compilation skills. Do not invent measurements, experimental conditions,
 figure paths, citations, bibliography metadata, or other unsupported facts.
 

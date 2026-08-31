@@ -21,6 +21,11 @@ import {
 import { REQUIRED_DIRS } from '../../src/workspace/init.js'
 import { saveProjectSettings, workspaceIdForRoot } from '../../src/settings.js'
 import { resetAcknowledgedBlockedKeys } from '../../src/workflow/turn-guard.js'
+import {
+  MAIN_STEER_SUMMARY,
+  MANIFEST_STEER_SUMMARY,
+  REPORT_STEER_SUMMARY,
+} from '../../src/workflow/display.js'
 import type { SpecialistRole } from '../../src/roles.js'
 import {
   admitFirstTurn,
@@ -207,7 +212,7 @@ describe('workflow eval', () => {
       kind: 'plugin',
       plugin: 'autoreportdsh/turn-guard',
       form: 'notice',
-      summary: 'turn_guard.steer: specialist-blocked',
+      summary: MAIN_STEER_SUMMARY,
     })
     stopTurn(assembled, assembled.mainAgent, 1)
     expect(turnGuardSteers(assembled.mainSession)).toHaveLength(1)
@@ -257,7 +262,7 @@ describe('workflow eval', () => {
     expect(tasks(assembled).getTask(qualityId)?.status).toBe('completed')
   })
 
-  it('4. forgotten report_workflow steers the specialist and does not fail the task', async () => {
+  it('4. forgotten report_workflow steers the subagent and does not fail the task', async () => {
     const assembled = await boot()
     admitFirstTurn(assembled)
     const child = await dispatch(assembled, { role: 'THEORY', prompt: 'derive' })
@@ -272,14 +277,14 @@ describe('workflow eval', () => {
       kind: 'plugin',
       plugin: 'autoreportdsh/turn-guard',
       form: 'notice',
-      summary: 'turn_guard.steer: stale-descriptions',
+      summary: MANIFEST_STEER_SUMMARY,
     })
     stopTurn(assembled, child.childAgent, 1)
     const afterReport = turnGuardSteers(child.childSession)
     expect(afterReport).toHaveLength(2)
     expect(messageText(afterReport[1])).toMatch(/report_workflow/)
     expect(messageSource(afterReport[1])).toMatchObject({
-      summary: 'turn_guard.steer: forgotten-report',
+      summary: REPORT_STEER_SUMMARY,
     })
     stopTurn(assembled, child.childAgent, 1)
     expect(turnGuardSteers(child.childSession)).toHaveLength(2)

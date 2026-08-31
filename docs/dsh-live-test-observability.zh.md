@@ -5,8 +5,8 @@
 ## 1. 已核实的运行架构
 
 - DSH 管理 provider、模型、凭据、会话、子会话、Web UI、工具执行和日志持久化。
-- AutoReportDSH 仅管理报告工作流：MAIN 与 THEORY、DATA_ANALYSIS、PLOTTING、REPORT 四个固定 specialist、目录权限、任务/委派状态、报告资源和产物 manifest。
-- MAIN 的模型由 DSH 的 `agent-default-model` 决定；每个 specialist 可继承 MAIN，或由 AutoReport 项目设置的 `specialistModel` 独立指定。此次测试将两者均固定为 `openai-codex / gpt-5.6-luna`。
+- AutoReportDSH 仅管理报告工作流：MAIN 与 THEORY、DATA_ANALYSIS、PLOTTING、REPORT 四个固定 subagents、目录权限、任务/委派状态、报告资源和产物 manifest。
+- MAIN 的模型由 DSH 的 `agent-default-model` 决定；每个 subagent 可继承 MAIN，或由 AutoReport 项目设置的 `specialistModel` 独立指定。此次测试将两者均固定为 `openai-codex / gpt-5.6-luna`。
 - 专项目录外的设置文件为：`$DSH_HOME/autoreport/<workspace-id>/project.json`。`workspace-id` 是工作区绝对路径 SHA-256 的前 16 位，避免把配置或机密写进实验目录。
 - 工作流建立时会冻结模型和语言等设置快照；随后修改默认设置不会改变该工作流。
 
@@ -61,10 +61,10 @@ cd ~/Develop/AutoReportDSH
 
 ## 4. 在页面中观察什么
 
-- **Chat**：用户消息、MAIN 回复、所有 tool call/result。`send_to_agent` 是 MAIN 对固定角色的委派；`report_workflow` 是 specialist 返回的结构化完成/阻塞结果。
+- **Chat**：用户消息、MAIN 回复、所有 tool call/result。`send_to_agent` 是 MAIN 对固定角色的委派；`report_workflow` 是 subagent 返回的结构化完成/阻塞结果。
 - **Trajectory 标签页**：逐 turn/step 的事件账本；可检查请求路由、输入/输出、时长、token usage、工具调用和结果。这是检查 agent 工作轨迹的首选页面。
 - **模型选择器**：确认 MAIN 路由为 `openai-codex / gpt-5.6-luna`。已开始的 session 保留其已记录的路由。
-- **子 agent 面包屑/会话**：specialist 是持久的 continuable child sessions；可查看各角色对话。它们保持角色权限，不能获得 MAIN 的任意写入权。
+- **子 agent 面包屑/会话**：subagent 是持久的 continuable child sessions；可查看各角色对话。它们保持角色权限，不能获得 MAIN 的任意写入权。
 - **工具卡片**：检查 `bash`、`send_to_agent`、`report_workflow` 的参数与结果。REPORT 通过 bash 按 `latex-compile` / `typst-compile` skill 编译。
 - **报告任务状态**：`autoreport/*` 事件与 `send_to_agent` / `report_workflow` 结果给出 task、revision、waiting/completed/blocked/timeout 状态；不要以 UI todo 取代该工作流状态。
 
@@ -75,7 +75,7 @@ DSH session 是追加事件日志。每条 MAIN/child session 都记录：
 - `request/header` 与 `request/context`：实际 provider/model 和请求工具集合；
 - `assistant/message`：对话内容和可用 token usage；
 - `tool/call` / `tool/result`：工具参数、结果及错误；
-- `user/message`：用户输入、specialist `report_workflow`（`source.kind = subagent-report`）、以及 turn-stopping 二次启动（`source.plugin = autoreportdsh/turn-guard`，`summary` 以 `turn_guard.steer:` 开头）；
+- `user/message`：用户输入、subagent `report_workflow`（`source.kind = subagent-report`）、以及 turn-stopping 二次启动（`source.plugin = autoreportdsh/turn-guard`，`summary` 为用户可读的 AutoReport resumed 文案）；
 - `autoreport/workflow`、`autoreport/task`、`autoreport/delegation`、`autoreport/role-binding`、`autoreport/artifact`、`autoreport/file-note`：AutoReport 的 durable 状态。
 
 不要另写一套 debug log。导出或打开原始 session 文件即可定位委派、报告、产物和为何 turn 被再次拉起。
@@ -108,7 +108,7 @@ $DSH_HOME/autoreport/<workspace-id>/manifests/
 验收时检查：
 
 1. MAIN 和 child 的 `request/context` 都为 `openai-codex / gpt-5.6-luna`；
-2. 四个 specialist 都有可追踪的 delegation revision 与结构化 `report_workflow` 结论；
+2. 四个 subagent 都有可追踪的 delegation revision 与结构化 `report_workflow` 结论；
 3. 每个角色只写自己的目录；
 4. `Report/main.pdf` 存在且 Typst 编译无失败；
 5. external manifest 与最终文件对应，且对话/Trajectory 中无未处理 blocker。
@@ -130,7 +130,7 @@ opencli browser autoreport screenshot /tmp/autoreportdsh.png
 
 - `pnpm test` 通过：33 个 test files、190 个 tests；唯一跳过项是未配置 `OPENROUTER_API_KEY` 的显式 opt-in e2e。
 - OpenCLI `doctor` 为绿色，实际打开 `http://127.0.0.1:3081` 后成功读取 DOM 状态并写出截图至 `/tmp/autoreportdsh-cv-before-final.png`。因此本机确实能查看 DSH 页面状态和截图。
-- MAIN 实际 `request/header` 为 `openai-codex / gpt-5.6-luna / xhigh`。THEORY child 实际请求为同一 provider/model，证明 MAIN 与 specialist 的 provider/model 双层路由可用。
+- MAIN 实际 `request/header` 为 `openai-codex / gpt-5.6-luna / xhigh`。THEORY child 实际请求为同一 provider/model，证明 MAIN 与 subagent 的 provider/model 双层路由可用。
 - 完整流水线**未验收通过**：THEORY 开始后，Codex OAuth 返回 `The usage limit has been reached`；`Report/main.pdf` 未生成，PLOTTING、REPORT 与 manifest 也未完成。不可把这次运行称为报告生成成功。
 - 测试中发现并修复两个本地运行时问题：child setup 中访问未注入的 `skills` 服务，以及 `send_to_agent(wait: true)` 忽略已持久化 inbox report、导致等待超时。对应回归测试已加入。
 - API 测试脚本现在遇到非 `completed` 的 `turn/end` 会以非零状态失败，避免 quota 或 transport 错误被误报为成功。
@@ -138,6 +138,6 @@ opencli browser autoreport screenshot /tmp/autoreportdsh.png
 ## 9. 已知限制
 
 - DSH Web 启动命令来自 harness checkout：`pnpm dsh ...`，系统 PATH 中无需存在独立 `dsh` 二进制。
-- AutoReport specialist 默认禁止网络；MAIN 的 provider 请求仍由 DSH host 发出。因此 MinerU 的联网提取在本次 THEORY 任务中被正确拒绝，child 改用项目已有的本地提取留档并记录该限制。
+- AutoReport subagent 默认禁止网络；MAIN 的 provider 请求仍由 DSH host 发出。因此 MinerU 的联网提取在本次 THEORY 任务中被正确拒绝，child 改用项目已有的本地提取留档并记录该限制。
 - 角色写权限由 DSH sandbox 的 per-role writable root 强制；本次 macOS 测试应确认 bash 不能跨角色写。
-- AutoReport 支持 MAIN 与 specialist 两级**provider/model 独立路由**：MAIN 使用 DSH 的 session model，`specialistModel` 可为四个 specialist 指定另一条固定 route，或省略/设为 `{ "inheritMain": true }` 继承 MAIN。实测中 `specialistModel.reasoningEffort: xhigh` 没有写入 child 的首个 `request/header`（记录为 `medium`）；这是 Web model-selection hook 的顺序缺陷，尚未修复，不能宣称 specialist effort 已生效。
+- AutoReport 支持 MAIN 与 subagent 两级**provider/model 独立路由**：MAIN 使用 DSH 的 session model，`specialistModel` 可为四个 subagent 指定另一条固定 route，或省略/设为 `{ "inheritMain": true }` 继承 MAIN。实测中 `specialistModel.reasoningEffort: xhigh` 没有写入 child 的首个 `request/header`（记录为 `medium`）；这是 Web model-selection hook 的顺序缺陷，尚未修复，不能宣称 subagent effort 已生效。

@@ -37,16 +37,16 @@ DSH sessions. Stock `standard` sessions stay stock DSH.
 - **LaTeX and Typst reports** — language selection, bundled templates/themes, bibliography assets, compile skills, and Python-based analysis and plotting
 - **DSH providers** — uses the model routes already configured in DSH; AutoReportDSH does not ship its own credentials or provider list
 - **Resource synchronization** — on plugin start, listed remotes refresh into `$DSH_HOME/autoreport/resources`; `pnpm run sync:resources` does the same without booting DSH
-- **Task and artifact tracking** — `send_to_agent` records durable tasks and revisions; specialists describe files with `describe_files` and finish with `report_workflow`; mechanical manifests live under `$DSH_HOME`, not in the experiment folder
+- **Task and artifact tracking** — `send_to_agent` records durable tasks and revisions; subagents describe files with `describe_files` and finish with `report_workflow`; mechanical manifests live under `$DSH_HOME`, not in the experiment folder
 - **Safe execution** — DSH `workspace-write` pins each role to its writable root; AutoReport sessions cannot escalate via `sandbox_permissions`; network is allowed
 - **Built-in defaults** — bundled personas, templates, and skills so a fresh workspace can run immediately
 
 ### Workflow
 - **Opt-in preset** — only a top-level `autoreport` session joins the runtime; overlay load does not change ordinary DSH sessions
-- **Small model surface** — MAIN adds `send_to_agent` (plus DSH `ask_user_question`); specialists add `describe_files` and `report_workflow`; everything else is DSH `read` / `write` / `edit` / `bash` / `skill`
-- **Continuable specialists** — children keep role context across follow-ups; a direct human chat with a specialist is ordinary conversation, not a workflow task
+- **Small model surface** — MAIN adds `send_to_agent` (plus DSH `ask_user_question`); subagents add `describe_files` and `report_workflow`; everything else is DSH `read` / `write` / `edit` / `bash` / `skill`
+- **Continuable subagents** — children keep role context across follow-ups; a direct human chat with a subagent is ordinary conversation, not a workflow task
 - **Role-scoped skills** — MAIN gets `pdf-reference-reader`; REPORT gets `experiment-report-writer` plus `latex-compile` or `typst-compile`; experiment `References/skills` is a cwd-sensitive DSH skill root
-- **Settings and live model** — language, wait timeout, and Python live under **Settings → Plugins → Plugin configuration**; switch a running specialist’s model in the conversation window
+- **Settings and live model** — language, wait timeout, and Python live under **Settings → Plugins → Plugin configuration**; switch a running subagent’s model in the conversation window
 - **Python environments** — AutoReport-managed venv created with `uv` only when you select it (`$DSH_HOME/autoreport/venv`, numpy/scipy/pandas/matplotlib); a detected local interpreter; or a custom path. Unused managed env occupies no disk; delete that directory to reclaim space. Owned bash sees `DSH_AUTOREPORT_PYTHON` and a PATH prefix so bare `python3` hits that interpreter
 
 ## Quick Start
@@ -113,7 +113,7 @@ schema defaults
 Changing settings later does not alter an in-flight report.
 
 - **Settings card** — `defaultReportLanguage`, `delegationWaitTimeoutMs`, and `pythonExecutable` under **Settings → Plugins → Plugin configuration**
-- **Specialist model** — new workers inherit Main unless `specialistModel` is set in cordis or project settings; switch a running worker from the conversation window (`session.models` / `selectModel`)
+- **Subagent model** — new subagents inherit Main unless `specialistModel` is set in cordis or project settings; switch a running subagent from the conversation window (`session.models` / `selectModel`)
 - **Python** — managed (`__managed__` → `$DSH_HOME/autoreport/venv`, created on save with `uv venv` then `uv pip install numpy scipy pandas matplotlib`; not created until selected; delete the directory to reclaim space), local (conda / virtualenv / pyenv / PATH, including `~/.autoreport/venv` if present; packages are not auto-installed), or a custom absolute path
 - **`/report-init [--language latex|typst]`** — idempotent workspace init; LaTeX and Typst files may coexist; the project setting chooses the active language. The command is host-global; non-AutoReport sessions are rejected before any file change
 
@@ -139,7 +139,7 @@ $DSH_HOME/
     ├── resources/                 synced templates, themes, skills
     ├── venv/                      AutoReport-managed Python (optional)
     └── <workspaceId>/
-        ├── project.json           language, python, specialist route
+        ├── project.json           language, python, subagent route
         └── manifests/             derived artifact projections
 ```
 

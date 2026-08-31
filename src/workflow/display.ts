@@ -12,18 +12,18 @@ import type { WorkflowReportEnvelope } from './events.js'
 /** `MessageSource.plugin` for turn-stopping steers in the durable session log. */
 export const TURN_GUARD_PLUGIN = 'autoreportdsh/turn-guard'
 
-/** Collapsed notice: MAIN was resumed because a specialist task is blocked. */
-export const MAIN_STEER_SUMMARY = 'turn_guard.steer: specialist-blocked'
+/** Collapsed notice: MAIN was resumed because a subagent task is blocked. */
+export const MAIN_STEER_SUMMARY = 'AutoReport resumed MAIN because a subagent is blocked'
 
-/** Collapsed notice: specialist turn resumed to call report_workflow. */
-export const REPORT_STEER_SUMMARY = 'turn_guard.steer: forgotten-report'
+/** Collapsed notice: subagent turn resumed to call report_workflow. */
+export const REPORT_STEER_SUMMARY = 'AutoReport resumed subagent to report results'
 
-/** Collapsed notice: specialist turn resumed to refresh describe_files. */
-export const MANIFEST_STEER_SUMMARY = 'turn_guard.steer: stale-descriptions'
+/** Collapsed notice: subagent turn resumed to refresh describe_files. */
+export const MANIFEST_STEER_SUMMARY = 'AutoReport resumed subagent to refresh file descriptions'
 
 /**
  * Human relay prefix placed ahead of the durable JSON envelope.
- * @param role - reporting specialist.
+ * @param role - reporting subagent role.
  * @param envelope - validated workflow report.
  * @returns model-and-Chat text; JSON follows separately.
  */

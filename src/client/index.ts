@@ -1,7 +1,7 @@
 /**
  * Browser half of AutoReportDSH: the settings card for the `autoreport`
  * namespace, registered into DSH's plugin-configuration tab, plus a
- * conversation-window model picker for AutoReport workers.
+ * conversation-window model picker for AutoReport subagents.
  *
  * Host registration of the namespace already lives in `src/runtime.ts`. This
  * file only owns chrome, controls, and copy. Cross-plugin collaboration is

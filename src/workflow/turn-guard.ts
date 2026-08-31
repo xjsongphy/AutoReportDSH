@@ -28,7 +28,7 @@ const SPECIALIST_REPORT_STEER_TEXT =
   'Finish the delegated task by calling report_workflow with the exact task_id and delegation_revision from your briefing.'
 
 const MAIN_BLOCKED_STEER_TEXT =
-  'A specialist task is blocked. Redispatch, repair a dependency, or ask the user.'
+  'A subagent task is blocked. Redispatch, repair a dependency, or ask the user.'
 
 /** Maximum specialist steers of each reason per session turn. */
 export const MAX_MANIFEST_STEERS = 1

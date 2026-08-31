@@ -36,7 +36,7 @@ AutoReportDSH owns report semantics and policy.
 - Physics/report-writing skills and report-specific execution policy.
 - Default network denial for report execution, with fail-closed behavior where it cannot be
   established by the host platform.
-- Optional specialist model-route policy; DSH still owns provider/model execution and
+- Optional subagent model-route policy; DSH still owns provider/model execution and
   credentials.
 
 ### DeepSeek Harness owns and is reused
@@ -53,7 +53,7 @@ AutoReportDSH owns report semantics and policy.
   overlay must not change the behavior of sessions that did not explicitly select it.
   Only top-level sessions actually running the `autoreport` preset (header value or a
   later logged `agent-preset/selected`, matching DSH's `resolveSessionPreset`) join the
-  workflow runtime as MAIN, and only RoleRegistry-bound children are specialists. Every
+  workflow runtime as MAIN, and only RoleRegistry-bound children are subagents. Every
   other session keeps stock DSH behavior: no initialization, no workflow events, stock
   write/shell policy, stock child reporting. "Unknown to AutoReport" means "not our
   session", never "invalid AutoReport session" (see `src/membership.ts`).
@@ -77,7 +77,7 @@ AutoReportDSH owns report semantics and policy.
   delegation state remains authoritative and DSH still owns child lifecycle and transport.
 - Workflow continuity comes only from durable task/delegation/file-note state plus the
   workspace files themselves. There is no conversation-history reconstruction and no
-  workspace-to-prompt injection at resume. A recreated specialist recovers from: task
+  workspace-to-prompt injection at resume. A recreated subagent recovers from: task
   state + workspace state + role ownership + semantic file notes (cold-rebind handoff).
 - MinerU instructions are synchronized explicitly from the managed upstream skill and
   registered only for THEORY and REPORT. Default network denial remains unchanged, so
@@ -141,10 +141,10 @@ Main catalog
 It does **not** expose generic `subagent`, `subagent_fork`, workflow, ralph, unrestricted
 bash, or the generic DSH `report` tool.
 
-Continuable child setup contributes `report_workflow` and `report_exec` to specialist
+Continuable child setup contributes `report_workflow` and `report_exec` to subagent
 children. `compile_report` is contributed only to the Report child. If the DSH setup
 mechanism cannot conditionally contribute by pre-provisioned role, the compiler schema may
-be inherited by all specialists but its tool visibility and runtime guard must still deny it
+be inherited by all subagents but its tool visibility and runtime guard must still deny it
 outside Report; Main must never inherit it.
 
 The stock `@deepseek-ai/dsh-tool-subagent-report` contribution is replaced for this profile,
@@ -306,14 +306,14 @@ presets. The router performs:
 continuable child created
         ↓
 RoleRegistry lookup
-        ├── AutoReport specialist → report_workflow
+        ├── AutoReport subagent → report_workflow
         └── ordinary DSH child   → stock report
 ```
 
 The stock `@deepseek-ai/dsh-tool-subagent-report` row is disabled/replaced so it does not
 register a second setup. The AutoReport router reuses DSH’s exported stock
 `installReportTool` for ordinary children rather than reimplementing generic reporting.
-AutoReport specialists receive only `report_workflow`, following the same
+AutoReport subagents receive only `report_workflow`, following the same
 `registerContinuableSetup()` → child-scoped `tools.register()` →
 `ctx.subagents.reportFrom()` pattern as DSH’s stock adapter.
 
@@ -380,8 +380,9 @@ parallel structured logger or debug transcript. Tests and live diagnosis read th
 raw session file. Critical control flow must appear there with a stable source:
 
 - turn-stopping resumes are `user/message` with `source.plugin = autoreportdsh/turn-guard`
-  and `source.summary` prefixed `turn_guard.steer:` (`specialist-blocked`,
-  `stale-descriptions`, `forgotten-report`);
+  and a user-facing `source.summary` (`AutoReport resumed subagent to refresh file
+  descriptions`, `AutoReport resumed subagent to report results`, `AutoReport resumed
+  MAIN because a subagent is blocked`);
 - `report_workflow` is the parent `user/message` with `source.kind = subagent-report`
   plus the folded `autoreport/delegation`;
 - task and delegation mutations are `autoreport/task` / `autoreport/delegation`;
@@ -563,11 +564,11 @@ Existing files are never overwritten. Assets are copied from
 
 ### 2.11 Runtime-generated artifacts and external manifests
 
-Mechanical tracking is automatic; semantic descriptions are a separate specialist tool:
+Mechanical tracking is automatic; semantic descriptions are a separate subagent tool:
 
 - Successful filesystem mutation tools produce `autoreport/artifact` events through the
   tool lifecycle observer.
-- Specialists call `describe_files` to write `autoreport/file-note` snapshots (path,
+- Subagents call `describe_files` to write `autoreport/file-note` snapshots (path,
   description, `descriptionUpdatedAt`, optional notes). These never land in the experiment
   workspace.
 - `report_exec` snapshots the relevant readable/writable roots before and after successful
@@ -602,7 +603,7 @@ cache/bundle is configured and verified, or `typst` for Typst reports. It return
 structured diagnostics and artifact paths. It never widens network policy. Missing local
 compiler resources fail loudly.
 
-AutoReport-owned skills are registered in role-bound specialist child scopes rather than
+AutoReport-owned skills are registered in role-bound subagent child scopes rather than
 preset-wide: THEORY gets `mineru`; REPORT gets writing, active-language compilation, and
 `mineru`; DATA_ANALYSIS and PLOTTING get none. Static bundled resources use DSH’s normal
 skill registration. Runtime sessions never fetch remote content; `pnpm sync:resources`
@@ -611,15 +612,15 @@ uses upstream Git blob state to refresh only changed managed resource files befo
 ### 2.13 Model policy
 
 DSH owns provider implementations, credentials, and route execution. AutoReport preserves
-separate Main/specialist binding as a lightweight policy:
+separate Main/subagent binding as a lightweight policy:
 
 - Main uses the DSH model route selected for the `autoreport` session.
 - `specialistRoute` is an optional AutoReport configuration passed as the child
-  `provider/model` request for every specialist role.
-- If `specialistRoute` is unset, specialists inherit the Main route, matching DSH defaults.
+  `provider/model` request for every subagent role.
+- If `specialistRoute` is unset, subagents inherit the Main route, matching DSH defaults.
 
 This keeps provider mechanics in DSH while preserving the product-level ability to select a
-different specialist model. The opt-in live-provider smoke boots the selected DSH profile
+different subagent model. The opt-in live-provider smoke boots the selected DSH profile
 with its already configured default route; it never declares a provider, endpoint, model, or
 credential. A controlled OpenRouter benchmark may be configured through DSH settings
 separately, but it is not the deployment e2e default. Credentials are never committed.
@@ -655,9 +656,9 @@ backend's files; both `Report/main.tex` and `Report/main.typ` may coexist with
 `project.reportLanguage` authoritative.
 
 Fixed authorization stays non-configurable (no allowNetwork/disableRoleIsolation
-surface); AutoReport policy may only narrow DSH capabilities. Specialist model
+surface); AutoReport policy may only narrow DSH capabilities. Subagent model
 reuses DSH routing entirely: children inherit Main by default with one optional
-AutoReport-level specialist override. The AutoReport-managed venv is created
+AutoReport-level subagent override. The AutoReport-managed venv is created
 only when the user selects it: `uv venv` at `$dshHome/autoreport/venv`, then
 `uv pip install numpy scipy pandas matplotlib`. It is not created at plugin
 load. Deleting that directory reclaims space; selecting managed again recreates
@@ -666,7 +667,7 @@ init and are never auto-installed. `uv` is required for the managed row.
 
 ### 2.15 Direct human conversation vs workflow delegation (rev 7)
 
-Specialists remain continuable children of MAIN under DSH's parent-owned
+Subagents remain continuable children of MAIN under DSH's parent-owned
 continuation contract; humans talk to them through stock DSH subagent surfaces
 (list/history/prompt/interrupt) with no parallel transport. The domain invariant
 is explicit:
@@ -678,8 +679,8 @@ conversation state != workflow task state
 Human follow-ups preserve role context and role-authorized file access (guards
 key on child session identity regardless of message source), but must not create,
 complete, or mutate task/delegation state unless the message carries an active
-workflow delegation context. Every specialist persona carries this rule verbatim;
-MAIN's persona documents that specialists also answer humans directly.
+workflow delegation context. Every subagent persona carries this rule verbatim;
+MAIN's persona documents that subagents also answer humans directly.
 
 ### 2.16 Model-interface minimization (rev 8)
 
@@ -699,8 +700,8 @@ create/dispatch/complete/block bookkeeping lives behind `send_to_agent`, the
 report observer, and durable `autoreport/*` events; there is no model-facing
 task checklist tool.
 
-Specialist tool scoping currently uses DSH's tested inherited-tool filter plus
-the role guard as authority. Future allowlist-based specialist catalogs are a
+Subagent tool scoping currently uses DSH's tested inherited-tool filter plus
+the role guard as authority. Future allowlist-based subagent catalogs are a
 trace-driven optimization, not a reason to replace the mature generic DSH
 filesystem/search/skill primitives now.
 
@@ -718,14 +719,14 @@ and where it lives in the codebase:
 | 5 | Persist resolved settings in workflow snapshot | **Implemented** — `WorkflowSettingsSnapshot` in `autoreport/workflow` payload (schema version 3); `resolveWorkflowSettings()` precedence chain |
 | 6 | `/report-init --language latex\|typst` | **Implemented** — updates project settings + materializes missing resources only; other backend files never deleted |
 | 7 | Non-configurable authorization/execution policy | **By design** — fixed role table + immutable `network:'deny'`, no broadening knobs exposed |
-| 8 | Reuse DSH provider infrastructure | **Implemented** — specialists inherit Main by default; one optional shared route override is applied through DSH agent-scoped model selection, including `reasoningEffort` |
+| 8 | Reuse DSH provider infrastructure | **Implemented** — subagents inherit Main by default; one optional shared route override is applied through DSH agent-scoped model selection, including `reasoningEffort` |
 | 9 | Web settings card via plugin settings seam | **Implemented** — `src/client/` registers `settings.plugin.item` keyed on namespace `autoreport`; Host half remains `installSettingsSection` |
-| 10 | Continuable children for four specialists | **Implemented** — one durable child per role, reserve→start→markActive protocol |
-| 11 | Direct human conversations with specialists | **Supported** — stock DSH subagent surfaces; no parallel transport |
+| 10 | Continuable children for four subagents | **Implemented** — one durable child per role, reserve→start→markActive protocol |
+| 11 | Direct human conversations with subagents | **Supported** — stock DSH subagent surfaces; no parallel transport |
 | 12 | Conversation ≠ delegation invariant | **Documented** — PLAN §2.15; enforced by observer correlation on `(task_id, revision)` context |
-| 13 | Specialist prompt rule | **Implemented** — rule present exactly once in each specialist persona; duplicate removed from Common.md |
+| 13 | Subagent prompt rule | **Implemented** — rule present exactly once in each subagent persona; duplicate removed from Common.md |
 | 14 | Role permissions unchanged by human turns | **Enforced** — guard keys on child session identity regardless of message source |
-| 15 | Parent-owned continuation semantics | **Reused** — DSH continuation contract untouched; no independent specialist lifecycle |
+| 15 | Parent-owned continuation semantics | **Reused** — DSH continuation contract untouched; no independent subagent lifecycle |
 | 16 | Strictly scoped compatibility hooks | **Implemented** — report router falls back to stock `installReportTool` for non-AutoReport children; verified by keyless router tests |
 
 ## 3. Testing and acceptance
@@ -735,7 +736,7 @@ and where it lives in the codebase:
 - Fixed role/task/delegation protocol validation, including stale revision rejection.
 - Role-binding reservation, synchronous registry updates, start failure, and resume.
 - Parent→child `startContinuable`/`followup` acknowledgement semantics.
-- Replacement `report_workflow` schema for AutoReport specialists, stock `report` fallback
+- Replacement `report_workflow` schema for AutoReport subagents, stock `report` fallback
   for ordinary DSH children, and no duplicate setup registration.
 - Duplicate, malformed, missing, and stale report handling.
 - Role write matrix across filesystem, edit, delete, patch, compile, and execution tools.
@@ -746,7 +747,7 @@ and where it lives in the codebase:
 - Cold load of a session log containing `autoreport/*` events, with and without the plugin;
   plugin-present folding recovers task/role/artifact state and stock DSH skips unknown
   ignorable records safely. Assembled evals assert control-flow facts on the raw session
-  events (`turn_guard.steer` notices, `report_workflow` deliveries, task/delegation/
+  events (turn-guard notices, `report_workflow` deliveries, task/delegation/
   artifact/file-note snapshots), not a parallel debug log.
 - Direct `Session.append(..., { ignorable: true })` writer/persistence tests from the DSH
   compatibility patch.
@@ -755,7 +756,7 @@ and where it lives in the codebase:
 
 Recovery acceptance (keyless):
 
-- **Compaction safety** — populate task/checklist state on a long-running specialist task,
+- **Compaction safety** — populate task/checklist state on a long-running subagent task,
   trigger compaction, verify task/role/artifact projections are unchanged and the agent can
   continue remaining steps from state + workspace only.
 - **Child recreation safety** — produce intermediate files under a running delegation,
@@ -864,5 +865,5 @@ this status.
 
 Remaining optional/product work (documented in README): Windows support, MinerU network
 execution path, and richer DSH-native workflow Chat projection (relay/notice/snapshot).
-Trace-driven work may later shrink the model-facing surface further or add specialist
+Trace-driven work may later shrink the model-facing surface further or add subagent
 allowlists; neither changes the durable `autoreport/*` workflow state.

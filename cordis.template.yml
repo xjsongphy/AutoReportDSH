@@ -11,7 +11,7 @@
 #
 # The stock child-report setup is global. Replace it with one router that
 # preserves stock reporting for ordinary children and installs report_workflow
-# only for pre-bound AutoReport specialists.
+# only for pre-bound AutoReport subagents.
 - id: tool-subagent-report
   disabled: true
 

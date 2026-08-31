@@ -147,7 +147,7 @@ export function createSendToAgentTool(deps: SendToAgentDependencies): ToolDefini
 
   return defineTool({
     name: 'send_to_agent',
-    description: 'Dispatch one durable AutoReport task to its fixed specialist role. Creates a task when task_id is omitted. Defaults to waiting for a structured workflow report.',
+    description: 'Dispatch one durable AutoReport task to its fixed subagent role. Creates a task when task_id is omitted. Defaults to waiting for a structured workflow report.',
     parameters: {
       role: { type: 'string', required: true, enum: ['THEORY', 'DATA_ANALYSIS', 'PLOTTING', 'REPORT'] },
       prompt: { type: 'string', required: true },
@@ -169,7 +169,7 @@ export function createSendToAgentTool(deps: SendToAgentDependencies): ToolDefini
       const parent = exec.agent as Agent | undefined
       if (parent === undefined) throw new Error('send_to_agent requires an owning Main agent')
       const role = args.role
-      if (!isSpecialistRole(role)) throw new Error('role must name an AutoReport specialist')
+      if (!isSpecialistRole(role)) throw new Error('role must name an AutoReport subagent')
       const prompt = text(args.prompt, 'prompt', MAX_PROMPT)
       const context = args.context === undefined ? undefined : text(args.context, 'context', MAX_CONTEXT)
       const parentSession: Session = parent.session
