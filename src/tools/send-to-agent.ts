@@ -147,15 +147,20 @@ export function createSendToAgentTool(deps: SendToAgentDependencies): ToolDefini
 
   return defineTool({
     name: 'send_to_agent',
-    description: 'Dispatch one durable AutoReport task to its fixed subagent role. Creates a task when task_id is omitted. Defaults to waiting for a structured workflow report.',
+    description: [
+      'Dispatch one durable AutoReport task to its fixed subagent role; creates a task when task_id is omitted. The subagent finishes only by calling report_workflow, which becomes your result.',
+      'With wait=true (default) the call blocks until the subagent reports and returns status: "success" (done — response holds results and produced file paths), "blocked" (subagent cannot proceed — block_type is "missing_data" or "quality"; response states what is needed), or "timeout" (no report within timeout_ms).',
+      'wait=false returns "delegated" immediately; the report arrives later.',
+      'To redispatch a blocked or timed-out task, call again with the same task_id — this starts a new delegation revision. Supply missing inputs or corrected constraints in prompt/context rather than repeating the failed prompt verbatim.',
+    ].join(' '),
     parameters: {
       role: { type: 'string', required: true, enum: ['THEORY', 'DATA_ANALYSIS', 'PLOTTING', 'REPORT'] },
-      prompt: { type: 'string', required: true },
+      prompt: { type: 'string', required: true, description: 'Task goal; include only the goal, relevant input locations, dependencies, and explicit user constraints.' },
       subject: { type: 'string', description: 'Short task subject when auto-creating a task.' },
       dependencies: { type: 'array', items: { type: 'string' }, description: 'Task ids that must complete first.' },
       task_id: { type: 'string', description: 'Existing task id for redispatch or follow-up.' },
-      context: { type: 'string' },
-      wait: { type: 'boolean', description: 'Wait for success/blocked/timeout; default true.' },
+      context: { type: 'string', description: 'Explicit user constraints the subagent must preserve.' },
+      wait: { type: 'boolean', description: 'Wait for the workflow report; default true.' },
       timeout_ms: { type: 'number', description: 'Bounded wait in milliseconds.' },
     },
     output: {

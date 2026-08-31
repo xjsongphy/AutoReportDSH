@@ -109,7 +109,8 @@ describe('report router', () => {
     installRoutedReportTool(child.ctx, host.ctx, { roleRegistry, config: CONFIG, workflowForChild: () => undefined, overlayRoot })
     expect(child.tools.map(tool => tool.name)).toEqual(['manifest', 'report_workflow'])
     expect(child.skills).toEqual([])
-    expect(child.sections.some(section => section.text.includes('THEORY'))).toBe(true)
+    expect(child.sections.some(section => section.name === 'tool:report-workflow')).toBe(true)
+    expect(child.sections.some(section => section.name === 'report-environment')).toBe(false)
     expect(child.tools.some(tool => tool.name === 'report')).toBe(false)
     expect(effectiveSandboxMode(child.session.events)).toBe('workspace-write')
     expect(effectiveSandboxWorkspaceRoot(child.session.events)).toBe(roleWritableRoot(workspaceRoot, 'THEORY'))
@@ -135,6 +136,10 @@ describe('report router', () => {
       'experiment-report-writer',
       'latex-compile',
     ])
+    const environment = child.sections.find(section => section.name === 'report-environment')
+    expect(environment?.text).toContain('language: latex')
+    expect(environment?.text).toContain('entry: Report/main.tex')
+    expect(environment?.text).toContain('compile skill: latex-compile')
     expect(child.sections.map(section => section.name)).not.toEqual(expect.arrayContaining([
       'autoreport:skill:experiment-report-writer',
       'autoreport:skill:latex-compile',

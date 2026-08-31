@@ -6,8 +6,34 @@ import type AutoReportWorkflowRuntime from '../runtime.js'
 import { applyRoleSandbox } from '../policy/sandbox-roots.js'
 import { installWorkflowReportTool } from './report-workflow.js'
 import { installManifestTool } from './manifest.js'
-import { registerRoleSkills } from '../skills-preset.js'
+import { registerRoleSkills, type ReportSkillLanguage } from '../skills-preset.js'
 import { installReferencesSkills } from '../skills-references.js'
+
+/** Entry file, theme, and compile skill per report language (workspace/init layout). */
+const REPORT_ENVIRONMENTS: Readonly<Record<ReportSkillLanguage, { entry: string; theme: string; compileSkill: string }>> = {
+  latex: { entry: 'Report/main.tex', theme: 'Report/mpltx.cls', compileSkill: 'latex-compile' },
+  typst: { entry: 'Report/main.typ', theme: 'Report/mplts.typ', compileSkill: 'typst-compile' },
+}
+
+/**
+ * Inject the session-specific Report Environment facts the REPORT persona
+ * references: active language, entry file, theme, and compile skill name.
+ * Dynamic facts live here, not in the immutable persona text.
+ */
+function installReportEnvironmentSection(childCtx: Context, language: ReportSkillLanguage): () => void {
+  const environment = REPORT_ENVIRONMENTS[language]
+  return childCtx.systemPrompt.section({
+    name: 'report-environment',
+    order: 115,
+    text: [
+      'Report Environment',
+      `language: ${language}`,
+      `entry: ${environment.entry}`,
+      `theme: ${environment.theme}`,
+      `compile skill: ${environment.compileSkill}`,
+    ].join('\n'),
+  })
+}
 
 export const name = 'autoreportdsh-report-router'
 export const inject = ['subagents', 'tools', 'systemPrompt', 'autoreportWorkflow']
@@ -76,6 +102,9 @@ export function installRoutedReportTool(
     if (disposeModelSelection !== undefined) disposers.push(disposeModelSelection)
     const language = workflow.workflowForChild(child.id)?.runtime.state.projection().meta?.settings?.reportLanguage
       ?? workflow.config.defaultReportLanguage
+    if (entry.binding.role === 'REPORT') {
+      disposers.push(installReportEnvironmentSection(childCtx, language))
+    }
     disposers.push(registerRoleSkills(childCtx, entry.binding.role, language, workflow.overlayRoot))
     disposers.push(installReferencesSkills(childCtx))
     const session = child.session

@@ -84,7 +84,7 @@ describe('integration: assembled host (real context)', () => {
     expect(theory.toolNames).toEqual(['manifest', 'report_workflow'])
     expect(theory.skillNames).toEqual([])
     expect(theory.toolNames).not.toContain('report')
-    expect(theory.sections.some(section => section.text.includes('THEORY'))).toBe(true)
+    expect(theory.sections.some(section => section.name === 'tool:report-workflow')).toBe(true)
 
     const reportBinding: RoleBindingSnapshot = { ...binding, role: 'REPORT', childSessionId: SessionId('it-report') }
     assembled.runtime.roleRegistry.registerReserved(reportBinding)
