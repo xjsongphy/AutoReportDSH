@@ -29,12 +29,16 @@ import {
   dispatch,
   disposeAssembled,
   execute,
+  eventTypes,
+  describeFiles,
+  messageSource,
   messageText,
   publish,
   reportWorkflow,
   specialistSkills,
   specialistWrite,
   stopTurn,
+  turnGuardSteers,
   userTurn,
 } from '../helpers/assembled-host.js'
 
@@ -78,6 +82,11 @@ async function finishRole(
     await specialistWrite(assembled, child, file.path, file.content)
   }
   const taskId = String(child.value.task_id)
+  const described = await describeFiles(assembled, child, produced.map(file => ({
+    path: file.path,
+    description: `${role} output ${file.path}`,
+  })))
+  expect(described.isError).toBe(false)
   const reported = await reportWorkflow(assembled, child, {
     task_id: taskId,
     delegation_revision: Number(child.value.delegation_revision),
@@ -112,6 +121,10 @@ describe('workflow eval', () => {
     ])
     await specialistWrite(assembled, report, 'Report/main.tex', '\\documentclass{article}\\begin{document}ok\\end{document}\n')
     await specialistWrite(assembled, report, 'Report/main.pdf', '%PDF-eval\n')
+    expect((await describeFiles(assembled, report, [
+      { path: 'Report/main.tex', description: 'LaTeX source' },
+      { path: 'Report/main.pdf', description: 'compiled PDF' },
+    ])).isError).toBe(false)
     const reported = await reportWorkflow(assembled, report, {
       task_id: String(report.value.task_id),
       delegation_revision: Number(report.value.delegation_revision),
@@ -126,6 +139,18 @@ describe('workflow eval', () => {
     ])
     expect(fold.artifacts.some(item => item.path === 'Report/main.pdf' && item.status === 'created')).toBe(true)
     expect(existsSync(join(assembled.workspaceRoot, 'Report', 'main.pdf'))).toBe(true)
+    const logged = eventTypes(assembled.mainSession)
+    expect(logged).toEqual(expect.arrayContaining([
+      'autoreport/workflow',
+      'autoreport/task',
+      'autoreport/delegation',
+      'autoreport/artifact',
+      'autoreport/file-note',
+    ]))
+    expect(assembled.mainSession.events.some(event => (
+      event.type === 'user/message'
+      && event.data.source.kind === 'subagent-report'
+    ))).toBe(true)
   })
 
   it('2. completes a Typst report pipeline with language snapshot and REPORT compile skills', async () => {
@@ -144,6 +169,10 @@ describe('workflow eval', () => {
     expect(specialistSkills(assembled, report.childId).skillNames).not.toContain('latex-compile')
     await specialistWrite(assembled, report, 'Report/main.typ', '#set page(paper: "a4")\nHello\n')
     await specialistWrite(assembled, report, 'Report/main.pdf', '%PDF-typst-eval\n')
+    expect((await describeFiles(assembled, report, [
+      { path: 'Report/main.typ', description: 'Typst source' },
+      { path: 'Report/main.pdf', description: 'compiled PDF' },
+    ])).isError).toBe(false)
     await reportWorkflow(assembled, report, {
       task_id: String(report.value.task_id),
       delegation_revision: Number(report.value.delegation_revision),
@@ -171,10 +200,17 @@ describe('workflow eval', () => {
     expect(tasks(assembled).currentDelegation(taskId)?.phase).toBe('blocked')
 
     stopTurn(assembled, assembled.mainAgent, 1)
-    expect(assembled.mainSteers.length).toBe(1)
-    expect(messageText(assembled.mainSteers[0])).toMatch(/blocked/i)
+    const firstSteers = turnGuardSteers(assembled.mainSession)
+    expect(firstSteers).toHaveLength(1)
+    expect(messageText(firstSteers[0])).toMatch(/blocked/i)
+    expect(messageSource(firstSteers[0])).toMatchObject({
+      kind: 'plugin',
+      plugin: 'autoreportdsh/turn-guard',
+      form: 'notice',
+      summary: 'turn_guard.steer: specialist-blocked',
+    })
     stopTurn(assembled, assembled.mainAgent, 1)
-    expect(assembled.mainSteers.length).toBe(1)
+    expect(turnGuardSteers(assembled.mainSession)).toHaveLength(1)
 
     const retry = await dispatch(assembled, {
       role: 'DATA_ANALYSIS',
@@ -183,6 +219,9 @@ describe('workflow eval', () => {
     })
     expect(retry.childId).toBe(child.childId)
     await specialistWrite(assembled, retry, 'Data/Processed/out.csv', 'ok\n')
+    expect((await describeFiles(assembled, retry, [
+      { path: 'Data/Processed/out.csv', description: 'fitted results' },
+    ])).isError).toBe(false)
     await reportWorkflow(assembled, retry, {
       task_id: taskId,
       delegation_revision: Number(retry.value.delegation_revision),
@@ -203,7 +242,7 @@ describe('workflow eval', () => {
     })
     expect(tasks(assembled).getTask(qualityId)?.status).toBe('blocked')
     stopTurn(assembled, assembled.mainAgent, 2)
-    expect(assembled.mainSteers.length).toBe(2)
+    expect(turnGuardSteers(assembled.mainSession)).toHaveLength(2)
     const repaired = await dispatch(assembled, {
       role: 'THEORY',
       task_id: qualityId,
@@ -226,16 +265,41 @@ describe('workflow eval', () => {
     await specialistWrite(assembled, child, 'Theory/theory.md', '# leftover without report\n')
 
     stopTurn(assembled, child.childAgent, 1)
-    expect(child.steers.length).toBe(1)
-    expect(messageText(child.steers[0])).toMatch(/report_workflow/)
+    const afterManifest = turnGuardSteers(child.childSession)
+    expect(afterManifest).toHaveLength(1)
+    expect(messageText(afterManifest[0])).toMatch(/describe_files/)
+    expect(messageSource(afterManifest[0])).toMatchObject({
+      kind: 'plugin',
+      plugin: 'autoreportdsh/turn-guard',
+      form: 'notice',
+      summary: 'turn_guard.steer: stale-descriptions',
+    })
     stopTurn(assembled, child.childAgent, 1)
-    expect(child.steers.length).toBe(2)
+    const afterReport = turnGuardSteers(child.childSession)
+    expect(afterReport).toHaveLength(2)
+    expect(messageText(afterReport[1])).toMatch(/report_workflow/)
+    expect(messageSource(afterReport[1])).toMatchObject({
+      summary: 'turn_guard.steer: forgotten-report',
+    })
     stopTurn(assembled, child.childAgent, 1)
-    expect(child.steers.length).toBe(2)
+    expect(turnGuardSteers(child.childSession)).toHaveLength(2)
 
     expect(tasks(assembled).getTask(taskId)?.status).toBe('running')
     expect(tasks(assembled).currentDelegation(taskId)?.phase).toBe('waiting_for_child')
 
+    const rejected = await reportWorkflow(assembled, child, {
+      task_id: taskId,
+      delegation_revision: Number(child.value.delegation_revision),
+      status: 'success',
+      response: 'reported after steer',
+      produced_files: ['Theory/theory.md'],
+    })
+    expect(rejected.isError).toBe(true)
+    expect(rejected.text).toMatch(/semantic manifest is stale/)
+
+    expect((await describeFiles(assembled, child, [
+      { path: 'Theory/theory.md', description: 'leftover derivation' },
+    ])).isError).toBe(false)
     await reportWorkflow(assembled, child, {
       task_id: taskId,
       delegation_revision: Number(child.value.delegation_revision),
@@ -274,6 +338,9 @@ describe('workflow eval', () => {
     expect(next?.supersedes).toBe(firstBinding?.childSessionId)
     expect(resumed.runtime.roleRegistry.lookup(firstBinding!.childSessionId)).toBeUndefined()
     expect(resumed.runtime.roleRegistry.lookup(rebound.childId)?.binding.provisioning).toBe('active')
+    const rebindPrompt = resumed.startedSpecs.at(-1)?.prompt ?? ''
+    expect(rebindPrompt).toContain('Role memory for THEORY')
+    expect(rebindPrompt).toContain('Theory/theory.md')
   })
 
   it('6. edit and bash against existing files record modified artifacts', async () => {

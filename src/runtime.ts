@@ -12,7 +12,7 @@ import { WorkflowState, type WorkflowProjection } from './workflow/service.js'
 import { RoleRegistry } from './workflow/role-registry.js'
 import { WaiterRegistry } from './workflow/waiters.js'
 import { appendWorkflowEvent } from './workflow/store.js'
-import { observeWorkflowMessage } from './workflow/report-observer.js'
+import { observeWorkflowMessage, recoverWorkflowReports } from './workflow/report-observer.js'
 import { applyRoleSandbox } from './policy/sandbox-roots.js'
 import { ensureInitialized } from './workspace/init.js'
 import { syncedResourcesRoot } from './workspace/resource-sync.js'
@@ -268,6 +268,11 @@ export default class AutoReportWorkflowRuntime extends Service {
     const created = { state: WorkflowState.fromSession(session), waiters: new WaiterRegistry() }
     this.parents.set(session.id, created)
     this.mainSessions.set(String(session.id), session)
+    recoverWorkflowReports(session, {
+      state: created.state,
+      waiters: created.waiters,
+      commit: (type, data) => this.commit(session, type, data),
+    })
     for (const binding of created.state.projection().bindingsByRole.values()) {
       if (binding.provisioning !== 'failed' && this.roleRegistry.lookup(binding.childSessionId) === undefined) {
         this.roleRegistry.registerReserved(binding)

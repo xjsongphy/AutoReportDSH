@@ -16,7 +16,7 @@ import type { SpecialistRoute } from '../config.js'
 import type { WorkflowSettingsSnapshot } from '../settings.js'
 
 /** Current schema version stamped on every snapshot; a field change bumps it. */
-export const AUTOREPORT_SCHEMA_VERSION = 3
+export const AUTOREPORT_SCHEMA_VERSION = 4
 
 /** Validated child-report envelope carried on delegation snapshots (PLAN.md §2.5). */
 export interface WorkflowReportEnvelope {
@@ -137,6 +137,30 @@ export interface DelegationSnapshot {
   readonly reason?: string
 }
 
+/**
+ * Agent-authored semantic description for one observed file. Mechanical
+ * create/modify facts stay on {@link ArtifactSnapshot}; this snapshot is the
+ * freshness clock compared against `artifact.recordedAt`.
+ */
+export interface FileNoteSnapshot {
+  /** Schema version ({@link AUTOREPORT_SCHEMA_VERSION}). */
+  readonly version: number
+  /** Normalized workspace-relative path. */
+  readonly path: string
+  /** What the file currently contains or means for downstream roles. */
+  readonly description: string
+  /** Epoch ms the description was last written; stale when an artifact is newer. */
+  readonly descriptionUpdatedAt: number
+  /** Optional durable notes (assumptions, decisions, unfinished issues). */
+  readonly notes?: string
+  /** Role that authored the note, when known. */
+  readonly producedBy?: AutoReportRole
+  /** Owning task when known. */
+  readonly taskId?: string
+  /** Owning attempt key `taskId#revision` when known. */
+  readonly delegationKey?: string
+}
+
 /** One produced file recorded by runtime observers (never by model claim). */
 export interface ArtifactSnapshot {
   /** Schema version ({@link AUTOREPORT_SCHEMA_VERSION}). */
@@ -210,5 +234,11 @@ declare module '@deepseek-ai/dsh-session/types' {
      * Model claims never create these. Log-only.
      */
     'autoreport/artifact': ArtifactSnapshot
+    /**
+     * Agent-authored semantic description for one workspace-relative path.
+     * Last-write-wins per path. Log-only; never written into the experiment
+     * workspace.
+     */
+    'autoreport/file-note': FileNoteSnapshot
   }
 }

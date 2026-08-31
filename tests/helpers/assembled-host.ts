@@ -11,7 +11,7 @@ import { dirname, join } from 'node:path'
 import { expect } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
-import { CallId, createUserMessage } from '@deepseek-ai/dsh-llm'
+import { CallId, createUserMessage, type UserMessage } from '@deepseek-ai/dsh-llm'
 import { Session, SessionId, type SessionEvent } from '@deepseek-ai/dsh-session'
 import ToolRuntime, { defineTool } from '@deepseek-ai/dsh-tools'
 import type { Config } from '../../src/config.js'
@@ -20,18 +20,12 @@ import { AUTOREPORT_MAIN_PRESET } from '../../src/membership.js'
 import AutoReportWorkflowRuntime from '../../src/runtime.js'
 import { saveProjectSettings, workspaceIdForRoot } from '../../src/settings.js'
 import { installWorkflowReportTool } from '../../src/tools/report-workflow.js'
+import { TURN_GUARD_PLUGIN } from '../../src/workflow/display.js'
 import * as presetModule from '../../src/preset.js'
 import * as reportRouterModule from '../../src/tools/report-router.js'
 import type { SpecialistRole } from '../../src/roles.js'
 import { syncedResourcesRoot } from '../../src/workspace/resource-sync.js'
 import { seedSyncedResourceStubs } from './synced-resource-stubs.js'
-import { AUTOREPORT_MAIN_PRESET } from '../../src/membership.js'
-import AutoReportWorkflowRuntime from '../../src/runtime.js'
-import { saveProjectSettings, workspaceIdForRoot } from '../../src/settings.js'
-import { installWorkflowReportTool } from '../../src/tools/report-workflow.js'
-import * as presetModule from '../../src/preset.js'
-import * as reportRouterModule from '../../src/tools/report-router.js'
-import type { SpecialistRole } from '../../src/roles.js'
 
 export const ASSEMBLED_CONFIG: Config = {
   defaultReportLanguage: 'latex',
@@ -92,9 +86,8 @@ export interface Assembled {
   home: string
   mainAgent: Agent
   mainSession: Session
-  mainSteers: unknown[]
   continuableSetups: ((childCtx: Parameters<typeof reportRouterModule.installRoutedReportTool>[0]) => () => void)[]
-  startedSpecs: { childId: unknown; label: string }[]
+  startedSpecs: { childId: unknown; label: string; prompt: string }[]
   reportInitCommand: { handler: (invocation: unknown) => Promise<{ kind: string; text?: string }> } | undefined
   presetSkillNames: string[]
   skillProviders: string[]
@@ -134,7 +127,6 @@ export async function assemble(options: AssembleOptions = {}): Promise<Assembled
   const startedSpecs: Assembled['startedSpecs'] = []
   const presetSkillNames: string[] = []
   const skillProviders: string[] = []
-  const mainSteers: unknown[] = []
   let followupImpl: () => Promise<string> = options.followup ?? (async () => 'followup-msg-1')
   let pythonResolver: (execution: { agent?: { session: Session } }) => Record<string, string> = () => ({})
 
@@ -149,7 +141,9 @@ export async function assemble(options: AssembleOptions = {}): Promise<Assembled
   const mainAgent = {
     id: mainSession.id,
     session: mainSession,
-    steer: (message: unknown) => { mainSteers.push(message) },
+    steer: (message: UserMessage) => {
+      publish(ctx, mainSession, 'user/message', message, { surfaceOp: 'append' })
+    },
   } as Agent
 
   ctx.provide('subagents', {
@@ -157,9 +151,17 @@ export async function assemble(options: AssembleOptions = {}): Promise<Assembled
       continuableSetups.push(contribution)
       return () => {}
     },
-    startContinuable: async (spec: { childId: unknown; label: string }) => {
+    startContinuable: async (spec: {
+      childId: unknown
+      label: string
+      request?: { prompt?: { type: string; text?: string }[] }
+    }) => {
       expect(ctx.autoreportWorkflow.roleRegistry.lookup(spec.childId as never)).toBeDefined()
-      startedSpecs.push({ childId: spec.childId, label: spec.label })
+      startedSpecs.push({
+        childId: spec.childId,
+        label: spec.label,
+        prompt: (spec.request?.prompt ?? []).flatMap(block => block.type === 'text' ? [block.text ?? ''] : []).join(''),
+      })
       return { childId: spec.childId, messageId: 'accepted-msg-1' }
     },
     followup: async () => followupImpl(),
@@ -269,7 +271,6 @@ export async function assemble(options: AssembleOptions = {}): Promise<Assembled
     home,
     mainAgent,
     mainSession,
-    mainSteers,
     continuableSetups,
     startedSpecs,
     reportInitCommand,
@@ -367,7 +368,7 @@ export async function waitUntil(predicate: () => boolean, timeoutMs = 2_000): Pr
 export async function dispatch(
   assembled: Assembled,
   args: { role: SpecialistRole; prompt: string; task_id?: string; subject?: string },
-): Promise<{ childId: string; childSession: Session; childAgent: Agent; steers: unknown[]; value: Record<string, unknown> }> {
+): Promise<{ childId: string; childSession: Session; childAgent: Agent; value: Record<string, unknown> }> {
   const result = await execute(assembled.ctx, 'send_to_agent', {
     ...args,
     wait: false,
@@ -384,13 +385,14 @@ export async function dispatch(
     cwd: assembled.workspaceRoot,
     parentSession: assembled.mainSession.id,
   })
-  const steers: unknown[] = []
   const childAgent = {
     id: childSession.id,
     session: childSession,
-    steer: (message: unknown) => { steers.push(message) },
+    steer: (message: UserMessage) => {
+      publish(assembled.ctx, childSession, 'user/message', message, { surfaceOp: 'append' })
+    },
   } as Agent
-  return { childId, childSession, childAgent, steers, value }
+  return { childId, childSession, childAgent, value }
 }
 
 export async function reportWorkflow(
@@ -415,6 +417,14 @@ export async function reportWorkflow(
   }, child.childAgent, child.childSession)
 }
 
+export async function describeFiles(
+  assembled: Assembled,
+  child: { childAgent: Agent; childSession: Session },
+  files: ReadonlyArray<{ path: string; description: string; notes?: string }>,
+): Promise<{ isError: boolean; text: string; value: unknown }> {
+  return execute(assembled.ctx, 'describe_files', { files }, child.childAgent, child.childSession)
+}
+
 export function stopTurn(assembled: Assembled, agent: Agent, turn = 1): void {
   assembled.ctx.emit('agent/turn-stopping', { agent, turn, signal: TOOL_SIGNAL })
 }
@@ -437,6 +447,30 @@ export async function specialistWrite(
   mkdirSync(dirname(file_path), { recursive: true })
   const written = await execute(assembled.ctx, 'write', { file_path, content }, child.childAgent, child.childSession)
   expect(written.isError).toBe(false)
+}
+
+export function eventTypes(session: Session): string[] {
+  return session.events.map(event => event.type)
+}
+
+export function userMessages(session: Session): UserMessage[] {
+  return session.events
+    .filter((event): event is SessionEvent<'user/message'> => event.type === 'user/message')
+    .map(event => event.data)
+}
+
+/** Turn-stopping steers persisted on the session as plugin notices. */
+export function turnGuardSteers(session: Session): UserMessage[] {
+  return userMessages(session).filter(message => {
+    const source = message.source
+    return source.kind === 'plugin' && source.plugin === TURN_GUARD_PLUGIN
+  })
+}
+
+export function messageSource(message: unknown): Record<string, unknown> | undefined {
+  if (typeof message !== 'object' || message === null) return undefined
+  const source = (message as { source?: Record<string, unknown> }).source
+  return source
 }
 
 export function messageText(message: unknown): string {

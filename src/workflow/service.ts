@@ -17,6 +17,7 @@ import { delegationKey } from './protocol.js'
 import type {
   ArtifactSnapshot,
   DelegationSnapshot,
+  FileNoteSnapshot,
   RoleBindingSnapshot,
   TaskSnapshot,
   WorkflowMetaSnapshot,
@@ -36,6 +37,8 @@ export interface WorkflowProjection {
   readonly bindingsByRole: ReadonlyMap<SpecialistRole, RoleBindingSnapshot>
   /** Artifacts in observation order. */
   readonly artifacts: readonly ArtifactSnapshot[]
+  /** Latest semantic description per workspace-relative path. */
+  readonly fileNotes: ReadonlyMap<string, FileNoteSnapshot>
 }
 
 /**
@@ -49,6 +52,7 @@ interface ProjectionBuilder {
   bindingsByChild: Map<string, RoleBindingSnapshot>
   bindingsByRole: Map<SpecialistRole, RoleBindingSnapshot>
   artifacts: ArtifactSnapshot[]
+  fileNotes: Map<string, FileNoteSnapshot>
 }
 
 function emptyProjection(): ProjectionBuilder {
@@ -59,6 +63,7 @@ function emptyProjection(): ProjectionBuilder {
     bindingsByChild: new Map(),
     bindingsByRole: new Map(),
     artifacts: [],
+    fileNotes: new Map(),
   }
 }
 
@@ -117,6 +122,9 @@ export class WorkflowState {
       case 'autoreport/artifact':
         this.builder.artifacts.push(event.data)
         break
+      case 'autoreport/file-note':
+        this.builder.fileNotes.set(event.data.path, event.data)
+        break
     }
   }
 
@@ -132,6 +140,7 @@ export class WorkflowState {
       bindingsByChild: this.builder.bindingsByChild,
       bindingsByRole: this.builder.bindingsByRole,
       artifacts: [...this.builder.artifacts],
+      fileNotes: new Map(this.builder.fileNotes),
     }
   }
 

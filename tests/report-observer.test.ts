@@ -5,7 +5,7 @@ import { appendWorkflowEvent } from '../src/workflow/store.js'
 import { WorkflowState } from '../src/workflow/service.js'
 import { WaiterRegistry } from '../src/workflow/waiters.js'
 import type { DelegationSnapshot, TaskSnapshot } from '../src/workflow/events.js'
-import { observeWorkflowMessage } from '../src/workflow/report-observer.js'
+import { observeWorkflowMessage, recoverWorkflowReports } from '../src/workflow/report-observer.js'
 
 function seedWaiting(session: Session, state: WorkflowState, revision = 1): DelegationSnapshot {
   const task: TaskSnapshot = {
@@ -123,6 +123,73 @@ describe('report observer', () => {
     expect(state.delegationAt('task-7', 1)?.phase).toBe('stale')
     expect(state.currentDelegation('task-7')?.delegationRevision).toBe(2)
     expect(state.currentDelegation('task-7')?.phase).toBe('waiting_for_child')
+  })
+
+  it('ignores a later delivery with a different message id after a terminal report is accepted', () => {
+    const session = Session.create(SessionId('parent'))
+    const state = WorkflowState.fromSession(session)
+    const waiters = new WaiterRegistry()
+    seedWaiting(session, state)
+    const first = session.append('user/message', createUserMessage({
+      content: [{ type: 'text', text: JSON.stringify({
+        task_id: 'task-7',
+        delegation_revision: 1,
+        status: 'success',
+        block_type: null,
+        response: 'once',
+        produced_files: [],
+      }) }],
+      source: { kind: 'subagent-report', form: 'relay', senderSessionId: SessionId('child-da') },
+    }), { surfaceOp: 'append' })
+    observe(session, state, waiters, first)
+    const settledAt = state.currentDelegation('task-7')?.settledAt
+    const taskRevision = state.getTask('task-7')?.revision
+    const second = session.append('user/message', createUserMessage({
+      content: [{ type: 'text', text: JSON.stringify({
+        task_id: 'task-7',
+        delegation_revision: 1,
+        status: 'success',
+        block_type: null,
+        response: 'twice',
+        produced_files: ['Data/Processed/other.csv'],
+      }) }],
+      source: { kind: 'subagent-report', form: 'relay', senderSessionId: SessionId('child-da') },
+    }), { surfaceOp: 'append' })
+    observe(session, state, waiters, second)
+    expect(state.currentDelegation('task-7')?.phase).toBe('completed')
+    expect(state.currentDelegation('task-7')?.reportMessageId).toBe(String(first.data.id))
+    expect(state.currentDelegation('task-7')?.settledAt).toBe(settledAt)
+    expect(state.currentDelegation('task-7')?.report?.response).toBe('once')
+    expect(state.getTask('task-7')?.revision).toBe(taskRevision)
+  })
+
+  it('recovers a waiting attempt from a logged delivery that never produced autoreport/delegation', () => {
+    const session = Session.create(SessionId('parent'))
+    const warm = WorkflowState.fromSession(session)
+    seedWaiting(session, warm)
+    session.append('user/message', createUserMessage({
+      content: [{ type: 'text', text: JSON.stringify({
+        task_id: 'task-7',
+        delegation_revision: 1,
+        status: 'success',
+        block_type: null,
+        response: 'survived the crash',
+        produced_files: ['Data/Processed/out.csv'],
+      }) }],
+      source: { kind: 'subagent-report', form: 'relay', senderSessionId: SessionId('child-da') },
+    }), { surfaceOp: 'append' })
+    const cold = WorkflowState.fromSession(session)
+    expect(cold.currentDelegation('task-7')?.phase).toBe('waiting_for_child')
+    recoverWorkflowReports(session, {
+      state: cold,
+      waiters: new WaiterRegistry(),
+      commit: (type, data) => {
+        cold.apply(appendWorkflowEvent(session, type, data))
+      },
+    })
+    expect(cold.currentDelegation('task-7')?.phase).toBe('completed')
+    expect(cold.currentDelegation('task-7')?.report?.response).toBe('survived the crash')
+    expect(cold.getTask('task-7')?.status).toBe('completed')
   })
 
   it('is idempotent for a duplicate transport message id', () => {

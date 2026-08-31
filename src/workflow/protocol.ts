@@ -62,6 +62,27 @@ export function normalizeProducedPath(raw: unknown): string | null {
 }
 
 /**
+ * Parse a workflow envelope that may be preceded by a human-readable relay
+ * prefix. Bare JSON still parses; mixed text takes a fenced or trailing JSON object.
+ * @param raw - joined message text or an already-parsed object.
+ * @returns the validated envelope or a rejection reason.
+ */
+export function parseWorkflowEnvelopeFromText(raw: unknown): ParseResult<WorkflowReportEnvelope> {
+  if (typeof raw !== 'string') return parseWorkflowEnvelope(raw)
+  const trimmed = raw.trim()
+  const direct = parseWorkflowEnvelope(trimmed)
+  if (direct.ok) return direct
+  const fence = /```(?:json)?\s*([\s\S]*?)\s*```/u.exec(trimmed)
+  if (fence?.[1] !== undefined) {
+    const fenced = parseWorkflowEnvelope(fence[1])
+    if (fenced.ok) return fenced
+  }
+  const start = trimmed.lastIndexOf('{')
+  if (start < 0) return { ok: false, reason: 'report is not valid JSON' }
+  return parseWorkflowEnvelope(trimmed.slice(start))
+}
+
+/**
  * Validate one raw child-report payload into the canonical envelope.
  * @param raw - parsed-or-unparsed report content (the tool passes JSON text).
  * @returns the validated envelope or a rejection reason.

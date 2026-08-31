@@ -17,6 +17,8 @@ import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import { resolveWorkflowSettings, saveProjectSettings, workspaceIdForRoot } from '../src/settings.js'
 import { syncedResourcesRoot } from '../src/workspace/resource-sync.js'
 import { seedSyncedResourceStubs } from './helpers/synced-resource-stubs.js'
+import { AUTOREPORT_SCHEMA_VERSION } from '../src/workflow/events.js'
+import { appendWorkflowEvent } from '../src/workflow/store.js'
 
 const tempDirs: string[] = []
 afterEach(() => {
@@ -222,5 +224,48 @@ describe('host workflow runtime', () => {
     expect(runtime.ownsSession(session)).toBe(true)
     expect(effectiveSandboxMode(session.events)).toBe('workspace-write')
     expect(effectiveSandboxWorkspaceRoot(session.events)).toBe(resolve(root, 'Outline'))
+  })
+
+  it('replays a durable child report that landed before the observer committed', () => {
+    const ctx = new Context()
+    const runtime = new AutoReportWorkflowRuntime(ctx, CONFIG)
+    const session = rootSession('main-recover', AUTOREPORT_MAIN_PRESET)
+    appendWorkflowEvent(session, 'autoreport/task', {
+      version: AUTOREPORT_SCHEMA_VERSION,
+      taskId: 'task-7',
+      subject: 'Analyze',
+      role: 'DATA_ANALYSIS',
+      dependencies: [],
+      status: 'running',
+      revision: 1,
+      steps: [],
+      scopes: ['Data/Processed'],
+      latestDelegationRevision: 1,
+    })
+    appendWorkflowEvent(session, 'autoreport/delegation', {
+      version: AUTOREPORT_SCHEMA_VERSION,
+      taskId: 'task-7',
+      delegationRevision: 1,
+      role: 'DATA_ANALYSIS',
+      childSessionId: SessionId('child-da'),
+      acceptedMessageId: 'msg-out',
+      phase: 'waiting_for_child',
+      dispatchedAt: 10,
+    })
+    session.append('user/message', createUserMessage({
+      content: [{ type: 'text', text: JSON.stringify({
+        task_id: 'task-7',
+        delegation_revision: 1,
+        status: 'success',
+        block_type: null,
+        response: 'processed.csv written',
+        produced_files: ['Data/Processed/out.csv'],
+      }) }],
+      source: { kind: 'subagent-report', form: 'relay', senderSessionId: SessionId('child-da') },
+    }), { surfaceOp: 'append' })
+    const live = runtime.forSession(session)
+    expect(live.state.currentDelegation('task-7')?.phase).toBe('completed')
+    expect(live.state.currentDelegation('task-7')?.report?.response).toBe('processed.csv written')
+    expect(live.state.getTask('task-7')?.status).toBe('completed')
   })
 })

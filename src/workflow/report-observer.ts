@@ -1,7 +1,7 @@
 import type { Session, SessionEvent, SessionId } from '@deepseek-ai/dsh-session'
 import type { SubagentReportMessageSource, SubagentSettledMessageSource } from '@deepseek-ai/dsh-subagent'
 import type { DelegationSnapshot, TaskSnapshot } from './events.js'
-import { delegationKey, parseWorkflowEnvelope } from './protocol.js'
+import { delegationKey, parseWorkflowEnvelopeFromText } from './protocol.js'
 import type { WorkflowState } from './service.js'
 import type { WaiterRegistry, WaiterOutcome } from './waiters.js'
 
@@ -63,6 +63,17 @@ function taskMatchesAttempt(task: TaskSnapshot, delegationRevision: number): boo
 }
 
 /**
+ * Whether one attempt already accepted a valid terminal workflow report.
+ * Duplicate deliveries after this must not mutate the fold or re-enter
+ * `reportFrom` — DSH acceptance is weaker than exactly-once durable delivery.
+ * @param attempt - the delegation slot for `(task_id, revision)`.
+ * @returns true when a success/blocked envelope is already folded.
+ */
+export function hasAcceptedWorkflowReport(attempt: DelegationSnapshot): boolean {
+  return (attempt.phase === 'completed' || attempt.phase === 'blocked') && attempt.report !== undefined
+}
+
+/**
  * Mirror a non-stale delegation terminal phase onto the owning task snapshot.
  * @param state - live workflow projection.
  * @param snapshot - settled delegation attempt.
@@ -116,7 +127,7 @@ function observeDeliveredMessage(message: DeliveredMessage, deps: WorkflowReport
   const source = message.source
   if (source.kind === 'subagent-report') {
     const reportSource = source as SubagentReportMessageSource
-    const parsed = parseWorkflowEnvelope(messageText(message))
+    const parsed = parseWorkflowEnvelopeFromText(messageText(message))
     if (!parsed.ok) {
       const current = currentForChild(deps.state, reportSource.senderSessionId)
       if (current === undefined) return
@@ -138,6 +149,7 @@ function observeDeliveredMessage(message: DeliveredMessage, deps: WorkflowReport
     if (attempt === undefined || attempt.childSessionId !== reportSource.senderSessionId) return
     const reportMessageId = String(message.id)
     if (attempt.reportMessageId === reportMessageId) return
+    if (hasAcceptedWorkflowReport(attempt)) return
     const current = deps.state.currentDelegation(report.task_id)
     const stale = current === undefined || current.delegationRevision !== report.delegation_revision
     const settled: DelegationSnapshot = {
@@ -191,4 +203,19 @@ export function observeWorkflowMessage(
   if (event.type === 'agent/inbox/spliced') {
     for (const message of event.data.inserted) observeDeliveredMessage(message, deps)
   }
+}
+
+/**
+ * Replay every already-logged report delivery into the fold. Used on cold
+ * load when a process died after DSH accepted a parent message but before
+ * `autoreport/delegation` was committed. Live `session/event` observation
+ * remains the steady-state path; this pass is last-write-wins and idempotent.
+ * @param events - the Main session log in seq order.
+ * @param deps - live projection, waiters, and commit sink.
+ */
+export function recoverWorkflowReports(
+  session: Session,
+  deps: WorkflowReportObserverDependencies,
+): void {
+  for (const event of session.events) observeWorkflowMessage(session, event, deps)
 }

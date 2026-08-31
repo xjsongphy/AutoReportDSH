@@ -16,6 +16,7 @@ import {
   type TaskSnapshot,
 } from '../workflow/events.js'
 import type { WorkflowSettingsSnapshot } from '../settings.js'
+import { roleHandoffText } from '../workflow/file-notes.js'
 import { delegationKey } from '../workflow/protocol.js'
 
 const MAX_PROMPT = 16_384
@@ -56,6 +57,7 @@ function taskBriefing(
   revision: number,
   prompt: string,
   context: string | undefined,
+  handoff: string | undefined,
 ): string {
   const policy = rolePolicy(task.role)
   const checklist = task.steps.length === 0
@@ -70,6 +72,8 @@ function taskBriefing(
     `Checklist:\n${checklist}`,
     `Goal:\n${prompt}`,
     ...(context === undefined ? [] : [`Explicit user constraints:\n${context}`]),
+    ...(handoff === undefined ? [] : [handoff]),
+    'After changing files, call describe_files so each path has a fresh semantic description before report_workflow(success).',
     'Finish by calling report_workflow with this exact task_id and delegation_revision.',
   ].join('\n\n')
 }
@@ -248,7 +252,16 @@ export function createSendToAgentTool(deps: SendToAgentDependencies): ToolDefini
       }
 
       let bound = binding
-      const content: ContentBlock[] = [{ type: 'text', text: taskBriefing(task, revision, prompt, context) }]
+      const briefing = (includeHandoff: boolean): ContentBlock[] => [{
+        type: 'text',
+        text: taskBriefing(
+          task,
+          revision,
+          prompt,
+          context,
+          includeHandoff ? roleHandoffText(live.state.projection(), role) : undefined,
+        ),
+      }]
       let acceptedMessageId: string
       let rebindAttempted = false
       try {
@@ -260,7 +273,7 @@ export function createSendToAgentTool(deps: SendToAgentDependencies): ToolDefini
               label: `AutoReport ${role}`,
               childId: bound.childSessionId,
               request: {
-                prompt: content,
+                prompt: briefing(true),
                 parent,
                 ...(agentOptions === undefined ? {} : { agentOptions }),
                 maxDepth: 1,
@@ -279,7 +292,7 @@ export function createSendToAgentTool(deps: SendToAgentDependencies): ToolDefini
           }
           try {
             const source: CoordinatorMessageSource = { kind: 'coordinator', form: 'relay', senderSessionId: parent.id }
-            return String(await deps.subagents.followup(parent, bound.childSessionId, content, {
+            return String(await deps.subagents.followup(parent, bound.childSessionId, briefing(false), {
               source,
               signal: exec.signal,
             }))

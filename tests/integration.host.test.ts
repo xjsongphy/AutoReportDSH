@@ -81,7 +81,7 @@ describe('integration: assembled host (real context)', () => {
     assembled.runtime.roleRegistry.registerReserved(binding)
     const theory = makeChildRecorder('it-theory')
     setup(theory.ctx)
-    expect(theory.toolNames).toEqual(['report_workflow'])
+    expect(theory.toolNames).toEqual(['describe_files', 'report_workflow'])
     expect(theory.skillNames).toEqual([])
     expect(theory.toolNames).not.toContain('report')
     expect(theory.sections.some(section => section.text.includes('THEORY'))).toBe(true)
@@ -90,7 +90,7 @@ describe('integration: assembled host (real context)', () => {
     assembled.runtime.roleRegistry.registerReserved(reportBinding)
     const reporter = makeChildRecorder('it-report')
     setup(reporter.ctx)
-    expect(reporter.toolNames).toEqual(['report_workflow'])
+    expect(reporter.toolNames).toEqual(['describe_files', 'report_workflow'])
     expect(reporter.skillNames).toEqual(['experiment-report-writer', 'latex-compile'])
     expect(reporter.sections.map(section => section.name)).not.toEqual(expect.arrayContaining([
       'autoreport:skill:experiment-report-writer',
@@ -101,7 +101,7 @@ describe('integration: assembled host (real context)', () => {
       ...binding, role: 'PLOTTING', childSessionId: SessionId('it-plotting-bound'),
     })
     setup(plotter.ctx)
-    expect(plotter.toolNames).toEqual(['report_workflow'])
+    expect(plotter.toolNames).toEqual(['describe_files', 'report_workflow'])
     expect(plotter.skillNames).toEqual([])
   })
 

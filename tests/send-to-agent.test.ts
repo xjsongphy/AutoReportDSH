@@ -174,10 +174,33 @@ describe('send_to_agent', () => {
       phase: 'completed',
       settledAt: 2,
     })
+    workflow.commit(session, 'autoreport/artifact', {
+      version: AUTOREPORT_SCHEMA_VERSION,
+      path: 'Theory/model.md',
+      producedBy: 'THEORY',
+      origin: 'fs-tool',
+      status: 'created',
+      recordedAt: 3,
+      taskId: 'task-1',
+      delegationKey: 'task-1#1',
+    })
+    workflow.commit(session, 'autoreport/file-note', {
+      version: AUTOREPORT_SCHEMA_VERSION,
+      path: 'Theory/model.md',
+      description: 'linearized pendulum',
+      descriptionUpdatedAt: 4,
+      producedBy: 'THEORY',
+      notes: 'small-angle',
+    })
     await expect(call({ role: 'THEORY', task_id: 'task-1', prompt: 'second', wait: false }))
       .resolves.toMatchObject({ status: 'delegated', delegation_revision: 2, message_id: 'msg-rebind' })
     expect(subagents.followup).toHaveBeenCalledOnce()
     expect(subagents.startContinuable).toHaveBeenCalledTimes(2)
+    const rebindPrompt = (subagents.startContinuable.mock.calls[1]?.[0] as {
+      request?: { prompt?: { type: string; text?: string }[] }
+    }).request?.prompt?.map(block => block.text ?? '').join('') ?? ''
+    expect(rebindPrompt).toContain('Role memory for THEORY')
+    expect(rebindPrompt).toContain('Theory/model.md: linearized pendulum')
     expect(state.bindingForRole('THEORY')?.childSessionId).toBe('child-b')
     expect(state.currentDelegation('task-1')?.childSessionId).toBe('child-b')
   })

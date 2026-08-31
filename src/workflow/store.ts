@@ -18,6 +18,7 @@ const AUTOREPORT_EVENT_TYPES = new Set<string>([
   'autoreport/task',
   'autoreport/delegation',
   'autoreport/artifact',
+  'autoreport/file-note',
 ])
 
 /**
@@ -34,7 +35,7 @@ export function isAutoreportEvent(type: SessionEventType): boolean {
  * ignorable marker. The returned event is the committed log entry: assigned
  * `seq`/`time` plus the frozen data snapshot.
  * @param session - owning session (MAIN's workflow session in practice).
- * @param type - one of the five `autoreport/*` types.
+ * @param type - one of the AutoReport `autoreport/*` types.
  * @param data - complete payload snapshot; must be JSON-serializable.
  * @returns the logged event.
  */

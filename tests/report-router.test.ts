@@ -10,11 +10,14 @@ import {
 } from '@deepseek-ai/dsh-sandbox-policy/src/session-mode.ts'
 import { RoleRegistry } from '../src/workflow/role-registry.js'
 import type { Config } from '../src/config.js'
-import type { RoleBindingSnapshot } from '../src/workflow/events.js'
+import { AUTOREPORT_SCHEMA_VERSION, type RoleBindingSnapshot } from '../src/workflow/events.js'
 import { installRoutedReportTool } from '../src/tools/report-router.js'
 import { installWorkflowReportTool } from '../src/tools/report-workflow.js'
 import { roleWritableRoot } from '../src/policy/sandbox-roots.js'
 import { seedSyncedResourceStubs } from './helpers/synced-resource-stubs.js'
+import { appendWorkflowEvent } from '../src/workflow/store.js'
+import { WorkflowState } from '../src/workflow/service.js'
+import { WaiterRegistry } from '../src/workflow/waiters.js'
 
 const overlayRoot = seedSyncedResourceStubs(mkdtempSync(join(tmpdir(), 'autoreport-router-overlay-')))
 afterAll(() => rmSync(overlayRoot, { recursive: true, force: true }))
@@ -103,7 +106,7 @@ describe('report router', () => {
     }
     roleRegistry.registerReserved(binding)
     installRoutedReportTool(child.ctx, host.ctx, { roleRegistry, config: CONFIG, workflowForChild: () => undefined, overlayRoot })
-    expect(child.tools.map(tool => tool.name)).toEqual(['report_workflow'])
+    expect(child.tools.map(tool => tool.name)).toEqual(['describe_files', 'report_workflow'])
     expect(child.skills).toEqual([])
     expect(child.sections.some(section => section.text.includes('THEORY'))).toBe(true)
     expect(child.tools.some(tool => tool.name === 'report')).toBe(false)
@@ -126,7 +129,7 @@ describe('report router', () => {
       provisioning: 'reserved',
     })
     installRoutedReportTool(child.ctx, host.ctx, { roleRegistry, config: CONFIG, workflowForChild: () => undefined, overlayRoot })
-    expect(child.tools.map(tool => tool.name)).toEqual(['report_workflow'])
+    expect(child.tools.map(tool => tool.name)).toEqual(['describe_files', 'report_workflow'])
     expect(child.skills.map(skill => skill.name)).toEqual([
       'experiment-report-writer',
       'latex-compile',
@@ -163,17 +166,25 @@ describe('report router', () => {
       get: () => undefined,
     } as unknown as Context
     installRoutedReportTool(ctx, hostContext().ctx, { roleRegistry, config: CONFIG, workflowForChild: () => undefined, overlayRoot })
-    expect(tools.map(tool => tool.name)).toEqual(['report_workflow'])
+    expect(tools.map(tool => tool.name)).toEqual(['describe_files', 'report_workflow'])
   })
 })
 
 describe('report_workflow', () => {
+  function toolNamed(tools: { name: string }[], name: string) {
+    const tool = tools.find(entry => entry.name === name) as {
+      name: string
+      execute: (args: Record<string, unknown>, exec: unknown) => Promise<unknown>
+    } | undefined
+    if (tool === undefined) throw new Error(`missing tool ${name}`)
+    return tool
+  }
+
   it('serializes a validated envelope through reportFrom', async () => {
     const child = childContext()
     const host = hostContext()
     installWorkflowReportTool(child.ctx, host.ctx, 'REPORT')
-    const tool = child.tools[0] as { execute: (args: Record<string, unknown>, exec: unknown) => Promise<{ messageId: string }> }
-    const result = await tool.execute({
+    const result = await toolNamed(child.tools, 'report_workflow').execute({
       task_id: 'task-3',
       delegation_revision: 2,
       status: 'success',
@@ -183,7 +194,9 @@ describe('report_workflow', () => {
     expect(result).toEqual({ messageId: 'report-msg' })
     expect(host.reportFrom).toHaveBeenCalledOnce()
     const content = host.reportFrom.mock.calls[0]?.[1] as { type: string; text: string }[]
-    expect(JSON.parse(content[0]?.text ?? '{}')).toMatchObject({
+    expect(content[0]?.text).toContain('REPORT → MAIN')
+    expect(content[0]?.text).toContain('Details')
+    expect(JSON.parse(content[1]?.text ?? '{}')).toMatchObject({
       task_id: 'task-3',
       delegation_revision: 2,
       status: 'success',
@@ -196,13 +209,154 @@ describe('report_workflow', () => {
     const child = childContext()
     const host = hostContext()
     installWorkflowReportTool(child.ctx, host.ctx, 'PLOTTING')
-    const tool = child.tools[0] as { execute: (args: Record<string, unknown>, exec: unknown) => Promise<unknown> }
-    await expect(tool.execute({
+    await expect(toolNamed(child.tools, 'report_workflow').execute({
       task_id: 'task-3',
       delegation_revision: 1,
       status: 'blocked',
       response: 'need data',
     }, { agent: { id: SessionId('child-1') }, signal: new AbortController().signal })).rejects.toThrow(/invalid workflow report/)
     expect(host.reportFrom).not.toHaveBeenCalled()
+  })
+
+  function hostWithDirtyTheory() {
+    const session = Session.create(SessionId('main'))
+    const state = WorkflowState.fromSession(session)
+    const waiters = new WaiterRegistry()
+    const commit = <T extends keyof import('@deepseek-ai/dsh-session').SessionEventMap & string>(
+      type: T,
+      data: import('@deepseek-ai/dsh-session').SessionEventMap[T],
+    ): void => {
+      state.apply(appendWorkflowEvent(session, type, data))
+    }
+    commit('autoreport/task', {
+      version: AUTOREPORT_SCHEMA_VERSION,
+      taskId: 'task-3',
+      subject: 'Derive',
+      role: 'THEORY',
+      dependencies: [],
+      status: 'running',
+      revision: 1,
+      steps: [],
+      scopes: ['Theory'],
+      latestDelegationRevision: 1,
+    })
+    commit('autoreport/delegation', {
+      version: AUTOREPORT_SCHEMA_VERSION,
+      taskId: 'task-3',
+      delegationRevision: 1,
+      role: 'THEORY',
+      childSessionId: SessionId('child-1'),
+      phase: 'waiting_for_child',
+      dispatchedAt: 1,
+    })
+    commit('autoreport/artifact', {
+      version: AUTOREPORT_SCHEMA_VERSION,
+      path: 'Theory/model.md',
+      producedBy: 'THEORY',
+      origin: 'fs-tool',
+      status: 'created',
+      recordedAt: 10,
+      taskId: 'task-3',
+      delegationKey: 'task-3#1',
+    })
+    const runtime = {
+      workflowForChild: () => ({ session, runtime: { state, waiters } }),
+      commit: (
+        target: typeof session,
+        type: Parameters<typeof appendWorkflowEvent>[1],
+        data: Parameters<typeof appendWorkflowEvent>[2],
+      ) => {
+        const event = appendWorkflowEvent(target, type, data)
+        state.apply(event)
+        return event
+      },
+    }
+    const reportFrom = vi.fn(async () => 'report-msg')
+    return {
+      ctx: {
+        subagents: { reportFrom },
+        get: (name: string) => name === 'autoreportWorkflow' ? runtime : undefined,
+      } as unknown as Context,
+      reportFrom,
+      runtime,
+      state,
+      session,
+    }
+  }
+
+  it('rejects success while semantic descriptions are stale, then accepts after describe_files', async () => {
+    const child = childContext()
+    const host = hostWithDirtyTheory()
+    installWorkflowReportTool(child.ctx, host.ctx, 'THEORY')
+    const exec = { agent: { id: SessionId('child-1') }, signal: new AbortController().signal }
+    const report = {
+      task_id: 'task-3',
+      delegation_revision: 1,
+      status: 'success',
+      response: 'derived',
+      produced_files: ['Theory/model.md'],
+    }
+    await expect(toolNamed(child.tools, 'report_workflow').execute(report, exec))
+      .rejects.toThrow(/semantic manifest is stale/)
+    expect(host.reportFrom).not.toHaveBeenCalled()
+
+    const described = await toolNamed(child.tools, 'describe_files').execute({
+      files: [{ path: 'Theory/model.md', description: 'linearized pendulum', notes: 'small-angle' }],
+    }, exec)
+    expect(described).toEqual({ paths: ['Theory/model.md'] })
+    expect(host.state.projection().fileNotes.get('Theory/model.md')?.description).toBe('linearized pendulum')
+
+    await expect(toolNamed(child.tools, 'report_workflow').execute(report, exec))
+      .resolves.toEqual({ messageId: 'report-msg' })
+    expect(host.reportFrom).toHaveBeenCalledOnce()
+  })
+
+  it('returns the accepted reportMessageId without calling reportFrom again', async () => {
+    const child = childContext()
+    const host = hostWithDirtyTheory()
+    host.runtime.commit(host.session, 'autoreport/delegation', {
+      version: AUTOREPORT_SCHEMA_VERSION,
+      taskId: 'task-3',
+      delegationRevision: 1,
+      role: 'THEORY',
+      childSessionId: SessionId('child-1'),
+      phase: 'completed',
+      dispatchedAt: 1,
+      report: {
+        task_id: 'task-3',
+        delegation_revision: 1,
+        status: 'success',
+        block_type: null,
+        response: 'already accepted',
+        produced_files: ['Theory/model.md'],
+      },
+      reportMessageId: 'already-accepted',
+      settledAt: 99,
+    })
+    installWorkflowReportTool(child.ctx, host.ctx, 'THEORY')
+    await expect(toolNamed(child.tools, 'report_workflow').execute({
+      task_id: 'task-3',
+      delegation_revision: 1,
+      status: 'success',
+      response: 'retry after crash',
+      produced_files: ['Theory/model.md'],
+    }, { agent: { id: SessionId('child-1') }, signal: new AbortController().signal }))
+      .resolves.toEqual({ messageId: 'already-accepted' })
+    expect(host.reportFrom).not.toHaveBeenCalled()
+  })
+
+  it('allows blocked reports even when descriptions are stale', async () => {
+    const child = childContext()
+    const host = hostWithDirtyTheory()
+    installWorkflowReportTool(child.ctx, host.ctx, 'THEORY')
+    await expect(toolNamed(child.tools, 'report_workflow').execute({
+      task_id: 'task-3',
+      delegation_revision: 1,
+      status: 'blocked',
+      block_type: 'missing_data',
+      response: 'need raw csv',
+    }, { agent: { id: SessionId('child-1') }, signal: new AbortController().signal }))
+      .resolves.toEqual({ messageId: 'report-msg' })
+    expect(host.reportFrom).toHaveBeenCalledOnce()
   })
 })
