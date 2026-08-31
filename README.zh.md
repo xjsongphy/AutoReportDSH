@@ -1,333 +1,181 @@
-<p align="center">
-  <img src="assets/title.svg" alt="AutoReportDSH — 在 DeepSeek Harness 上生成物理实验报告" width="100%" />
-</p>
+<div align="center">
 
-<p align="center">
-  面向物理实验报告的固定角色工作流，构建于 <a href="https://github.com/deepseek-ai/deepseek-harness">DeepSeek Harness</a>。
-</p>
+<img src="assets/title.svg" alt="AutoReportDSH" width="100%" />
 
-<p align="center">
-  <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-3f7ecb?style=flat-square" alt="支持 macOS、Linux 和 Windows" />
-  <img src="https://img.shields.io/badge/runtime-Node%2022.19%2B-339933?style=flat-square" alt="Node.js 22.19 或更高版本" />
-  <img src="https://img.shields.io/badge/DeepSeek%20Harness-plugin-3366cc?style=flat-square" alt="DeepSeek Harness 插件" />
-  <img src="https://img.shields.io/badge/report-LaTeX%20%7C%20Typst-7560c8?style=flat-square" alt="支持 LaTeX 与 Typst" />
-  <img src="https://img.shields.io/badge/status-developer%20preview-f2a900?style=flat-square" alt="开发者预览版" />
-</p>
+### 面向 DeepSeek Harness 的固定团队物理实验报告工作流
 
-<p align="center">
-  <a href="README.md">English</a> | 中文
-</p>
+[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey.svg)](#)
+[![Node](https://img.shields.io/badge/node-22.19%2B-339933.svg)](https://nodejs.org/)
+[![DeepSeek Harness](https://img.shields.io/badge/DeepSeek%20Harness-plugin-3366cc.svg)](https://github.com/deepseek-ai/deepseek-harness)
 
-> **开发者预览版。** 当前支持从源码安装，并有完整的无密钥集成测试覆盖。npm/DSH bundle 正式发布流程已预留，但尚未发布。
+[English](README.md) | 中文
 
-AutoReportDSH 将 [AutoReportCLI](../autoreportcli) 的报告领域工作流迁移为 DeepSeek Harness（`dsh`）插件。DSH 负责通用运行时：agent loop、持续子会话、持久化、上下文压缩、模型路由、工具管线、子进程生命周期、审批、沙箱和 Web UI。AutoReportDSH 只负责报告领域语义：固定角色、委派状态、角色可写根目录、报告资源、编译 skill 和产物追踪。
+</div>
 
-完整架构和实现记录见 [PLAN.md](PLAN.md)。
+一款运行在 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 上的
+**固定团队报告工作流**，用 LaTeX 或 Typst 自动撰写物理实验报告。它把
+[AutoReportCLI](../autoreportcli) 的报告领域行为迁成 `dsh` 插件 —— 不再造第二套
+harness，不自带 provider，不加一层 agent loop。
+DSH 是运行时，实验目录就是项目；选择 **`autoreport`** 即进入工作流。
 
-## 功能概览
+开发者预览版：目前只支持从源码安装。npm / `dsh plugin add` 发布流程已预留，但
+**尚未发布**。
 
-选择可选的 **`autoreport`** agent preset 后，会启用一个固定的五角色团队：
+## 概述
 
-| 角色 | 职责 | 可写目录 |
-|---|---|---|
-| MAIN | 审计实验范围、跟踪依赖、委派任务、面向用户汇报 | `Outline/` |
-| THEORY | 理论推导、假设与可复用公式 | `Theory/` |
-| DATA_ANALYSIS | 处理原始测量数据与定量结果 | `Data/Processed/` |
-| PLOTTING | 绘图脚本与图像 | `Plots/` |
-| REPORT | LaTeX/Typst 源码与报告编译 | `Report/` |
+AutoReportDSH 保留 AutoReportCLI 的五角色报告流水线，但跑在 DSH 里。打开一个实验目录，
+选择 `autoreport` preset，通过普通 DSH session 协调 Main、Theory、Data Analysis、
+Plotting 和 Report。未选择该 preset 的 `standard` session 仍是原样 DSH。
 
-模型使用 DSH 原生的 `read` / `write` / `edit` / `bash` / `skill`（搜索走 bash 中的 `rg`/`find`）。MAIN 只额外看到很小的 AutoReport 领域接口：
+## 功能特性
 
-```text
-send_to_agent     向固定角色委派任务，并持久化任务/版本状态
-ask_user_question DSH 原生结构化提问，用于需求缺口
-```
+### 核心能力
+- **多智能体协作** — Main、Theory、Data Analysis、Plotting、Report 分工协作，并拥有各自的写入边界
+- **面向项目目录** — 当前文件夹即实验项目；`/report-init` 或 MAIN 的首个 turn 会创建标准目录，不覆盖已有用户文件
+- **LaTeX 与 Typst 报告** — 支持语言选择、内置模板/主题、参考文献资源、编译 skill，以及基于 Python 的数据分析和绘图
+- **使用 DSH 的 Provider** — 只用 DSH 里已配置的模型路由；AutoReportDSH 不维护自己的凭证或 provider 列表
+- **资源同步** — 插件启动时把清单中的远端刷新到 `$DSH_HOME/autoreport/resources`；`pnpm run sync:resources` 不必启动 DSH 也能做同样的事
+- **任务与产物追踪** — `send_to_agent` 记录持久化任务和版本；specialist 用 `report_workflow` 结束；manifest 写在 `$DSH_HOME` 下，不进实验目录
+- **安全执行** — DSH `workspace-write` 把每个角色钉在各自的可写根目录；AutoReport session 不能通过 `sandbox_permissions` 提权；网络允许访问
+- **内置默认资源** — 自带 persona、模板和 skills，新项目开箱即用
 
-specialist 是 DSH continuable child session。它们会保留角色上下文，能够接收后续任务，并通过 `report_workflow` 返回结构化结果。用户直接与 specialist 对话时，那是普通对话；没有活跃 workflow delegation 上下文时，不会自动创建或完成任务。
+### 工作流
+- **可选 preset** — 只有顶层 `autoreport` session 进入 runtime；加载 overlay 不会改变普通 DSH session
+- **很小的模型接口** — MAIN 只增加 `send_to_agent`（外加 DSH 的 `ask_user_question`）；specialist 增加 `report_workflow`；其余是 DSH 的 `read` / `write` / `edit` / `bash` / `skill`
+- **可续写的 specialist** — child 在后续任务中保留角色上下文；用户直接与 specialist 对话是普通对话，不会自动变成 workflow 任务
+- **按角色隔离的 skill** — MAIN 有 `pdf-reference-reader`；REPORT 有 `experiment-report-writer` 以及 `latex-compile` 或 `typst-compile`；实验目录 `References/skills` 是按 cwd 发现的 DSH skill 根
+- **设置与实时模型** — 语言、等待超时和 Python 在 **设置 → 插件 → 插件配置**；运行中的 specialist 在对话窗口切换模型
+- **Python 环境** — AutoReport 托管 venv（`$DSH_HOME/autoreport/venv`）、检测到的本机解释器，或自定义路径；owned bash 注入 `DSH_AUTOREPORT_PYTHON` 并前置 PATH，因此裸的 `python3` 也会打到该解释器
 
-AutoReport 专属 skill 按角色隔离：MAIN 有 `pdf-reference-reader`（MinerU / mineru-open-api），把 References 中的 PDF 抽到 `Outline/.cache/mineru/`；REPORT 通过渐进披露获得 `experiment-report-writer` 和当前语言的编译 skill（`latex-compile` 或 `typst-compile`）；THEORY、DATA_ANALYSIS、PLOTTING 不获得这些领域 skill。实验目录 `References/skills` 是按 cwd 发现的 DSH skill 根。DSH 的用户/项目 skill 仍遵循原本的 DSH 可见性。
+## 快速开始
 
-## 与普通 DSH 共存
+**前置依赖：** Node.js 22.19+ 或 24+、启用 Corepack 的 pnpm，以及一份与
+[docs/dependencies.md](docs/dependencies.md) 中 pin 一致的相邻
+[DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) checkout。
+在 DSH 发布 `Session.append(..., { ignorable: true })` 和逐会话
+`sandbox/workspace-root` 之前，需要打上 `patches/` 里与 CI 相同的两份补丁。
+PATH 上的全局 `dsh` **不能**代替这份打过补丁的 checkout。
 
-安装 overlay 不会把所有 DSH session 变成 AutoReport：
-
-```text
-standard           普通 DSH 行为
-autoreport    AutoReport 物理实验报告工作流
-```
-
-只有有效 preset 为 `autoreport` 的顶层 session 才会进入 AutoReport runtime。普通 session 保留原有 shell、文件权限、子 agent report 工具和工作目录行为；这一共存约束已有集成测试。
-
-## 安装
-
-**现在：** 从源码安装（本节）。这是当前唯一支持的方式。
-
-**以后：** 包发布到 npm 后，用 `dsh plugin add` 安装。命令见 [计划中的 npm / DSH bundle 发布方式](#计划中的-npm--dsh-bundle-发布方式)，**现在还不能用**。
-
-## 从源码运行
-
-两个仓库必须是相邻目录：开发版 `package.json` 用 `link:` 指向本地 harness checkout。
-
-### 前置条件
-
-- Node.js `22.19+` 或 `24+`
-- 启用 Corepack 的 pnpm
-- 本地 DeepSeek Harness checkout，版本为 [docs/dependencies.md](docs/dependencies.md) 中的 pin，并已打上 `patches/` 里的两份补丁
-- DSH 原生 bash 与 workspace-write 沙箱（macOS Seatbelt、Linux bwrap/Landlock、Windows ACL）
-
-### 1. 将两个仓库克隆为相邻目录
-
-```sh
+```bash
 cd /path/to/your/development-directory
-
 git clone https://github.com/deepseek-ai/deepseek-harness.git deepseek-harness
 git clone https://github.com/xjsongphy/AutoReportDSH.git AutoReportDSH
-```
 
-### 2. 给 DeepSeek Harness 打补丁并构建
-
-在 DSH 自身发布 `Session.append(..., { ignorable: true })` 和逐会话 `sandbox/workspace-root` 之前，打上与 CI 相同的补丁（见 [docs/dependencies.md](docs/dependencies.md)）：
-
-```sh
 cd deepseek-harness
 git checkout <docs/dependencies.md 中的 DSH_REF>
 git apply ../AutoReportDSH/patches/deepseek-harness-ignorable-append.patch
 git apply ../AutoReportDSH/patches/deepseek-harness-sandbox-workspace-root.patch
-corepack enable
-pnpm install
-pnpm run build
-```
+corepack enable && pnpm install && pnpm run build
 
-PATH 上已有的 `@deepseek-ai/dsh` 全局 CLI **不能**代替这份打过补丁的 checkout，直到上述 API 进入已发布的 DSH 版本。
-
-### 3. 安装、测试并构建 AutoReportDSH
-
-```sh
 cd ../AutoReportDSH
-
-pnpm install
-pnpm test
-pnpm run build
-```
-
-无密钥测试会覆盖 workflow 持久化、preset 成员判定、角色可写根目录、报告资源、产物 manifest 和真实 Loader 启动。`tests/eval/workflow-eval.test.ts` 覆盖八条 assembled workflow eval（LaTeX/Typst 全链路、blocked 恢复、忘记 `report_workflow`、cold rebind、artifact `modified`、Python snapshot、coexistence）。
-
-### 刷新外部维护的 skill
-
-插件启动时把清单里的远端文件增量同步到 **`$DSH_HOME/autoreport/resources`**（对应 AutoReportCLI 的 `~/.autoreport`）。按 Git blob 判断：只下载变过的文件。远端路径消失或拉取失败则保留上次 overlay 副本。这些文件**不进本仓库**。
-
-`pnpm run sync:resources` 做同样的刷新，不必启动 DSH。清单覆盖 AutoReportCLI 仍存在的上游（不包括 cc-switch，provider 由 DSH 管）以及已冻结的 `experiment-report-writer` 投影。Typst 只保留 `SKILL.md` 和 basics/styling/tables/academic。仓库里捆绑的 skill 仍在 `resources/skills/`。
-
-### 4. 安装 AutoReport preset
-
-```sh
+pnpm install && pnpm test && pnpm run build
 pnpm run install:preset
 ```
 
-该命令会写入渲染后的 user preset：
+`pnpm run install:preset` 会写入 `$DSH_HOME/.agent-presets/autoreport/`，链上供
+Web 设置卡片使用的包，并生成 `cordis.overlay.generated.yml`。直接 `dsh web`
+**不会**加载 AutoReport；在正式 profile 接管 overlay 之前，每次启动都要带 `--patch`。
 
-```text
-$DSH_HOME/.agent-presets/autoreport/   # 默认 home 是 ~/.dsh
-```
-
-把本包装到 `$DSH_HOME/profiles/node_modules/autoreportdsh`（供 Web 加载设置卡片），并在本仓库生成 `cordis.overlay.generated.yml`。安装器会覆盖 AutoReport 自己管理的 preset 文件，并保留该目录下无关的用户文件。preset id 更名后残留的 `$DSH_HOME/.agent-presets/autoreport-main/` 会在写入新目录后退役（新安装尚未拥有的用户文件会一并迁过去）。以 `autoreport-main` 保存的旧 session 仍视为 AutoReport。若要彻底替换过期安装，先删除 `$DSH_HOME/.agent-presets/autoreport/` 再重跑。
-
-使用隔离的 harness home：
-
-```sh
-DSH_HOME=/tmp/autoreport-dsh-home \
-  pnpm run install:preset -- --home "$DSH_HOME"
-```
-
-直接运行 `dsh web` **不会**加载 AutoReport。overlay 不在 stock 的 web/headless profile 里，每次启动都要带 `--patch`。
-
-### 5. 使用 overlay 启动本地 harness
-
-启动**打过补丁的 sibling** harness（在上述两个 API 进入 DSH 发布版之前必须如此）：
-
-```sh
+```bash
 cd ../deepseek-harness
-
-pnpm dsh web \
-  --port 3081 \
-  --patch ../AutoReportDSH/cordis.overlay.generated.yml
+pnpm dsh web --port 3081 --patch ../AutoReportDSH/cordis.overlay.generated.yml
 ```
 
-访问 `http://127.0.0.1:3081`，新建 session 后选择 **`autoreport`**。报告工作流默认值在 **设置 → 插件 → 插件配置 → AutoReport**。若已有 DSH Web 服务占用默认的 `3080` 端口，请使用其他端口。
+打开 `http://127.0.0.1:3081`，新建 session，选择 **`autoreport`**，并把工作目录指到实验文件夹。若 `3080` 已被占用，换一个端口。
 
-若 PATH 上已有全局 `dsh`（`npm i -g @deepseek-ai/dsh`），同一 `--patch` 只有在该 CLI 已包含上述两个 API 时才能用。在此之前请用 sibling checkout 里的 `pnpm dsh`，不要用全局二进制：
-
-```sh
-dsh web --port 3081 --patch /absolute/path/to/AutoReportDSH/cordis.overlay.generated.yml
-```
-
-单次 headless 运行：
-
-```sh
+```bash
 pnpm dsh headless \
   --patch ../AutoReportDSH/cordis.overlay.generated.yml \
   "为这个实验工作目录创建报告大纲"
 ```
 
-## 第一次报告工作流
-
-选择 `autoreport` 后，可显式初始化工作目录；或者由 MAIN 的首个 workflow turn 自动、幂等地初始化：
-
-```text
-/report-init
-/report-init --language latex
-/report-init --language typst
-```
-
-`/report-init` 会创建所需目录并仅补齐缺失资源，绝不覆盖用户文件。LaTeX 与 Typst 文件可以共存，实际活动语言由 project setting 决定。
-
-```text
-Data/
-├── Processed/
-References/
-Theory/
-Plots/
-├── Fig/
-└── Scripts/
-Report/
-Outline/
-```
-
-随后可以直接让 MAIN 开始：
-
-```text
-审阅实验文件，创建报告任务，并产出第一版报告草稿。
-```
-
-MAIN 通过 `send_to_agent` 有界地委派工作；specialist 读取共享工作目录，并把持久化结果返回 MAIN。
+隔离的 DSH home：`DSH_HOME=/tmp/autoreport-dsh-home pnpm run install:preset -- --home "$DSH_HOME"`。
 
 ## 配置
 
-DSH 负责所有模型/provider 和凭证配置；AutoReportDSH 只使用 DSH 中已配置的模型路由，不维护自己的 provider 系统。
-
-AutoReportDSH 只管理报告工作流配置。新工作流按以下优先级冻结设置：
+Provider、凭证和 MAIN 模型路由由 DSH 负责。AutoReportDSH 只在工作流开始时冻结报告策略：
 
 ```text
 项目设置            <dshHome>/autoreport/<workspaceId>/project.json
         ↓
 DSH 用户设置        namespace: autoreport
         ↓
-Cordis composition 默认值
+composition 默认值
         ↓
 schema 默认值
 ```
 
-解析后的值会写入 durable `autoreport/workflow` event 的 `WorkflowSettingsSnapshot`。之后修改设置，不会改变正在执行的报告。resolver 保留了内部 workflow override seam，供未来的结构化 command 使用；v1 故意不提供用户入口。
+之后改设置，不会影响正在跑的报告。
 
-当前 composition 默认值：
+- **设置卡片** — `defaultReportLanguage`、`delegationWaitTimeoutMs`、`pythonExecutable` 在 **设置 → 插件 → 插件配置**
+- **specialist 模型** — 新建 worker 默认继承 MAIN，除非在 cordis 或项目设置里写了 `specialistModel`；运行中的 worker 在对话窗口切换（`session.models` / `selectModel`）
+- **Python** — 托管（`__managed__` → `$DSH_HOME/autoreport/venv`，保存时用 `uv venv --seed` 或 `python3 -m venv` 创建）、本机（conda / virtualenv / pyenv / PATH，若存在也包括 `~/.autoreport/venv`），或自定义绝对路径
+- **`/report-init [--language latex|typst]`** — 幂等初始化；LaTeX 与 Typst 文件可以共存，活动语言由项目设置决定。命令注册在 host 全局 catalog；非 AutoReport session 会在产生任何文件改动前被拒绝
+
+## 工作区结构
 
 ```text
-defaultReportLanguage   latex
-specialistModel         继承 MAIN（cordis/项目可选路由；运行中的工作智能体在对话窗口切换）
-delegationWaitTimeoutMs 600000
-pythonExecutable        可选；AutoReport 托管 venv（`__managed__` → `$DSH_HOME/autoreport/venv`）、本机已检测的解释器，或自定义绝对路径
+.
+├── Data/            原始数据（Data/Raw）与处理结果（Data/Processed）
+├── References/      论文、图片、模板、自定义 skills
+├── Theory/          Theory 智能体输出
+├── Plots/           图表（Plots/Fig）与脚本（Plots/Scripts）
+├── Report/          当前 LaTeX/Typst 源文件与编译后的 PDF
+└── Outline/         Main 智能体的大纲与规划
 ```
 
-`autoreport` 用户设置 namespace 已通过 `@deepseek-ai/dsh-settings` 注册并持久化、校验 `defaultReportLanguage`、`delegationWaitTimeoutMs` 和可选的 `pythonExecutable`。浏览器设置卡片在 **设置 → 插件 → 插件配置**。修改这些值不会改变已经在跑的报告。工作智能体的模型、提供方和推理力度不在这张卡片上改：在 **设置 → 模型** 里新增提供方，把前台切到该工作智能体后用 DSH 对话窗口的模型列表切换（同一套 `session.models` / `selectModel`）。新建工作智能体默认继承 MAIN，除非在 cordis 或项目设置里写了 `specialistModel`。
+程序状态不写进实验目录（`$DSH_HOME` 默认为 `~/.dsh`）：
 
-Python 选择与 AutoReportCLI 一样是三选一：**AutoReport 托管**（保存在 `$DSH_HOME/autoreport/venv`，保存时若不存在则用 `uv venv --seed` 或 `python3 -m venv` 创建）、**本机**（检测到的 conda / virtualenv / pyenv / PATH，若存在也会列出 AutoReportCLI 的 `~/.autoreport/venv`），或 **自定义路径**。选中的解释器会作为 `DSH_AUTOREPORT_PYTHON` 注入 owned bash，并将其 bin 目录前置到 `PATH`，因此 `"$DSH_AUTOREPORT_PYTHON"` 和裸的 `python3` 都会打到这个解释器。
+```text
+$DSH_HOME/
+├── .agent-presets/autoreport/     已安装的 user preset
+├── profiles/node_modules/autoreportdsh
+└── autoreport/
+    ├── resources/                 同步的模板、主题、skills
+    ├── venv/                      AutoReport 托管的 Python（可选）
+    └── <workspaceId>/
+        ├── project.json           语言、Python、specialist 路由
+        └── manifests/             派生的产物投影
+```
 
-## 安全模型
+## 开发
 
-角色边界由运行时强制执行，而不只是 persona 中的文字约束：
+```text
+AutoReportDSH/
+├── cordis.template.yml    host + report-router overlay
+├── patches/               sibling Harness API 补丁
+├── presets/autoreport/    user preset（id = 目录名）
+├── resources/             捆绑的 persona、skills、LaTeX 模板
+├── scripts/               preset 安装、资源同步、client 构建
+├── src/
+│   ├── host.ts · preset.ts · runtime.ts · client/
+│   ├── workflow/ · tools/ · policy/ · workspace/ · artifacts/
+│   └── python-detect.ts · python-env.ts · settings.ts
+└── tests/                 unit、integration、client/、eval/、e2e/
+```
 
-- 每个角色的导航 cwd 都是实验根目录。
-- DSH `workspace-write` 沙箱把每个角色钉在各自的可写根目录（`Outline/`、`Theory/`、`Data/Processed/`、`Plots/`、`Report/`）。
-- 五个角色都使用 DSH 原生 `bash`。网络允许访问；可写根目录隔离与网络策略是两件事。
-- AutoReport session 不能通过 `sandbox_permissions` 扩大写权限。
-- MAIN 可以用 bash 和 `pdf-reference-reader` skill 解析 PDF，但不能写到 `Outline/` 以外。
-- specialist 通过 bash 与 skill 编译、运行 Python，不再使用专用 model tool。
-- 用户直接与 specialist 对话时，角色文件权限不变。
-
-## 测试
-
-```sh
+```bash
 pnpm test
 pnpm run build
 ```
 
-真实 provider smoke 是显式 opt-in，并直接使用 DSH 当前已配置的默认模型路由：
+`tests/eval/workflow-eval.test.ts` 覆盖 assembled workflow 路径（LaTeX/Typst 全链路、
+blocked 恢复、忘记 `report_workflow`、cold rebind、artifact `modified`、Python snapshot、
+coexistence）。真实 provider smoke 是显式 opt-in：
 
-```sh
+```bash
 export AUTOREPORT_LIVE_TEST=1
 export AUTOREPORT_E2E_DSH_HOME="/path/to/configured/dsh-home"
 pnpm vitest run tests/e2e/configured-route.e2e.test.ts
 ```
 
-见 [docs/live-provider-testing.md](docs/live-provider-testing.md)。该测试不声明 provider、模型、endpoint 或 API key；由 DSH 按所选 deployment profile 使用实际配置的 route。
+见 [docs/live-provider-testing.md](docs/live-provider-testing.md)。该测试不声明
+provider 或 API key。
 
-### GitHub Actions CI
+CI（`.github/workflows/ci.yml`）在 Linux、macOS、Windows 上运行：checkout Harness pin、
+打上 `patches/`，再 install、无密钥测试、typecheck 和 build。角色 writable-root 的
+live bash（允许路径成功、跨角色路径拒绝）只在 Linux 和 macOS 上跑。Windows CI 检查
+DSH ACL runner 是否可用，尚未让 AutoReport 角色经 Windows shell 做一次端到端禁写。
 
-[`.github/workflows/ci.yml`](.github/workflows/ci.yml) 在 PR 和 `main` push 时分别于 Linux、macOS、Windows 运行。此开发预览包故意使用 sibling Harness 的 `link:` 依赖，因此 CI 会 checkout [docs/dependencies.md](docs/dependencies.md) 固定的 Harness、打上 `patches/` 中的两份补丁、先构建 Harness，再执行 immutable install、keyless tests、typecheck 和 build。真实 API 测试仍为 opt-in；该 workflow 不接收凭证。
-
-角色 writable-root 的 live confinement（真实 bash 经 DSH sandbox：允许路径成功、跨角色路径拒绝）只在 Linux 和 macOS 上跑。Windows CI 仍要求 DSH 的 windows-acl runner 可用——runner 或 Git Bash 缺失时任务失败而不是跳过——但该 probe 尚未让 AutoReport 角色经 Windows shell 做一次端到端禁写。
-
-## 计划中的 npm / DSH bundle 发布方式
-
-**现在不要执行这些命令。** AutoReportDSH 尚未发布到 npm，也没有正式的 DSH bundle，因此 `dsh plugin add` 装不上。
-
-等包发布**并且**某个 DSH 发布版包含所需的 append 与 sandbox API 之后，预期的用户安装方式是：
-
-```sh
-# 把已发布 bundle 装进 web profile（npm 包名以发布时为准）。
-dsh plugin --profile web add @xjsongphy/autoreportdsh
-
-# 从该 profile 里已安装的包生成 user preset。
-npx @xjsongphy/autoreportdsh setup --profile web
-
-# 正常启动 DSH；需要报告时选择 autoreport。
-# overlay 进入 profile 层之后不再需要 --patch。
-dsh web
-```
-
-在此之前请留在 [从源码运行](#从源码运行)：sibling checkout、补丁、`pnpm run build`、`pnpm run install:preset`，以及 `pnpm dsh … --patch ./cordis.overlay.generated.yml`。
-
-正式包将包含预构建 `dist/`、DSH bundle manifest、host/router patch 和 setup executable；会改用带版本范围的 DSH peer dependencies，而不是当前源码开发时的本地 `link:` 依赖。也可能支持：
-
-```sh
-dsh plugin --profile web add github:...
-```
-
-Git 安装只会下载源代码，pnpm 需要用户明确允许 `prepare` build script；普通用户安装优先使用 npm 预构建包。
-
-## 仓库结构
-
-```text
-assets/title.svg            README 标题图
-cordis.template.yml         生成 host/router overlay 的模板
-presets/autoreport/    user preset 模板
-resources/                  报告资源和 preset-scoped skills
-scripts/install-user-preset.ts
-src/
-├── host.ts                 host runtime、成员判定、guard、/report-init
-├── preset.ts               单一 preset-plane AutoReport contribution
-├── client/                 Web 设置卡片（插件配置 tab）
-├── runtime.ts              workflow state、waiters、artifacts、manifests、settings snapshot
-├── workflow/               events、projections、registry、waiters、report observer
-├── tools/                  send_to_agent、report_workflow
-├── policy/                 role guard 与按角色的 DSH sandbox 根目录
-├── python-env.ts           DSH_AUTOREPORT_PYTHON shell-env 事实
-├── workspace/              目录、资源、命令和 skill loader
-├── artifacts/              过滤、观察和外部 manifest projection
-└── settings.ts             项目/用户/默认设置解析
-docs/                       dependency 与 live-provider 测试说明
-tests/                      unit、integration、boot、可选真实 API 测试
-```
-
-## 当前限制
-
-- Windows CI 验证的是 DSH Windows ACL sandbox 是否可用。AutoReport 角色级 writable-root confinement 尚未在 Windows 上端到端跑过。
-- `/report-init` 注册在 host 全局 command catalog。handler 会在产生任何 workspace 副作用前拒绝非 AutoReport session；DSH 暂时没有 agent-scoped slash command 接口，因此命令名仍可能出现在 AutoReport 以外的 session 里。
-- MinerU 由 MAIN 通过 bash 与 `pdf-reference-reader` skill 调用（输出 `Outline/.cache/mineru/`），没有单独的 MinerU model tool。
-- artifact manifest 由运行时生成，agent 不能添加自由文本备注。
-- 任务生命周期已内化：MAIN 通过 `send_to_agent` 委派（省略 `task_id` 时自动创建任务）；specialist 通过 `report_workflow` 结束，report observer 负责 settle durable 状态。
-- role guard 仍对 write/edit 路径做 defense in depth；preset 不挂载 `delete` 或 `apply_patch`。
-
-## 许可证
-
-npm 发布前会补充仓库许可证和第三方资源声明。当前请查看本仓库记录的资源来源及上述上游项目。
+设计与实现记录见 **[PLAN.md](PLAN.md)**；依赖 pin 见
+**[docs/dependencies.md](docs/dependencies.md)**。

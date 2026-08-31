@@ -13,7 +13,7 @@ The normal unit/integration suite remains keyless. This test requires an explici
 
 ## Prerequisites
 
-- Complete the [source installation](../README.md#run-from-source) first.
+- Complete the [Quick Start](../README.md#quick-start) first.
 - Use a DSH home that already has a working configured default model route.
 - Ensure the local Harness profile selected below can run normally before adding the AutoReport overlay.
 
