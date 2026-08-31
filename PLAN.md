@@ -98,41 +98,28 @@ One out-of-tree Cordis plugin package is loaded as a patch overlay over stock `w
 
 ```text
 AutoReportDSH/
-├── package.json
-├── cordis.yml                         # plugin rows and global report-router overlay
+├── cordis.template.yml                # host + global report-router overlay
+├── patches/                           # sibling Harness API patches
 ├── scripts/
 │   └── install-user-preset.ts         # materializes the preset under $DSH_HOME/.agent-presets
 ├── src/
-│   ├── index.ts                       # host-plane registration and lifecycle
-│   ├── config.ts                      # validated report/execution/model configuration
-│   ├── roles.ts                        # fixed role table and policy metadata
-│   ├── workflow/
-│   │   ├── service.ts                  # report task/delegation service
-│   │   ├── events.ts                   # SessionEventMap extension and projections
-│   │   ├── role-registry.ts            # synchronous authorization projection
-│   │   └── protocol.ts                 # delegation/report envelopes
-│   ├── tools/
-│   │   ├── send-to-agent.ts            # thin DSH continuation-message consumer
-│   │   ├── report-task.ts              # report task/delegation state consumer
-│   │   ├── report-workflow.ts          # replacement child report tool
-│   │   ├── report-exec.ts              # policy-controlled process consumer
-│   │   └── compile-report.ts            # Report-only compiler over report-exec
-│   ├── workspace/
-│   │   ├── init.ts                     # initialization and asset materializer
-│   │   └── manifest.ts                 # external manifest projection/materializer
-│   ├── policy/
-│   │   ├── tool-guard.ts               # actual role mutation enforcement
-│   │   └── execution-isolation.ts      # root/network isolation over ctx.subprocess
-│   └── skills-preset.ts                # preset-scoped bundled skill registration
-├── presets/
-│   └── autoreport/agent.cordis.yml
-├── resources/
-│   ├── personas/*.md
-│   ├── report-languages/*.md
-│   ├── latex/{templates,themes}/
-│   ├── typst/{templates,themes}/
-│   └── skills/*.md
-└── tests/
+│   ├── host.ts                        # host-plane runtime, guard, /report-init
+│   ├── preset.ts                      # autoreport preset-plane contribution
+│   ├── client/                        # web settings card (separate tsconfig)
+│   ├── runtime.ts                     # workflow state, artifacts, settings snapshot
+│   ├── config.ts                      # validated report/model configuration
+│   ├── roles.ts                       # fixed role table and policy metadata
+│   ├── workflow/                      # tasks, delegations, bindings, turn/report observers
+│   ├── tools/                         # send_to_agent, report_workflow, report router
+│   ├── workspace/                     # init, /report-init, bundled skill loader
+│   ├── policy/                        # role guard and per-role sandbox roots
+│   ├── artifacts/                     # observation and external manifest projection
+│   ├── python-detect.ts               # local / managed / custom interpreter discovery
+│   ├── python-env.ts                  # DSH_AUTOREPORT_PYTHON facts and PATH overlay
+│   └── settings.ts                    # project/user/default settings resolution
+├── presets/autoreport/                # user preset (id = directory name)
+├── resources/                         # personas, skills, LaTeX templates/themes
+└── tests/                             # unit, integration, client/, eval/, e2e/
 ```
 
 The plugin host plane registers the workflow service, durable projections, `/report-init`,
