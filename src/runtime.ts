@@ -15,7 +15,7 @@ import { appendWorkflowEvent } from './workflow/store.js'
 import { observeWorkflowMessage, recoverWorkflowReports } from './workflow/report-observer.js'
 import { applyRoleSandbox } from './policy/sandbox-roots.js'
 import { ensureInitialized } from './workspace/init.js'
-import { missingAnalysisPackages } from './python-detect.js'
+import { detectPythonEnvironments, missingAnalysisPackages, type PythonDetectOptions } from './python-detect.js'
 import { syncedResourcesRoot } from './workspace/resource-sync.js'
 import {
   AUTO_REPORT_USER_SETTINGS_SCHEMA,
@@ -28,7 +28,6 @@ import {
   type AutoReportUserSettings,
   type WorkflowSettingsSnapshot,
 } from './settings.js'
-import { detectPythonEnvironments } from './python-detect.js'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -60,6 +59,8 @@ export interface RuntimeOptions {
   readonly manifestHome?: string
   /** Skip GitHub overlay sync (tests seed stubs instead). */
   readonly skipResourceSync?: boolean
+  /** Interpreter discovery overlay; tests disable conda/PATH scans. */
+  readonly pythonDetect?: PythonDetectOptions
 }
 
 /**
@@ -104,6 +105,7 @@ export default class AutoReportWorkflowRuntime extends Service {
       detectPythonEnvironments({
         ...(config.workspaceRoot === undefined ? {} : { workspace: config.workspaceRoot }),
         dshHome,
+        ...options.pythonDetect,
       }),
     )
     this.userSettingsSource = () => userSettingsBase

@@ -17,6 +17,7 @@ import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import { resolveWorkflowSettings, saveProjectSettings, workspaceIdForRoot } from '../src/settings.js'
 import { syncedResourcesRoot } from '../src/workspace/resource-sync.js'
 import { seedSyncedResourceStubs } from './helpers/synced-resource-stubs.js'
+import { ISOLATED_PYTHON_DETECT } from './helpers/managed-python-stub.js'
 import { AUTOREPORT_SCHEMA_VERSION } from '../src/workflow/events.js'
 import { appendWorkflowEvent } from '../src/workflow/store.js'
 
@@ -64,12 +65,20 @@ function rootSession(id: string, preset: string | undefined, cwd?: string): Sess
   })
 }
 
+function createRuntime(
+  ctx: Context,
+  config: Config,
+  extra: ConstructorParameters<typeof AutoReportWorkflowRuntime>[2] = {},
+): AutoReportWorkflowRuntime {
+  return new AutoReportWorkflowRuntime(ctx, config, { pythonDetect: ISOLATED_PYTHON_DETECT, ...extra })
+}
+
 describe('host workflow runtime', () => {
   it('initializes the experiment workspace once and records workflow metadata', () => {
     const root = mkdtempSync(join(tmpdir(), 'autoreport-runtime-'))
     tempDirs.push(root)
     const ctx = new Context()
-    const runtime = new AutoReportWorkflowRuntime(ctx, { ...CONFIG, workspaceRoot: root })
+    const runtime = createRuntime(ctx, { ...CONFIG, workspaceRoot: root })
     const session = rootSession('main', AUTOREPORT_MAIN_PRESET)
     runtime.maybeInitialize(session)
     for (const dir of REQUIRED_DIRS) {
@@ -100,7 +109,7 @@ describe('host workflow runtime', () => {
         },
       },
     })
-    const runtime = new AutoReportWorkflowRuntime(ctx, { ...CONFIG, workspaceRoot: root }, { settingsHome: home })
+    const runtime = createRuntime(ctx, { ...CONFIG, workspaceRoot: root }, { settingsHome: home })
     await vi.waitFor(() => {
       const section = ctx.settings.describe().find(entry => entry.ns === 'autoreport')
       expect(section?.value).toMatchObject({ defaultReportLanguage: 'typst', delegationWaitTimeoutMs: 12_345 })
@@ -121,7 +130,7 @@ describe('host workflow runtime', () => {
     saveProjectSettings(home, workspaceIdForRoot(root), { reportLanguage: 'typst' })
     seedSyncedResourceStubs(syncedResourcesRoot(home))
     const ctx = new Context()
-    const runtime = new AutoReportWorkflowRuntime(ctx, { ...CONFIG, workspaceRoot: root }, { settingsHome: home })
+    const runtime = createRuntime(ctx, { ...CONFIG, workspaceRoot: root }, { settingsHome: home })
     const session = rootSession('main', AUTOREPORT_MAIN_PRESET)
     runtime.maybeInitialize(session)
     const meta = runtime.forSession(session).state.projection().meta
@@ -134,7 +143,7 @@ describe('host workflow runtime', () => {
 
   it('does not treat continuable children as Main parents', () => {
     const ctx = new Context()
-    const runtime = new AutoReportWorkflowRuntime(ctx, CONFIG)
+    const runtime = createRuntime(ctx, CONFIG)
     const child = Session.create(SessionId('child'), undefined, {
       version: 0,
       id: SessionId('child'),
@@ -150,7 +159,7 @@ describe('host workflow runtime', () => {
     const root = mkdtempSync(join(tmpdir(), 'autoreport-runtime-'))
     tempDirs.push(root)
     const ctx = new Context()
-    const runtime = new AutoReportWorkflowRuntime(ctx, { ...CONFIG, workspaceRoot: root })
+    const runtime = createRuntime(ctx, { ...CONFIG, workspaceRoot: root })
 
     // An ordinary top-level DSH session without the AutoReport preset…
     const stock = rootSession('stock-main', undefined)
@@ -175,7 +184,7 @@ describe('host workflow runtime', () => {
 
   it('admits autoreport roots and releases Main membership after a later preset switch', () => {
     const ctx = new Context()
-    const runtime = new AutoReportWorkflowRuntime(ctx, CONFIG)
+    const runtime = createRuntime(ctx, CONFIG)
     const session = rootSession('switchable', AUTOREPORT_MAIN_PRESET)
     ctx.emit('session/event', session, session.append('turn/start', { turn: 1 }))
     expect(runtime.isMainSession(SessionId('switchable'))).toBe(true)
@@ -193,7 +202,7 @@ describe('host workflow runtime', () => {
     const root = mkdtempSync(join(tmpdir(), 'autoreport-runtime-'))
     tempDirs.push(root)
     const ctx = new Context()
-    const runtime = new AutoReportWorkflowRuntime(ctx, { ...CONFIG, workspaceRoot: root })
+    const runtime = createRuntime(ctx, { ...CONFIG, workspaceRoot: root })
     const session = rootSession('blank-switch', undefined, root)
 
     session.append('agent-preset/selected', { agentPreset: AUTOREPORT_MAIN_PRESET })
@@ -212,7 +221,7 @@ describe('host workflow runtime', () => {
     const root = mkdtempSync(join(tmpdir(), 'autoreport-runtime-'))
     tempDirs.push(root)
     const ctx = new Context()
-    const runtime = new AutoReportWorkflowRuntime(ctx, { ...CONFIG, workspaceRoot: root })
+    const runtime = createRuntime(ctx, { ...CONFIG, workspaceRoot: root })
     const session = rootSession('main-sandbox', AUTOREPORT_MAIN_PRESET, root)
 
     const message = createUserMessage({
@@ -228,7 +237,7 @@ describe('host workflow runtime', () => {
 
   it('replays a durable child report that landed before the observer committed', () => {
     const ctx = new Context()
-    const runtime = new AutoReportWorkflowRuntime(ctx, CONFIG)
+    const runtime = createRuntime(ctx, CONFIG)
     const session = rootSession('main-recover', AUTOREPORT_MAIN_PRESET)
     appendWorkflowEvent(session, 'autoreport/task', {
       version: AUTOREPORT_SCHEMA_VERSION,

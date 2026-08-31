@@ -15,6 +15,7 @@ import {
   WORKFLOW_SETTINGS_SCHEMA_DEFAULTS,
   workspaceIdForRoot,
 } from '../src/settings.js'
+import { managedPythonExecutable } from '../src/python-detect.js'
 import { createReportInitCommand } from '../src/workspace/command.js'
 import { syncedResourcesRoot } from '../src/workspace/resource-sync.js'
 import { seedSyncedResourceStubs } from './helpers/synced-resource-stubs.js'
@@ -81,7 +82,7 @@ describe('resolveWorkflowSettings precedence', () => {
       pythonEnv: pathWithBin(bin),
     })
     expect(realpathSync(resolved.pythonExecutable as string)).toBe(
-      realpathSync(join(dshHome, 'autoreport', 'venv', 'bin', 'python')),
+      realpathSync(managedPythonExecutable(dshHome)),
     )
   })
 

@@ -8,7 +8,7 @@
  * @module autoreportdsh-python-detect
  */
 
-import { spawnSync } from 'node:child_process'
+import { spawnSync, type SpawnSyncReturns } from 'node:child_process'
 import { existsSync, mkdirSync, readdirSync, realpathSync, rmSync, statSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { basename, dirname, isAbsolute, join } from 'node:path'
@@ -211,11 +211,7 @@ export function missingAnalysisPackages(executable: string): string[] {
     'print("OK" if not missing else "MISSING:"+ ",".join(missing))',
   ].join('; ')
   try {
-    const result = spawnSync(executable, ['-c', script], {
-      encoding: 'utf8',
-      timeout: 20_000,
-      windowsHide: true,
-    })
+    const result = spawnCli(executable, ['-c', script], { timeout: 20_000 })
     if (result.error !== undefined || result.status !== 0) return [...ANALYSIS_PACKAGES]
     const text = firstLine(result.stdout)
     if (text === 'OK') return []
@@ -273,6 +269,28 @@ function managedCandidate(dshHome: string): PythonCandidate {
   }
 }
 
+function spawnCli(
+  command: string,
+  args: readonly string[],
+  options: {
+    timeout?: number
+    env?: NodeJS.ProcessEnv
+  } = {},
+): SpawnSyncReturns<string> {
+  const windowsScript = process.platform === 'win32' && /\.(cmd|bat)$/iu.test(command)
+  return spawnSync(
+    windowsScript ? `"${command.replace(/"/gu, '')}"` : command,
+    [...args],
+    {
+      encoding: 'utf8',
+      windowsHide: true,
+      timeout: options.timeout,
+      ...(options.env === undefined ? {} : { env: options.env }),
+      ...(windowsScript ? { shell: true } : {}),
+    },
+  )
+}
+
 function runCreate(
   command: string,
   args: readonly string[],
@@ -280,12 +298,7 @@ function runCreate(
   what: string,
   timeoutMs = 120_000,
 ): void {
-  const result = spawnSync(command, args, {
-    encoding: 'utf8',
-    timeout: timeoutMs,
-    windowsHide: true,
-    env,
-  })
+  const result = spawnCli(command, args, { timeout: timeoutMs, env })
   if (result.error !== undefined) {
     throw new Error(`AutoReport managed venv: ${what} failed: ${result.error.message}`)
   }
@@ -333,11 +346,7 @@ export function pythonBinDir(executable: string): string | undefined {
  */
 export function pythonVersion(executable: string): string | undefined {
   try {
-    const result = spawnSync(executable, ['--version'], {
-      encoding: 'utf8',
-      timeout: 3_000,
-      windowsHide: true,
-    })
+    const result = spawnCli(executable, ['--version'], { timeout: 3_000 })
     if (result.error !== undefined) return undefined
     const text = firstLine(result.stdout) || firstLine(result.stderr)
     return text.length > 0 ? text : undefined
@@ -347,7 +356,14 @@ export function pythonVersion(executable: string): string | undefined {
 }
 
 function pythonInPrefix(prefix: string): string {
-  if (process.platform === 'win32') return join(prefix, 'Scripts', 'python.exe')
+  if (process.platform === 'win32') {
+    const scripts = join(prefix, 'Scripts')
+    for (const name of ['python.exe', 'python.cmd', 'python3.exe', 'python3.cmd']) {
+      const candidate = join(scripts, name)
+      if (isFile(candidate)) return candidate
+    }
+    return join(scripts, 'python.exe')
+  }
   const python = join(prefix, 'bin', 'python')
   return isFile(python) ? python : join(prefix, 'bin', 'python3')
 }
@@ -375,12 +391,7 @@ function addCondaCliEnvs(env: NodeJS.ProcessEnv, add: (path: string, source: str
     const found = whichCommand(command, env)
     if (found === undefined) continue
     try {
-      const result = spawnSync(found, ['env', 'list', '--json'], {
-        encoding: 'utf8',
-        timeout: 5_000,
-        windowsHide: true,
-        env,
-      })
+      const result = spawnCli(found, ['env', 'list', '--json'], { timeout: 2_000, env })
       if (result.error !== undefined || result.status !== 0) continue
       const parsed: unknown = JSON.parse(result.stdout)
       const envs = condaEnvList(parsed)
@@ -411,7 +422,7 @@ function whichCommand(command: string, env: NodeJS.ProcessEnv): string | undefin
   const pathEnv = env.PATH ?? env.Path
   if (pathEnv === undefined || pathEnv.length === 0) return undefined
   const sep = process.platform === 'win32' ? ';' : ':'
-  const extensions = process.platform === 'win32' ? ['.exe', '.bat', ''] : ['']
+  const extensions = process.platform === 'win32' ? ['.exe', '.cmd', '.bat', ''] : ['']
   for (const dir of pathEnv.split(sep)) {
     if (dir.length === 0) continue
     for (const extension of extensions) {

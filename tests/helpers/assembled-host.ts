@@ -26,6 +26,7 @@ import * as reportRouterModule from '../../src/tools/report-router.js'
 import type { SpecialistRole } from '../../src/roles.js'
 import { syncedResourcesRoot } from '../../src/workspace/resource-sync.js'
 import { seedSyncedResourceStubs } from './synced-resource-stubs.js'
+import { ISOLATED_PYTHON_DETECT } from './managed-python-stub.js'
 
 export const ASSEMBLED_CONFIG: Config = {
   defaultReportLanguage: 'latex',
@@ -221,7 +222,12 @@ export async function assemble(options: AssembleOptions = {}): Promise<Assembled
     saveProjectSettings(home, workspaceIdForRoot(workspaceRoot), projectPatch)
   }
 
-  await applyHost(ctx, { ...ASSEMBLED_CONFIG, workspaceRoot }, { settingsHome: home, manifestHome: home, skipResourceSync: true })
+  await applyHost(ctx, { ...ASSEMBLED_CONFIG, workspaceRoot }, {
+    settingsHome: home,
+    manifestHome: home,
+    skipResourceSync: true,
+    pythonDetect: ISOLATED_PYTHON_DETECT,
+  })
   reportRouterModule.apply(ctx)
   presetModule.apply(ctx)
 

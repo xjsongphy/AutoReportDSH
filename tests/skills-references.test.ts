@@ -11,6 +11,7 @@ import {
   REFERENCES_SKILL_PROVIDER,
   REFERENCES_SKILL_RANK,
 } from '../src/skills-references.js'
+import { ISOLATED_PYTHON_DETECT } from './helpers/managed-python-stub.js'
 
 const tempDirs: string[] = []
 afterEach(() => {
@@ -160,7 +161,11 @@ describe('References/skills coexistence', () => {
     const ctx = new Context()
     await ctx.plugin(SkillRegistry)
     ctx.provide('tools', { guard: () => () => {} } as never)
-    await applyHost(ctx, { ...hostConfig, workspaceRoot: experiment }, { settingsHome: home, skipResourceSync: true })
+    await applyHost(ctx, { ...hostConfig, workspaceRoot: experiment }, {
+      settingsHome: home,
+      skipResourceSync: true,
+      pythonDetect: ISOLATED_PYTHON_DETECT,
+    })
     const listed = await ctx.skills.list({ cwd: experiment })
     expect(listed.map(skill => skill.name)).not.toContain('foo')
     expect(listed.some(skill => skill.provider === REFERENCES_SKILL_PROVIDER)).toBe(false)

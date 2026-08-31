@@ -1,6 +1,6 @@
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, realpathSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, realpathSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
   ANALYSIS_PACKAGES,
@@ -15,15 +15,10 @@ import {
   pythonBinDir,
   removeManagedPython,
 } from '../src/python-detect.js'
-import { MANAGED_PYTHON_STUB, pathWithBin, writeFakeVenvBootstrap } from './helpers/managed-python-stub.js'
+import { pathWithBin, writeAnalysisPython, writeFakePython, writeFakeVenvBootstrap } from './helpers/managed-python-stub.js'
 
 function fakePython(root: string, version = 'Python 3.12.0-test'): string {
-  const bin = join(root, 'bin')
-  mkdirSync(bin, { recursive: true })
-  const executable = join(bin, 'python')
-  writeFileSync(executable, `#!/bin/sh\necho ${JSON.stringify(version)}\n`)
-  chmodSync(executable, 0o755)
-  return executable
+  return writeFakePython(root, version)
 }
 
 describe('detectPythonEnvironments', () => {
@@ -134,11 +129,7 @@ describe('ensureManagedPython', () => {
   it('reports missing analysis packages until uv pip install succeeds', () => {
     const root = mkdtempSync(join(tmpdir(), 'autoreport-py-pkgs-'))
     const bin = writeFakeVenvBootstrap(join(root, 'bootstrap'))
-    const dest = join(root, 'venv', 'bin')
-    mkdirSync(dest, { recursive: true })
-    writeFileSync(join(dest, 'python'), MANAGED_PYTHON_STUB)
-    chmodSync(join(dest, 'python'), 0o755)
-    const python = join(dest, 'python')
+    const python = writeAnalysisPython(join(root, 'venv'))
     expect(missingAnalysisPackages(python)).toEqual([...ANALYSIS_PACKAGES])
     expect(ensureAnalysisPackages(python, pathWithBin(bin))).toEqual([...ANALYSIS_PACKAGES])
     expect(missingAnalysisPackages(python)).toEqual([])
@@ -147,7 +138,8 @@ describe('ensureManagedPython', () => {
 
 describe('pythonBinDir', () => {
   it('returns the parent of an absolute interpreter and omits a bare command', () => {
-    expect(pythonBinDir('/opt/venv/bin/python3')).toBe('/opt/venv/bin')
+    const executable = join(tmpdir(), 'venv', 'bin', 'python3')
+    expect(pythonBinDir(executable)).toBe(dirname(executable))
     expect(pythonBinDir('python3')).toBeUndefined()
   })
 })
