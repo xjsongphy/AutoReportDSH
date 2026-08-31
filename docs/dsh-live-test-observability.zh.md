@@ -75,7 +75,10 @@ DSH session 是追加事件日志。每条 MAIN/child session 都记录：
 - `request/header` 与 `request/context`：实际 provider/model 和请求工具集合；
 - `assistant/message`：对话内容和可用 token usage；
 - `tool/call` / `tool/result`：工具参数、结果及错误；
-- `autoreport/workflow`、`autoreport/task`、`autoreport/delegation`、`autoreport/role-binding`、`autoreport/artifact`：AutoReport 的 durable 状态。
+- `user/message`：用户输入、specialist `report_workflow`（`source.kind = subagent-report`）、以及 turn-stopping 二次启动（`source.plugin = autoreportdsh/turn-guard`，`summary` 以 `turn_guard.steer:` 开头）；
+- `autoreport/workflow`、`autoreport/task`、`autoreport/delegation`、`autoreport/role-binding`、`autoreport/artifact`、`autoreport/file-note`：AutoReport 的 durable 状态。
+
+不要另写一套 debug log。导出或打开原始 session 文件即可定位委派、报告、产物和为何 turn 被再次拉起。
 
 Web 的历史页、Chat 与 Trajectory 都从这些事件投影。会话导出功能可导出原始 session log，适合离线审计。
 

@@ -75,16 +75,17 @@ AutoReportDSH owns report semantics and policy.
   waiting for the parent’s next model step. `wait: false` returns the DSH acceptance
   acknowledgement immediately. The waiter is a local synchronization aid; durable
   delegation state remains authoritative and DSH still owns child lifecycle and transport.
-- Workflow continuity comes only from durable task/delegation state plus the workspace
-  files themselves. There is no agent memory layer (no memory store, semantic retrieval, or
-  conversation reconstruction), no workspace-to-prompt injection at resume (no automatic
-  scan/summarize/inject), and no requirement to preserve prior reasoning. A recreated or
-  compacted agent recovers from: task state + workspace state + role ownership.
+- Workflow continuity comes only from durable task/delegation/file-note state plus the
+  workspace files themselves. There is no conversation-history reconstruction and no
+  workspace-to-prompt injection at resume. A recreated specialist recovers from: task
+  state + workspace state + role ownership + semantic file notes (cold-rebind handoff).
 - MinerU instructions are synchronized explicitly from the managed upstream skill and
   registered only for THEORY and REPORT. Default network denial remains unchanged, so
   actual `mineru-open-api` API execution still needs a later explicit network-policy change.
-- Agent-editable manifest descriptions/notes are omitted. Manifests are derived projections
-  of `autoreport/artifact` events, not a model-facing annotation store.
+- Semantic file notes are agent-authored (`describe_files`) and last-write-wins per path.
+  Mechanical create/modify facts stay on `autoreport/artifact`. A description is stale when
+  `artifact.recordedAt > descriptionUpdatedAt`. Turn-stopping steers stale notes before a
+  forgotten `report_workflow`, once per reason; `report_workflow(success)` rejects stale notes.
 
 No existing community dsh plugin covers this physics-report domain. `dsh-overleaf` and
 similar UI/LaTeX helpers are not substitutes for the five-role workflow.
@@ -336,9 +337,17 @@ canonical envelope to `ctx.subagents.reportFrom()`.
 A parent observer validates the envelope, correlates it by `(task_id, delegation_revision)`,
 records its DSH `MessageId`, and folds it into the delegation state. A report for an older
 revision is retained as stale evidence and cannot complete the current revision. Duplicate
-transport delivery is idempotent by report message identity; multiple reports for one
-attempt are treated as progress until one valid terminal report is accepted. Missing,
-malformed, or unrecognized reports become explicit quality failures, never success.
+transport delivery is idempotent by report message identity. The first valid terminal
+report (`success` → completed, `blocked` → blocked) wins; later deliveries for that
+attempt, including a different DSH message id, are ignored. `timed_out` is not a
+terminal acceptance — a late valid report may still complete the attempt. A malformed
+report (`failed`) may be overwritten by a later valid envelope. Cold load replays
+already-logged `user/message` / inbox-splice deliveries through
+`recoverWorkflowReports` so a crash after DSH persisted the parent message but before
+`autoreport/delegation` is repaired. `report_workflow` returns the existing
+`reportMessageId` without calling `reportFrom` again when that attempt already has an
+accepted report. Missing, malformed, or unrecognized reports become explicit quality
+failures, never success.
 
 The child report does not terminate the child turn. The child persona receives the
 AutoReport-specific instruction to report with the replacement tool before finishing.
@@ -361,9 +370,24 @@ service and SessionEventMap extension whose snapshots are authoritative:
   `failed`, `timed_out`, `stale`, and `cancelled`. The snapshot records WHY something
   waits; it never serializes an in-memory waiter.
 - `autoreport/artifact` — complete artifact snapshot emitted by the runtime observer.
+- `autoreport/file-note` — agent-authored semantic description for one workspace-relative path.
 
 Events are append-only durable facts and projections fold them from the session log under
 DSH’s `SessionEventMap` and model-visible-is-logged rules.
+
+**Observability.** The DSH session event log is the source of truth. There is no
+parallel structured logger or debug transcript. Tests and live diagnosis read the
+raw session file. Critical control flow must appear there with a stable source:
+
+- turn-stopping resumes are `user/message` with `source.plugin = autoreportdsh/turn-guard`
+  and `source.summary` prefixed `turn_guard.steer:` (`specialist-blocked`,
+  `stale-descriptions`, `forgotten-report`);
+- `report_workflow` is the parent `user/message` with `source.kind = subagent-report`
+  plus the folded `autoreport/delegation`;
+- task and delegation mutations are `autoreport/task` / `autoreport/delegation`;
+- filesystem/process observations are `autoreport/artifact`; semantic descriptions are
+  `autoreport/file-note`; directory manifests under `$DSH_HOME` are projections of those
+  artifact events, not a second log.
 
 **Persistence gate (P0).** `KNOWN_SESSION_EVENT_TYPES` is generated from the DSH repo only.
 Out-of-tree plugin types are excluded by construction. AutoReport records must be
@@ -539,10 +563,13 @@ Existing files are never overwritten. Assets are copied from
 
 ### 2.11 Runtime-generated artifacts and external manifests
 
-Agents do not call an `update_manifest` tool. Manifest tracking is automatic:
+Mechanical tracking is automatic; semantic descriptions are a separate specialist tool:
 
 - Successful filesystem mutation tools produce `autoreport/artifact` events through the
   tool lifecycle observer.
+- Specialists call `describe_files` to write `autoreport/file-note` snapshots (path,
+  description, `descriptionUpdatedAt`, optional notes). These never land in the experiment
+  workspace.
 - `report_exec` snapshots the relevant readable/writable roots before and after successful
   processes and emits normalized changed-file artifacts.
 - Failed, denied, or ambiguous results never claim success; ambiguous process changes are
@@ -630,7 +657,12 @@ backend's files; both `Report/main.tex` and `Report/main.typ` may coexist with
 Fixed authorization stays non-configurable (no allowNetwork/disableRoleIsolation
 surface); AutoReport policy may only narrow DSH capabilities. Specialist model
 reuses DSH routing entirely: children inherit Main by default with one optional
-AutoReport-level specialist override.
+AutoReport-level specialist override. The AutoReport-managed venv is created
+only when the user selects it: `uv venv` at `$dshHome/autoreport/venv`, then
+`uv pip install numpy scipy pandas matplotlib`. It is not created at plugin
+load. Deleting that directory reclaims space; selecting managed again recreates
+it. Custom/user interpreters are probed only: missing packages warn at first-turn
+init and are never auto-installed. `uv` is required for the managed row.
 
 ### 2.15 Direct human conversation vs workflow delegation (rev 7)
 
@@ -713,7 +745,9 @@ and where it lives in the codebase:
   `REQUIRED_DIRS` set, model-route resolution, and config validation.
 - Cold load of a session log containing `autoreport/*` events, with and without the plugin;
   plugin-present folding recovers task/role/artifact state and stock DSH skips unknown
-  ignorable records safely.
+  ignorable records safely. Assembled evals assert control-flow facts on the raw session
+  events (`turn_guard.steer` notices, `report_workflow` deliveries, task/delegation/
+  artifact/file-note snapshots), not a parallel debug log.
 - Direct `Session.append(..., { ignorable: true })` writer/persistence tests from the DSH
   compatibility patch.
 - Unsupported-platform network fail-closed behavior.
@@ -828,8 +862,7 @@ this status.
 | Settings layering (rev 7) | `settings-layering` | precedence resolution, DSH `autoreport` user namespace, project settings store, durable workflow snapshots |
 | Integration & e2e | `integration-e2e` | wiring fixes, assembled smokes, installer boot smoke, configured-route self-skipping e2e |
 
-Remaining optional/product work (documented in README): browser card for the
-already-registered `autoreport` settings namespace, Windows support, MinerU network
-execution path, and agent-editable manifest annotations. Trace-driven work may later
-shrink the model-facing surface further or add specialist allowlists; neither changes
-the durable `autoreport/*` workflow state.
+Remaining optional/product work (documented in README): Windows support, MinerU network
+execution path, and richer DSH-native workflow Chat projection (relay/notice/snapshot).
+Trace-driven work may later shrink the model-facing surface further or add specialist
+allowlists; neither changes the durable `autoreport/*` workflow state.

@@ -35,17 +35,17 @@ Plotting 和 Report。未选择该 preset 的 `standard` session 仍是原样 DS
 - **LaTeX 与 Typst 报告** — 支持语言选择、内置模板/主题、参考文献资源、编译 skill，以及基于 Python 的数据分析和绘图
 - **使用 DSH 的 Provider** — 只用 DSH 里已配置的模型路由；AutoReportDSH 不维护自己的凭证或 provider 列表
 - **资源同步** — 插件启动时把清单中的远端刷新到 `$DSH_HOME/autoreport/resources`；`pnpm run sync:resources` 不必启动 DSH 也能做同样的事
-- **任务与产物追踪** — `send_to_agent` 记录持久化任务和版本；specialist 用 `report_workflow` 结束；manifest 写在 `$DSH_HOME` 下，不进实验目录
+- **任务与产物追踪** — `send_to_agent` 记录持久化任务和版本；specialist 用 `describe_files` 更新文件说明、用 `report_workflow` 结束；机械 manifest 写在 `$DSH_HOME` 下，不进实验目录
 - **安全执行** — DSH `workspace-write` 把每个角色钉在各自的可写根目录；AutoReport session 不能通过 `sandbox_permissions` 提权；网络允许访问
 - **内置默认资源** — 自带 persona、模板和 skills，新项目开箱即用
 
 ### 工作流
 - **可选 preset** — 只有顶层 `autoreport` session 进入 runtime；加载 overlay 不会改变普通 DSH session
-- **很小的模型接口** — MAIN 只增加 `send_to_agent`（外加 DSH 的 `ask_user_question`）；specialist 增加 `report_workflow`；其余是 DSH 的 `read` / `write` / `edit` / `bash` / `skill`
+- **很小的模型接口** — MAIN 只增加 `send_to_agent`（外加 DSH 的 `ask_user_question`）；specialist 增加 `describe_files` 和 `report_workflow`；其余是 DSH 的 `read` / `write` / `edit` / `bash` / `skill`
 - **可续写的 specialist** — child 在后续任务中保留角色上下文；用户直接与 specialist 对话是普通对话，不会自动变成 workflow 任务
 - **按角色隔离的 skill** — MAIN 有 `pdf-reference-reader`；REPORT 有 `experiment-report-writer` 以及 `latex-compile` 或 `typst-compile`；实验目录 `References/skills` 是按 cwd 发现的 DSH skill 根
 - **设置与实时模型** — 语言、等待超时和 Python 在 **设置 → 插件 → 插件配置**；运行中的 specialist 在对话窗口切换模型
-- **Python 环境** — AutoReport 托管 venv（`$DSH_HOME/autoreport/venv`）、检测到的本机解释器，或自定义路径；owned bash 注入 `DSH_AUTOREPORT_PYTHON` 并前置 PATH，因此裸的 `python3` 也会打到该解释器
+- **Python 环境** — AutoReport 托管 venv 仅在你选中时用 `uv` 创建（`$DSH_HOME/autoreport/venv`，安装 numpy/scipy/pandas/matplotlib）；或检测到的本机解释器；或自定义路径。未选择则不占磁盘；删除该目录即可回收空间。owned bash 注入 `DSH_AUTOREPORT_PYTHON` 并前置 PATH，因此裸的 `python3` 也会打到该解释器
 
 ## 快速开始
 
@@ -109,7 +109,7 @@ schema 默认值
 
 - **设置卡片** — `defaultReportLanguage`、`delegationWaitTimeoutMs`、`pythonExecutable` 在 **设置 → 插件 → 插件配置**
 - **specialist 模型** — 新建 worker 默认继承 MAIN，除非在 cordis 或项目设置里写了 `specialistModel`；运行中的 worker 在对话窗口切换（`session.models` / `selectModel`）
-- **Python** — 托管（`__managed__` → `$DSH_HOME/autoreport/venv`，保存时用 `uv venv --seed` 或 `python3 -m venv` 创建）、本机（conda / virtualenv / pyenv / PATH，若存在也包括 `~/.autoreport/venv`），或自定义绝对路径
+- **Python** — 托管（`__managed__` → `$DSH_HOME/autoreport/venv`，保存时用 `uv venv` 创建再 `uv pip install numpy scipy pandas matplotlib`；未选择不会创建；删除该目录即可回收空间）、本机（conda / virtualenv / pyenv / PATH，若存在也包括 `~/.autoreport/venv`；不会自动装包），或自定义绝对路径
 - **`/report-init [--language latex|typst]`** — 幂等初始化；LaTeX 与 Typst 文件可以共存，活动语言由项目设置决定。命令注册在 host 全局 catalog；非 AutoReport session 会在产生任何文件改动前被拒绝
 
 ## 工作区结构
