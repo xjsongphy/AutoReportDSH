@@ -14,6 +14,13 @@ iterating rapidly; PLAN.md risk 9).
 
 ## Compatibility seams
 
+The two files under `patches/` are temporary source-compatibility shims for
+this pinned development checkout; they are not DSH's plugin distribution
+mechanism. DSH's supported plugin path is an npm bundle declaring
+`dsh.bundle.patch` and installed with `dsh plugin --profile <name> add <package>`.
+The source installer applies these shims only until the pinned DSH release
+contains the APIs natively.
+
 AutoReportDSH requires:
 
 1. `Session.append(type, data, { ignorable: true })` so stock readers skip

@@ -13,12 +13,21 @@
     ".": {
       "default": "./dist/src/index.js"
     },
+    "./preset": {
+      "default": "./dist/src/preset.js"
+    },
+    "./tools/report-router": {
+      "default": "./dist/src/tools/report-router.js"
+    },
     "./client": {
       "default": "./dist/client.js"
     },
     "./package.json": "./package.json"
   },
   "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
     "client": {
       "platform": "web",
       "inject": [
@@ -28,10 +37,13 @@
     }
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json && tsx scripts/copy-resources.ts && tsx scripts/build-client.ts",
+    "build": "node scripts/clean-dist.mjs && tsc -p tsconfig.json && tsx scripts/copy-resources.ts && tsx scripts/build-client.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.client.json --noEmit",
     "test": "vitest run",
     "install:preset": "tsx scripts/install-user-preset.ts",
+    "install:source": "node scripts/install-source.mjs",
+    "start:source": "node scripts/start-source.mjs",
+    "prepare:npm": "pnpm run build && node scripts/prepare-npm-package.mjs",
     "sync:resources": "tsx scripts/sync-resources.ts"
   },
   "dependencies": {

@@ -19,8 +19,8 @@ It migrates the report-domain behavior of [AutoReportCLI](../autoreportcli) into
 DSH is the runtime; the experiment folder is the project; select **`autoreport`**
 to enter the workflow.
 
-Developer preview: install from source. An npm / `dsh plugin add` release is
-planned but **not published**.
+The package follows DSH's normal installable-bundle model. The source checkout
+also includes a one-command installer for the current pinned DSH revision.
 
 ## Overview
 
@@ -51,49 +51,39 @@ DSH sessions. Stock `standard` sessions stay stock DSH.
 
 ## Quick Start
 
-**Prerequisites:** Node.js 22.19+ or 24+, Corepack pnpm, and a sibling
-[DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) checkout at
-the pin in [docs/dependencies.md](docs/dependencies.md). Until DSH ships
-`Session.append(..., { ignorable: true })` and per-session
-`sandbox/workspace-root`, apply the two patches in `patches/` (the same ones CI
-uses). A global `dsh` on PATH is not a substitute for that patched checkout.
+### Install from npm
+
+After `autoreportdsh` is published, install it into DSH's standard Web profile:
 
 ```bash
-cd /path/to/your/development-directory
-git clone https://github.com/deepseek-ai/deepseek-harness.git deepseek-harness
-git clone https://github.com/xjsongphy/AutoReportDSH.git AutoReportDSH
-
-cd deepseek-harness
-git checkout <DSH_REF from docs/dependencies.md>
-git apply ../AutoReportDSH/patches/deepseek-harness-ignorable-append.patch
-git apply ../AutoReportDSH/patches/deepseek-harness-sandbox-workspace-root.patch
-corepack enable && pnpm install && pnpm run build
-
-cd ../AutoReportDSH
-pnpm install && pnpm test && pnpm run build
-pnpm run install:preset
+npx @deepseek-ai/dsh plugin --profile web add autoreportdsh
+npx @deepseek-ai/dsh web
 ```
 
-`pnpm run install:preset` writes `$DSH_HOME/.agent-presets/autoreport/`, links
-the package for the web settings card, and generates
-`cordis.overlay.generated.yml`. Plain `dsh web` does not load AutoReport; pass
-`--patch` every boot until a published profile owns the overlay.
+The installer adds the `autoreport` preset automatically. Open the normal DSH
+Web UI at `http://127.0.0.1:3080`, select **`autoreport`**, and choose the
+experiment folder.
+
+### Install from source
+
+The source installer clones the pinned DSH checkout when needed, applies the
+two temporary compatibility patches, builds both projects, installs the
+`autoreport` preset, and adds AutoReportDSH to DSH's normal `web` profile:
 
 ```bash
-cd ../deepseek-harness
-pnpm dsh web --port 3081 --patch ../AutoReportDSH/cordis.overlay.generated.yml
+git clone https://github.com/xjsongphy/AutoReportDSH.git
+cd AutoReportDSH
+node scripts/install-source.mjs
 ```
 
-Open `http://127.0.0.1:3081`, create a session, select **`autoreport`**, and
-point it at an experiment folder. Use another port if `3080` is already taken.
+Then start the same Web UI:
 
 ```bash
-pnpm dsh headless \
-  --patch ../AutoReportDSH/cordis.overlay.generated.yml \
-  "Create an outline for this experiment workspace"
+pnpm run start:source
 ```
 
-For an isolated DSH home: `DSH_HOME=/tmp/autoreport-dsh-home pnpm run install:preset -- --home "$DSH_HOME"`.
+The default address is `http://127.0.0.1:3080`. The installer and start command
+are safe to rerun; set `AUTOREPORT_DSH_DIR` when the DSH checkout lives elsewhere.
 
 ## Configuration
 
@@ -176,11 +166,11 @@ pnpm vitest run tests/e2e/configured-route.e2e.test.ts
 See [docs/live-provider-testing.md](docs/live-provider-testing.md). The test
 never declares a provider or API key.
 
-CI (`.github/workflows/ci.yml`) runs on Linux, macOS, and Windows: checkout the
-Harness pin, apply `patches/`, then install, keyless tests, typecheck, and
-build. Live role-writable-root bash (allowed path succeeds, sibling role path
-denied) runs on Linux and macOS. Windows CI checks that DSH’s ACL runner is
-usable; it does not yet drive an AutoReport role through the Windows shell.
+CI (`.github/workflows/ci.yml`) runs on Linux, macOS, and Windows against the
+pinned DSH compatibility checkout. It applies the temporary patches, then runs
+install, keyless tests, typecheck, and build. Use `pnpm run prepare:npm` to
+assemble the publishable bundle under `dist/npm`; npm users install it through
+DSH's normal `dsh plugin --profile web add autoreportdsh` command.
 
 Design and implementation notes: **[PLAN.md](PLAN.md)**. Dependency pin:
 **[docs/dependencies.md](docs/dependencies.md)**.

@@ -1,0 +1,13 @@
+# AutoReportDSH's installable DSH bundle. DSH applies this layer through the
+# profile mechanism; users do not need to pass a generated --patch overlay.
+
+# AutoReport's router preserves stock reporting for ordinary children and
+# installs report_workflow for role-bound AutoReport subagents.
+- id: tool-subagent-report
+  disabled: true
+
+- insert:
+    - id: autoreportdsh-host
+      name: autoreportdsh
+    - id: autoreportdsh-report-router
+      name: autoreportdsh/tools/report-router

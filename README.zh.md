@@ -18,8 +18,7 @@
 harness，不自带 provider，不加一层 agent loop。
 DSH 是运行时，实验目录就是项目；选择 **`autoreport`** 即进入工作流。
 
-开发者预览版：目前只支持从源码安装。npm / `dsh plugin add` 发布流程已预留，但
-**尚未发布**。
+该插件遵循 DSH 标准的可安装 bundle 机制；源码仓库也提供了针对当前 DSH pin 的一键安装脚本。
 
 ## 概述
 
@@ -49,47 +48,37 @@ Plotting 和 Report。未选择该 preset 的 `standard` session 仍是原样 DS
 
 ## 快速开始
 
-**前置依赖：** Node.js 22.19+ 或 24+、启用 Corepack 的 pnpm，以及一份与
-[docs/dependencies.md](docs/dependencies.md) 中 pin 一致的相邻
-[DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) checkout。
-在 DSH 发布 `Session.append(..., { ignorable: true })` 和逐会话
-`sandbox/workspace-root` 之前，需要打上 `patches/` 里与 CI 相同的两份补丁。
-PATH 上的全局 `dsh` **不能**代替这份打过补丁的 checkout。
+### 从 npm 安装
+
+`autoreportdsh` 发布后，按 DSH 标准方式安装到 Web profile：
 
 ```bash
-cd /path/to/your/development-directory
-git clone https://github.com/deepseek-ai/deepseek-harness.git deepseek-harness
-git clone https://github.com/xjsongphy/AutoReportDSH.git AutoReportDSH
-
-cd deepseek-harness
-git checkout <docs/dependencies.md 中的 DSH_REF>
-git apply ../AutoReportDSH/patches/deepseek-harness-ignorable-append.patch
-git apply ../AutoReportDSH/patches/deepseek-harness-sandbox-workspace-root.patch
-corepack enable && pnpm install && pnpm run build
-
-cd ../AutoReportDSH
-pnpm install && pnpm test && pnpm run build
-pnpm run install:preset
+npx @deepseek-ai/dsh plugin --profile web add autoreportdsh
+npx @deepseek-ai/dsh web
 ```
 
-`pnpm run install:preset` 会写入 `$DSH_HOME/.agent-presets/autoreport/`，链上供
-Web 设置卡片使用的包，并生成 `cordis.overlay.generated.yml`。直接 `dsh web`
-**不会**加载 AutoReport；在正式 profile 接管 overlay 之前，每次启动都要带 `--patch`。
+安装器会自动加入 `autoreport` preset。打开 DSH 默认的
+`http://127.0.0.1:3080`，选择 **`autoreport`**，再选择实验目录。
+
+### 从源码安装
+
+源码安装器会在需要时自动 clone 固定版本的 DSH、应用两份临时兼容补丁、构建两个项目、安装
+`autoreport` preset，并把 AutoReportDSH 加入 DSH 正常的 `web` profile：
 
 ```bash
-cd ../deepseek-harness
-pnpm dsh web --port 3081 --patch ../AutoReportDSH/cordis.overlay.generated.yml
+git clone https://github.com/xjsongphy/AutoReportDSH.git
+cd AutoReportDSH
+node scripts/install-source.mjs
 ```
 
-打开 `http://127.0.0.1:3081`，新建 session，选择 **`autoreport`**，并把工作目录指到实验文件夹。若 `3080` 已被占用，换一个端口。
+然后启动同一个 Web UI：
 
 ```bash
-pnpm dsh headless \
-  --patch ../AutoReportDSH/cordis.overlay.generated.yml \
-  "为这个实验工作目录创建报告大纲"
+pnpm run start:source
 ```
 
-隔离的 DSH home：`DSH_HOME=/tmp/autoreport-dsh-home pnpm run install:preset -- --home "$DSH_HOME"`。
+默认地址仍是 `http://127.0.0.1:3080`。安装和启动命令都可以安全重复执行；如果 DSH
+checkout 在其他位置，设置 `AUTOREPORT_DSH_DIR` 即可。
 
 ## 配置
 
@@ -171,10 +160,10 @@ pnpm vitest run tests/e2e/configured-route.e2e.test.ts
 见 [docs/live-provider-testing.md](docs/live-provider-testing.md)。该测试不声明
 provider 或 API key。
 
-CI（`.github/workflows/ci.yml`）在 Linux、macOS、Windows 上运行：checkout Harness pin、
-打上 `patches/`，再 install、无密钥测试、typecheck 和 build。角色 writable-root 的
-live bash（允许路径成功、跨角色路径拒绝）只在 Linux 和 macOS 上跑。Windows CI 检查
-DSH ACL runner 是否可用，尚未让 AutoReport 角色经 Windows shell 做一次端到端禁写。
+CI（`.github/workflows/ci.yml`）在 Linux、macOS、Windows 上针对固定的 DSH 兼容 checkout
+运行：应用临时补丁后执行 install、无密钥测试、typecheck 和 build。运行
+`pnpm run prepare:npm` 可在 `dist/npm` 生成待发布 bundle；npm 用户通过 DSH 标准的
+`dsh plugin --profile web add autoreportdsh` 安装。
 
 设计与实现记录见 **[PLAN.md](PLAN.md)**；依赖 pin 见
 **[docs/dependencies.md](docs/dependencies.md)**。
