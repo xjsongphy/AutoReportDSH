@@ -2,12 +2,14 @@
  * Discover local Python interpreters the way AutoReportCLI does, offer an
  * AutoReport-managed venv under the DSH home, and validate a user-typed path.
  * Detected candidates are already proven runnable; only a custom path needs a
- * separate check. Picking managed creates `$dshHome/autoreport/venv` on save.
+ * separate check. Picking managed creates `$dshHome/autoreport/venv` with `uv`
+ * on save; the directory is not created until then and may be deleted to
+ * reclaim space.
  * @module autoreportdsh-python-detect
  */
 
 import { spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, readdirSync, realpathSync, statSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, realpathSync, rmSync, statSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { basename, dirname, isAbsolute, join } from 'node:path'
 
@@ -54,6 +56,9 @@ export interface PythonDetectOptions {
 }
 
 const HOME_CONDA_INSTALLS = ['miniconda3', 'anaconda3', 'mambaforge', 'miniforge3', 'micromamba'] as const
+
+/** Packages Data Analysis and Plotting need in a healthy AutoReport interpreter. */
+export const ANALYSIS_PACKAGES = ['numpy', 'scipy', 'pandas', 'matplotlib'] as const
 
 const WELL_KNOWN_CONDA_ROOTS = [
   '/Applications/miniforge3',
@@ -141,10 +146,16 @@ export function managedPythonExecutable(dshHome: string): string {
   return pythonInPrefix(managedVenvDir(dshHome))
 }
 
+/** Error when the managed venv needs `uv` and it is not on PATH. */
+const UV_REQUIRED =
+  'AutoReport managed Python requires uv on PATH. Install it from https://docs.astral.sh/uv/ then choose the managed environment again.'
+
 /**
- * Create `$dshHome/autoreport/venv` when missing (`uv venv --seed`, else
- * `python3 -m venv`) and return its interpreter. Idempotent when already
- * runnable.
+ * Create `$dshHome/autoreport/venv` with `uv venv` when missing, install
+ * analysis packages with `uv pip`, and return its interpreter. Not created
+ * until the user selects the managed row. Idempotent when already runnable
+ * with numpy/scipy/pandas/matplotlib. Delete the directory to reclaim space;
+ * selecting managed again recreates it.
  * @param options - DSH home and an optional env overlay (tests isolate PATH).
  * @returns the managed interpreter path.
  */
@@ -157,26 +168,98 @@ export function ensureManagedPython(options: {
   const existing = pythonInPrefix(dest)
   if (isFile(existing)) {
     const version = pythonVersion(existing)
-    if (version !== undefined) return canonicalize(existing) ?? existing
+    if (version !== undefined) {
+      const executable = canonicalize(existing) ?? existing
+      ensureAnalysisPackages(executable, env)
+      return executable
+    }
   }
 
+  const uv = requireUv(env)
   mkdirSync(join(options.dshHome, 'autoreport'), { recursive: true })
-  const uv = whichCommand('uv', env)
-  if (uv !== undefined) {
-    runCreate(uv, ['venv', '--seed', dest], env, `uv venv ${dest}`)
-  } else {
-    const bootstrap = whichCommand('python3', env) ?? whichCommand('python', env)
-    if (bootstrap === undefined) {
-      throw new Error('No python3 on PATH to create the AutoReport managed venv')
-    }
-    runCreate(bootstrap, ['-m', 'venv', dest], env, `${bootstrap} -m venv ${dest}`)
-  }
+  runCreate(uv, ['venv', dest], env, `uv venv ${dest}`)
 
   const created = pythonInPrefix(dest)
   if (!isFile(created) || pythonVersion(created) === undefined) {
     throw new Error(`AutoReport managed venv did not produce a runnable Python at ${created}`)
   }
-  return canonicalize(created) ?? created
+  const executable = canonicalize(created) ?? created
+  ensureAnalysisPackages(executable, env)
+  return executable
+}
+
+/**
+ * Delete `$dshHome/autoreport/venv`. No-op when the directory is already gone.
+ * Does not change settings; choosing managed later recreates it with `uv`.
+ * @param dshHome - DSH home that owns the AutoReport venv.
+ */
+export function removeManagedPython(dshHome: string): void {
+  rmSync(managedVenvDir(dshHome), { recursive: true, force: true })
+}
+
+/**
+ * Import names that failed to load in `executable`, in {@link ANALYSIS_PACKAGES}
+ * order. An interpreter that cannot run the probe is treated as missing all.
+ * @param executable - absolute interpreter path.
+ * @returns missing package names; empty when all import.
+ */
+export function missingAnalysisPackages(executable: string): string[] {
+  const mods = ANALYSIS_PACKAGES.map(name => JSON.stringify(name)).join(', ')
+  const script = [
+    'import importlib.util',
+    `missing=[m for m in [${mods}] if importlib.util.find_spec(m) is None]`,
+    'print("OK" if not missing else "MISSING:"+ ",".join(missing))',
+  ].join('; ')
+  try {
+    const result = spawnSync(executable, ['-c', script], {
+      encoding: 'utf8',
+      timeout: 20_000,
+      windowsHide: true,
+    })
+    if (result.error !== undefined || result.status !== 0) return [...ANALYSIS_PACKAGES]
+    const text = firstLine(result.stdout)
+    if (text === 'OK') return []
+    if (text.startsWith('MISSING:')) {
+      return text.slice('MISSING:'.length).split(',').filter(name => name.length > 0)
+    }
+    return [...ANALYSIS_PACKAGES]
+  } catch {
+    return [...ANALYSIS_PACKAGES]
+  }
+}
+
+function requireUv(env: NodeJS.ProcessEnv): string {
+  const uv = whichCommand('uv', env)
+  if (uv === undefined) throw new Error(UV_REQUIRED)
+  return uv
+}
+
+/**
+ * Install {@link ANALYSIS_PACKAGES} into `executable` when any are missing.
+ * Uses `uv pip install --python`; does not write into user conda/venv paths
+ * unless that path is the AutoReport-managed interpreter.
+ * @param executable - interpreter that should receive the packages.
+ * @param env - PATH overlay for locating `uv`.
+ * @returns packages that were missing before install.
+ */
+export function ensureAnalysisPackages(executable: string, env: NodeJS.ProcessEnv = process.env): string[] {
+  const missing = missingAnalysisPackages(executable)
+  if (missing.length === 0) return []
+  const uv = requireUv(env)
+  runCreate(
+    uv,
+    ['pip', 'install', '--python', executable, ...ANALYSIS_PACKAGES],
+    env,
+    `uv pip install --python ${executable} ${ANALYSIS_PACKAGES.join(' ')}`,
+    300_000,
+  )
+  const stillMissing = missingAnalysisPackages(executable)
+  if (stillMissing.length > 0) {
+    throw new Error(
+      `AutoReport managed venv is missing analysis packages after install: ${stillMissing.join(', ')}`,
+    )
+  }
+  return missing
 }
 
 function managedCandidate(dshHome: string): PythonCandidate {
@@ -190,10 +273,16 @@ function managedCandidate(dshHome: string): PythonCandidate {
   }
 }
 
-function runCreate(command: string, args: readonly string[], env: NodeJS.ProcessEnv, what: string): void {
+function runCreate(
+  command: string,
+  args: readonly string[],
+  env: NodeJS.ProcessEnv,
+  what: string,
+  timeoutMs = 120_000,
+): void {
   const result = spawnSync(command, args, {
     encoding: 'utf8',
-    timeout: 120_000,
+    timeout: timeoutMs,
     windowsHide: true,
     env,
   })

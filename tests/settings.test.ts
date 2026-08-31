@@ -1,4 +1,4 @@
-import { chmodSync, existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -18,6 +18,7 @@ import {
 import { createReportInitCommand } from '../src/workspace/command.js'
 import { syncedResourcesRoot } from '../src/workspace/resource-sync.js'
 import { seedSyncedResourceStubs } from './helpers/synced-resource-stubs.js'
+import { pathWithBin, writeFakeVenvBootstrap } from './helpers/managed-python-stub.js'
 
 const cleanup: string[] = []
 
@@ -73,26 +74,11 @@ describe('resolveWorkflowSettings precedence', () => {
   it('materializes __managed__ into the created DSH-owned interpreter', () => {
     const root = tempDir('autoreport-resolve-managed-')
     const dshHome = join(root, 'dsh')
-    const bin = join(root, 'bootstrap', 'bin')
-    mkdirSync(bin, { recursive: true })
-    const python3 = join(bin, 'python3')
-    writeFileSync(python3, `#!/bin/sh
-if [ "$1" = "--version" ]; then echo "Python 3.12.0-bootstrap"; exit 0; fi
-if [ "$1" = "-m" ] && [ "$2" = "venv" ]; then
-  dest="$3"
-  mkdir -p "$dest/bin"
-  printf '%s\\n' '#!/bin/sh' 'echo Python 3.12.0-managed' > "$dest/bin/python"
-  chmod +x "$dest/bin/python"
-  cp "$dest/bin/python" "$dest/bin/python3"
-  exit 0
-fi
-exit 1
-`)
-    chmodSync(python3, 0o755)
+    const bin = writeFakeVenvBootstrap(join(root, 'bootstrap'))
     const resolved = resolveWorkflowSettings({
       user: { pythonExecutable: '__managed__' },
       dshHome,
-      pythonEnv: { PATH: [bin, '/usr/bin', '/bin'].join(process.platform === 'win32' ? ';' : ':') },
+      pythonEnv: pathWithBin(bin),
     })
     expect(realpathSync(resolved.pythonExecutable as string)).toBe(
       realpathSync(join(dshHome, 'autoreport', 'venv', 'bin', 'python')),
@@ -376,26 +362,11 @@ describe('validatePythonExecutableSetting', () => {
   it('accepts __managed__ after creating the DSH-owned venv', () => {
     const root = tempDir('autoreport-validate-managed-')
     const dshHome = join(root, 'dsh')
-    const bin = join(root, 'bootstrap', 'bin')
-    mkdirSync(bin, { recursive: true })
-    const python3 = join(bin, 'python3')
-    writeFileSync(python3, `#!/bin/sh
-if [ "$1" = "--version" ]; then echo "Python 3.12.0-bootstrap"; exit 0; fi
-if [ "$1" = "-m" ] && [ "$2" = "venv" ]; then
-  dest="$3"
-  mkdir -p "$dest/bin"
-  printf '%s\\n' '#!/bin/sh' 'echo Python 3.12.0-managed' > "$dest/bin/python"
-  chmod +x "$dest/bin/python"
-  cp "$dest/bin/python" "$dest/bin/python3"
-  exit 0
-fi
-exit 1
-`)
-    chmodSync(python3, 0o755)
+    const bin = writeFakeVenvBootstrap(join(root, 'bootstrap'))
     expect(() => validatePythonExecutableSetting({
       defaultReportLanguage: 'latex',
       delegationWaitTimeoutMs: 1,
       pythonExecutable: '__managed__',
-    }, dshHome, { PATH: [bin, '/usr/bin', '/bin'].join(process.platform === 'win32' ? ';' : ':') })).not.toThrow()
+    }, dshHome, pathWithBin(bin))).not.toThrow()
   })
 })

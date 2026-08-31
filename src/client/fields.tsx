@@ -162,7 +162,7 @@ const MANAGED_PYTHON = '__managed__'
 /**
  * Python environment picker: AutoReport-managed, detected local rows, and
  * a typed absolute path. Picking managed writes `__managed__`; the Host
- * creates `$DSH_HOME/autoreport/venv` on save if it is missing.
+ * creates `$DSH_HOME/autoreport/venv` with `uv` on save if it is missing.
  */
 export function PythonField(props: FieldProps & {
   /** Host-detected interpreters, in display order (managed first when published). */

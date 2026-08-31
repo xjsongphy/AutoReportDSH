@@ -15,6 +15,7 @@ import { appendWorkflowEvent } from './workflow/store.js'
 import { observeWorkflowMessage, recoverWorkflowReports } from './workflow/report-observer.js'
 import { applyRoleSandbox } from './policy/sandbox-roots.js'
 import { ensureInitialized } from './workspace/init.js'
+import { missingAnalysisPackages } from './python-detect.js'
 import { syncedResourcesRoot } from './workspace/resource-sync.js'
 import {
   AUTO_REPORT_USER_SETTINGS_SCHEMA,
@@ -398,6 +399,7 @@ export default class AutoReportWorkflowRuntime extends Service {
       return
     }
     this.createWorkflow(session, settings)
+    this.warnMissingAnalysisPackages(settings.pythonExecutable)
   }
 
   /**
@@ -427,5 +429,25 @@ export default class AutoReportWorkflowRuntime extends Service {
       ...(this.config.specialistModel === undefined ? {} : { specialistRoute: this.config.specialistModel }),
       settings: resolvedSettings,
     })
+  }
+
+  /**
+   * Warn when a non-managed (or otherwise incomplete) interpreter is missing
+   * numpy/scipy/pandas/matplotlib. Never fails init; managed venvs already
+   * pip-install those packages when they are created or reused.
+   */
+  private warnMissingAnalysisPackages(pythonExecutable: string | undefined): void {
+    if (pythonExecutable === undefined) return
+    const missing = missingAnalysisPackages(pythonExecutable)
+    if (missing.length === 0) return
+    try {
+      this.ctx.logger.warn(
+        'autoreportdsh: Python interpreter is missing analysis packages: %s (%s). Data Analysis and Plotting may fail until they are installed.',
+        missing.join(', '),
+        pythonExecutable,
+      )
+    } catch {
+      // A bare test Context may lack a working logger.
+    }
   }
 }

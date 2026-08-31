@@ -1,15 +1,21 @@
-import { chmodSync, mkdirSync, mkdtempSync, realpathSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, realpathSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
+  ANALYSIS_PACKAGES,
   detectPythonEnvironments,
+  ensureAnalysisPackages,
   ensureManagedPython,
   invalidCustomPythonPath,
   MANAGED_PYTHON_SENTINEL,
   managedPythonExecutable,
+  managedVenvDir,
+  missingAnalysisPackages,
   pythonBinDir,
+  removeManagedPython,
 } from '../src/python-detect.js'
+import { MANAGED_PYTHON_STUB, pathWithBin, writeFakeVenvBootstrap } from './helpers/managed-python-stub.js'
 
 function fakePython(root: string, version = 'Python 3.12.0-test'): string {
   const bin = join(root, 'bin')
@@ -18,35 +24,6 @@ function fakePython(root: string, version = 'Python 3.12.0-test'): string {
   writeFileSync(executable, `#!/bin/sh\necho ${JSON.stringify(version)}\n`)
   chmodSync(executable, 0o755)
   return executable
-}
-
-/** Interpreter that implements `python3 -m venv <dest>` by writing a stub venv. */
-function fakeVenvPython(root: string): string {
-  const bin = join(root, 'bin')
-  mkdirSync(bin, { recursive: true })
-  const executable = join(bin, 'python3')
-  writeFileSync(executable, `#!/bin/sh
-if [ "$1" = "--version" ]; then
-  echo "Python 3.12.0-bootstrap"
-  exit 0
-fi
-if [ "$1" = "-m" ] && [ "$2" = "venv" ]; then
-  dest="$3"
-  mkdir -p "$dest/bin"
-  printf '%s\\n' '#!/bin/sh' 'echo Python 3.12.0-managed' > "$dest/bin/python"
-  chmod +x "$dest/bin/python"
-  cp "$dest/bin/python" "$dest/bin/python3"
-  exit 0
-fi
-exit 1
-`)
-  chmodSync(executable, 0o755)
-  return executable
-}
-
-function createEnv(bin: string): NodeJS.ProcessEnv {
-  const sep = process.platform === 'win32' ? ';' : ':'
-  return { PATH: [bin, '/usr/bin', '/bin'].join(sep) }
 }
 
 describe('detectPythonEnvironments', () => {
@@ -115,20 +92,56 @@ describe('detectPythonEnvironments', () => {
 })
 
 describe('ensureManagedPython', () => {
-  it('creates $dshHome/autoreport/venv via python3 -m venv when uv is absent', () => {
+  it('creates $dshHome/autoreport/venv with uv venv when the user selects managed', () => {
     const root = mkdtempSync(join(tmpdir(), 'autoreport-managed-'))
     const dshHome = join(root, 'dsh')
-    fakeVenvPython(join(root, 'bootstrap'))
+    const bin = writeFakeVenvBootstrap(join(root, 'bootstrap'))
     const created = ensureManagedPython({
       dshHome,
-      env: createEnv(join(root, 'bootstrap', 'bin')),
+      env: pathWithBin(bin),
     })
     expect(realpathSync(created)).toBe(realpathSync(managedPythonExecutable(dshHome)))
     expect(invalidCustomPythonPath(created)).toBeUndefined()
+    expect(missingAnalysisPackages(created)).toEqual([])
     expect(ensureManagedPython({
       dshHome,
-      env: createEnv(join(root, 'bootstrap', 'bin')),
+      env: pathWithBin(bin),
     })).toBe(created)
+  })
+
+  it('does not create the venv until ensureManagedPython runs, and removeManagedPython deletes it', () => {
+    const root = mkdtempSync(join(tmpdir(), 'autoreport-managed-remove-'))
+    const dshHome = join(root, 'dsh')
+    const bin = writeFakeVenvBootstrap(join(root, 'bootstrap'))
+    expect(existsSync(managedVenvDir(dshHome))).toBe(false)
+    const created = ensureManagedPython({ dshHome, env: pathWithBin(bin) })
+    expect(existsSync(created)).toBe(true)
+    removeManagedPython(dshHome)
+    expect(existsSync(managedVenvDir(dshHome))).toBe(false)
+    const recreated = ensureManagedPython({ dshHome, env: pathWithBin(bin) })
+    expect(missingAnalysisPackages(recreated)).toEqual([])
+  })
+
+  it('refuses to create the managed venv when uv is absent', () => {
+    const dshHome = mkdtempSync(join(tmpdir(), 'autoreport-managed-no-uv-'))
+    expect(() => ensureManagedPython({
+      dshHome,
+      env: { PATH: join(dshHome, 'empty-bin') },
+    })).toThrow(/requires uv on PATH/)
+    expect(existsSync(managedVenvDir(dshHome))).toBe(false)
+  })
+
+  it('reports missing analysis packages until uv pip install succeeds', () => {
+    const root = mkdtempSync(join(tmpdir(), 'autoreport-py-pkgs-'))
+    const bin = writeFakeVenvBootstrap(join(root, 'bootstrap'))
+    const dest = join(root, 'venv', 'bin')
+    mkdirSync(dest, { recursive: true })
+    writeFileSync(join(dest, 'python'), MANAGED_PYTHON_STUB)
+    chmodSync(join(dest, 'python'), 0o755)
+    const python = join(dest, 'python')
+    expect(missingAnalysisPackages(python)).toEqual([...ANALYSIS_PACKAGES])
+    expect(ensureAnalysisPackages(python, pathWithBin(bin))).toEqual([...ANALYSIS_PACKAGES])
+    expect(missingAnalysisPackages(python)).toEqual([])
   })
 })
 
