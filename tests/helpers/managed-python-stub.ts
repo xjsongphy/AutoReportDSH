@@ -39,8 +39,6 @@ if "%~1"=="--version" (
   exit /b 0
 )
 if "%~1"=="-c" (
-  echo %~2 | findstr /C:"find_spec" >nul
-  if errorlevel 1 exit /b 0
   if exist "%MARKER%" (
     echo OK
     exit /b 0
@@ -113,38 +111,34 @@ export function writeFakeVenvBootstrap(root: string): string {
   if (!win) chmodSync(stub, 0o755)
 
   if (win) {
+    const uvJs = join(root, 'uv-stub.cjs')
+    writeFileSync(uvJs, `"use strict";
+const { copyFileSync, mkdirSync, writeFileSync } = require("node:fs");
+const { dirname, join } = require("node:path");
+const stub = join(__dirname, ${JSON.stringify(stubName)});
+const args = process.argv.slice(2);
+if (args[0] === "venv") {
+  const dest = args[1] === "--seed" ? args[2] : args[1];
+  if (!dest) process.exit(1);
+  const scripts = join(dest, "Scripts");
+  mkdirSync(scripts, { recursive: true });
+  copyFileSync(stub, join(scripts, "python.cmd"));
+  copyFileSync(stub, join(scripts, "python3.cmd"));
+  process.exit(0);
+}
+if (args[0] === "pip") {
+  const index = args.indexOf("--python");
+  const py = index >= 0 ? args[index + 1] : undefined;
+  if (!py) process.exit(1);
+  writeFileSync(join(dirname(py), "..", ".analysis-ok"), "");
+  process.exit(0);
+}
+process.exit(1);
+`)
     const uv = join(bin, 'uv.cmd')
-    writeFileSync(uv, [
-      '@echo off',
-      'setlocal EnableDelayedExpansion',
-      `set "STUB=%~dp0..\\${stubName}"`,
-      'if /I "%~1"=="venv" goto venv',
-      'if /I "%~1"=="pip" goto pip',
-      'exit /b 1',
-      ':venv',
-      'set "DEST=%~2"',
-      'if /I "%~2"=="--seed" set "DEST=%~3"',
-      'if "!DEST!"=="" exit /b 1',
-      'mkdir "!DEST!\\Scripts" >nul 2>&1',
-      'copy /Y "%STUB%" "!DEST!\\Scripts\\python.cmd" >nul',
-      'copy /Y "%STUB%" "!DEST!\\Scripts\\python3.cmd" >nul',
-      'exit /b 0',
-      ':pip',
-      'shift',
-      ':findpy',
-      'if "%~1"=="" exit /b 1',
-      'if /I "%~1"=="--python" (',
-      '  set "PY=%~2"',
-      '  goto gotpy',
-      ')',
-      'shift',
-      'goto findpy',
-      ':gotpy',
-      'if "!PY!"=="" exit /b 1',
-      'for %%I in ("!PY!") do echo.>"%%~dpI..\\.analysis-ok"',
-      'exit /b 0',
-      '',
-    ].join('\r\n'))
+    const node = process.execPath.replace(/"/gu, '')
+    const script = uvJs.replace(/"/gu, '')
+    writeFileSync(uv, `@echo off\r\n"${node}" "${script}" %*\r\n`)
     return bin
   }
 

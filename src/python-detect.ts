@@ -278,15 +278,16 @@ function spawnCli(
   } = {},
 ): SpawnSyncReturns<string> {
   const windowsScript = process.platform === 'win32' && /\.(cmd|bat)$/iu.test(command)
+  // `.cmd` needs cmd.exe, but `shell: true` concatenates argv into one line and
+  // mangles `python -c` scripts that contain quotes. Pass args as an argv array.
   return spawnSync(
-    windowsScript ? `"${command.replace(/"/gu, '')}"` : command,
-    [...args],
+    windowsScript ? (process.env.ComSpec ?? 'cmd.exe') : command,
+    windowsScript ? ['/d', '/s', '/c', command, ...args] : [...args],
     {
       encoding: 'utf8',
       windowsHide: true,
       timeout: options.timeout,
       ...(options.env === undefined ? {} : { env: options.env }),
-      ...(windowsScript ? { shell: true } : {}),
     },
   )
 }
