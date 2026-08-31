@@ -84,6 +84,8 @@ describe('persona slimming', () => {
     expect(text).not.toContain('report_task')
     expect(text).toContain('pdf-reference-reader')
     expect(text).toContain('bash')
+    expect(text).toContain('Selective todos')
+    expect(text).toContain('No tables by default')
     expect(text).not.toContain('subagent_fork')
     expect(text).not.toContain('`respond`')
     assertNoForbiddenPatterns(text, 'MAIN persona')
@@ -138,6 +140,11 @@ describe('persona slimming', () => {
     expect(text).toContain('plt.close')
     expect(text).not.toContain('Auto-validated')
     expect(text).not.toContain('Automatic code validation')
+  })
+
+  it('keeps the hard LaTeX figure/table placement policy in language guidance', () => {
+    const latex = readFileSync(join(REPO_PERSONAS, '../report-languages/latex.md'), 'utf8')
+    expect(latex).toContain('Use `[H]` for every figure and table unless the user-provided template explicitly requires another placement policy')
   })
 
   it('keeps DATA_ANALYSIS output responsibilities unambiguous', () => {

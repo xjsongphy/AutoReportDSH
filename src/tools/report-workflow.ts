@@ -27,14 +27,9 @@ function runtimeOf(hostCtx: Context): AutoReportWorkflowRuntime | undefined {
  * @param childCtx - unpublished specialist scope.
  * @param hostCtx - host context carrying the shared subagent service.
  * @param role - bound specialist identity rendered in guidance.
- * @returns disposer for the scoped tools and prompt section.
+ * @returns disposer for the scoped tool.
  */
 export function installWorkflowReportTool(childCtx: Context, hostCtx: Context, role: SpecialistRole): () => void {
-  const disposeSection = childCtx.systemPrompt.section({
-    name: 'tool:report-workflow',
-    order: 117,
-    text: `The generic report tool is unavailable; Main-dispatched tasks finish through report_workflow (see its description). After changing files, update your manifest so each path has a fresh description.`,
-  })
   const disposers: (() => void)[] = []
   try {
     disposers.push(childCtx.tools.register(defineTool({
@@ -103,7 +98,6 @@ export function installWorkflowReportTool(childCtx: Context, hostCtx: Context, r
         // Best-effort rollback of partial registrations before rethrowing.
       }
     }
-    disposeSection()
     throw error
   }
   return () => {
@@ -114,11 +108,6 @@ export function installWorkflowReportTool(childCtx: Context, hostCtx: Context, r
       } catch (caught: unknown) {
         failures.push(caught)
       }
-    }
-    try {
-      disposeSection()
-    } catch (caught: unknown) {
-      failures.push(caught)
     }
     if (failures.length > 0) {
       throw new AggregateError(failures, 'failed to revoke AutoReport subagent workflow tools')

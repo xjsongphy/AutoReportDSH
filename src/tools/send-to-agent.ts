@@ -73,8 +73,6 @@ function taskBriefing(
     `Goal:\n${prompt}`,
     ...(context === undefined ? [] : [`Explicit user constraints:\n${context}`]),
     ...(handoff === undefined ? [] : [handoff]),
-    'After changing files, update your manifest so each path has a fresh description before report_workflow(success).',
-    'Finish by calling report_workflow with this exact task_id and delegation_revision.',
   ].join('\n\n')
 }
 

@@ -109,7 +109,7 @@ describe('report router', () => {
     installRoutedReportTool(child.ctx, host.ctx, { roleRegistry, config: CONFIG, workflowForChild: () => undefined, overlayRoot })
     expect(child.tools.map(tool => tool.name)).toEqual(['manifest', 'report_workflow'])
     expect(child.skills).toEqual([])
-    expect(child.sections.some(section => section.name === 'tool:report-workflow')).toBe(true)
+    expect(child.sections.some(section => section.name === 'tool:report-workflow')).toBe(false)
     expect(child.sections.some(section => section.name === 'report-environment')).toBe(false)
     expect(child.tools.some(tool => tool.name === 'report')).toBe(false)
     expect(effectiveSandboxMode(child.session.events)).toBe('workspace-write')

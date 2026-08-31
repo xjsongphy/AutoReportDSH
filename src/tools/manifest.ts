@@ -185,16 +185,11 @@ function delegationContext(projection: WorkflowProjection, role: AutoReportRole,
 
 /** Install the AutoReport-compatible agent manifest read/update tool. */
 export function installManifestTool(ctx: Context, hostCtx: Context, role: AutoReportRole): () => void {
-  const disposeSection = ctx.systemPrompt.section({
-    name: 'tool:manifest',
-    order: 116,
-    text: `Use manifest(action="read") to inspect your AutoReport manifest or another subagent's manifest. You may update only the ${role.toLowerCase()} manifest with manifest(action="update"). File descriptions are required before a successful workflow report; manifest notes are durable handoff context.`,
-  })
   let disposeTool: (() => void) | undefined
   try {
     disposeTool = ctx.tools.register(defineTool({
       name: 'manifest',
-      description: 'Read or update AutoReport manifests. Read any role manifest; update only your own file descriptions and role-level notes.',
+      description: 'AutoReport semantic manifest for file discovery and cross-agent handoff. The runtime maintains the file list and update times; agents maintain semantic file descriptions and role-level notes. Read any role manifest; update only your own. Changed files require fresh descriptions before successful workflow completion. Role notes are durable handoff context across tasks and session rebinds.',
       parameters: {
         action: { type: 'string', enum: ['read', 'update'], default: 'read' },
         agent: { type: 'string', enum: ['main', 'theory', 'data_analysis', 'plotting', 'report'] },
@@ -307,10 +302,7 @@ export function installManifestTool(ctx: Context, hostCtx: Context, role: AutoRe
       presentCall: args => ({ card: 'generic', title: `manifest ${String(args.action ?? 'read')}`, kind: 'other', rawInput: args }),
     }))
   } catch (error: unknown) {
-    try { disposeSection() } catch { /* rollback best effort */ }
     throw error
   }
-  return () => {
-    try { disposeTool?.() } finally { disposeSection() }
-  }
+  return () => { disposeTool?.() }
 }
