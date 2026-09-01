@@ -9,15 +9,16 @@ import { installManifestTool } from './manifest.js'
 import { registerRoleSkills, type ReportSkillLanguage } from '../skills-preset.js'
 import { installReferencesSkills } from '../skills-references.js'
 
-/** Entry file, theme, and compile skill per report language (workspace/init layout). */
-const REPORT_ENVIRONMENTS: Readonly<Record<ReportSkillLanguage, { entry: string; theme: string; compileSkill: string }>> = {
-  latex: { entry: 'Report/main.tex', theme: 'Report/mpltx.cls', compileSkill: 'latex-compile' },
-  typst: { entry: 'Report/main.typ', theme: 'Report/mplts.typ', compileSkill: 'typst-compile' },
+/** Entry file, theme, language guidance, and compile skill per report language. */
+const REPORT_ENVIRONMENTS: Readonly<Record<ReportSkillLanguage, { entry: string; theme: string; languageSkill: string; compileSkill: string }>> = {
+  latex: { entry: 'Report/main.tex', theme: 'Report/mpltx.cls', languageSkill: 'report-language-latex', compileSkill: 'latex-compile' },
+  typst: { entry: 'Report/main.typ', theme: 'Report/mplts.typ', languageSkill: 'report-language-typst', compileSkill: 'typst-compile' },
 }
 
 /**
  * Inject the session-specific Report Environment facts the REPORT persona
- * references: active language, entry file, theme, and compile skill name.
+ * references: active language, entry file, theme, language guidance, and
+ * compile skill names.
  * Dynamic facts live here, not in the immutable persona text.
  */
 function installReportEnvironmentSection(childCtx: Context, language: ReportSkillLanguage): () => void {
@@ -30,6 +31,7 @@ function installReportEnvironmentSection(childCtx: Context, language: ReportSkil
       `language: ${language}`,
       `entry: ${environment.entry}`,
       `theme: ${environment.theme}`,
+      `language skill: ${environment.languageSkill}`,
       `compile skill: ${environment.compileSkill}`,
     ].join('\n'),
   })

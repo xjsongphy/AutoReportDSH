@@ -45,7 +45,7 @@ DSH sessions. Stock `standard` sessions stay stock DSH.
 - **Opt-in preset** — only a top-level `autoreport` session joins the runtime; overlay load does not change ordinary DSH sessions
 - **Small model surface** — MAIN adds `send_to_agent` and `manifest` (plus DSH `ask_user_question`); subagents add `manifest` and `report_workflow`; everything else is DSH `read` / `write` / `edit` / `bash` / `skill`
 - **Continuable subagents** — children keep role context across follow-ups; a direct human chat with a subagent is ordinary conversation, not a workflow task
-- **Role-scoped skills** — MAIN gets `pdf-reference-reader`; REPORT gets `experiment-report-writer` plus `latex-compile` or `typst-compile`; experiment `References/skills` is a cwd-sensitive DSH skill root
+- **Role-scoped skills** — MAIN gets `pdf-reference-reader`; REPORT gets `experiment-report-writer`, the active `report-language-*` guidance, and the matching compile skills; experiment `References/skills` is a cwd-sensitive DSH skill root
 - **Settings and live model** — language, wait timeout, and Python live under **Settings → Plugins → Plugin configuration**; switch a running subagent’s model in the conversation window
 - **Python environments** — AutoReport-managed venv created with `uv` only when you select it (`$DSH_HOME/autoreport/venv`, numpy/scipy/pandas/matplotlib); a detected local interpreter; or a custom path. Unused managed env occupies no disk; delete that directory to reclaim space. Owned bash sees `DSH_AUTOREPORT_PYTHON` and a PATH prefix so bare `python3` hits that interpreter
 

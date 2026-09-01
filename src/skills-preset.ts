@@ -15,7 +15,7 @@ import { loadBundledSkills, type BundledSkill } from './workspace/skill-loader.j
 export const name = 'autoreportdsh-skills'
 export const inject = ['skills' as const]
 
-/** Language-specific compilation guidance selected for a REPORT child. */
+/** Language-specific report guidance selected for a REPORT child. */
 export type ReportSkillLanguage = 'latex' | 'typst'
 
 /** MAIN-only bundled skills registered in the preset scope. */
@@ -30,8 +30,8 @@ export function skillNamesForRole(role: SpecialistRole, language: ReportSkillLan
       return []
     case 'REPORT':
       return language === 'latex'
-        ? ['experiment-report-writer', 'latex-compile']
-        : ['experiment-report-writer', 'typst', 'typst-compile']
+        ? ['experiment-report-writer', 'report-language-latex', 'latex-compile']
+        : ['experiment-report-writer', 'report-language-typst', 'typst', 'typst-compile']
   }
 }
 

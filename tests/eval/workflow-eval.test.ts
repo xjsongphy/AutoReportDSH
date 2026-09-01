@@ -122,6 +122,7 @@ describe('workflow eval', () => {
     const report = await dispatch(assembled, { role: 'REPORT', prompt: 'write and compile latex' })
     expect(specialistSkills(assembled, report.childId).skillNames).toEqual([
       'experiment-report-writer',
+      'report-language-latex',
       'latex-compile',
     ])
     await specialistWrite(assembled, report, 'Report/main.tex', '\\documentclass{article}\\begin{document}ok\\end{document}\n')
@@ -168,6 +169,7 @@ describe('workflow eval', () => {
     const report = await dispatch(assembled, { role: 'REPORT', prompt: 'write and compile typst' })
     expect(specialistSkills(assembled, report.childId).skillNames).toEqual([
       'experiment-report-writer',
+      'report-language-typst',
       'typst',
       'typst-compile',
     ])

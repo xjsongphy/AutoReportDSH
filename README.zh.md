@@ -42,7 +42,7 @@ Plotting 和 Report。未选择该 preset 的 `standard` session 仍是原样 DS
 - **可选 preset** — 只有顶层 `autoreport` session 进入 runtime；加载 overlay 不会改变普通 DSH session
 - **很小的模型接口** — MAIN 只增加 `send_to_agent` 和 `manifest`（外加 DSH 的 `ask_user_question`）；subagent 增加 `manifest` 和 `report_workflow`；其余是 DSH 的 `read` / `write` / `edit` / `bash` / `skill`
 - **可续写的 subagent** — child 在后续任务中保留角色上下文；用户直接与 subagent 对话是普通对话，不会自动变成 workflow 任务
-- **按角色隔离的 skill** — MAIN 有 `pdf-reference-reader`；REPORT 有 `experiment-report-writer` 以及 `latex-compile` 或 `typst-compile`；实验目录 `References/skills` 是按 cwd 发现的 DSH skill 根
+- **按角色隔离的 skill** — MAIN 有 `pdf-reference-reader`；REPORT 有 `experiment-report-writer`、当前语言的 `report-language-*` guidance 以及对应编译 skill；实验目录 `References/skills` 是按 cwd 发现的 DSH skill 根
 - **设置与实时模型** — 语言、等待超时和 Python 在 **设置 → 插件 → 插件配置**；运行中的 subagent 在对话窗口切换模型
 - **Python 环境** — AutoReport 托管 venv 仅在你选中时用 `uv` 创建（`$DSH_HOME/autoreport/venv`，安装 numpy/scipy/pandas/matplotlib）；或检测到的本机解释器；或自定义路径。未选择则不占磁盘；删除该目录即可回收空间。owned bash 注入 `DSH_AUTOREPORT_PYTHON` 并前置 PATH，因此裸的 `python3` 也会打到该解释器
 

@@ -134,11 +134,13 @@ describe('report router', () => {
     expect(child.tools.map(tool => tool.name)).toEqual(['manifest', 'report_workflow'])
     expect(child.skills.map(skill => skill.name)).toEqual([
       'experiment-report-writer',
+      'report-language-latex',
       'latex-compile',
     ])
     const environment = child.sections.find(section => section.name === 'report-environment')
     expect(environment?.text).toContain('language: latex')
     expect(environment?.text).toContain('entry: Report/main.tex')
+    expect(environment?.text).toContain('language skill: report-language-latex')
     expect(environment?.text).toContain('compile skill: latex-compile')
     expect(child.sections.map(section => section.name)).not.toEqual(expect.arrayContaining([
       'autoreport:skill:experiment-report-writer',

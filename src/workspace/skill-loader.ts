@@ -65,17 +65,19 @@ export function parseBundledSkill(raw: string): BundledSkill | undefined {
 }
 
 function collectSkillsFromRoot(root: string, add: (skill: BundledSkill | undefined, path: string) => void): void {
-  let skillEntries: string[]
-  try {
-    skillEntries = readdirSync(join(root, 'skills')).sort()
-  } catch (error: unknown) {
-    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
-    skillEntries = []
-  }
-  for (const entry of skillEntries) {
-    if (!entry.endsWith('.md')) continue
-    const path = join(root, 'skills', entry)
-    add(parseBundledSkill(readFileSync(path, 'utf8')), path)
+  for (const directory of ['skills', 'report-languages'] as const) {
+    let entries: string[]
+    try {
+      entries = readdirSync(join(root, directory)).sort()
+    } catch (error: unknown) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+      entries = []
+    }
+    for (const entry of entries) {
+      if (!entry.endsWith('.md')) continue
+      const path = join(root, directory, entry)
+      add(parseBundledSkill(readFileSync(path, 'utf8')), path)
+    }
   }
   for (const language of ['latex', 'typst'] as const) {
     const nestedRoot = join(root, language, 'skills')
@@ -104,7 +106,8 @@ function collectSkillsFromRoot(root: string, add: (skill: BundledSkill | undefin
  * global overlay (`$DSH_HOME/autoreport/resources`) for synced remotes such as
  * `latex-compile` and `typst`. Overlay names replace a bundled file of the
  * same name. Report-language guidance files under `report-languages/` are
- * not part of the runtime catalog.
+ * bundled runtime skills too; role routing decides which one a REPORT child
+ * receives.
  * @param overlayRoot - global synced overlay directory.
  * @returns parsed skills with unique names, sorted by name.
  */

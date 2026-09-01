@@ -40,6 +40,8 @@ describe('loadBundledSkills', () => {
     expect(skills.map(skill => skill.name)).toEqual([
       'experiment-report-writer',
       'pdf-reference-reader',
+      'report-language-latex',
+      'report-language-typst',
       'typst-compile',
     ])
   })
@@ -70,11 +72,20 @@ describe('loadBundledSkills', () => {
     expect(latex?.content).toContain('Do not use `compile_report`')
   })
 
+  it('loads report-language guidance into the runtime catalog', () => {
+    const latex = loadBundledSkills().find(skill => skill.name === 'report-language-latex')
+    const typst = loadBundledSkills().find(skill => skill.name === 'report-language-typst')
+    expect(latex?.content).toContain('Use `[H]` for every figure and table unless the user-provided template explicitly requires another placement policy')
+    expect(typst?.content).toContain('do not use LaTeX commands')
+  })
+
   it('merges overlay typst and latex-compile with bundled skills', () => {
     expect(loadBundledSkills(overlay()).map(skill => skill.name)).toEqual([
       'experiment-report-writer',
       'latex-compile',
       'pdf-reference-reader',
+      'report-language-latex',
+      'report-language-typst',
       'typst',
       'typst-compile',
     ])

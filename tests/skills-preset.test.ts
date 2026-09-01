@@ -31,28 +31,38 @@ describe('AutoReport role-scoped domain skills', () => {
 
   it('gives REPORT only the active compilation skill plus writing guidance', () => {
     expect(skillNamesForRole('REPORT', 'latex')).toEqual([
-      'experiment-report-writer', 'latex-compile',
+      'experiment-report-writer', 'report-language-latex', 'latex-compile',
     ])
     expect(skillNamesForRole('REPORT', 'typst')).toEqual([
-      'experiment-report-writer', 'typst', 'typst-compile',
+      'experiment-report-writer', 'report-language-typst', 'typst', 'typst-compile',
     ])
   })
 
   it('registers REPORT runtime skills on the child context', () => {
-    const skills: string[] = []
+    const skills: { name: string; content: string }[] = []
     const context = {
       skills: {
-        register: (registration: { name: string }) => {
-          skills.push(registration.name)
+        register: (registration: { name: string; content: string }) => {
+          skills.push(registration)
           return () => {}
         },
       },
     }
     registerRoleSkills(context, 'REPORT', 'latex', overlay())
-    expect(skills).toEqual(['experiment-report-writer', 'latex-compile'])
+    expect(skills.map(skill => skill.name)).toEqual([
+      'experiment-report-writer', 'report-language-latex', 'latex-compile',
+    ])
+    expect(skills.find(skill => skill.name === 'report-language-latex')?.content).toContain(
+      'Use `[H]` for every figure and table unless the user-provided template explicitly requires another placement policy',
+    )
     skills.length = 0
     registerRoleSkills(context, 'REPORT', 'typst', overlay())
-    expect(skills).toEqual(['experiment-report-writer', 'typst', 'typst-compile'])
+    expect(skills.map(skill => skill.name)).toEqual([
+      'experiment-report-writer', 'report-language-typst', 'typst', 'typst-compile',
+    ])
+    expect(skills.find(skill => skill.name === 'report-language-typst')?.content).toContain(
+      'do not use LaTeX commands',
+    )
   })
 
   it('fails loud when the child skills service is missing', () => {
