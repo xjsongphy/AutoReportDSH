@@ -125,6 +125,33 @@ describe('report observer', () => {
     expect(state.currentDelegation('task-7')?.phase).toBe('waiting_for_child')
   })
 
+  it('accepts a valid report after this same revision timed out', () => {
+    const session = Session.create(SessionId('parent'))
+    const state = WorkflowState.fromSession(session)
+    const waiters = new WaiterRegistry()
+    const waiting = seedWaiting(session, state)
+    state.apply(appendWorkflowEvent(session, 'autoreport/delegation', {
+      ...waiting,
+      phase: 'timed_out',
+      reason: 'idle timeout',
+      settledAt: 20,
+    }))
+    const event = session.append('user/message', createUserMessage({
+      content: [{ type: 'text', text: JSON.stringify({
+        task_id: 'task-7',
+        delegation_revision: 1,
+        status: 'success',
+        block_type: null,
+        response: 'finished after Main resumed',
+        produced_files: ['Data/Processed/out.csv'],
+      }) }],
+      source: { kind: 'subagent-report', form: 'relay', senderSessionId: SessionId('child-da') },
+    }), { surfaceOp: 'append' })
+    observe(session, state, waiters, event)
+    expect(state.currentDelegation('task-7')?.phase).toBe('completed')
+    expect(state.getTask('task-7')?.status).toBe('completed')
+  })
+
   it('ignores a later delivery with a different message id after a terminal report is accepted', () => {
     const session = Session.create(SessionId('parent'))
     const state = WorkflowState.fromSession(session)

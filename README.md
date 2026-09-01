@@ -12,59 +12,65 @@ English | [中文](README.zh.md)
 
 </div>
 
-A **fixed-team report workflow** for automatically writing physics-experiment
-reports in LaTeX or Typst on [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness).
-It migrates the report-domain behavior of [AutoReportCLI](../autoreportcli) into a
-`dsh` plugin — no second harness, no provider layer, no extra agent loop.
-DSH is the runtime; the experiment folder is the project; select **`autoreport`**
-to enter the workflow.
+AutoReportDSH writes physics-experiment reports automatically. It is a plugin for
+[DeepSeek Harness (DSH)](https://github.com/deepseek-ai/deepseek-harness) that runs a
+fixed five-role team — Main, Theory, Data Analysis, Plotting, and Report — over one
+experiment folder: give the team your measured data and reference material, and it
+derives the theory, processes the data, draws the figures, and compiles a LaTeX or
+Typst report. The workflow ports the report pipeline of
+[AutoReportCLI](../autoreportcli) onto DSH; DSH provides the runtime and model
+access, and this plugin provides the report workflow.
 
-The package follows DSH's normal installable-bundle model. The source checkout
-also includes a one-command installer for the DSH already installed by the user.
+## How it works
 
-## Overview
-
-AutoReportDSH keeps AutoReportCLI’s five-role report pipeline, but runs it
-inside DSH. You open an experiment folder, choose the `autoreport` preset, and
-coordinate Main, Theory, Data Analysis, Plotting, and Report through ordinary
-DSH sessions. Stock `standard` sessions stay stock DSH.
+Open an experiment folder in DSH and start a session with the `autoreport` preset.
+Main plans the report and hands tasks to the four specialists, each of which works
+only inside its own part of the folder. Specialists keep their role context across
+follow-up tasks, and they describe their outputs in a shared `manifest`, so the next
+role can find another role's files without being told where they are. A session
+started without the preset behaves exactly like stock DSH.
 
 ## Features
 
-### Core capabilities
-- **Multi-agent collaboration** — Main, Theory, Data Analysis, Plotting, and Report share one experiment, with separate responsibilities and write boundaries
-- **Project-oriented workspace** — the current folder is the experiment; `/report-init` or the first MAIN turn creates the standard layout without overwriting user files
-- **LaTeX and Typst reports** — language selection, bundled templates/themes, bibliography assets, compile skills, and Python-based analysis and plotting
-- **DSH providers** — uses the model routes already configured in DSH; AutoReportDSH does not ship its own credentials or provider list
-- **Resource synchronization** — on plugin start, listed remotes refresh into `$DSH_HOME/autoreport/resources`; `pnpm run sync:resources` does the same without booting DSH
-- **Task and artifact tracking** — `send_to_agent` records durable tasks and revisions; artifact events record observed changes; agents use `manifest` for cross-agent file descriptions and role notes, then finish with `report_workflow`
-- **Safe execution** — DSH `workspace-write` pins each role to its writable root; AutoReport sessions cannot escalate via `sandbox_permissions`; network is allowed
-- **Built-in defaults** — bundled personas, templates, and skills so a fresh workspace can run immediately
-
-### Workflow
-- **Opt-in preset** — only a top-level `autoreport` session joins the runtime; overlay load does not change ordinary DSH sessions
-- **Small model surface** — MAIN adds `send_to_agent` and `manifest` (plus DSH `ask_user_question`); subagents add `manifest` and `report_workflow`; everything else is DSH `read` / `write` / `edit` / `bash` / `skill`
-- **Continuable subagents** — children keep role context across follow-ups; a direct human chat with a subagent is ordinary conversation, not a workflow task
-- **Role-scoped skills** — MAIN gets `pdf-reference-reader`; REPORT gets `experiment-report-writer`, the active `report-language-*` guidance, and the matching compile skills; experiment `References/skills` is a cwd-sensitive DSH skill root
-- **Settings and live model** — language, wait timeout, and Python live under **Settings → Plugins → Plugin configuration**; switch a running subagent’s model in the conversation window
-- **Python environments** — AutoReport-managed venv created with `uv` only when you select it (`$DSH_HOME/autoreport/venv`, numpy/scipy/pandas/matplotlib); a detected local interpreter; or a custom path. Unused managed env occupies no disk; delete that directory to reclaim space. Owned bash sees `DSH_AUTOREPORT_PYTHON` and a PATH prefix so bare `python3` hits that interpreter
+- **Five-role fixed team** — Main coordinates; Theory derives formulas; Data
+  Analysis processes measurements; Plotting produces figures and their scripts;
+  Report writes and compiles the document. DSH's `workspace-write` sandbox keeps
+  each role inside its own writable directories.
+- **The folder is the project** — `/report-init` or Main's first turn creates the
+  standard layout (`Data/`, `References/`, `Theory/`, `Plots/`, `Report/`,
+  `Outline/`) without touching files you already have.
+- **LaTeX and Typst** — each project selects a report language; bundled templates,
+  themes, bibliography assets, and compile skills cover the document side, and
+  Python covers data processing and plotting.
+- **Your DSH providers** — model routes and credentials come from DSH's own
+  configuration.
+- **Kept-current resources** — templates, themes, and skills refresh from their
+  remotes each time the plugin starts; `pnpm run sync:resources` triggers the same
+  refresh by hand.
+- **Everything bundled** — personas, templates, and skills ship with the plugin,
+  so a fresh workspace runs immediately.
 
 ## Quick Start
 
+**Prerequisites:** Node 22.19+. DSH itself is fetched on demand through
+`npx @deepseek-ai/dsh`.
+
 ### Install from npm
 
-After `autoreportdsh` is published, install it into DSH's standard Web profile:
+**Install the plugin** — downloads the published package and registers it, with
+its `autoreport` preset, in DSH's `web` profile:
 
 ```bash
 npx @deepseek-ai/dsh plugin --profile web add autoreportdsh
+```
+
+**Start DSH** — the Web UI opens at `http://127.0.0.1:3080`:
+
+```bash
 npx @deepseek-ai/dsh web
 ```
 
-The installer adds the `autoreport` preset automatically. Open the normal DSH
-Web UI at `http://127.0.0.1:3080`, select **`autoreport`**, and choose the
-experiment folder.
-
-To upgrade an existing installation:
+**Upgrade an existing installation:**
 
 ```bash
 npx @deepseek-ai/dsh plugin --profile web update autoreportdsh
@@ -72,33 +78,52 @@ npx @deepseek-ai/dsh plugin --profile web update autoreportdsh
 
 ### Install from source
 
-The source installer uses the DSH already installed on your `PATH`. It builds
-AutoReportDSH, installs the `autoreport` preset, and adds the plugin to DSH's
-normal `web` profile. It never clones or patches DSH:
+**Build and install** — builds this checkout, installs the `autoreport` preset
+into your DSH home, and registers the plugin in DSH's `web` profile. It uses the
+`dsh` on your `PATH`, never modifies DSH itself, and asks before replacing an
+existing install:
 
 ```bash
-git clone https://github.com/xjsongphy/AutoReportDSH.git
-cd AutoReportDSH
 pnpm run install:source
 ```
 
-If AutoReportDSH is already installed, the installer asks before replacing it.
-Use `pnpm run install:source -- --yes` for an explicit non-interactive upgrade.
+Pass `--yes` to replace without asking, for non-interactive use:
 
-Start the Web UI:
+```bash
+pnpm run install:source -- --yes
+```
+
+**Start the Web UI** — launches `dsh web` against the installed profile, same
+UI, same default address:
 
 ```bash
 pnpm run start:source
 ```
 
-The default address is `http://127.0.0.1:3080`. Set
-`AUTOREPORT_DSH_COMMAND` when the DSH executable has a non-standard name or
-location.
+**If `dsh` is not on your `PATH` or has a different name**, point both scripts
+at it:
+
+```bash
+AUTOREPORT_DSH_COMMAND="/path/to/dsh" pnpm run install:source
+AUTOREPORT_DSH_COMMAND="/path/to/dsh" pnpm run start:source
+```
+
+### Run your first report
+
+1. Open `http://127.0.0.1:3080`, start a session with the **`autoreport`**
+   preset, and choose your experiment folder.
+2. Run `/report-init` or describe the experiment in your first message — either
+   creates the standard layout and leaves existing files alone.
+   `/report-init --language typst` selects Typst; LaTeX and Typst files may
+   coexist, and the project setting decides the active language.
+3. Add measured data and reference material to the folder, then ask Main to
+   write the report; the compiled PDF lands in `Report/`.
 
 ## Configuration
 
-DSH owns providers, credentials, and the Main model route. AutoReportDSH only
-snapshots report-workflow policy when a workflow starts:
+Providers, credentials, and the Main model route belong to DSH. The plugin reads
+its report settings in this order and freezes the result when a workflow starts,
+so later changes leave a running report untouched:
 
 ```text
 project settings     <dshHome>/autoreport/<workspaceId>/project.json
@@ -110,14 +135,23 @@ composition defaults
 schema defaults
 ```
 
-Changing settings later does not alter an in-flight report.
-
-- **Settings card** — `defaultReportLanguage`, `delegationWaitTimeoutMs`, and `pythonExecutable` under **Settings → Plugins → Plugin configuration**
-- **Subagent model** — new subagents inherit Main unless `specialistModel` is set in cordis or project settings; switch a running subagent from the conversation window (`session.models` / `selectModel`)
-- **Python** — managed (`__managed__` → `$DSH_HOME/autoreport/venv`, created on save with `uv venv` then `uv pip install numpy scipy pandas matplotlib`; not created until selected; delete the directory to reclaim space), local (conda / virtualenv / pyenv / PATH, including `~/.autoreport/venv` if present; packages are not auto-installed), or a custom absolute path
-- **`/report-init [--language latex|typst]`** — idempotent workspace init; LaTeX and Typst files may coexist; the project setting chooses the active language. The command is host-global; non-AutoReport sessions are rejected before any file change
+- **Settings card** — report language, delegation idle timeout, delegation maximum
+  wait, and Python interpreter live under **Settings → Plugins → Plugin configuration**.
+- **Subagent model** — new specialists inherit Main's model unless
+  `specialistModel` is set in cordis or project settings; switch a running
+  specialist's model from the conversation window.
+- **Python** — pick one of three: a managed environment that the plugin creates
+  with `uv` under `$DSH_HOME/autoreport/venv` only when you select it (numpy,
+  scipy, pandas, and matplotlib included; delete the directory to reclaim the
+  disk), an interpreter already on your machine (conda, virtualenv, pyenv, or
+  `PATH`, including `~/.autoreport/venv` when present; packages are not
+  auto-installed), or any custom path. Agent shells receive the selection as
+  `DSH_AUTOREPORT_PYTHON`; the managed environment is also put on `PATH`, so a
+  bare `python3` resolves to it.
 
 ## Workspace Layout
+
+The experiment folder keeps everything a report needs:
 
 ```text
 .
@@ -158,29 +192,33 @@ AutoReportDSH/
 └── tests/                 unit, integration, client/, eval/, e2e/
 ```
 
-```bash
-pnpm test
-pnpm run build
-```
+| Command | What it does |
+|---|---|
+| `pnpm test` | runs the unit, integration, client, and eval suites with Vitest |
+| `pnpm run typecheck` | typechecks the host and client code without emitting files |
+| `pnpm run build` | cleans `dist/`, compiles TypeScript, copies resources, and builds the web client |
+| `pnpm run sync:resources` | refreshes managed resources into `$DSH_HOME/autoreport/resources` without starting DSH |
+| `pnpm run install:preset` | materializes the `autoreport` user preset and its overlay in the DSH home (the source installer runs it for you) |
+| `pnpm run prepare:npm` | builds and assembles the publishable npm bundle under `dist/npm` |
 
-`tests/eval/workflow-eval.test.ts` covers the assembled workflow traces (LaTeX/Typst
-pipelines, blocked recovery, forgotten `report_workflow`, cold rebind, artifact
-`modified`, Python snapshot, coexistence). The live-provider smoke is opt-in:
+`tests/eval/workflow-eval.test.ts` asserts the assembled workflow traces: the full
+LaTeX and Typst pipelines, recovery from a blocked delegation, a specialist that
+forgets to declare completion, cold rebinding, artifact `modified` events, the
+Python snapshot, and LaTeX/Typst coexistence. The live-provider smoke test runs
+against a real DSH installation and is opt-in: set `AUTOREPORT_LIVE_TEST=1`, point
+`AUTOREPORT_E2E_DSH_HOME` at a DSH home that already has providers configured, and
+run
 
 ```bash
-export AUTOREPORT_LIVE_TEST=1
-export AUTOREPORT_E2E_DSH_HOME="/path/to/configured/dsh-home"
 pnpm vitest run tests/e2e/configured-route.e2e.test.ts
 ```
 
-See [docs/live-provider-testing.md](docs/live-provider-testing.md). The test
-never declares a provider or API key.
+The test reads the providers from that DSH home and declares none of its own. See
+[docs/live-provider-testing.md](docs/live-provider-testing.md).
 
 CI (`.github/workflows/ci.yml`) runs on Linux, macOS, and Windows against the
 pinned DSH compatibility checkout. It applies the temporary patches, then runs
-install, keyless tests, typecheck, and build. Use `pnpm run prepare:npm` to
-assemble the publishable bundle under `dist/npm`; npm users install it through
-DSH's normal `dsh plugin --profile web add autoreportdsh` command.
+install, keyless tests, typecheck, and build. See
+[docs/dependencies.md](docs/dependencies.md) for the dependency pin.
 
-Design and implementation notes: **[PLAN.md](PLAN.md)**. Dependency pin:
-**[docs/dependencies.md](docs/dependencies.md)**.
+Design and implementation notes: **[PLAN.md](PLAN.md)**.

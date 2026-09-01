@@ -6,6 +6,7 @@ import { acceptWrites, stubSettingsScope } from './stub-scope.js'
 function form() {
   const host = stubSettingsScope<Record<string, unknown>>()
   const subject = new CardForm(host.scope, [
+    numberField('delegationIdleTimeoutMs'),
     numberField('delegationWaitTimeoutMs'),
     enumField('defaultReportLanguage', ['latex', 'typst']),
     textField('pythonExecutable'),
@@ -16,8 +17,8 @@ function form() {
   host.publish({
     status: 'ready',
     writable: true,
-    value: { delegationWaitTimeoutMs: 600_000, defaultReportLanguage: 'latex' },
-    base: { delegationWaitTimeoutMs: 600_000, defaultReportLanguage: 'latex' },
+    value: { delegationIdleTimeoutMs: 60_000, delegationWaitTimeoutMs: 600_000, defaultReportLanguage: 'latex' },
+    base: { delegationIdleTimeoutMs: 60_000, delegationWaitTimeoutMs: 600_000, defaultReportLanguage: 'latex' },
     user: {},
   })
   return { host, subject }
@@ -28,6 +29,7 @@ describe('CardForm', () => {
     const { subject } = form()
 
     expect(subject.field('delegationWaitTimeoutMs')).toEqual({ text: '600000', overridden: false, invalid: false })
+    expect(subject.field('delegationIdleTimeoutMs')).toEqual({ text: '60000', overridden: false, invalid: false })
     expect(subject.shell()).toMatchObject({ available: true, writable: true, dirty: false, invalid: false })
   })
 
@@ -45,6 +47,14 @@ describe('CardForm', () => {
 
     expect(host.set.mock.calls).toEqual([['delegationWaitTimeoutMs', 9_000]])
     expect(subject.shell()).toMatchObject({ dirty: false, failed: false, saving: false })
+  })
+
+  it('writes the idle timeout independently from the hard timeout', async () => {
+    const { host, subject } = form()
+    acceptWrites(host)
+    subject.actions().edit('delegationIdleTimeoutMs', '75000')
+    await subject.save()
+    expect(host.set.mock.calls).toEqual([['delegationIdleTimeoutMs', 75_000]])
   })
 
   it('refuses a non-positive timeout and keeps the draft', async () => {

@@ -21,12 +21,14 @@ export const name = 'autoreportdsh-host'
 export const inject = ['tools']
 
 const DEFAULT_WAIT_MS = 600_000
+const DEFAULT_IDLE_TIMEOUT_MS = 60_000
 
 const DEFAULT_CONFIG: Config = {
   defaultReportLanguage: 'latex',
   workspaceRoot: undefined,
   specialistModel: undefined,
   delegationWaitTimeoutMs: DEFAULT_WAIT_MS,
+  delegationIdleTimeoutMs: DEFAULT_IDLE_TIMEOUT_MS,
 }
 
 /**
@@ -39,6 +41,7 @@ export function resolveHostConfig(raw: Partial<Config> = {}): Config {
     workspaceRoot: raw.workspaceRoot ?? DEFAULT_CONFIG.workspaceRoot,
     specialistModel: raw.specialistModel ?? DEFAULT_CONFIG.specialistModel,
     delegationWaitTimeoutMs: raw.delegationWaitTimeoutMs ?? DEFAULT_WAIT_MS,
+    delegationIdleTimeoutMs: raw.delegationIdleTimeoutMs ?? DEFAULT_IDLE_TIMEOUT_MS,
     ...(raw.pythonExecutable === undefined ? {} : { pythonExecutable: raw.pythonExecutable }),
   }
 }

@@ -18,6 +18,7 @@ import {
 import type { WorkflowSettingsSnapshot } from '../settings.js'
 import { roleHandoffText } from '../workflow/file-notes.js'
 import { delegationKey } from '../workflow/protocol.js'
+import type { WaiterOutcome } from '../workflow/waiters.js'
 
 const MAX_PROMPT = 16_384
 const MAX_CONTEXT = 8_192
@@ -112,6 +113,52 @@ function subjectFromPrompt(prompt: string, rawSubject: unknown): string {
   return firstLine.length <= MAX_SUBJECT ? firstLine : firstLine.slice(0, MAX_SUBJECT)
 }
 
+/** Convert one already-folded terminal delegation into the waiter vocabulary. */
+function terminalOutcome(snapshot: DelegationSnapshot | undefined): WaiterOutcome | undefined {
+  if (snapshot?.phase === 'completed') {
+    return {
+      status: 'completed',
+      ...(snapshot.report?.response === undefined ? {} : { response: snapshot.report.response }),
+      ...(snapshot.report?.produced_files === undefined ? {} : { producedFiles: snapshot.report.produced_files }),
+    }
+  }
+  if (snapshot?.phase === 'blocked') {
+    return {
+      status: 'blocked',
+      ...(snapshot.report?.response === undefined ? {} : { response: snapshot.report.response }),
+      ...(snapshot.report?.block_type === 'missing_data' || snapshot.report?.block_type === 'quality'
+        ? { blockType: snapshot.report.block_type }
+        : {}),
+    }
+  }
+  if (snapshot?.phase === 'failed') {
+    return { status: 'failed', ...(snapshot.reason === undefined ? {} : { response: snapshot.reason }) }
+  }
+  return undefined
+}
+
+function resultFromOutcome(
+  taskId: string,
+  revision: number,
+  outcome: WaiterOutcome,
+): {
+  status: string
+  task_id: string
+  delegation_revision: number
+  response?: string
+  block_type?: 'missing_data' | 'quality'
+  produced_files?: string[]
+} {
+  return {
+    status: outcome.status === 'completed' ? 'success' : outcome.status === 'timed_out' ? 'timeout' : outcome.status,
+    task_id: taskId,
+    delegation_revision: revision,
+    ...(outcome.response === undefined ? {} : { response: outcome.response }),
+    ...(outcome.blockType === undefined ? {} : { block_type: outcome.blockType }),
+    ...(outcome.producedFiles === undefined ? {} : { produced_files: [...outcome.producedFiles] }),
+  }
+}
+
 /**
  * Resolve the child `agentOptions` from the durable settings snapshot,
  * falling back to composition defaults ONLY when no snapshot is on the
@@ -147,7 +194,7 @@ export function createSendToAgentTool(deps: SendToAgentDependencies): ToolDefini
     name: 'send_to_agent',
     description: [
       'Dispatch one durable AutoReport task to its fixed subagent role; creates a task when task_id is omitted. The subagent finishes only by calling report_workflow, which becomes your result.',
-      'With wait=true (default) the call blocks until the subagent reports and returns status: "success" (done — response holds results and produced file paths), "blocked" (subagent cannot proceed — block_type is "missing_data" or "quality"; response states what is needed), or "timeout" (no report within timeout_ms).',
+      'With wait=true (default) the call blocks until the subagent reports and returns status: "success" (done — response holds results and produced file paths), "blocked" (subagent cannot proceed — block_type is "missing_data" or "quality"; response states what is needed), or "timeout" (the child stayed idle too long or reached the absolute wait limit).',
       'wait=false returns "delegated" immediately; the report arrives later.',
       'To redispatch a blocked or timed-out task, call again with the same task_id — this starts a new delegation revision. Supply missing inputs or corrected constraints in prompt/context rather than repeating the failed prompt verbatim.',
     ].join(' '),
@@ -159,7 +206,7 @@ export function createSendToAgentTool(deps: SendToAgentDependencies): ToolDefini
       task_id: { type: 'string', description: 'Existing task id for redispatch or follow-up.' },
       context: { type: 'string', description: 'Explicit user constraints the subagent must preserve.' },
       wait: { type: 'boolean', description: 'Wait for the workflow report; default true.' },
-      timeout_ms: { type: 'number', description: 'Bounded wait in milliseconds.' },
+      timeout_ms: { type: 'number', description: 'Absolute wait limit in milliseconds; child activity only pauses the separate idle timeout.' },
     },
     output: {
       schema: {
@@ -360,31 +407,36 @@ export function createSendToAgentTool(deps: SendToAgentDependencies): ToolDefini
         }
       }
 
-      const timeoutMs = normalizeTimeout(
+      const hardTimeoutMs = normalizeTimeout(
         args.timeout_ms,
         settings?.delegationWaitTimeoutMs ?? deps.config.delegationWaitTimeoutMs ?? 600_000,
       )
-      const outcome = await live.waiters.wait(delegationKey(taskId, revision), timeoutMs)
+      const idleTimeoutMs = normalizeTimeout(
+        undefined,
+        settings?.delegationIdleTimeoutMs ?? deps.config.delegationIdleTimeoutMs ?? 60_000,
+      )
+      // `startContinuable()` only waits for inbox acceptance. A very fast child
+      // may have reported before this tool reaches its local waiter, so read the
+      // durable projection first instead of sleeping until a timeout.
+      const key = delegationKey(taskId, revision)
+      const outcome = terminalOutcome(live.state.delegationAt(taskId, revision))
+        ?? await live.waiters.wait(key, {
+          childSessionId: String(bound.childSessionId),
+          idleTimeoutMs,
+          hardTimeoutMs,
+        })
       if (outcome.status === 'timed_out') {
         const current = live.state.delegationAt(taskId, revision)
         if (current?.phase === 'waiting_for_child') {
           deps.workflow.commit(parentSession, 'autoreport/delegation', {
             ...current,
             phase: 'timed_out',
-            reason: `no workflow report within ${timeoutMs}ms`,
+            reason: `no workflow report within idle ${idleTimeoutMs}ms or hard ${hardTimeoutMs}ms`,
             settledAt: now(),
           })
         }
       }
-      const result = {
-        status: outcome.status === 'completed' ? 'success' : outcome.status === 'timed_out' ? 'timeout' : outcome.status,
-        task_id: taskId,
-        delegation_revision: revision,
-        ...(outcome.response === undefined ? {} : { response: outcome.response }),
-        ...(outcome.blockType === undefined ? {} : { block_type: outcome.blockType }),
-        ...(outcome.producedFiles === undefined ? {} : { produced_files: [...outcome.producedFiles] }),
-      }
-      return result
+      return resultFromOutcome(taskId, revision, outcome)
     },
     presentCall: args => ({ card: 'generic', title: `send_to_agent ${String(args.role)}`, kind: 'other', rawInput: args }),
   })

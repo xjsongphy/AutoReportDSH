@@ -22,6 +22,10 @@ const force = process.argv.includes('--yes') || process.argv.includes('-y') || p
 const help = process.argv.includes('--help') || process.argv.includes('-h')
 const interactive = process.stdin.isTTY === true && process.stdout.isTTY === true
 const useColor = interactive && process.env.NO_COLOR === undefined
+const STATUS_INDENT = '  '
+const DETAIL_INDENT = '    '
+const BOX_WIDTH = 54
+const BOX_CONTENT_WIDTH = BOX_WIDTH - 4
 
 const color = {
   reset: useColor ? '\x1b[0m' : '',
@@ -39,6 +43,31 @@ function paint(name, value) {
 
 function duration(startedAt) {
   return `${((Date.now() - startedAt) / 1000).toFixed(1)}s`
+}
+
+function boxTop(title, colorName) {
+  const prefix = `─ ${title} `
+  return paint(colorName, `╭${prefix}${'─'.repeat(Math.max(0, BOX_WIDTH - 2 - prefix.length))}╮`)
+}
+
+function boxBody(parts) {
+  let remaining = BOX_CONTENT_WIDTH
+  const rendered = []
+  for (const part of parts) {
+    if (remaining <= 0) break
+    const text = part.text.slice(0, remaining)
+    rendered.push(part.color === undefined ? text : paint(part.color, text))
+    remaining -= text.length
+  }
+  return `│ ${rendered.join('')}${' '.repeat(Math.max(0, remaining))} │`
+}
+
+function boxBottom(colorName) {
+  return paint(colorName, `╰${'─'.repeat(BOX_WIDTH - 2)}╯`)
+}
+
+function printField(label, value) {
+  console.log(`${DETAIL_INDENT}${paint('cyan', `${label}:`)} ${value}`)
 }
 
 function commandResult(bin, args, cwd) {
@@ -74,10 +103,10 @@ async function step(label, bin, args, cwd) {
   let frame = 0
   let spinner
   if (interactive) {
-    process.stdout.write(`  ${paint('cyan', frames[frame])} ${label}`)
+    process.stdout.write(`${STATUS_INDENT}${paint('cyan', frames[frame])} ${label}`)
     spinner = setInterval(() => {
       frame = (frame + 1) % frames.length
-      process.stdout.write(`\r\x1b[2K  ${paint('cyan', frames[frame])} ${label}`)
+      process.stdout.write(`\r\x1b[2K${STATUS_INDENT}${paint('cyan', frames[frame])} ${label}`)
     }, 100)
   }
   let result
@@ -93,16 +122,19 @@ async function step(label, bin, args, cwd) {
     if (interactive) process.stdout.write('\r\x1b[2K')
     throw formatFailure(bin, args, result)
   }
-  const line = `  ${paint('green', '✓')} ${label} ${paint('dim', `(${duration(startedAt)})`)}\n`
+  const line = `${STATUS_INDENT}${paint('green', '✓')} ${label} ${paint('dim', `(${duration(startedAt)})`)}\n`
   process.stdout.write(interactive ? `\r\x1b[2K${line}` : line)
   return result
 }
 
 function printHeader() {
   console.log('')
-  console.log(paint('bold', '╭─ AutoReportDSH installer ─────────────────────────╮'))
-  console.log(`│ Install into the existing DSH ${paint('cyan', `${dshCommand} · ${profile} profile`)} │`)
-  console.log(paint('bold', '╰────────────────────────────────────────────────────╯'))
+  console.log(boxTop('AutoReportDSH installer', 'bold'))
+  console.log(boxBody([
+    { text: 'Install into the existing DSH ' },
+    { text: `${dshCommand} · ${profile} profile`, color: 'cyan' },
+  ]))
+  console.log(boxBottom('bold'))
   console.log('')
 }
 
@@ -134,13 +166,13 @@ function installedPackage(list) {
 }
 
 async function confirmOverwrite(existing) {
-  console.log(`${paint('yellow', '⚠')} ${paint('bold', 'AutoReportDSH is already installed')}`)
-  console.log(`  Profile: ${profile}`)
-  console.log(`  Current: ${existing.version ?? 'unknown version'}`)
-  if (existing.path !== undefined) console.log(`  Location: ${existing.path}`)
+  console.log(`${STATUS_INDENT}${paint('yellow', '⚠')} ${paint('bold', 'AutoReportDSH is already installed')}`)
+  printField('Profile', profile)
+  printField('Current', existing.version ?? 'unknown version')
+  if (existing.path !== undefined) printField('Location', existing.path)
   console.log('')
   if (force) {
-    console.log(`  ${paint('dim', 'Continuing because --yes was provided.')}`)
+    console.log(`${DETAIL_INDENT}${paint('dim', 'Continuing because --yes was provided.')}`)
     return true
   }
   if (!interactive) {
@@ -148,7 +180,7 @@ async function confirmOverwrite(existing) {
   }
   const readline = createInterface({ input: process.stdin, output: process.stdout })
   try {
-    const answer = await readline.question('  Overwrite this installation? [y/N] ')
+    const answer = await readline.question(`${DETAIL_INDENT}Overwrite this installation? [y/N] `)
     return /^(?:y|yes)$/iu.test(answer.trim())
   } finally {
     readline.close()
@@ -187,22 +219,34 @@ try {
   if (!existsSync(repoRoot)) throw new Error(`plugin checkout not found: ${repoRoot}`)
   printHeader()
   const version = await detectDsh()
-  console.log(`  ${paint('green', '✓')} Found DSH ${paint('bold', version)}`)
+  console.log(`${STATUS_INDENT}${paint('green', '✓')} Found DSH ${paint('bold', version)}`)
   const existing = await detectExistingPlugin()
   if (existing !== undefined && !(await confirmOverwrite(existing))) {
-    console.log(`\n${paint('yellow', 'Installation cancelled.')} Existing installation was left unchanged.`)
+    console.log(`\n${STATUS_INDENT}${paint('yellow', '⚠')} ${paint('bold', 'Installation cancelled.')} Existing installation was left unchanged.`)
     process.exit(0)
   }
   console.log('')
   await installPlugin()
   console.log('')
-  console.log(paint('green', '╭─ AutoReportDSH installed ─────────────────────────╮'))
-  console.log(`│ DSH ${version.padEnd(18)} profile: ${profile.padEnd(20)} │`)
-  console.log(`│ Start: ${paint('cyan', `${dshCommand} web`).padEnd(43)}│`)
-  console.log('│ Web UI: http://127.0.0.1:3080                       │')
-  console.log(paint('green', '╰────────────────────────────────────────────────────╯'))
+  console.log(boxTop('AutoReportDSH installed', 'green'))
+  console.log(boxBody([
+    { text: 'DSH: ', color: 'cyan' },
+    { text: version },
+    { text: '    profile: ', color: 'cyan' },
+    { text: profile },
+  ]))
+  console.log(boxBody([
+    { text: 'Start: ', color: 'cyan' },
+    { text: `${dshCommand} web` },
+  ]))
+  console.log(boxBody([
+    { text: 'Web UI: ', color: 'cyan' },
+    { text: 'http://127.0.0.1:3080' },
+  ]))
+  console.log(boxBottom('green'))
 } catch (error) {
-  console.error(`\n${paint('red', '✗ Installation failed')}`)
-  console.error(String(error instanceof Error ? error.message : error))
+  console.error(`\n${STATUS_INDENT}${paint('red', '✗')} ${paint('bold', 'Installation failed')}`)
+  const details = String(error instanceof Error ? error.message : error)
+  console.error(details.split('\n').map(line => `${DETAIL_INDENT}${line}`).join('\n'))
   process.exitCode = 1
 }

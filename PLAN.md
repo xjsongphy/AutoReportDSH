@@ -278,8 +278,10 @@ The tool:
    it waits on an in-process waiter keyed by `(task_id, delegation_revision)` while the
    durable delegation projection remains authoritative. The waiter is resolved by the
    child report/settlement observer, not by waiting for the parent’s next model step. A
-   bounded timeout produces a durable timeout phase and a tool error/result; it does not
-   create another queue or transport path.
+   liveness-aware bounds produce a durable timeout phase and a tool error/result; they do
+   not create another queue or transport path. A bound child with DSH lifecycle status
+   `running` pauses the 60-second idle timer; `idle` rearms it. A separate hard deadline
+   always applies, including while the child remains active.
 
 The model-facing request has explicit wait semantics:
 

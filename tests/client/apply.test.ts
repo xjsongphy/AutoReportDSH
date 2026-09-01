@@ -38,8 +38,8 @@ async function bench() {
   host.publish({
     status: 'ready',
     writable: true,
-    value: { defaultReportLanguage: 'latex', delegationWaitTimeoutMs: 600_000 },
-    base: { defaultReportLanguage: 'latex', delegationWaitTimeoutMs: 600_000 },
+    value: { defaultReportLanguage: 'latex', delegationIdleTimeoutMs: 60_000, delegationWaitTimeoutMs: 600_000 },
+    base: { defaultReportLanguage: 'latex', delegationIdleTimeoutMs: 60_000, delegationWaitTimeoutMs: 600_000 },
     user: {},
   })
   ctx.provide('connection', { isLoopback: true, api: {} })

@@ -8,7 +8,7 @@ export type AutoReportLocaleKey =
   | 'save' | 'saving' | 'discard' | 'unsaved' | 'saveFailed'
   | 'invalidChoice' | 'invalidNumber' | 'invalidPython'
   | 'reportLanguage' | 'reportLanguageHint'
-  | 'timeoutMs' | 'timeoutMsHint'
+  | 'idleTimeoutMs' | 'idleTimeoutMsHint' | 'timeoutMs' | 'timeoutMsHint'
   | 'python' | 'pythonHint'
   | 'pythonPick' | 'pythonManaged' | 'pythonCustom'
   | 'modelPicker' | 'modelPickerLoading' | 'modelPickerFailed' | 'reasoningEffort'
@@ -33,8 +33,10 @@ export const en: Record<AutoReportLocaleKey, string> = {
   invalidPython: 'Pick the AutoReport-managed venv, a detected local environment, or type an absolute interpreter path.',
   reportLanguage: 'Report language',
   reportLanguageHint: 'Source language for newly initialized workspaces.',
-  timeoutMs: 'Delegation wait (ms)',
-  timeoutMsHint: 'How long Main may wait when it delegates to a subagent with wait: true.',
+  idleTimeoutMs: 'Delegation idle timeout (ms)',
+  idleTimeoutMsHint: 'Main stops waiting after this much idle time. Model generation and tool execution do not count.',
+  timeoutMs: 'Delegation maximum wait (ms)',
+  timeoutMsHint: 'Absolute wait limit for Main when it delegates with wait: true, even while the subagent is active.',
   python: 'Python environment',
   pythonHint: 'Selecting AutoReport managed creates a uv venv under the DSH home and installs numpy, scipy, pandas, and matplotlib. It is not created until you choose it. Delete $DSH_HOME/autoreport/venv to reclaim space; choosing managed again recreates it. You can also pick a local conda/venv/pyenv/PATH interpreter or type a path. Subagent model, provider, and reasoning effort are switched in the conversation window.',
   pythonPick: 'Select an environment',
@@ -67,8 +69,10 @@ export const zh: Record<AutoReportLocaleKey, string> = {
   invalidPython: '请选择 AutoReport 托管环境、本机已检测的环境，或输入解释器的绝对路径。',
   reportLanguage: '报告语言',
   reportLanguageHint: '新初始化工作区使用的源码语言。',
-  timeoutMs: '委派等待（毫秒）',
-  timeoutMsHint: 'MAIN 以 wait: true 委派 subagent 时最多等待多久。',
+  idleTimeoutMs: '委派空闲超时（毫秒）',
+  idleTimeoutMsHint: 'Subagent 连续空闲这么久后，MAIN 停止同步等待；生成模型回复和执行工具时不计时。',
+  timeoutMs: '委派最长等待（毫秒）',
+  timeoutMsHint: 'MAIN 以 wait: true 委派 subagent 时的绝对等待上限，即使 subagent 一直在工作也会到期。',
   python: 'Python 环境',
   pythonHint: '选中 AutoReport 托管环境时才会用 uv 在 DSH home 下创建 venv 并安装 numpy/scipy/pandas/matplotlib。未选择不占空间。删除 $DSH_HOME/autoreport/venv 即可回收；再选托管会重新创建。也可选本机 conda/venv/pyenv/PATH 或自定义路径。subagent 的模型、提供方和推理力度请在对话窗口用 DSH 自己的切换。',
   pythonPick: '请选择环境',

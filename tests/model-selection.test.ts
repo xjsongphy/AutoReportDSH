@@ -10,6 +10,7 @@ const CONFIG: Config = {
   defaultReportLanguage: 'latex',
   workspaceRoot: undefined,
   specialistModel: undefined,
+  delegationIdleTimeoutMs: 60_000,
   delegationWaitTimeoutMs: 600_000,
 }
 

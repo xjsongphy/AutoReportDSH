@@ -30,6 +30,7 @@ const CONFIG: Config = {
   defaultReportLanguage: 'latex',
   workspaceRoot: undefined,
   specialistModel: undefined,
+  delegationIdleTimeoutMs: 60_000,
   delegationWaitTimeoutMs: 600_000,
 }
 
@@ -119,6 +120,7 @@ describe('host workflow runtime', () => {
     expect(runtime.forSession(session).state.projection().meta?.settings).toEqual({
       reportLanguage: 'typst',
       specialistModel: { inheritMain: false, provider: 'specialist', model: 'reasoning-model', reasoningEffort: 'high' },
+      delegationIdleTimeoutMs: 60_000,
       delegationWaitTimeoutMs: 12_345,
     })
   })
@@ -153,6 +155,38 @@ describe('host workflow runtime', () => {
     ctx.emit('session/event', child, child.append('turn/start', { turn: 1 }))
     expect(runtime.isMainSession(SessionId('child'))).toBe(false)
     expect(() => runtime.forSession(child)).toThrow(/owned by Main/)
+  })
+
+  it('pauses a bound child delegation idle timer from Harness agent status', async () => {
+    vi.useFakeTimers()
+    try {
+      const ctx = new Context()
+      const runtime = createRuntime(ctx, CONFIG)
+      const session = rootSession('main-liveness', AUTOREPORT_MAIN_PRESET)
+      const live = runtime.forSession(session)
+      const childId = SessionId('child-liveness')
+      runtime.roleRegistry.registerReserved({
+        version: AUTOREPORT_SCHEMA_VERSION,
+        role: 'THEORY',
+        childSessionId: childId,
+        parentSessionId: session.id,
+        workflowId: 'wf-liveness',
+        provisioning: 'reserved',
+      })
+      const pending = live.waiters.wait('task-1#1', {
+        childSessionId: String(childId),
+        idleTimeoutMs: 100,
+        hardTimeoutMs: 1_000,
+      })
+      ctx.emit('agent/status', { agent: { id: childId } as never, status: 'running' })
+      await vi.advanceTimersByTimeAsync(150)
+      expect(live.waiters.pendingKeys()).toBe(1)
+      ctx.emit('agent/status', { agent: { id: childId } as never, status: 'idle' })
+      await vi.advanceTimersByTimeAsync(100)
+      await expect(pending).resolves.toEqual({ status: 'timed_out' })
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('leaves stock sessions untouched: no membership, no initialization, no workflow events', () => {

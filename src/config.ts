@@ -39,8 +39,14 @@ export interface Config {
   workspaceRoot: string | undefined
   /** Default fixed model route for every specialist child; absent inherits Main. */
   specialistModel: SpecialistRoute | undefined
-  /** Default bounded wait for `send_to_agent({ wait: true })` (default ten minutes). */
+  /**
+   * Default absolute wait for `send_to_agent({ wait: true })` (default ten
+   * minutes). Kept under its original name so existing composition settings
+   * remain valid; it is the hard, not no-progress, deadline.
+   */
   delegationWaitTimeoutMs: number
+  /** Default no-progress wait while a delegated child is idle (default one minute). */
+  delegationIdleTimeoutMs: number
   /** Optional absolute Python interpreter path for specialist bash execution. */
   pythonExecutable?: string
 }
@@ -54,5 +60,6 @@ export const Config: z<Config> = z.object({
     reasoningEffort: z.string(),
   }),
   delegationWaitTimeoutMs: z.number().default(600_000),
+  delegationIdleTimeoutMs: z.number().default(60_000),
   pythonExecutable: z.string(),
 }) as unknown as z<Config>

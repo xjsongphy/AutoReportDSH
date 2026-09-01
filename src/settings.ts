@@ -47,9 +47,11 @@ import {
 /** Schema-default workflow policy applied below every other layer. */
 export const WORKFLOW_SETTINGS_SCHEMA_DEFAULTS: Readonly<{
   reportLanguage: ReportLanguage
+  delegationIdleTimeoutMs: number
   delegationWaitTimeoutMs: number
 }> = Object.freeze({
   reportLanguage: 'latex',
+  delegationIdleTimeoutMs: 60_000,
   delegationWaitTimeoutMs: 600_000,
 })
 
@@ -59,7 +61,9 @@ export const AUTOREPORT_SETTINGS_NAMESPACE = settingsNamespace('autoreport')
 export interface AutoReportUserSettings {
   /** Default report source language (schema default `latex`). */
   defaultReportLanguage: ReportLanguage
-  /** Bounded wait for `send_to_agent({ wait: true })` (schema default ten minutes). */
+  /** No-progress timeout while a `wait: true` child is idle (schema default one minute). */
+  delegationIdleTimeoutMs: number
+  /** Absolute `wait: true` cap (schema default ten minutes; legacy key retained for compatibility). */
   delegationWaitTimeoutMs: number
   /** Optional specialist route; absent inherits the Main route. */
   specialistModel?: SpecialistRoute
@@ -104,6 +108,7 @@ const PYTHON_ENVIRONMENT_SCHEMA = z.object({
 export const AUTO_REPORT_USER_SETTINGS_SCHEMA: z<AutoReportUserSettings> = z.object({
   defaultReportLanguage: z.union(['latex', 'typst'] as const).default(WORKFLOW_SETTINGS_SCHEMA_DEFAULTS.reportLanguage),
   specialistModel: SPECIALIST_ROUTE_SCHEMA,
+  delegationIdleTimeoutMs: z.number().default(WORKFLOW_SETTINGS_SCHEMA_DEFAULTS.delegationIdleTimeoutMs),
   delegationWaitTimeoutMs: z.number().default(WORKFLOW_SETTINGS_SCHEMA_DEFAULTS.delegationWaitTimeoutMs),
   pythonExecutable: z.string(),
   pythonEnvironments: z.array(PYTHON_ENVIRONMENT_SCHEMA).default([]),
@@ -116,6 +121,7 @@ export function autoReportUserSettingsBase(
 ): AutoReportUserSettings {
   return {
     defaultReportLanguage: config.defaultReportLanguage,
+    delegationIdleTimeoutMs: config.delegationIdleTimeoutMs,
     delegationWaitTimeoutMs: config.delegationWaitTimeoutMs,
     ...(config.specialistModel === undefined ? {} : { specialistModel: config.specialistModel }),
     ...(config.pythonExecutable === undefined ? {} : { pythonExecutable: config.pythonExecutable }),
@@ -166,7 +172,9 @@ function asEnvironmentOption(candidate: PythonCandidate): PythonEnvironmentOptio
 export interface AutoReportProjectSettings {
   /** Authoritative report language for this workspace once set. */
   reportLanguage?: ReportLanguage
-  /** Workspace delegation-wait bound. */
+  /** Workspace no-progress timeout while a delegated child is idle. */
+  delegationIdleTimeoutMs?: number
+  /** Workspace absolute delegation-wait cap. */
   delegationWaitTimeoutMs?: number
   /** Workspace specialist route; absent inherits lower layers. */
   specialistModel?: SpecialistRoute
@@ -178,6 +186,7 @@ export interface AutoReportProjectSettings {
 export const AUTO_REPORT_PROJECT_SETTINGS_SCHEMA: z<AutoReportProjectSettings> = z.object({
   reportLanguage: z.union(['latex', 'typst'] as const),
   specialistModel: SPECIALIST_ROUTE_SCHEMA,
+  delegationIdleTimeoutMs: z.number(),
   delegationWaitTimeoutMs: z.number(),
   pythonExecutable: z.string(),
 }) as unknown as z<AutoReportProjectSettings>
@@ -206,12 +215,13 @@ function compactSection<S extends Record<string, unknown>>(section: S): S {
 /** Composition-layer fields that act as plugin DEFAULTS (see {@link Config}). */
 export type WorkflowCompositionDefaults = Pick<
   Config,
-  'defaultReportLanguage' | 'specialistModel' | 'delegationWaitTimeoutMs' | 'pythonExecutable'
+  'defaultReportLanguage' | 'specialistModel' | 'delegationIdleTimeoutMs' | 'delegationWaitTimeoutMs' | 'pythonExecutable'
 >
 
 /** Explicit per-workflow inputs; highest layer, owned by the creating turn. */
 export interface WorkflowSettingsOverride {
   reportLanguage?: ReportLanguage
+  delegationIdleTimeoutMs?: number
   delegationWaitTimeoutMs?: number
   pythonExecutable?: string
   /**
@@ -241,7 +251,9 @@ export interface WorkflowSettingsSnapshot {
   readonly reportLanguage: ReportLanguage
   /** Concrete specialist route or explicit Main inheritance. */
   readonly specialistModel: SpecialistModelSelection
-  /** Bounded wait applied to delegation waits. */
+  /** No-progress wait applied while a delegated child is idle. */
+  readonly delegationIdleTimeoutMs: number
+  /** Absolute cap applied to delegation waits. */
   readonly delegationWaitTimeoutMs: number
   /** Resolved Python interpreter when configured at any layer. */
   readonly pythonExecutable?: string
@@ -351,6 +363,15 @@ export function resolveWorkflowSettings(layers: WorkflowSettingsLayers): Workflo
     firstDefined(override?.reportLanguage, project?.reportLanguage, user?.defaultReportLanguage, composition?.defaultReportLanguage),
     REPORT_LANGUAGES,
   ) ?? WORKFLOW_SETTINGS_SCHEMA_DEFAULTS.reportLanguage
+  const delegationIdleTimeoutMs = positiveIntegerField(
+    'delegationIdleTimeoutMs',
+    firstDefined(
+      override?.delegationIdleTimeoutMs,
+      project?.delegationIdleTimeoutMs,
+      user?.delegationIdleTimeoutMs,
+      composition?.delegationIdleTimeoutMs,
+    ),
+  ) ?? WORKFLOW_SETTINGS_SCHEMA_DEFAULTS.delegationIdleTimeoutMs
   const delegationWaitTimeoutMs = positiveIntegerField(
     'delegationWaitTimeoutMs',
     firstDefined(
@@ -379,6 +400,7 @@ export function resolveWorkflowSettings(layers: WorkflowSettingsLayers): Workflo
   return deepFreeze({
     reportLanguage,
     specialistModel,
+    delegationIdleTimeoutMs,
     delegationWaitTimeoutMs,
     ...(pythonExecutable === undefined ? {} : { pythonExecutable }),
   })

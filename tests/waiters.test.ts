@@ -37,6 +37,36 @@ describe('WaiterRegistry (PLAN 2.4 wait semantics)', () => {
     expect(registry.settle('task-3#2', { status: 'completed' })).toBe(false)
   })
 
+  it('pauses idle timeout while its child is running, then rearms it on idle', async () => {
+    const registry = new WaiterRegistry()
+    const pending = registry.wait('task-5#1', {
+      childSessionId: 'child-5',
+      idleTimeoutMs: 100,
+      hardTimeoutMs: 1_000,
+    })
+    await vi.advanceTimersByTimeAsync(90)
+    registry.noteChildActivity('child-5', 'running')
+    await vi.advanceTimersByTimeAsync(800)
+    expect(registry.pendingKeys()).toBe(1)
+    registry.noteChildActivity('child-5', 'idle')
+    await vi.advanceTimersByTimeAsync(99)
+    expect(registry.pendingKeys()).toBe(1)
+    await vi.advanceTimersByTimeAsync(1)
+    await expect(pending).resolves.toEqual({ status: 'timed_out' })
+  })
+
+  it('enforces the hard timeout even while the child remains running', async () => {
+    const registry = new WaiterRegistry()
+    registry.noteChildActivity('child-6', 'running')
+    const pending = registry.wait('task-6#1', {
+      childSessionId: 'child-6',
+      idleTimeoutMs: 100,
+      hardTimeoutMs: 250,
+    })
+    await vi.advanceTimersByTimeAsync(250)
+    await expect(pending).resolves.toEqual({ status: 'timed_out' })
+  })
+
   it('abandon resolves waiters as cancelled (shutdown path)', async () => {
     const registry = new WaiterRegistry()
     const promise = registry.wait('task-4#1', 60_000)

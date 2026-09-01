@@ -27,6 +27,8 @@ export interface AutoReportCardSettings {
   /** Default report source language. */
   defaultReportLanguage?: 'latex' | 'typst'
   /** Bounded wait for `send_to_agent({ wait: true })`. */
+  delegationIdleTimeoutMs?: number
+  /** Absolute bound for `send_to_agent({ wait: true })`. */
   delegationWaitTimeoutMs?: number
   /** Optional absolute Python interpreter for subagent bash. */
   pythonExecutable?: string
@@ -39,6 +41,8 @@ export interface AutoReportCardState extends CardShell {
   /** Default report source language. */
   defaultReportLanguage: CardFieldState
   /** Delegation wait bound. */
+  delegationIdleTimeoutMs: CardFieldState
+  /** Delegation absolute wait bound. */
   delegationWaitTimeoutMs: CardFieldState
   /** Optional Python interpreter. */
   pythonExecutable: CardFieldState
@@ -74,6 +78,7 @@ export class AutoReportCardController {
     this.scope = scope
     this.form = new CardForm(scope, [
       enumField('defaultReportLanguage', LANGUAGE_VALUES),
+      numberField('delegationIdleTimeoutMs'),
       numberField('delegationWaitTimeoutMs'),
       textField('pythonExecutable'),
     ])
@@ -107,6 +112,7 @@ export class AutoReportCardController {
       ...shell,
       invalid: shell.invalid || pythonInvalid,
       defaultReportLanguage: this.form.field('defaultReportLanguage'),
+      delegationIdleTimeoutMs: this.form.field('delegationIdleTimeoutMs'),
       delegationWaitTimeoutMs: this.form.field('delegationWaitTimeoutMs'),
       pythonExecutable: { ...python, invalid: pythonInvalid },
       pythonEnvironments: environments,

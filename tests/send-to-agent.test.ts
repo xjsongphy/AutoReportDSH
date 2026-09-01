@@ -17,6 +17,7 @@ const CONFIG: Config = {
   defaultReportLanguage: 'latex',
   workspaceRoot: undefined,
   specialistModel: undefined,
+  delegationIdleTimeoutMs: 60_000,
   delegationWaitTimeoutMs: 600_000,
 }
 
@@ -314,6 +315,36 @@ describe('send_to_agent', () => {
       response: 'H written',
       produced_files: ['Theory/formulas.md'],
     })
+  })
+
+  it('returns an already-folded fast child report without registering a waiter', async () => {
+    const { call, waiters, workflow } = harness()
+    const originalCommit = workflow.commit.bind(workflow)
+    workflow.commit = ((target, type, data) => {
+      const event = originalCommit(target, type, data)
+      if (type === 'autoreport/delegation' && data.phase === 'waiting_for_child') {
+        originalCommit(target, 'autoreport/delegation', {
+          ...data,
+          phase: 'completed',
+          report: {
+            task_id: data.taskId,
+            delegation_revision: data.delegationRevision,
+            status: 'success',
+            block_type: null,
+            response: 'reported before waiter registration',
+            produced_files: ['Theory/formulas.md'],
+          },
+          reportMessageId: 'fast-report',
+          settledAt: 2,
+        })
+      }
+      return event
+    }) as SendToAgentWorkflow['commit']
+    await expect(call({ role: 'THEORY', task_id: 'task-1', prompt: 'Derive H' })).resolves.toMatchObject({
+      status: 'success',
+      response: 'reported before waiter registration',
+    })
+    expect(waiters.pendingKeys()).toBe(0)
   })
 
   it('records a durable timeout when wait:true elapses with no report', async () => {

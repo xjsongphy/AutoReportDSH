@@ -12,55 +12,54 @@
 
 </div>
 
-一款运行在 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 上的
-**固定团队报告工作流**，用 LaTeX 或 Typst 自动撰写物理实验报告。它把
-[AutoReportCLI](../autoreportcli) 的报告领域行为迁成 `dsh` 插件 —— 不再造第二套
-harness，不自带 provider，不加一层 agent loop。
-DSH 是运行时，实验目录就是项目；选择 **`autoreport`** 即进入工作流。
+AutoReportDSH 自动撰写物理实验报告。它是运行在
+[DeepSeek Harness (DSH)](https://github.com/deepseek-ai/deepseek-harness) 上的一个
+插件，用一支固定的五角色团队 —— Main、Theory、Data Analysis、Plotting、Report ——
+处理同一个实验目录：把测量数据和参考资料交给它，它会推导理论、处理数据、绘制图表，
+并编译出 LaTeX 或 Typst 报告。工作流移植自 [AutoReportCLI](../autoreportcli) 的报告
+流水线；DSH 提供运行时和模型接入，本插件提供报告工作流。
 
-该插件遵循 DSH 标准的可安装 bundle 机制；源码仓库也提供了向用户现有 DSH 安装插件的一键脚本。
+## 工作方式
 
-## 概述
-
-AutoReportDSH 保留 AutoReportCLI 的五角色报告流水线，但跑在 DSH 里。打开一个实验目录，
-选择 `autoreport` preset，通过普通 DSH session 协调 Main、Theory、Data Analysis、
-Plotting 和 Report。未选择该 preset 的 `standard` session 仍是原样 DSH。
+在 DSH 中打开一个实验目录，选择 `autoreport` preset 启动 session。Main 负责规划报告，
+并把任务交给四位 specialist，每位只在自己负责的目录里工作。specialist 在后续任务中
+保留角色上下文，并在共享的 `manifest` 里描述自己的产出，因此下一个角色无需被告知
+就能找到别的角色生成的文件。未选择该 preset 的 session 与原版 DSH 行为一致。
 
 ## 功能特性
 
-### 核心能力
-- **多智能体协作** — Main、Theory、Data Analysis、Plotting、Report 分工协作，并拥有各自的写入边界
-- **面向项目目录** — 当前文件夹即实验项目；`/report-init` 或 MAIN 的首个 turn 会创建标准目录，不覆盖已有用户文件
-- **LaTeX 与 Typst 报告** — 支持语言选择、内置模板/主题、参考文献资源、编译 skill，以及基于 Python 的数据分析和绘图
-- **使用 DSH 的 Provider** — 只用 DSH 里已配置的模型路由；AutoReportDSH 不维护自己的凭证或 provider 列表
-- **资源同步** — 插件启动时把清单中的远端刷新到 `$DSH_HOME/autoreport/resources`；`pnpm run sync:resources` 不必启动 DSH 也能做同样的事
-- **任务与产物追踪** — `send_to_agent` 记录持久化任务和版本；artifact 事件记录实际变更；各 agent 用 `manifest` 读取其他角色的文件说明、更新自己的说明和 role notes，再用 `report_workflow` 结束
-- **安全执行** — DSH `workspace-write` 把每个角色钉在各自的可写根目录；AutoReport session 不能通过 `sandbox_permissions` 提权；网络允许访问
-- **内置默认资源** — 自带 persona、模板和 skills，新项目开箱即用
-
-### 工作流
-- **可选 preset** — 只有顶层 `autoreport` session 进入 runtime；加载 overlay 不会改变普通 DSH session
-- **很小的模型接口** — MAIN 只增加 `send_to_agent` 和 `manifest`（外加 DSH 的 `ask_user_question`）；subagent 增加 `manifest` 和 `report_workflow`；其余是 DSH 的 `read` / `write` / `edit` / `bash` / `skill`
-- **可续写的 subagent** — child 在后续任务中保留角色上下文；用户直接与 subagent 对话是普通对话，不会自动变成 workflow 任务
-- **按角色隔离的 skill** — MAIN 有 `pdf-reference-reader`；REPORT 有 `experiment-report-writer`、当前语言的 `report-language-*` guidance 以及对应编译 skill；实验目录 `References/skills` 是按 cwd 发现的 DSH skill 根
-- **设置与实时模型** — 语言、等待超时和 Python 在 **设置 → 插件 → 插件配置**；运行中的 subagent 在对话窗口切换模型
-- **Python 环境** — AutoReport 托管 venv 仅在你选中时用 `uv` 创建（`$DSH_HOME/autoreport/venv`，安装 numpy/scipy/pandas/matplotlib）；或检测到的本机解释器；或自定义路径。未选择则不占磁盘；删除该目录即可回收空间。owned bash 注入 `DSH_AUTOREPORT_PYTHON` 并前置 PATH，因此裸的 `python3` 也会打到该解释器
+- **五角色固定团队** —— Main 负责协调；Theory 推导公式；Data Analysis 处理测量数据；
+  Plotting 产出图表及其脚本；Report 撰写并编译文档。DSH 的 `workspace-write` 沙箱把
+  每个角色限制在自己的可写目录内。
+- **目录即项目** —— `/report-init` 或 Main 的首个回合会创建标准目录结构（`Data/`、
+  `References/`、`Theory/`、`Plots/`、`Report/`、`Outline/`），已有文件保持原样。
+- **LaTeX 与 Typst** —— 每个项目自选报告语言；内置模板、主题、参考文献资源与编译
+  skill 覆盖文档一侧，Python 负责数据处理与绘图。
+- **使用 DSH 的 Provider** —— 模型路由与凭证来自 DSH 自己的配置。
+- **资源保持最新** —— 模板、主题和 skills 在每次插件启动时从远端刷新；
+  `pnpm run sync:resources` 可以手动触发同样的刷新。
+- **开箱即用** —— 插件自带 persona、模板和 skills，新项目立即可跑。
 
 ## 快速开始
 
+**前置要求：** Node 22.19+。DSH 本体通过 `npx @deepseek-ai/dsh` 按需获取。
+
 ### 从 npm 安装
 
-`autoreportdsh` 发布后，按 DSH 标准方式安装到 Web profile：
+**安装插件** —— 下载已发布的包，并连同 `autoreport` preset 一起注册进 DSH 的
+`web` profile：
 
 ```bash
 npx @deepseek-ai/dsh plugin --profile web add autoreportdsh
+```
+
+**启动 DSH** —— Web UI 打开在 `http://127.0.0.1:3080`：
+
+```bash
 npx @deepseek-ai/dsh web
 ```
 
-安装器会自动加入 `autoreport` preset。打开 DSH 默认的
-`http://127.0.0.1:3080`，选择 **`autoreport`**，再选择实验目录。
-
-升级已有安装：
+**升级已有安装：**
 
 ```bash
 npx @deepseek-ai/dsh plugin --profile web update autoreportdsh
@@ -68,30 +67,45 @@ npx @deepseek-ai/dsh plugin --profile web update autoreportdsh
 
 ### 从源码安装
 
-源码安装器会使用 PATH 中已经安装的 DSH。它只构建 AutoReportDSH、安装
-`autoreport` preset，并把插件加入 DSH 正常的 `web` profile；不会 clone 或修改 DSH：
+**构建并安装** —— 构建本仓库、把 `autoreport` preset 装进 DSH home、并把插件注册
+进 DSH 的 `web` profile。使用 `PATH` 中的 `dsh`，不修改 DSH 本身；已安装时会先询问：
 
 ```bash
-git clone https://github.com/xjsongphy/AutoReportDSH.git
-cd AutoReportDSH
 pnpm run install:source
 ```
 
-如果 AutoReportDSH 已经安装，安装器会先询问是否覆盖。要在非交互环境中明确升级，使用
-`pnpm run install:source -- --yes`。
+加 `--yes` 跳过询问直接替换，适合脚本环境：
 
-然后启动 Web UI：
+```bash
+pnpm run install:source -- --yes
+```
+
+**启动 Web UI** —— 针对已安装的 profile 启动 `dsh web`，同一个界面，同一个默认地址：
 
 ```bash
 pnpm run start:source
 ```
 
-默认地址仍是 `http://127.0.0.1:3080`。如果 DSH 可执行文件名称或位置不标准，设置
-`AUTOREPORT_DSH_COMMAND` 即可。
+**`dsh` 不在 `PATH` 或名称不同时**，为上面两个脚本指定 DSH 命令：
+
+```bash
+AUTOREPORT_DSH_COMMAND="/path/to/dsh" pnpm run install:source
+AUTOREPORT_DSH_COMMAND="/path/to/dsh" pnpm run start:source
+```
+
+### 写第一份报告
+
+1. 打开 `http://127.0.0.1:3080`，选择 **`autoreport`** preset 启动 session，并选定
+   实验目录。
+2. 运行 `/report-init` 或直接在第一条消息里描述实验 —— 两者都会创建标准目录结构，
+   且不改动已有文件。`/report-init --language typst` 选择 Typst；LaTeX 与 Typst 文件
+   可以共存，由项目设置决定当前语言。
+3. 把测量数据和参考资料放进目录，让 Main 写报告；编译好的 PDF 会出现在 `Report/`。
 
 ## 配置
 
-Provider、凭证和 MAIN 模型路由由 DSH 负责。AutoReportDSH 只在工作流开始时冻结报告策略：
+Provider、凭证和 Main 模型路由由 DSH 负责。本插件按以下顺序读取报告相关设置，并在
+工作流开始时冻结结果，因此之后的修改不会影响正在进行的报告：
 
 ```text
 项目设置            <dshHome>/autoreport/<workspaceId>/project.json
@@ -103,14 +117,20 @@ composition 默认值
 schema 默认值
 ```
 
-之后改设置，不会影响正在跑的报告。
-
-- **设置卡片** — `defaultReportLanguage`、`delegationWaitTimeoutMs`、`pythonExecutable` 在 **设置 → 插件 → 插件配置**
-- **subagent 模型** — 新建 subagent 默认继承 MAIN，除非在 cordis 或项目设置里写了 `specialistModel`；运行中的 subagent 在对话窗口切换（`session.models` / `selectModel`）
-- **Python** — 托管（`__managed__` → `$DSH_HOME/autoreport/venv`，保存时用 `uv venv` 创建再 `uv pip install numpy scipy pandas matplotlib`；未选择不会创建；删除该目录即可回收空间）、本机（conda / virtualenv / pyenv / PATH，若存在也包括 `~/.autoreport/venv`；不会自动装包），或自定义绝对路径
-- **`/report-init [--language latex|typst]`** — 幂等初始化；LaTeX 与 Typst 文件可以共存，活动语言由项目设置决定。命令注册在 host 全局 catalog；非 AutoReport session 会在产生任何文件改动前被拒绝
+- **设置卡片** —— 报告语言、委派空闲超时、委派最长等待和 Python 解释器位于
+  **设置 → 插件 → 插件配置**。
+- **specialist 模型** —— 新建的 specialist 默认继承 Main 的模型，除非在 cordis 或
+  项目设置中指定 `specialistModel`；运行中的 specialist 可在对话窗口切换模型。
+- **Python** —— 三选一：由插件用 `uv` 在 `$DSH_HOME/autoreport/venv` 创建的托管环境
+  （仅在你选中时创建，含 numpy、scipy、pandas、matplotlib；删除该目录即回收磁盘）、
+  本机已有的解释器（conda、virtualenv、pyenv 或 `PATH`，包括存在时的
+  `~/.autoreport/venv`；不会自动安装包），或任意自定义路径。agent 的 shell 会拿到
+  `DSH_AUTOREPORT_PYTHON` 指向所选解释器；托管环境还会进入 `PATH`，因此裸的
+  `python3` 也会解析到它。
 
 ## 工作区结构
+
+实验目录保存报告所需的全部内容：
 
 ```text
 .
@@ -151,28 +171,30 @@ AutoReportDSH/
 └── tests/                 unit、integration、client/、eval/、e2e/
 ```
 
-```bash
-pnpm test
-pnpm run build
-```
+| 命令 | 作用 |
+|---|---|
+| `pnpm test` | 用 Vitest 运行 unit、integration、client、eval 测试套件 |
+| `pnpm run typecheck` | 对 host 与 client 代码做类型检查，不产出文件 |
+| `pnpm run build` | 清理 `dist/`，编译 TypeScript，复制资源，并构建 web client |
+| `pnpm run sync:resources` | 把受管资源刷新到 `$DSH_HOME/autoreport/resources`，无需启动 DSH |
+| `pnpm run install:preset` | 在 DSH home 中物化 `autoreport` user preset 及其 overlay（源码安装器会代为执行） |
+| `pnpm run prepare:npm` | 构建并在 `dist/npm` 组装可发布的 npm 包 |
 
-`tests/eval/workflow-eval.test.ts` 覆盖 assembled workflow 路径（LaTeX/Typst 全链路、
-blocked 恢复、忘记 `report_workflow`、cold rebind、artifact `modified`、Python snapshot、
-coexistence）。真实 provider smoke 是显式 opt-in：
+`tests/eval/workflow-eval.test.ts` 断言组装后的工作流路径：LaTeX 与 Typst 全链路、
+blocked 委派的恢复、specialist 忘记声明完成、cold rebind、artifact `modified` 事件、
+Python snapshot，以及 LaTeX/Typst 共存。真实 provider smoke 测试针对真实 DSH 安装
+运行且为显式 opt-in：设置 `AUTOREPORT_LIVE_TEST=1`，把 `AUTOREPORT_E2E_DSH_HOME`
+指向一个已配置好 provider 的 DSH home，然后运行
 
 ```bash
-export AUTOREPORT_LIVE_TEST=1
-export AUTOREPORT_E2E_DSH_HOME="/path/to/configured/dsh-home"
 pnpm vitest run tests/e2e/configured-route.e2e.test.ts
 ```
 
-见 [docs/live-provider-testing.md](docs/live-provider-testing.md)。该测试不声明
-provider 或 API key。
+该测试从那个 DSH home 读取 provider，自身不声明任何 provider。详见
+[docs/live-provider-testing.md](docs/live-provider-testing.md)。
 
-CI（`.github/workflows/ci.yml`）在 Linux、macOS、Windows 上针对固定的 DSH 兼容 checkout
-运行：应用临时补丁后执行 install、无密钥测试、typecheck 和 build。运行
-`pnpm run prepare:npm` 可在 `dist/npm` 生成待发布 bundle；npm 用户通过 DSH 标准的
-`dsh plugin --profile web add autoreportdsh` 安装。
+CI（`.github/workflows/ci.yml`）在 Linux、macOS、Windows 上针对固定的 DSH 兼容
+checkout 运行：应用临时补丁后依次执行 install、无密钥测试、typecheck 和 build。
+依赖 pin 见 [docs/dependencies.md](docs/dependencies.md)。
 
-设计与实现记录见 **[PLAN.md](PLAN.md)**；依赖 pin 见
-**[docs/dependencies.md](docs/dependencies.md)**。
+设计与实现记录见 **[PLAN.md](PLAN.md)**。

@@ -37,6 +37,7 @@ afterEach(() => {
 const COMPOSITION = {
   defaultReportLanguage: 'latex',
   specialistModel: { provider: 'comp-provider', model: 'comp-model' },
+  delegationIdleTimeoutMs: 1100,
   delegationWaitTimeoutMs: 1000,
   pythonExecutable: '/comp/python',
 } as const
@@ -44,6 +45,7 @@ const COMPOSITION = {
 const USER = {
   defaultReportLanguage: 'typst',
   specialistModel: { provider: 'user-provider', model: 'user-model', reasoningEffort: 'high' },
+  delegationIdleTimeoutMs: 2200,
   delegationWaitTimeoutMs: 2000,
   pythonExecutable: '/user/python',
 } as const
@@ -51,6 +53,7 @@ const USER = {
 const PROJECT = {
   reportLanguage: 'latex',
   specialistModel: { provider: 'project-provider', model: 'project-model' },
+  delegationIdleTimeoutMs: 3300,
   delegationWaitTimeoutMs: 3000,
   pythonExecutable: '/project/python',
 } as const
@@ -58,6 +61,7 @@ const PROJECT = {
 const OVERRIDE = {
   reportLanguage: 'typst',
   specialistModel: { inheritMain: true },
+  delegationIdleTimeoutMs: 4400,
   delegationWaitTimeoutMs: 4000,
   pythonExecutable: '/override/python',
 } as const
@@ -67,9 +71,10 @@ describe('resolveWorkflowSettings precedence', () => {
     expect(resolveWorkflowSettings({})).toEqual({
       reportLanguage: 'latex',
       specialistModel: { inheritMain: true },
+      delegationIdleTimeoutMs: 60_000,
       delegationWaitTimeoutMs: 600_000,
     })
-    expect(WORKFLOW_SETTINGS_SCHEMA_DEFAULTS).toMatchObject({ reportLanguage: 'latex', delegationWaitTimeoutMs: 600_000 })
+    expect(WORKFLOW_SETTINGS_SCHEMA_DEFAULTS).toMatchObject({ reportLanguage: 'latex', delegationIdleTimeoutMs: 60_000, delegationWaitTimeoutMs: 600_000 })
   })
 
   it('materializes __managed__ into the created DSH-owned interpreter', () => {
@@ -90,18 +95,21 @@ describe('resolveWorkflowSettings precedence', () => {
     expect(resolveWorkflowSettings({ composition: COMPOSITION })).toEqual({
       reportLanguage: 'latex',
       specialistModel: { inheritMain: false, provider: 'comp-provider', model: 'comp-model' },
+      delegationIdleTimeoutMs: 1100,
       delegationWaitTimeoutMs: 1000,
       pythonExecutable: '/comp/python',
     })
     expect(resolveWorkflowSettings({ user: USER })).toEqual({
       reportLanguage: 'typst',
       specialistModel: { inheritMain: false, provider: 'user-provider', model: 'user-model', reasoningEffort: 'high' },
+      delegationIdleTimeoutMs: 2200,
       delegationWaitTimeoutMs: 2000,
       pythonExecutable: '/user/python',
     })
     expect(resolveWorkflowSettings({ project: PROJECT })).toEqual({
       reportLanguage: 'latex',
       specialistModel: { inheritMain: false, provider: 'project-provider', model: 'project-model' },
+      delegationIdleTimeoutMs: 3300,
       delegationWaitTimeoutMs: 3000,
       pythonExecutable: '/project/python',
     })
@@ -111,6 +119,7 @@ describe('resolveWorkflowSettings precedence', () => {
     const all = { override: OVERRIDE, project: PROJECT, user: USER, composition: COMPOSITION }
     expect(resolveWorkflowSettings(all)).toMatchObject({
       reportLanguage: 'typst',
+      delegationIdleTimeoutMs: 4400,
       delegationWaitTimeoutMs: 4000,
       pythonExecutable: '/override/python',
       specialistModel: { inheritMain: true },
@@ -118,6 +127,7 @@ describe('resolveWorkflowSettings precedence', () => {
     const withoutOverride = (({ override: _drop, ...rest }) => rest)(all)
     expect(resolveWorkflowSettings(withoutOverride)).toMatchObject({
       reportLanguage: 'latex',
+      delegationIdleTimeoutMs: 3300,
       delegationWaitTimeoutMs: 3000,
       pythonExecutable: '/project/python',
       specialistModel: { provider: 'project-provider' },
@@ -125,6 +135,7 @@ describe('resolveWorkflowSettings precedence', () => {
     const withoutProject = (({ project: _drop, ...rest }) => rest)(withoutOverride)
     expect(resolveWorkflowSettings(withoutProject)).toMatchObject({
       reportLanguage: 'typst',
+      delegationIdleTimeoutMs: 2200,
       delegationWaitTimeoutMs: 2000,
       pythonExecutable: '/user/python',
       specialistModel: { provider: 'user-provider', reasoningEffort: 'high' },
@@ -132,6 +143,7 @@ describe('resolveWorkflowSettings precedence', () => {
     const withoutUser = (({ user: _drop, ...rest }) => rest)(withoutProject)
     expect(resolveWorkflowSettings(withoutUser)).toMatchObject({
       reportLanguage: 'latex',
+      delegationIdleTimeoutMs: 1100,
       delegationWaitTimeoutMs: 1000,
       pythonExecutable: '/comp/python',
       specialistModel: { provider: 'comp-provider' },
@@ -142,12 +154,13 @@ describe('resolveWorkflowSettings precedence', () => {
     const resolved = resolveWorkflowSettings({
       composition: COMPOSITION,
       user: { defaultReportLanguage: 'typst' },
-      project: { delegationWaitTimeoutMs: 42 },
+      project: { delegationIdleTimeoutMs: 24, delegationWaitTimeoutMs: 42 },
       override: { pythonExecutable: '/override/python' },
     })
     expect(resolved).toEqual({
       reportLanguage: 'typst',
       specialistModel: { inheritMain: false, provider: 'comp-provider', model: 'comp-model' },
+      delegationIdleTimeoutMs: 24,
       delegationWaitTimeoutMs: 42,
       pythonExecutable: '/override/python',
     })
@@ -162,6 +175,7 @@ describe('resolveWorkflowSettings precedence', () => {
       .toThrow(/specialistModel/)
     expect(() => resolveWorkflowSettings({ override: { reportLanguage: 'markdown' as never } })).toThrow(/reportLanguage/)
     expect(() => resolveWorkflowSettings({ user: { delegationWaitTimeoutMs: 0 } })).toThrow(/delegationWaitTimeoutMs/)
+    expect(() => resolveWorkflowSettings({ user: { delegationIdleTimeoutMs: 0 } })).toThrow(/delegationIdleTimeoutMs/)
     expect(() => resolveWorkflowSettings({ composition: { specialistModel: { provider: '', model: 'm' } } })).toThrow(/specialistModel/)
   })
 })

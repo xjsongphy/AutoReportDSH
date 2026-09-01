@@ -43,6 +43,17 @@ export function AutoReportCard(props: AutoReportCardProps) {
         onReset={() => { props.resetField('defaultReportLanguage') }}
       />
       <ValueField
+        id="plugin-config-autoreport-idle-timeout"
+        label={t('idleTimeoutMs')}
+        hint={t('idleTimeoutMsHint')}
+        invalidLabel={t('invalidNumber')}
+        numeric
+        {...shared}
+        {...state.delegationIdleTimeoutMs}
+        onEdit={(text) => { props.edit('delegationIdleTimeoutMs', text) }}
+        onReset={() => { props.resetField('delegationIdleTimeoutMs') }}
+      />
+      <ValueField
         id="plugin-config-autoreport-timeout"
         label={t('timeoutMs')}
         hint={t('timeoutMsHint')}

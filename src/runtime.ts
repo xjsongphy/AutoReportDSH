@@ -36,12 +36,14 @@ declare module '@deepseek-ai/cordis' {
 }
 
 const DEFAULT_WAIT_MS = 600_000
+const DEFAULT_IDLE_TIMEOUT_MS = 60_000
 
 const DEFAULT_CONFIG: Config = {
   defaultReportLanguage: 'latex',
   workspaceRoot: undefined,
   specialistModel: undefined,
   delegationWaitTimeoutMs: DEFAULT_WAIT_MS,
+  delegationIdleTimeoutMs: DEFAULT_IDLE_TIMEOUT_MS,
 }
 
 /** Per-parent live synchronization state. Durable facts remain in the Session log. */
@@ -136,6 +138,11 @@ export default class AutoReportWorkflowRuntime extends Service {
         waiters: live.waiters,
         commit: (type, data) => this.commit(session, type, data),
       })
+    })
+    ctx.on('agent/status', ({ agent, status }) => {
+      const owner = this.workflowForChild(agent.id)
+      if (owner === undefined) return
+      owner.runtime.waiters.noteChildActivity(String(agent.id), status)
     })
   }
 

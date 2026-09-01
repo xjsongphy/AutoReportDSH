@@ -46,6 +46,7 @@ function renderCard(state: Partial<AutoReportCardState> = {}) {
   const store = snapshotStore<AutoReportCardState>({
     ...settled,
     defaultReportLanguage: field('latex'),
+    delegationIdleTimeoutMs: field('60000'),
     delegationWaitTimeoutMs: field('600000'),
     pythonExecutable: field(''),
     pythonEnvironments: [],
@@ -82,6 +83,8 @@ describe('AutoReportCard', () => {
     fireEvent.click(screen.getByRole('button', { name: `${en.expand}: ${en.title}` }))
 
     expect(screen.getByRole('combobox', { name: en.reportLanguage }).textContent).toContain(en.languageLatex)
+    expect(screen.getByRole('textbox', { name: en.idleTimeoutMs })).toHaveProperty('value', '60000')
+    expect(screen.getByRole('textbox', { name: en.timeoutMs })).toHaveProperty('value', '600000')
     expect(screen.getByRole('combobox', { name: en.python }).textContent).toContain(en.pythonPick)
     expect(actions.save).not.toHaveBeenCalled()
 
