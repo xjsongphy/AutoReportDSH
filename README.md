@@ -20,7 +20,7 @@ DSH is the runtime; the experiment folder is the project; select **`autoreport`*
 to enter the workflow.
 
 The package follows DSH's normal installable-bundle model. The source checkout
-also includes a one-command installer for the current pinned DSH revision.
+also includes a one-command installer for the DSH already installed by the user.
 
 ## Overview
 
@@ -64,26 +64,36 @@ The installer adds the `autoreport` preset automatically. Open the normal DSH
 Web UI at `http://127.0.0.1:3080`, select **`autoreport`**, and choose the
 experiment folder.
 
+To upgrade an existing installation:
+
+```bash
+npx @deepseek-ai/dsh plugin --profile web update autoreportdsh
+```
+
 ### Install from source
 
-The source installer clones the pinned DSH checkout when needed, applies the
-two temporary compatibility patches, builds both projects, installs the
-`autoreport` preset, and adds AutoReportDSH to DSH's normal `web` profile:
+The source installer uses the DSH already installed on your `PATH`. It builds
+AutoReportDSH, installs the `autoreport` preset, and adds the plugin to DSH's
+normal `web` profile. It never clones or patches DSH:
 
 ```bash
 git clone https://github.com/xjsongphy/AutoReportDSH.git
 cd AutoReportDSH
-node scripts/install-source.mjs
+pnpm run install:source
 ```
 
-Then start the same Web UI:
+If AutoReportDSH is already installed, the installer asks before replacing it.
+Use `pnpm run install:source -- --yes` for an explicit non-interactive upgrade.
+
+Start the Web UI:
 
 ```bash
 pnpm run start:source
 ```
 
-The default address is `http://127.0.0.1:3080`. The installer and start command
-are safe to rerun; set `AUTOREPORT_DSH_DIR` when the DSH checkout lives elsewhere.
+The default address is `http://127.0.0.1:3080`. Set
+`AUTOREPORT_DSH_COMMAND` when the DSH executable has a non-standard name or
+location.
 
 ## Configuration
 

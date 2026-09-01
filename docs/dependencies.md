@@ -18,8 +18,9 @@ The two files under `patches/` are temporary source-compatibility shims for
 this pinned development checkout; they are not DSH's plugin distribution
 mechanism. DSH's supported plugin path is an npm bundle declaring
 `dsh.bundle.patch` and installed with `dsh plugin --profile <name> add <package>`.
-The source installer applies these shims only until the pinned DSH release
-contains the APIs natively.
+The source installer does not apply these shims or modify DSH. They are used
+only by CI and by contributors who build AutoReportDSH against the pinned
+development checkout.
 
 AutoReportDSH requires:
 
@@ -38,8 +39,8 @@ Local source development should use the matching patched Harness checkout.
 
 `@deepseek-ai/dsh-settings` is already present in the public base and supplies the AutoReport
 user-settings namespace. Once the append API and sandbox workspace-root override are released
-upstream, remove the patch steps, update the source-install requirement, and pin the published
-compatibility version together.
+upstream, update the plugin's published compatibility range and remove the CI-only patch files
+when they are no longer needed.
 
 ## Wiring decision
 

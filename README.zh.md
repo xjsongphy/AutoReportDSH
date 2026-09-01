@@ -18,7 +18,7 @@
 harness，不自带 provider，不加一层 agent loop。
 DSH 是运行时，实验目录就是项目；选择 **`autoreport`** 即进入工作流。
 
-该插件遵循 DSH 标准的可安装 bundle 机制；源码仓库也提供了针对当前 DSH pin 的一键安装脚本。
+该插件遵循 DSH 标准的可安装 bundle 机制；源码仓库也提供了向用户现有 DSH 安装插件的一键脚本。
 
 ## 概述
 
@@ -60,25 +60,34 @@ npx @deepseek-ai/dsh web
 安装器会自动加入 `autoreport` preset。打开 DSH 默认的
 `http://127.0.0.1:3080`，选择 **`autoreport`**，再选择实验目录。
 
+升级已有安装：
+
+```bash
+npx @deepseek-ai/dsh plugin --profile web update autoreportdsh
+```
+
 ### 从源码安装
 
-源码安装器会在需要时自动 clone 固定版本的 DSH、应用两份临时兼容补丁、构建两个项目、安装
-`autoreport` preset，并把 AutoReportDSH 加入 DSH 正常的 `web` profile：
+源码安装器会使用 PATH 中已经安装的 DSH。它只构建 AutoReportDSH、安装
+`autoreport` preset，并把插件加入 DSH 正常的 `web` profile；不会 clone 或修改 DSH：
 
 ```bash
 git clone https://github.com/xjsongphy/AutoReportDSH.git
 cd AutoReportDSH
-node scripts/install-source.mjs
+pnpm run install:source
 ```
 
-然后启动同一个 Web UI：
+如果 AutoReportDSH 已经安装，安装器会先询问是否覆盖。要在非交互环境中明确升级，使用
+`pnpm run install:source -- --yes`。
+
+然后启动 Web UI：
 
 ```bash
 pnpm run start:source
 ```
 
-默认地址仍是 `http://127.0.0.1:3080`。安装和启动命令都可以安全重复执行；如果 DSH
-checkout 在其他位置，设置 `AUTOREPORT_DSH_DIR` 即可。
+默认地址仍是 `http://127.0.0.1:3080`。如果 DSH 可执行文件名称或位置不标准，设置
+`AUTOREPORT_DSH_COMMAND` 即可。
 
 ## 配置
 
