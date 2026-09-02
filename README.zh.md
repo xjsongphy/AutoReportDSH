@@ -12,33 +12,27 @@
 
 </div>
 
-AutoReportDSH 自动撰写物理实验报告。它是运行在
-[DeepSeek Harness (DSH)](https://github.com/deepseek-ai/deepseek-harness) 上的一个
-插件，用一支固定的五角色团队 —— Main、Theory、Data Analysis、Plotting、Report ——
-处理同一个实验目录：把测量数据和参考资料交给它，它会推导理论、处理数据、绘制图表，
-并编译出 LaTeX 或 Typst 报告。工作流移植自 [AutoReportCLI](../autoreportcli) 的报告
-流水线；DSH 提供运行时和模型接入，本插件提供报告工作流。
-
-## 工作方式
-
-在 DSH 中打开一个实验目录，选择 `autoreport` preset 启动 session。Main 负责规划报告，
-并把任务交给四位 specialist，每位只在自己负责的目录里工作。specialist 在后续任务中
-保留角色上下文，并在共享的 `manifest` 里描述自己的产出，因此下一个角色无需被告知
-就能找到别的角色生成的文件。未选择该 preset 的 session 与原版 DSH 行为一致。
+基于多 Agent 协作的自动化物理实验报告撰写系统，以
+[DeepSeek Harness (DSH)](https://github.com/deepseek-ai/deepseek-harness) 插件的形式
+运行。用户提供实验数据和参考资料，固定的五角色团队 —— Main、Theory、Data Analysis、
+Plotting、Report —— 负责理论推导、数据分析、绘图和 LaTeX/Typst 报告编译。工作流
+移植自 [AutoReportCLI](https://github.com/xjsongphy/AutoreportCLI)。
 
 ## 功能特性
 
-- **五角色固定团队** —— Main 负责协调；Theory 推导公式；Data Analysis 处理测量数据；
-  Plotting 产出图表及其脚本；Report 撰写并编译文档。DSH 的 `workspace-write` 沙箱把
-  每个角色限制在自己的可写目录内。
-- **目录即项目** —— `/report-init` 或 Main 的首个回合会创建标准目录结构（`Data/`、
-  `References/`、`Theory/`、`Plots/`、`Report/`、`Outline/`），已有文件保持原样。
-- **LaTeX 与 Typst** —— 每个项目自选报告语言；内置模板、主题、参考文献资源与编译
-  skill 覆盖文档一侧，Python 负责数据处理与绘图。
-- **使用 DSH 的 Provider** —— 模型路由与凭证来自 DSH 自己的配置。
-- **资源保持最新** —— 模板、主题和 skills 在每次插件启动时从远端刷新；
-  `pnpm run sync:resources` 可以手动触发同样的刷新。
-- **开箱即用** —— 插件自带 persona、模板和 skills，新项目立即可跑。
+### 核心能力
+- **多 Agent 协作** — Main 负责规划与调度，Theory、Data Analysis、Plotting、Report 四个 specialist 各司其职
+- **目录权限隔离** — 每个 Agent 的写入目录由 DSH 的 `workspace-write` 沙箱钉死（见下表）
+- **LaTeX 与 Typst 报告** — 每个项目自选语言，内置模板、主题、参考文献资源与编译 skill；Python 负责数据处理与绘图
+- **使用 DSH 的 Provider** — 模型路由与凭证来自 DSH 自己的配置
+- **资源保持最新** — 模板、主题和 skills 在每次插件启动时从远端刷新；`pnpm run sync:resources` 可手动触发
+- **开箱即用** — 插件自带 persona、模板和 skills，新项目立即可跑
+
+### 工作流
+- **工作区自动初始化** — Main 的首个回合或 `/report-init` 创建缺失目录、拷贝缺失模板，已有文件一律不覆盖
+- **任务与产物追踪** — Main 通过 `send_to_agent` 委派任务；specialist 在共享的 `manifest` 里描述自己的产出，下一个角色无需被告知即可找到；每个任务以声明完成收尾
+- **specialist 可续写** — 每个 specialist 在后续任务中保留角色上下文；直接与它对话仍是普通对话
+- **其余是原样 DSH** — 未选择 `autoreport` preset 的 session 与没有本插件的 DSH 行为一致
 
 ## 快速开始
 
@@ -155,6 +149,16 @@ $DSH_HOME/
         ├── project.json           语言、Python、subagent 路由
 ```
 
+### 角色权限
+
+| 角色 | 写入目录 | 读取范围 |
+|---|---|---|
+| Main | `Outline/` | 全部目录 |
+| Theory | `Theory/` | 全部目录 |
+| Data Analysis | `Data/Processed/` | 全部目录 |
+| Plotting | `Plots/` | 全部目录 |
+| Report | `Report/` | 全部目录 |
+
 ## 开发
 
 ```text
@@ -198,3 +202,9 @@ checkout 运行：应用临时补丁后依次执行 install、无密钥测试、
 依赖 pin 见 [docs/dependencies.md](docs/dependencies.md)。
 
 设计与实现记录见 **[PLAN.md](PLAN.md)**。
+
+## 参考项目
+
+- [AutoReport](https://github.com/xjsongphy/AutoReport) — 本工作流来源的桌面版
+- [AutoReportCLI](https://github.com/xjsongphy/AutoreportCLI) — 被移植的终端版工作流
+- [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) — 运行时、session 与沙箱模型

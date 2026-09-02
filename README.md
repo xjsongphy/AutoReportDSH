@@ -12,43 +12,29 @@ English | [中文](README.zh.md)
 
 </div>
 
-AutoReportDSH writes physics-experiment reports automatically. It is a plugin for
-[DeepSeek Harness (DSH)](https://github.com/deepseek-ai/deepseek-harness) that runs a
-fixed five-role team — Main, Theory, Data Analysis, Plotting, and Report — over one
-experiment folder: give the team your measured data and reference material, and it
-derives the theory, processes the data, draws the figures, and compiles a LaTeX or
-Typst report. The workflow ports the report pipeline of
-[AutoReportCLI](../autoreportcli) onto DSH; DSH provides the runtime and model
-access, and this plugin provides the report workflow.
-
-## How it works
-
-Open an experiment folder in DSH and start a session with the `autoreport` preset.
-Main plans the report and hands tasks to the four specialists, each of which works
-only inside its own part of the folder. Specialists keep their role context across
-follow-up tasks, and they describe their outputs in a shared `manifest`, so the next
-role can find another role's files without being told where they are. A session
-started without the preset behaves exactly like stock DSH.
+An automated physics-experiment report writing system built on multi-agent
+collaboration, running as a [DeepSeek Harness (DSH)](https://github.com/deepseek-ai/deepseek-harness)
+plugin. You provide the measured data and reference material; a fixed five-role
+team — Main, Theory, Data Analysis, Plotting, Report — derives the theory,
+analyzes the data, draws the figures, and compiles the LaTeX or Typst report.
+The workflow ports the report pipeline of
+[AutoReportCLI](https://github.com/xjsongphy/AutoreportCLI) onto DSH.
 
 ## Features
 
-- **Five-role fixed team** — Main coordinates; Theory derives formulas; Data
-  Analysis processes measurements; Plotting produces figures and their scripts;
-  Report writes and compiles the document. DSH's `workspace-write` sandbox keeps
-  each role inside its own writable directories.
-- **The folder is the project** — `/report-init` or Main's first turn creates the
-  standard layout (`Data/`, `References/`, `Theory/`, `Plots/`, `Report/`,
-  `Outline/`) without touching files you already have.
-- **LaTeX and Typst** — each project selects a report language; bundled templates,
-  themes, bibliography assets, and compile skills cover the document side, and
-  Python covers data processing and plotting.
-- **Your DSH providers** — model routes and credentials come from DSH's own
-  configuration.
-- **Kept-current resources** — templates, themes, and skills refresh from their
-  remotes each time the plugin starts; `pnpm run sync:resources` triggers the same
-  refresh by hand.
-- **Everything bundled** — personas, templates, and skills ship with the plugin,
-  so a fresh workspace runs immediately.
+### Core capabilities
+- **Multi-agent collaboration** — Main plans and coordinates; Theory, Data Analysis, Plotting, and Report carry out the specialized work
+- **Directory permission isolation** — every role is pinned to its own writable root by DSH's `workspace-write` sandbox (table below)
+- **LaTeX and Typst reports** — per-project language with bundled templates, themes, bibliography assets, and compile skills; Python for data processing and plotting
+- **Your DSH providers** — model routes and credentials come from DSH's own configuration
+- **Kept-current resources** — templates, themes, and skills refresh from their remotes each time the plugin starts; `pnpm run sync:resources` triggers the same refresh by hand
+- **Everything bundled** — personas, templates, and skills ship with the plugin, so a fresh workspace runs immediately
+
+### Workflow
+- **Auto-initialized workspace** — Main's first turn or `/report-init` creates missing directories and copies missing templates; existing files are never overwritten
+- **Task and artifact tracking** — Main delegates through `send_to_agent`; specialists describe their outputs in a shared `manifest`, so the next role finds them without being told; each task ends with a declared completion
+- **Continuable specialists** — every specialist keeps its role context across follow-up tasks; chatting with one directly stays an ordinary conversation
+- **Stock DSH elsewhere** — a session started without the `autoreport` preset behaves exactly like DSH without this plugin
 
 ## Quick Start
 
@@ -176,6 +162,16 @@ $DSH_HOME/
         ├── project.json           language, python, subagent route
 ```
 
+### Role permissions
+
+| Role | Writes | Reads |
+|---|---|---|
+| Main | `Outline/` | the whole workspace |
+| Theory | `Theory/` | the whole workspace |
+| Data Analysis | `Data/Processed/` | the whole workspace |
+| Plotting | `Plots/` | the whole workspace |
+| Report | `Report/` | the whole workspace |
+
 ## Development
 
 ```text
@@ -222,3 +218,9 @@ install, keyless tests, typecheck, and build. See
 [docs/dependencies.md](docs/dependencies.md) for the dependency pin.
 
 Design and implementation notes: **[PLAN.md](PLAN.md)**.
+
+## Credits
+
+- [AutoReport](https://github.com/xjsongphy/AutoReport) — the desktop app this workflow derives from
+- [AutoReportCLI](https://github.com/xjsongphy/AutoreportCLI) — the terminal workflow ported here
+- [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) — runtime, sessions, and sandbox
