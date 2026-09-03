@@ -128,6 +128,11 @@ export default class AutoReportWorkflowRuntime extends Service {
       live.state.apply(event)
       if (event.type === 'turn/start') {
         this.ensureMainSandbox(session)
+        // The turn boundary is the first reliable lifecycle event for a
+        // newly selected preset. Initialize here before the first model
+        // message; the user/message branch below remains an idempotent
+        // recovery path for hosts that do not publish turn/start first.
+        this.maybeInitialize(session)
       }
       if (event.type === 'user/message' && event.data.source.kind === 'user') {
         this.ensureMainSandbox(session)
@@ -263,7 +268,7 @@ export default class AutoReportWorkflowRuntime extends Service {
 
   /**
    * Pin MAIN sandbox confinement once a real turn starts. Idempotent last-wins;
-   * independent of workflow initialization so `/report-init` alone never pins.
+   * independent of workflow initialization so `/init` alone never pins.
    * @param session - owning Main session.
    */
   private ensureMainSandbox(session: Session): void {
@@ -366,7 +371,7 @@ export default class AutoReportWorkflowRuntime extends Service {
       ensureInitialized(root, settings.reportLanguage, this.overlayRoot)
     } catch (error: unknown) {
       // A broken EXTERNAL settings document must not wedge every first turn;
-      // the next user message retries after repair. The /report-init command
+      // the next user message retries after repair. The /init command
       // path surfaces the same failure loudly instead of skipping.
       const message = error instanceof Error ? error.message : String(error)
       try {

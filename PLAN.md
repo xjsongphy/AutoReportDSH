@@ -106,7 +106,7 @@ AutoReportDSH/
 ├── scripts/
 │   └── install-user-preset.ts         # materializes the preset under $DSH_HOME/.agent-presets
 ├── src/
-│   ├── host.ts                        # host-plane runtime, guard, /report-init
+│   ├── host.ts                        # host-plane runtime, guard, /init
 │   ├── preset.ts                      # autoreport preset-plane contribution
 │   ├── client/                        # web settings card (separate tsconfig)
 │   ├── runtime.ts                     # workflow state, artifacts, settings snapshot
@@ -114,7 +114,7 @@ AutoReportDSH/
 │   ├── roles.ts                       # fixed role table and policy metadata
 │   ├── workflow/                      # tasks, delegations, bindings, turn/report observers
 │   ├── tools/                         # manifest, send_to_agent, report_workflow, router
-│   ├── workspace/                     # init, /report-init, bundled skill loader
+│   ├── workspace/                     # init, /init, bundled skill loader
 │   ├── policy/                        # role guard and per-role sandbox roots
 │   ├── artifacts/                     # automatic filesystem observation and filtering
 │   ├── python-detect.ts               # local / managed / custom interpreter discovery
@@ -125,7 +125,7 @@ AutoReportDSH/
 └── tests/                             # unit, integration, client/, eval/, e2e/
 ```
 
-The plugin host plane registers the workflow service, durable projections, `/report-init`,
+The plugin host plane registers the workflow service, durable projections, `/init`,
 role policy guard, report-execution capability, and lifecycle observers. Model-facing tools
 are mounted through the `autoreport` agent-plane composition rather than globally.
 
@@ -538,7 +538,7 @@ availability. No network-capable generic web tool is mounted in the report prese
 
 AutoReportCLI initializes/materializes the project during normal startup. AutoReportDSH
 preserves that behavior at the domain boundary: the first admitted report workflow turn
-calls idempotent `ensureInitialized()`. `/report-init` remains an explicit idempotent
+calls idempotent `ensureInitialized()`. `/init` remains an explicit idempotent
 recovery/reinitialization command registered through `ctx.commands`. Because that
 command registry is host-global, its handler verifies effective `autoreport`
 membership before parsing input, saving project settings, or materializing files.
@@ -656,7 +656,7 @@ inherit-from-Main default, `executionTimeoutMs`), not live workflow inputs. When
 effective values as a `WorkflowSettingsSnapshot` in the durable
 `autoreport/workflow` event; execution reads the snapshot, so later settings
 changes never mutate an in-flight report. Project-scoped language selection is
-preserved: `/report-init [--language latex|typst]` updates project settings and
+preserved: `/init [--language latex|typst]` updates project settings and
 materializes missing resources for that language without deleting the other
 backend's files; both `Report/main.tex` and `Report/main.typ` may coexist with
 `project.reportLanguage` authoritative.
@@ -723,7 +723,7 @@ and where it lives in the codebase:
 | 3 | Plugin config = defaults, not live workflow inputs | **Implemented** — `defaultReportLanguage`/`specialistModel`/`executionTimeoutMs` are snapshotted; the unused Python-environment abstraction was removed |
 | 4 | Project-scoped language selection | **Implemented** — external `<dshHome>/autoreport/<workspaceId>/project.json`; concurrent projects supported |
 | 5 | Persist resolved settings in workflow snapshot | **Implemented** — `WorkflowSettingsSnapshot` in `autoreport/workflow` payload (schema version 3); `resolveWorkflowSettings()` precedence chain |
-| 6 | `/report-init --language latex\|typst` | **Implemented** — updates project settings + materializes missing resources only; other backend files never deleted |
+| 6 | `/init --language latex\|typst` | **Implemented** — updates project settings + materializes missing resources only; other backend files never deleted |
 | 7 | Non-configurable authorization/execution policy | **By design** — fixed role table + immutable `network:'deny'`, no broadening knobs exposed |
 | 8 | Reuse DSH provider infrastructure | **Implemented** — subagents inherit Main by default; one optional shared route override is applied through DSH agent-scoped model selection, including `reasoningEffort` |
 | 9 | Web settings card via plugin settings seam | **Implemented** — `src/client/` registers `settings.plugin.item` keyed on namespace `autoreport`; Host half remains `installSettingsSection` |
@@ -785,7 +785,7 @@ Recovery acceptance (keyless):
 - Verify child persona, role-routed `report_workflow`, ordinary-child stock-report fallback,
   recursion restriction, and stale delegation report rejection.
 - Verify AutoReport skills are visible only inside the preset scope.
-- Run the first report turn and `/report-init` in a temporary workspace; verify idempotent
+- Run the first report turn and `/init` in a temporary workspace; verify idempotent
   initialization and every resource.
 - Attempt cross-role filesystem/process writes and verify actual denial.
 - Run a harmless report process and verify localhost network isolation.
@@ -809,7 +809,7 @@ denials, and PDF output; never accept a model’s textual claim as evidence.
 | `workflow-state` | role reservation/registry, SessionEventMap events/projections, task tool, revision protocol, local waiters | scaffold |
 | `roles-delegation` | Main preset, fixed personas, thin `send_to_agent` with wait modes, continuable report router | scaffold, workflow-state |
 | `execution-policy` | actual mutation guard, explicit execution policy, `report_exec` over ctx.subprocess, Linux/macOS network isolation and smokes | scaffold, workflow-state |
-| `workspace-assets` | startup `ensureInitialized`, `/report-init`, resource materializer, bundled assets and preset-scoped skills | scaffold |
+| `workspace-assets` | startup `ensureInitialized`, `/init`, resource materializer, bundled assets and preset-scoped skills | scaffold |
 | `compile-manifests` | Report-only compiler, automatic artifact observer, AutoReport filtering, manifest projection/tool | execution-policy, workspace-assets, workflow-state |
 | `integration-e2e` | assembled keyless smokes, cold-load tests, configured-provider live smoke, acceptance gates | all previous |
 
@@ -863,7 +863,7 @@ this status.
 | DSH compatibility patch | harness `feat/session-append-ignorable` | `Session.append(..., { ignorable: true })` writer surface + cold-load tests |
 | Scaffold | `scaffold` | package, absolute harness links, user-preset installer, overlay template, keyless boot proof |
 | Workflow state | `workflow-state` | role table, `autoreport/*` events + folds, RoleRegistry, waiters, `report_task` tool |
-| Workspace assets | `workspace-assets` | REQUIRED_DIRS init, create-missing-only materializer, `/report-init`, bundled skills |
+| Workspace assets | `workspace-assets` | REQUIRED_DIRS init, create-missing-only materializer, `/init`, bundled skills |
 | Execution policy | `execution-policy` | mutation guard matrix, seatbelt/bwrap isolation, `report_exec`, live macOS network-denial smoke |
 | Roles & delegation | `roles-delegation` | personas, Main preset, `send_to_agent`, `report_workflow`, global report router, observer |
 | Compile & manifests | `compile-manifests` ×3 lanes | `compile_report`, artifact policy ported from manifest.rs, observer, AutoReport manifest projection/tool |

@@ -37,7 +37,7 @@ error: unknown variable: $
   ┌─ Report/main.typ:12:5
 ```
 
-**Fix:** read the located line with fs tools. Most cases are a missing `#import "mplts.typ": *` at the top of `main.typ` — `/report-init` materializes both files; never edit `mplts.typ` to "fix" an entry-file problem.
+**Fix:** read the located line with fs tools. Most cases are a missing `#import "mplts.typ": *` at the top of `main.typ` — `/init` materializes both files; never edit `mplts.typ` to "fix" an entry-file problem.
 
 ### 2. File not found for figure or bibliography
 
@@ -57,7 +57,7 @@ error: unknown font family: ...
 
 ### 4. Bibliography issues
 
-`bibliography("bibli.bib")` resolves relative to `Report/`. Citation keys must exist in `bibli.bib`; a `failed to load bibliography` error usually means the `.csl` or `.bib` file was deleted — restore via `/report-init`.
+`bibliography("bibli.bib")` resolves relative to `Report/`. Citation keys must exist in `bibli.bib`; a `failed to load bibliography` error usually means the `.csl` or `.bib` file was deleted — restore via `/init`.
 
 ## Workflow
 

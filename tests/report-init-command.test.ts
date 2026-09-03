@@ -60,13 +60,13 @@ describe('parseReportInitInput', () => {
   })
 })
 
-describe('report-init command', () => {
+describe('init command', () => {
   const overlayRoot = seedSyncedResourceStubs(mkdtempSync(join(tmpdir(), 'autoreport-cmd-overlay-')))
   afterAll(() => rmSync(overlayRoot, { recursive: true, force: true }))
   const definition = createReportInitCommand({ reportLanguage: 'latex', overlayRoot })
 
-  it('registers under the report-init name with a hint', () => {
-    expect(definition.name).toBe('report-init')
+  it('registers under the init name with a hint', () => {
+    expect(definition.name).toBe('init')
     expect(definition.input?.hint).toContain('[workspace-directory]')
   })
 
@@ -90,7 +90,7 @@ describe('report-init command', () => {
     const result = await bare.handler(invocation('', undefined))
     expect(result.kind).toBe('error')
     if (result.kind === 'error') {
-      expect(result.text).toContain('/report-init [--language latex|typst] <directory>')
+      expect(result.text).toContain('/init [--language latex|typst] <directory>')
     }
   })
 

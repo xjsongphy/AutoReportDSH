@@ -54,7 +54,7 @@ cd ~/Develop/AutoReportDSH
 打开 `http://127.0.0.1:3081`，创建 session 时选择 `autoreport`，工作目录选择 `~/Develop/CV`。首个报告工作流 turn 会自动、幂等地完成初始化；需要单独检查时也可运行：
 
 ```text
-/report-init --language typst
+/init --language typst
 ```
 
 初始化只创建缺失目录和资源；已存在的 `Report/main.typ`、`Report/mplts.typ` 等文件不会覆盖。API 测试脚本不再先队列该命令，以免将 slash-command turn 与后续报告 turn 混淆。

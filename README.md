@@ -31,7 +31,7 @@ The workflow ports the report pipeline of
 - **Everything bundled** — personas, templates, and skills ship with the plugin, so a fresh workspace runs immediately
 
 ### Workflow
-- **Auto-initialized workspace** — Main's first turn or `/report-init` creates missing directories and copies missing templates; existing files are never overwritten
+- **Auto-initialized workspace** — Main's first turn initializes the workspace once; `/init` is available for explicit repair or language selection
 - **Task and artifact tracking** — Main delegates through `send_to_agent`; specialists describe their outputs in a shared `manifest`, so the next role finds them without being told; each task ends with a declared completion
 - **Continuable specialists** — every specialist keeps its role context across follow-up tasks; chatting with one directly stays an ordinary conversation
 - **Stock DSH elsewhere** — a session started without the `autoreport` preset behaves exactly like DSH without this plugin
@@ -98,9 +98,9 @@ AUTOREPORT_DSH_COMMAND="/path/to/dsh" pnpm run start:source
 
 1. Open `http://127.0.0.1:3080`, start a session with the **`autoreport`**
    preset, and choose your experiment folder.
-2. Run `/report-init` or describe the experiment in your first message — either
-   creates the standard layout and leaves existing files alone.
-   `/report-init --language typst` selects Typst; LaTeX and Typst files may
+2. Run `/init` or describe the experiment in your first message — the first
+   turn initializes the standard layout and leaves existing files alone.
+   `/init --language typst` selects Typst; LaTeX and Typst files may
    coexist, and the project setting decides the active language.
 3. Add measured data and reference material to the folder, then ask Main to
    write the report; the compiled PDF lands in `Report/`.

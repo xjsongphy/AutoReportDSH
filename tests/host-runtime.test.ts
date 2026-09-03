@@ -269,6 +269,22 @@ describe('host workflow runtime', () => {
     expect(effectiveSandboxWorkspaceRoot(session.events)).toBe(resolve(root, 'Outline'))
   })
 
+  it('initializes on the first turn boundary after a preset selection', () => {
+    const root = mkdtempSync(join(tmpdir(), 'autoreport-runtime-'))
+    tempDirs.push(root)
+    const ctx = new Context()
+    const runtime = createRuntime(ctx, { ...CONFIG, workspaceRoot: root })
+    const session = rootSession('selected-main', undefined, root)
+
+    const selected = session.append('agent-preset/selected', { agentPreset: AUTOREPORT_MAIN_PRESET })
+    ctx.emit('session/event', session, selected)
+    const firstTurn = session.append('turn/start', { turn: 1 })
+    ctx.emit('session/event', session, firstTurn)
+
+    for (const dir of REQUIRED_DIRS) expect(existsSync(join(root, dir))).toBe(true)
+    expect(runtime.forSession(session).state.projection().meta?.initialized).toBe(true)
+  })
+
   it('replays a durable child report that landed before the observer committed', () => {
     const ctx = new Context()
     const runtime = createRuntime(ctx, CONFIG)

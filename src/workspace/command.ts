@@ -1,5 +1,5 @@
 /**
- * The human-facing `/report-init` command: idempotent experiment workspace
+ * The human-facing `/init` command: idempotent experiment workspace
  * initialization and resource materialization for the selected report
  * language.
  *
@@ -67,7 +67,7 @@ export function renderInitialization(result: InitializationResult): string {
   return [`Workspace ready (${parts.join(', ')}).`, ...detail].join('\n')
 }
 
-/** Parsed `/report-init` input: optional explicit language plus directory tail. */
+/** Parsed `/init` input: optional explicit language plus directory tail. */
 export interface ParsedReportInitInput {
   /** Explicit `--language` value; absent defers to project/defaults. */
   readonly language: ReportLanguage | undefined
@@ -133,14 +133,14 @@ function resolveWorkspaceRoot(
 }
 
 /**
- * Build the `/report-init` command definition.
+ * Build the `/init` command definition.
  * @param options - defaults for workspace root and report language, plus the
  *   optional external project-settings seam.
  * @returns the definition for `ctx.commands.register()`.
  */
 export function createReportInitCommand(options: ReportInitCommandOptions): CommandDefinition {
   return {
-    name: 'report-init',
+    name: 'init',
     description: 'initialize or repair the experiment workspace layout and bundled report resources',
     input: { hint: '[--language latex|typst] [workspace-directory]' },
     async handler(invocation: CommandInvocation): Promise<CommandResult> {
@@ -150,7 +150,7 @@ export function createReportInitCommand(options: ReportInitCommandOptions): Comm
       if (root === undefined) {
         return {
           kind: 'error',
-          text: 'No workspace directory available. Pass one: /report-init [--language latex|typst] <directory>.',
+          text: 'No workspace directory available. Pass one: /init [--language latex|typst] <directory>.',
         }
       }
       try {
@@ -170,7 +170,10 @@ export function createReportInitCommand(options: ReportInitCommandOptions): Comm
           text: `${renderInitialization(initialization)}\nreport language: ${language}${saved}`,
         }
       } catch (error: unknown) {
-        return { kind: 'error', text: `report-init failed: ${error instanceof Error ? error.message : String(error)}` }
+        return {
+          kind: 'error',
+          text: 'init failed: ' + (error instanceof Error ? error.message : String(error)),
+        }
       }
     },
   }

@@ -1,4 +1,4 @@
-import { mkdtempSync, mkdirSync, rmSync, symlinkSync } from 'node:fs'
+import { existsSync, mkdtempSync, mkdirSync, rmSync, symlinkSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -20,6 +20,12 @@ function workspace(): string {
   const root = mkdtempSync(join(tmpdir(), 'autoreport-guard-'))
   roots.push(root)
   for (const dir of ['Outline', 'Theory', 'Data/Processed', 'Plots', 'Report']) mkdirSync(join(root, dir), { recursive: true })
+  return root
+}
+
+function emptyWorkspace(): string {
+  const root = mkdtempSync(join(tmpdir(), 'autoreport-empty-'))
+  roots.push(root)
   return root
 }
 
@@ -76,6 +82,18 @@ describe('AutoReport role tool guard', () => {
     expect(guard(execution('edit', { file_path: 'Outline/report.md' }, main))).toBeUndefined()
     expect(guard(execution('write', { file_path: 'Report/main.tex' }, main))).toContain('Outline')
     expect(guard(execution('bash', { command: 'true' }, main))).toBeUndefined()
+  })
+
+  it('creates only the authorized mutation parent on demand', () => {
+    const root = emptyWorkspace()
+    const main = agent('lazy-main', root, { agentPreset: AUTOREPORT_MAIN_PRESET })
+    const guard = createRoleToolGuard({ registry: new RoleRegistry() })
+
+    expect(guard(execution('write', { file_path: 'Outline/.cache/plan.md' }, main))).toBeUndefined()
+    expect(existsSync(join(root, 'Outline/.cache'))).toBe(true)
+    expect(existsSync(join(root, 'Report'))).toBe(false)
+    expect(guard(execution('write', { file_path: 'Report/main.tex' }, main))).toContain('Outline')
+    expect(guard(execution('write', { file_path: 'Report/main.tex' }, main))).not.toContain('/init')
   })
 
   it('recognizes a MAIN root through the autoreport preset alone', () => {

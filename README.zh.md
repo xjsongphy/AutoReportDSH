@@ -29,7 +29,7 @@ Plotting、Report —— 负责理论推导、数据分析、绘图和 LaTeX/Typ
 - **开箱即用** — 插件自带 persona、模板和 skills，新项目立即可跑
 
 ### 工作流
-- **工作区自动初始化** — Main 的首个回合或 `/report-init` 创建缺失目录、拷贝缺失模板，已有文件一律不覆盖
+- **工作区自动初始化** — Main 首个回合只初始化一次；`/init` 用于手动修复或选择报告语言
 - **任务与产物追踪** — Main 通过 `send_to_agent` 委派任务；specialist 在共享的 `manifest` 里描述自己的产出，下一个角色无需被告知即可找到；每个任务以声明完成收尾
 - **specialist 可续写** — 每个 specialist 在后续任务中保留角色上下文；直接与它对话仍是普通对话
 - **其余是原样 DSH** — 未选择 `autoreport` preset 的 session 与没有本插件的 DSH 行为一致
@@ -91,8 +91,8 @@ AUTOREPORT_DSH_COMMAND="/path/to/dsh" pnpm run start:source
 
 1. 打开 `http://127.0.0.1:3080`，选择 **`autoreport`** preset 启动 session，并选定
    实验目录。
-2. 运行 `/report-init` 或直接在第一条消息里描述实验 —— 两者都会创建标准目录结构，
-   且不改动已有文件。`/report-init --language typst` 选择 Typst；LaTeX 与 Typst 文件
+2. 运行 `/init` 或直接在第一条消息里描述实验 —— 首个回合会创建标准目录结构，
+   且不改动已有文件。`/init --language typst` 选择 Typst；LaTeX 与 Typst 文件
    可以共存，由项目设置决定当前语言。
 3. 把测量数据和参考资料放进目录，让 Main 写报告；编译好的 PDF 会出现在 `Report/`。
 

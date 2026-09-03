@@ -8,7 +8,7 @@
  * Proven end to end: single role-routed continuable setup, reservation before
  * `startContinuable`, first-call authorization through the assembled guard,
  * cross-role write denial, the full delegation round trip with artifact
- * facts, `/report-init` language coexistence against external project
+ * facts, `/init` language coexistence against external project
  * settings, and agent-facing manifest projection.
  * @module tests/integration.host
  */
@@ -226,17 +226,17 @@ describe('integration: assembled host (real context)', () => {
     await assembled.ctx.fiber?.dispose()
   })
 
-  it('/report-init is membership-gated, then switches languages without deleting either backend', async () => {
+  it('/init is membership-gated, then switches languages without deleting either backend', async () => {
     const assembled = await boot()
     const command = assembled.reportInitCommand
-    if (command === undefined) throw new Error('/report-init was not registered by the host plugin')
+    if (command === undefined) throw new Error('/init was not registered by the host plugin')
 
     // The command service is host-global, so a stock caller must be rejected
     // BEFORE settings persistence or workspace materialization.
-    const stockCwd = makeTemp('autoreport-it-report-init-stock-')
-    const stockSession = Session.create(SessionId('it-report-init-stock'), undefined, {
+    const stockCwd = makeTemp('autoreport-it-init-stock-')
+    const stockSession = Session.create(SessionId('it-init-stock'), undefined, {
       version: 0,
-      id: SessionId('it-report-init-stock'),
+      id: SessionId('it-init-stock'),
       createdAt: Date.now(),
       cwd: stockCwd,
     })

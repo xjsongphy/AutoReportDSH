@@ -1,6 +1,6 @@
 /**
  * AutoReportDSH host-plane plugin: workflow runtime, role guard, and
- * `/report-init`. Child report routing is a separate overlay row because
+ * `/init`. Child report routing is a separate overlay row because
  * DSH continuable setups are process-global.
  *
  * @module autoreportdsh-host
@@ -52,7 +52,7 @@ export function resolveHostConfig(raw: Partial<Config> = {}): Config {
  * This single registration owns every host-plane piece (PLAN.md §2): the
  * workflow runtime service (`autoreportWorkflow`, provided via the Service
  * effect), the global monotonic role guard, first-turn settings-snapshot
- * initialization plus `/report-init`, and artifact observation over every
+   * initialization plus `/init`, and artifact observation over every
  * session's committed tool stream.
  * @param ctx - host-plane context the Loader activates this plugin under.
  * @param config - optional overlay configuration.
@@ -123,7 +123,7 @@ export async function apply(ctx: Context, config: Partial<Config> = {}, options:
         if (!isAutoReportMainSession(invocation.agent.session)) {
           return {
             kind: 'error',
-            text: "report-init is available only in an 'autoreport' session.",
+            text: "init is available only in an 'autoreport' session.",
           }
         }
         const result = await definition.handler(invocation)

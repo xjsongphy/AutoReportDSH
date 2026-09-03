@@ -16,7 +16,7 @@
  * @module
  */
 
-import { existsSync, realpathSync } from 'node:fs'
+import { existsSync, mkdirSync, realpathSync } from 'node:fs'
 import { basename, dirname, isAbsolute, relative, resolve, sep } from 'node:path'
 import type { SessionId } from '@deepseek-ai/dsh-session'
 import type { ToolExecution, ToolGuard } from '@deepseek-ai/dsh-tools'
@@ -202,6 +202,26 @@ function targetDenial(target: string, resolved: ResolvedRole): string | undefine
     : `AutoReport ${resolved.role} may write only ${resolved.policy.writableRoots.join(', ')}: ${target}`
 }
 
+/** Create the parent for an authorized file mutation, without repairing the workspace. */
+function prepareMutationParent(
+  exec: Readonly<ToolExecution>,
+  target: string,
+  resolved: ResolvedRole,
+): string | undefined {
+  if (exec.name === 'delete' || exec.name === 'delete_file') return undefined
+  const absolute = resolve(resolved.workspaceRoot, target)
+  try {
+    mkdirSync(dirname(absolute), { recursive: true })
+    return undefined
+  } catch (error: unknown) {
+    const writable = resolved.policy.writableRoots.join(', ')
+    const detail = error instanceof Error ? error.message : String(error)
+    return 'AutoReport ' + resolved.role
+      + ' could not create its writable directory (' + writable + ') for ' + target
+      + '; run /init to repair the workspace (' + detail + ')'
+  }
+}
+
 function sandboxPermissionsEscalation(exec: Readonly<ToolExecution>): boolean {
   const args = record(exec.arguments)
   return args !== undefined && typeof args['sandbox_permissions'] === 'string'
@@ -231,6 +251,8 @@ export function createRoleToolGuard(options: RoleGuardOptions): ToolGuard {
       for (const path of call.paths) {
         const denied = targetDenial(path, resolved)
         if (denied !== undefined) return denied
+        const preparation = prepareMutationParent(exec, path, resolved)
+        if (preparation !== undefined) return preparation
       }
     }
     return undefined

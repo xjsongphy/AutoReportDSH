@@ -275,7 +275,7 @@ describe('project settings persistence', () => {
   })
 })
 
-describe('report-init --language coexistence', () => {
+describe('init --language coexistence', () => {
   function invocation(rawInput: string, cwd?: string): CommandInvocation {
     return {
       commandId: 'cmd-1' as CommandInvocation['commandId'],
