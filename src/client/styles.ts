@@ -55,8 +55,6 @@ export const css = {
   menuCheck: 'ar-menu-check',
   subagentModel: 'ar-subagent-model',
   subagentModelLabel: 'ar-subagent-model-label',
-  rolePicker: 'ar-role-picker',
-  rolePickerLabel: 'ar-role-picker-label',
   chipTrigger: 'ar-chip-trigger',
   chipTriggerLabel: 'ar-chip-trigger-label',
 } as const
@@ -443,18 +441,6 @@ const STYLESHEET = `
   height: 1px;
   overflow: hidden;
   clip: rect(0 0 0 0);
-}
-.${css.rolePicker} {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-}
-.${css.rolePickerLabel} {
-  color: var(--dsw-alias-label-tertiary);
-  font-size: 12px;
-  line-height: 18px;
-  white-space: nowrap;
 }
 .${css.chipTrigger} {
   display: flex;

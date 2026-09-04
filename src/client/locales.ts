@@ -12,7 +12,6 @@ export type AutoReportLocaleKey =
   | 'python' | 'pythonHint'
   | 'pythonPick' | 'pythonManaged' | 'pythonCustom'
   | 'modelPicker' | 'modelPickerLoading' | 'modelPickerFailed' | 'reasoningEffort'
-  | 'agentPicker'
   | 'languageLatex' | 'languageTypst'
   | 'mineru' | 'mineruHint' | 'mineruCommand' | 'mineruInstalled' | 'mineruNotInstalled'
   | 'mineruToken' | 'mineruTokenConfigured' | 'mineruTokenMissing'
@@ -50,7 +49,6 @@ export const en: Record<AutoReportLocaleKey, string> = {
   modelPickerLoading: 'Loading models…',
   modelPickerFailed: 'Could not load models for this subagent.',
   reasoningEffort: 'Reasoning effort',
-  agentPicker: 'AutoReport subagent',
   languageLatex: 'LaTeX',
   languageTypst: 'Typst',
   mineru: 'MinerU',
@@ -97,7 +95,6 @@ export const zh: Record<AutoReportLocaleKey, string> = {
   modelPickerLoading: '正在加载模型…',
   modelPickerFailed: '无法加载这个 subagent 的模型列表。',
   reasoningEffort: '推理力度',
-  agentPicker: 'AutoReport subagent',
   languageLatex: 'LaTeX',
   languageTypst: 'Typst',
   mineru: 'MinerU',

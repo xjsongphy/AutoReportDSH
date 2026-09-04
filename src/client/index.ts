@@ -18,7 +18,6 @@ import { AutoReportCard } from './AutoReportCard.js'
 import { AUTOREPORT_SETTINGS_NAMESPACE, AutoReportCardController } from './controller.js'
 import { en, zh, type AutoReportLocaleKey } from './locales.js'
 import { SubagentModelSelect, type SubagentModelChoice, type SubagentModelInjected } from './SubagentModelSelect.js'
-import { ResidentRoleSelect } from './ResidentRoleSelect.js'
 import { installCardStyles } from './styles.js'
 
 export type { AutoReportCardProps } from './AutoReportCard.js'
@@ -60,19 +59,7 @@ export function apply(ctx: ClientContext): void {
   }, AutoReportCard))
   ctx.inject(['sessions'], (scope: ClientContext) => {
     installSubagentModelSeat(scope)
-    installResidentRoleSeat(scope)
   })
-}
-
-function installResidentRoleSeat(ctx: ClientContext): void {
-  const sessions = ctx.get('sessions') as ISessions
-  ctx.slots.inject('conversation.session.header.actions', () => ctx.slots.register({
-    name: 'conversation.session.header.actions',
-    id: 'autoreport-resident-role',
-    order: -5,
-    locale: SETTINGS_NS,
-    inject: () => ({ sessions }),
-  }, ResidentRoleSelect))
 }
 
 function installSubagentModelSeat(ctx: ClientContext): void {
