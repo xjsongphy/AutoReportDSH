@@ -148,6 +148,7 @@ export default class AutoReportWorkflowRuntime extends Service {
       live.state.apply(event)
       if (event.type === 'turn/start' && this.isInitialTurnStart(session)) {
         this.initializeAfterAppend(session)
+        this.ensureResidentRolesForSession(session)
         // The turn boundary is the first reliable lifecycle event for a
         // newly selected preset. Initialize here before the first model
         // message; the user/message branch below remains an idempotent
@@ -157,6 +158,13 @@ export default class AutoReportWorkflowRuntime extends Service {
         && event.data.source.kind === 'user'
         && this.isInitialUserMessage(session)) {
         this.initializeAfterAppend(session)
+        this.ensureResidentRolesForSession(session)
+      }
+      if (event.type === 'agent-preset/selected' && isAutoReportMainSession(session)) {
+        // A blank DSH session can be composed after agent/session-start. In
+        // that path the startup listener has already run before membership is
+        // visible, so retry provisioning at the actual preset-selection event.
+        this.ensureResidentRolesForSession(session)
       }
       observeWorkflowMessage(session, event, {
         state: live.state,
@@ -227,6 +235,18 @@ export default class AutoReportWorkflowRuntime extends Service {
   /** Ensure all four fixed subagents exist before the first user turn. */
   async ensureResidentRoles(parent: Agent, signal?: AbortSignal): Promise<void> {
     await Promise.all(allSpecialistRoles().map(role => this.ensureResidentRole(parent, role, signal)))
+  }
+
+  /** Retry resident provisioning when a blank session selects AutoReport late. */
+  private ensureResidentRolesForSession(session: Session): void {
+    const agents = this.ctx.get('agents') as {
+      get?: (id: SessionId) => Agent | undefined
+      list?: () => Agent[]
+    } | undefined
+    const agent = agents?.get?.(session.id)
+      ?? agents?.list?.().find(candidate => candidate.session.id === session.id)
+    if (agent === undefined) return
+    void this.ensureResidentRoles(agent).catch(error => this.logResidentFailure(error))
   }
 
   /** Deliver a coordinator message to a resident child without cold-resume. */
