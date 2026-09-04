@@ -2,8 +2,8 @@
  * Cwd-sensitive skill provider for experiment `References/skills/`.
  *
  * Discovers DSH-shaped flat markdown and directory bundles under the current
- * workspace's References tree so per-experiment skills sit between project
- * `.agents/skills` and user custom roots without widening the bundled catalog.
+ * workspace's References tree so experiment-local skills remain available to
+ * AutoReport without importing project or user agent roots into its catalog.
  * @module autoreportdsh-skills-references
  */
 
@@ -19,7 +19,7 @@ import type {
 import { parseBundledSkill } from './workspace/skill-loader.js'
 
 export const REFERENCES_SKILL_PROVIDER = 'autoreport-references'
-/** Between project-agents (200) and custom roots (300); below runtime (250) is wrong — use 280. */
+/** Project-local reference skills sit above custom roots and below runtime registrations. */
 export const REFERENCES_SKILL_RANK = 280
 
 const DEFAULT_INVOCATION = { modelInvocable: true, userInvocable: true } as const

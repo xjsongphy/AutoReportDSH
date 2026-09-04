@@ -2,7 +2,7 @@
 
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { AutoReportCardFace } from './controller.js'
-import { SelectField, ValueField, PythonField } from './fields.js'
+import { MineruStatusField, SelectField, ValueField, PythonField } from './fields.js'
 import { PluginCard } from './PluginCard.js'
 import type {} from '@deepseek-ai/dsh-client-ui-settings-plugins/client'
 
@@ -41,6 +41,22 @@ export function AutoReportCard(props: AutoReportCardProps) {
         {...state.defaultReportLanguage}
         onEdit={(text) => { props.edit('defaultReportLanguage', text) }}
         onReset={() => { props.resetField('defaultReportLanguage') }}
+      />
+      <MineruStatusField
+        label={t('mineru')}
+        hint={t('mineruHint')}
+        commandLabel={t('mineruCommand')}
+        installedLabel={t('mineruInstalled')}
+        notInstalledLabel={t('mineruNotInstalled')}
+        tokenLabel={t('mineruToken')}
+        tokenConfiguredLabel={t('mineruTokenConfigured')}
+        tokenMissingLabel={t('mineruTokenMissing')}
+        tokenSource={state.mineruStatus.tokenSource === 'environment'
+          ? t('mineruTokenSourceEnvironment')
+          : state.mineruStatus.tokenSource === 'config'
+            ? t('mineruTokenSourceConfig')
+            : undefined}
+        status={state.mineruStatus}
       />
       <ValueField
         id="plugin-config-autoreport-idle-timeout"

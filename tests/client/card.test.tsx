@@ -50,6 +50,7 @@ function renderCard(state: Partial<AutoReportCardState> = {}) {
     delegationWaitTimeoutMs: field('600000'),
     pythonExecutable: field(''),
     pythonEnvironments: [],
+    mineruStatus: { installed: true, tokenConfigured: true, tokenSource: 'config' },
     ...state,
   })
   const actions = { edit: vi.fn(), resetField: vi.fn(), save: vi.fn(), discard: vi.fn() }
@@ -86,6 +87,8 @@ describe('AutoReportCard', () => {
     expect(screen.getByRole('textbox', { name: en.idleTimeoutMs })).toHaveProperty('value', '60000')
     expect(screen.getByRole('textbox', { name: en.timeoutMs })).toHaveProperty('value', '600000')
     expect(screen.getByRole('combobox', { name: en.python }).textContent).toContain(en.pythonPick)
+    expect(screen.getByText(en.mineru)).toBeTruthy()
+    expect(screen.getByRole('status').textContent).toContain(en.mineruTokenSourceConfig)
     expect(actions.save).not.toHaveBeenCalled()
 
     fireEvent.click(screen.getByRole('button', { name: en.save }))

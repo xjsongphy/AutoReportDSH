@@ -141,8 +141,16 @@ describe('AutoReportCardController', () => {
     host.publish({
       status: 'ready',
       writable: true,
-      value: { defaultReportLanguage: 'typst', delegationWaitTimeoutMs: 1_000 },
-      base: { defaultReportLanguage: 'latex', delegationWaitTimeoutMs: 600_000 },
+      value: {
+        defaultReportLanguage: 'typst',
+        delegationWaitTimeoutMs: 1_000,
+        mineruStatus: { installed: true, tokenConfigured: true, tokenSource: 'environment' },
+      },
+      base: {
+        defaultReportLanguage: 'latex',
+        delegationWaitTimeoutMs: 600_000,
+        mineruStatus: { installed: false, tokenConfigured: false },
+      },
       user: { defaultReportLanguage: 'typst' },
     })
 
@@ -150,6 +158,7 @@ describe('AutoReportCardController', () => {
     const state = face.hooks.autoreportCard.getSnapshot()
     expect(state.available).toBe(true)
     expect(state.defaultReportLanguage).toEqual({ text: 'typst', overridden: true, invalid: false })
+    expect(state.mineruStatus).toEqual({ installed: true, tokenConfigured: true, tokenSource: 'environment' })
     expect(Object.keys(face.hooks)).toEqual(['autoreportCard'])
   })
 

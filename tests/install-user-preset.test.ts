@@ -64,6 +64,7 @@ describe('install-user-preset', () => {
     expect(composed).not.toContain('dsh-tool-workflow')
     expect(composed).not.toContain('dsh-tool-web')
     expect(composed).not.toContain('dsh-tool-todo')
+    expect(composed).toContain("includeDefaultRoots: false")
 
     const metadata = readFileSync(join(result.presetDir, 'preset.yml'), 'utf8')
     expect(metadata).toContain('name: AutoReport')

@@ -2,7 +2,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'no
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { ensureInitialized, ensureWorkspaceDirs, REQUIRED_DIRS, resourcesRoot, materializeResources } from '../src/workspace/init.js'
+import { ensureInitialized, ensureWorkspaceDirs, REQUIRED_DIRS, resourcesRoot, materializeResources, workspaceIsComplete } from '../src/workspace/init.js'
 import { seedSyncedResourceStubs } from './helpers/synced-resource-stubs.js'
 
 const cleanup: string[] = []
@@ -38,6 +38,13 @@ describe('REQUIRED_DIRS', () => {
 })
 
 describe('ensureWorkspaceDirs', () => {
+  it('reports completeness from directories only', () => {
+    const root = tempRoot()
+    expect(workspaceIsComplete(root)).toBe(false)
+    ensureWorkspaceDirs(root)
+    expect(workspaceIsComplete(root)).toBe(true)
+  })
+
   it('creates every required directory in a fresh root', () => {
     const root = tempRoot()
     const created = ensureWorkspaceDirs(root)

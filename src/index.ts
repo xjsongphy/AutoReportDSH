@@ -8,8 +8,7 @@
  * @module autoreportdsh
  */
 
-export { apply, resolveHostConfig } from './host.js'
+export { apply, inject, resolveHostConfig } from './host.js'
 export { name as hostName } from './host.js'
-export { default } from './host.js'
 
 export const name = 'autoreportdsh'

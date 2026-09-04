@@ -21,10 +21,13 @@
   config:
     enableRunInBackground: false
 
-# Generic DSH/user/project skills stay available in this preset. AutoReport's
-# bundled skills and domain tools join through the single `autoreport` row below.
+# Do not import ambient DSH or user-agent skills into AutoReport. AutoReport's
+# bundled skills are registered by the `autoreport` row below; the preset's
+# own References/skills provider remains available for experiment-local rules.
 - id: skill-filesystem
   name: '@deepseek-ai/dsh-skill-filesystem'
+  config:
+    includeDefaultRoots: false
 
 - id: tool-skill
   name: '@deepseek-ai/dsh-tool-skill'

@@ -6,6 +6,7 @@
  */
 
 import type { SettingsScope, SnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
+import type { MineruStatus } from './mineru-status-types.js'
 import {
   CardForm, enumField, numberField, textField,
   type CardActions, type CardFieldState, type CardShell,
@@ -34,6 +35,8 @@ export interface AutoReportCardSettings {
   pythonExecutable?: string
   /** Host-detected interpreters; composition-only, never written by the card. */
   pythonEnvironments?: readonly PythonEnvironmentOption[]
+  /** Host-detected MinerU CLI/auth state; composition-only, never written by the card. */
+  mineruStatus?: MineruStatus
 }
 
 /** What the AutoReport card renders. */
@@ -48,6 +51,8 @@ export interface AutoReportCardState extends CardShell {
   pythonExecutable: CardFieldState
   /** Detected interpreters from the Host composition layer. */
   pythonEnvironments: readonly PythonEnvironmentOption[]
+  /** Detected MinerU CLI/auth state from the Host composition layer. */
+  mineruStatus: MineruStatus
 }
 
 /** The registration-side face the AutoReport card's slot entry injects. */
@@ -62,6 +67,11 @@ const LANGUAGE_VALUES = ['latex', 'typst'] as const
 
 /** Must match Host `MANAGED_PYTHON_SENTINEL` in python-detect.ts. */
 const MANAGED_PYTHON = '__managed__'
+
+const DEFAULT_MINERU_STATUS: MineruStatus = {
+  installed: false,
+  tokenConfigured: false,
+}
 
 function isAbsolutePath(path: string): boolean {
   return path.startsWith('/') || /^[A-Za-z]:[\\/]/u.test(path)
@@ -97,9 +107,22 @@ export class AutoReportCardController {
     return []
   }
 
+  private mineruStatus(): MineruStatus {
+    const snapshot = this.scope.getSnapshot()
+    const fromValue = snapshot.value?.mineruStatus
+    if (fromValue !== undefined) return fromValue
+    const base = snapshot.base
+    if (base !== undefined && typeof base === 'object' && base !== null && 'mineruStatus' in base) {
+      const status = (base as AutoReportCardSettings).mineruStatus
+      if (status !== undefined) return status
+    }
+    return DEFAULT_MINERU_STATUS
+  }
+
   private projection(): AutoReportCardState {
     const python = this.form.field('pythonExecutable')
     const environments = this.environments()
+    const mineruStatus = this.mineruStatus()
     const pythonText = python.text.trim()
     const detected = environments.some(option => option.executable === pythonText)
     const pythonInvalid = python.invalid
@@ -116,6 +139,7 @@ export class AutoReportCardController {
       delegationWaitTimeoutMs: this.form.field('delegationWaitTimeoutMs'),
       pythonExecutable: { ...python, invalid: pythonInvalid },
       pythonEnvironments: environments,
+      mineruStatus,
     }
   }
 

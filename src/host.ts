@@ -18,7 +18,10 @@ import { installTurnGuards } from './workflow/turn-guard.js'
 import { syncManagedResources } from './workspace/resource-sync.js'
 
 export const name = 'autoreportdsh-host'
-export const inject = ['tools']
+// `apply()` registers the host-wide `/init` command through the commands
+// service.  Keep both services in the activation contract so the lookup below
+// cannot race startup and silently skip command registration.
+export const inject = ['tools', 'commands', 'shellEnv']
 
 const DEFAULT_WAIT_MS = 600_000
 const DEFAULT_IDLE_TIMEOUT_MS = 60_000

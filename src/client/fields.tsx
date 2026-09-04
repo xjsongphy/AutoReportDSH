@@ -9,6 +9,23 @@ import { useState } from 'react'
 import { SelectMenu } from './SelectMenu.js'
 import { css } from './styles.js'
 
+/** Read-only Host-composed MinerU readiness facts. */
+export interface MineruStatusFieldProps {
+  label: string
+  hint: string
+  commandLabel: string
+  installedLabel: string
+  notInstalledLabel: string
+  tokenLabel: string
+  tokenConfiguredLabel: string
+  tokenMissingLabel: string
+  tokenSource?: string | undefined
+  status: {
+    installed: boolean
+    tokenConfigured: boolean
+  }
+}
+
 /** What every field control needs regardless of its value type. */
 export interface FieldProps {
   /** Stable id associating the label with its control. */
@@ -152,6 +169,32 @@ export function SelectField(props: FieldProps & {
         onChange={props.onEdit}
       />
     </FieldChrome>
+  )
+}
+
+/** Show the local MinerU command and authentication readiness without editing either. */
+export function MineruStatusField(props: MineruStatusFieldProps) {
+  const commandState = props.status.installed ? props.installedLabel : props.notInstalledLabel
+  const tokenState = props.status.tokenConfigured ? props.tokenConfiguredLabel : props.tokenMissingLabel
+  return (
+    <div className={css.field}>
+      <div className={css.fieldHead}>
+        <span className={css.label}>{props.label}</span>
+      </div>
+      <p className={css.hint}>{props.hint}</p>
+      <div className={css.statusList} role="status">
+        <div className={css.statusItem}>
+          <span className={props.status.installed ? css.statusGood : css.statusBad} aria-hidden="true">●</span>
+          <span className={css.statusName}>{props.commandLabel}</span>
+          <span className={css.statusValue}>{commandState}</span>
+        </div>
+        <div className={css.statusItem}>
+          <span className={props.status.tokenConfigured ? css.statusGood : css.statusBad} aria-hidden="true">●</span>
+          <span className={css.statusName}>{props.tokenLabel}</span>
+          <span className={css.statusValue}>{tokenState}{props.tokenSource === undefined ? '' : ` · ${props.tokenSource}`}</span>
+        </div>
+      </div>
+    </div>
   )
 }
 

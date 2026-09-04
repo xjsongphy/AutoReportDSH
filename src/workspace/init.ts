@@ -9,7 +9,7 @@
  * @module workspace/init
  */
 
-import { copyFileSync, existsSync, mkdirSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, statSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -28,6 +28,19 @@ export const REQUIRED_DIRS: readonly string[] = Object.freeze([
   'Report',
   'Outline',
 ])
+
+function isDirectory(path: string): boolean {
+  try {
+    return statSync(path).isDirectory()
+  } catch {
+    return false
+  }
+}
+
+/** Return whether every fixed AutoReport workspace directory exists. */
+export function workspaceIsComplete(root: string): boolean {
+  return REQUIRED_DIRS.every(dir => isDirectory(join(root, dir)))
+}
 
 /** One workspace-relative file a language materialization may install. */
 interface ResourceFile {
@@ -72,7 +85,10 @@ export function ensureWorkspaceDirs(root: string): string[] {
   const created: string[] = []
   for (const dir of REQUIRED_DIRS) {
     const target = join(root, dir)
-    if (existsSync(target)) continue
+    if (isDirectory(target)) continue
+    if (existsSync(target)) {
+      throw new Error(`AutoReport workspace path is not a directory: ${target}`)
+    }
     mkdirSync(target, { recursive: true })
     created.push(dir)
   }
@@ -164,7 +180,7 @@ export function ensureInitialized(
   language: ReportLanguage,
   overlayRoot?: string,
 ): InitializationResult {
-  const createdDirs = ensureWorkspaceDirs(root)
+  const createdDirs = workspaceIsComplete(root) ? [] : ensureWorkspaceDirs(root)
   const { written, skipped } = materializeResources(root, language, overlayRoot)
   return { createdDirs, writtenFiles: written, skippedFiles: skipped }
 }

@@ -91,7 +91,11 @@ describe('host workflow runtime', () => {
     expect(meta?.workspaceRoot).toBe(root)
     // The resolved settings snapshot is committed with the workflow event.
     expect(meta?.settings).toEqual(resolveWorkflowSettings({ composition: { ...CONFIG, workspaceRoot: root } }))
+    // Workflow metadata is orchestration state, not the filesystem readiness
+    // marker: an explicit initialization pass still repairs a missing folder.
+    rmSync(join(root, 'Outline'), { recursive: true, force: true })
     runtime.maybeInitialize(session)
+    expect(existsSync(join(root, 'Outline'))).toBe(true)
     expect(runtime.forSession(session).state.projection().meta?.initialized).toBe(true)
   })
 
