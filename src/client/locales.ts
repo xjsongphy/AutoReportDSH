@@ -12,7 +12,11 @@ export type AutoReportLocaleKey =
   | 'python' | 'pythonHint'
   | 'pythonPick' | 'pythonManaged' | 'pythonCustom'
   | 'modelPicker' | 'modelPickerLoading' | 'modelPickerFailed' | 'reasoningEffort'
+  | 'agentPicker'
   | 'languageLatex' | 'languageTypst'
+  | 'mineru' | 'mineruHint' | 'mineruCommand' | 'mineruInstalled' | 'mineruNotInstalled'
+  | 'mineruToken' | 'mineruTokenConfigured' | 'mineruTokenMissing'
+  | 'mineruTokenSourceEnvironment' | 'mineruTokenSourceConfig'
 
 /** English copy. */
 export const en: Record<AutoReportLocaleKey, string> = {
@@ -46,8 +50,19 @@ export const en: Record<AutoReportLocaleKey, string> = {
   modelPickerLoading: 'Loading models…',
   modelPickerFailed: 'Could not load models for this subagent.',
   reasoningEffort: 'Reasoning effort',
+  agentPicker: 'AutoReport subagent',
   languageLatex: 'LaTeX',
   languageTypst: 'Typst',
+  mineru: 'MinerU',
+  mineruHint: 'Used by MAIN for precise PDF extraction with mineru-open-api. Status is checked when DSH starts.',
+  mineruCommand: 'CLI',
+  mineruInstalled: 'Installed',
+  mineruNotInstalled: 'Not installed',
+  mineruToken: 'API token',
+  mineruTokenConfigured: 'Configured',
+  mineruTokenMissing: 'Not configured',
+  mineruTokenSourceEnvironment: 'Environment variable',
+  mineruTokenSourceConfig: 'Config file',
 }
 
 /** Simplified Chinese copy. */
@@ -82,6 +97,17 @@ export const zh: Record<AutoReportLocaleKey, string> = {
   modelPickerLoading: '正在加载模型…',
   modelPickerFailed: '无法加载这个 subagent 的模型列表。',
   reasoningEffort: '推理力度',
+  agentPicker: 'AutoReport subagent',
   languageLatex: 'LaTeX',
   languageTypst: 'Typst',
+  mineru: 'MinerU',
+  mineruHint: 'MAIN 使用 mineru-open-api 做精确 PDF 提取；状态在 DSH 启动时检测。',
+  mineruCommand: '命令',
+  mineruInstalled: '已安装',
+  mineruNotInstalled: '未安装',
+  mineruToken: 'API Token',
+  mineruTokenConfigured: '已配置',
+  mineruTokenMissing: '未配置',
+  mineruTokenSourceEnvironment: '环境变量',
+  mineruTokenSourceConfig: '配置文件',
 }

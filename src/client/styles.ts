@@ -34,6 +34,12 @@ export const css = {
   inputInvalid: 'ar-field-input-invalid',
   hint: 'ar-field-hint',
   invalid: 'ar-field-invalid',
+  statusList: 'ar-field-status-list',
+  statusItem: 'ar-field-status-item',
+  statusGood: 'ar-field-status-good',
+  statusBad: 'ar-field-status-bad',
+  statusName: 'ar-field-status-name',
+  statusValue: 'ar-field-status-value',
   selectRoot: 'ar-select-root',
   selector: 'ar-selector',
   selectorLabel: 'ar-selector-label',
@@ -49,6 +55,8 @@ export const css = {
   menuCheck: 'ar-menu-check',
   subagentModel: 'ar-subagent-model',
   subagentModelLabel: 'ar-subagent-model-label',
+  rolePicker: 'ar-role-picker',
+  rolePickerLabel: 'ar-role-picker-label',
   chipTrigger: 'ar-chip-trigger',
   chipTriggerLabel: 'ar-chip-trigger-label',
 } as const
@@ -283,6 +291,34 @@ const STYLESHEET = `
   line-height: 18px;
   color: var(--dsw-alias-label-tertiary);
 }
+.${css.statusList} {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 2px 0;
+}
+.${css.statusItem} {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 22px;
+  font-size: 13px;
+  line-height: 20px;
+}
+.${css.statusGood}, .${css.statusBad} {
+  flex: none;
+  font-size: 10px;
+  line-height: 1;
+}
+.${css.statusGood} { color: var(--dsw-alias-label-success, #2e9b63); }
+.${css.statusBad} { color: var(--dsw-alias-label-error); }
+.${css.statusName} {
+  min-width: 96px;
+  color: var(--dsw-alias-label-secondary);
+}
+.${css.statusValue} {
+  color: var(--dsw-alias-label-primary);
+}
 .${css.selectRoot} {
   position: relative;
   display: inline-flex;
@@ -407,6 +443,18 @@ const STYLESHEET = `
   height: 1px;
   overflow: hidden;
   clip: rect(0 0 0 0);
+}
+.${css.rolePicker} {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.${css.rolePickerLabel} {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 18px;
+  white-space: nowrap;
 }
 .${css.chipTrigger} {
   display: flex;

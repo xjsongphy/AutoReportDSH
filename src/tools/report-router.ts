@@ -38,7 +38,7 @@ function installReportEnvironmentSection(childCtx: Context, language: ReportSkil
 }
 
 export const name = 'autoreportdsh-report-router'
-export const inject = ['subagents', 'tools', 'systemPrompt', 'autoreportWorkflow']
+export const inject = ['subagents', 'tools', 'systemPrompt', 'skills', 'autoreportWorkflow']
 
 /** Router inputs shared by every specialist branch. */
 type RoutedWorkflow = Pick<AutoReportWorkflowRuntime, 'roleRegistry' | 'config' | 'workflowForChild' | 'overlayRoot'>

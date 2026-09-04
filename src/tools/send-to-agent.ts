@@ -32,6 +32,17 @@ export type SendToAgentWorkflow = Pick<AutoReportWorkflowRuntime, 'roleRegistry'
 /** Dependencies used by the fixed-role delegation tool. */
 export interface SendToAgentDependencies {
   readonly subagents: Pick<SubagentRuntime, 'startContinuable' | 'followup'>
+  /** Resident AutoReport roles are addressed directly; legacy continuables remain supported. */
+  readonly resident?: {
+    ensure: (parent: Agent, role: SpecialistRole, signal: AbortSignal) => Promise<Agent | undefined>
+    deliver: (
+      parent: Agent,
+      childSessionId: SessionId,
+      content: ContentBlock[],
+      source: CoordinatorMessageSource,
+      signal: AbortSignal,
+    ) => Promise<string | undefined>
+  }
   readonly workflow: SendToAgentWorkflow
   readonly config: Config
   readonly now?: () => number
@@ -225,6 +236,11 @@ export function createSendToAgentTool(deps: SendToAgentDependencies): ToolDefini
       const parentSession: Session = parent.session
       const live = deps.workflow.forSession(parentSession)
 
+      // Provisioning is a runtime concern, not a Main tool concern. This
+      // await only closes the startup race for a resident role; it does not
+      // submit a prompt or wake the child.
+      await deps.resident?.ensure(parent, role, exec.signal)
+
       let task: TaskSnapshot
       let taskId: string
       if (args.task_id !== undefined) {
@@ -342,6 +358,14 @@ export function createSendToAgentTool(deps: SendToAgentDependencies): ToolDefini
           }
           try {
             const source: CoordinatorMessageSource = { kind: 'coordinator', form: 'relay', senderSessionId: parent.id }
+            const residentMessage = await deps.resident?.deliver(
+              parent,
+              bound.childSessionId,
+              briefing(false),
+              source,
+              exec.signal,
+            )
+            if (residentMessage !== undefined) return residentMessage
             return String(await deps.subagents.followup(parent, bound.childSessionId, briefing(false), {
               source,
               signal: exec.signal,

@@ -82,10 +82,14 @@ export function installWorkflowReportTool(childCtx: Context, hostCtx: Context, r
           { type: 'text', text: `${formatWorkflowRelay(role, parsed.value)}\n\nDetails\n` },
           { type: 'text', text: JSON.stringify(parsed.value) },
         ]
-        const messageId = await hostCtx.subagents.reportFrom(exec.agent as Agent, content, {
-          delivery: 'next-step',
-          signal: exec.signal,
-        })
+        const residentReport = typeof runtime?.reportFromResident === 'function'
+          ? runtime.reportFromResident(exec.agent as Agent, content, exec.signal)
+          : undefined
+        const messageId = await residentReport
+          ?? await hostCtx.subagents.reportFrom(exec.agent as Agent, content, {
+            delivery: 'next-step',
+            signal: exec.signal,
+          })
         return { messageId: String(messageId) }
       },
       presentCall: args => ({ card: 'generic', title: `report_workflow ${String(args.status)}`, kind: 'other', rawInput: args }),

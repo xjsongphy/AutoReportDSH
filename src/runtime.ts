@@ -1,5 +1,10 @@
+import { randomUUID } from 'node:crypto'
 import { Service, type Context } from '@deepseek-ai/cordis'
-import type { Session, SessionEvent, SessionEventMap, SessionEventType, SessionId } from '@deepseek-ai/dsh-session'
+import type { Agent, AgentHandle } from '@deepseek-ai/dsh-agent'
+import { applyChildComposition, seedDescriptorTurn, snapshotSubagentDescriptor } from '@deepseek-ai/dsh-subagent'
+import { createUserMessage } from '@deepseek-ai/dsh-llm'
+import type { ContentBlock } from '@deepseek-ai/dsh-llm'
+import { SessionId, type Session, type SessionEvent, type SessionEventMap, type SessionEventType } from '@deepseek-ai/dsh-session'
 import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
 import { installSettingsSection } from '@deepseek-ai/dsh-settings'
 import type { Config } from './config.js'
@@ -7,6 +12,10 @@ import { AUTOREPORT_MAIN_PRESET, isAutoReportMainSession } from './membership.js
 import { emptyArtifactFoldState, foldArtifact, type ArtifactCaller, type ArtifactFoldState } from './artifacts/observer.js'
 import { AUTOREPORT_SCHEMA_VERSION, type WorkflowMetaSnapshot } from './workflow/events.js'
 import { delegationKey } from './workflow/protocol.js'
+import { installRoutedReportTool } from './tools/report-router.js'
+import { allSpecialistRoles, type SpecialistRole } from './roles.js'
+import { loadSpecialistPersona } from './personas.js'
+import type { CoordinatorMessageSource, SubagentReportMessageSource } from '@deepseek-ai/dsh-subagent'
 import { WorkflowState, type WorkflowProjection } from './workflow/service.js'
 import { RoleRegistry } from './workflow/role-registry.js'
 import { WaiterRegistry } from './workflow/waiters.js'
@@ -16,6 +25,7 @@ import { applyRoleSandbox } from './policy/sandbox-roots.js'
 import { ensureInitialized } from './workspace/init.js'
 import { detectPythonEnvironments, missingAnalysisPackages, type PythonDetectOptions } from './python-detect.js'
 import { syncedResourcesRoot } from './workspace/resource-sync.js'
+import { detectMineruStatus } from './mineru-status.js'
 import {
   AUTO_REPORT_USER_SETTINGS_SCHEMA,
   AUTOREPORT_SETTINGS_NAMESPACE,
@@ -82,6 +92,12 @@ export default class AutoReportWorkflowRuntime extends Service {
   // preset may change while a root is still blank.
   private readonly mainSessions = new Map<string, Session>()
   private readonly artifactFolds = new Map<string, ArtifactFoldState>()
+  /** Main ids whose post-append initialization retry is already queued. */
+  private readonly pendingPostCommitInitialization = new Set<string>()
+  /** Resident AutoReport children, grouped by their owning MAIN session. */
+  private readonly residentHandles = new Map<string, Map<SpecialistRole, AgentHandle>>()
+  /** Coalesce startup and first-dispatch provisioning for one role. */
+  private readonly residentProvisioning = new Map<string, Map<SpecialistRole, Promise<Agent | undefined>>>()
   /** Current DSH-resolved user defaults; each new workflow snapshots this once. */
   private userSettingsSource: () => AutoReportUserSettings
 
@@ -97,6 +113,9 @@ export default class AutoReportWorkflowRuntime extends Service {
     this.settingsHome = options.settingsHome
     const dshHome = options.settingsHome ?? resolveDshHome()
     this.overlayRoot = syncedResourcesRoot(dshHome)
+    // Keep this as composition state: the settings card can show readiness,
+    // while the token value itself never enters the browser-facing snapshot.
+    const mineruStatus = detectMineruStatus()
     const userSettingsBase = autoReportUserSettingsBase(
       config,
       detectPythonEnvironments({
@@ -104,6 +123,7 @@ export default class AutoReportWorkflowRuntime extends Service {
         dshHome,
         ...options.pythonDetect,
       }),
+      mineruStatus,
     )
     this.userSettingsSource = () => userSettingsBase
     installSettingsSection(ctx, AUTOREPORT_SETTINGS_NAMESPACE, AUTO_REPORT_USER_SETTINGS_SCHEMA, userSettingsBase, {
@@ -126,29 +146,291 @@ export default class AutoReportWorkflowRuntime extends Service {
       if (session.header.parentSession !== undefined) return
       const live = this.forSession(session)
       live.state.apply(event)
-      if (event.type === 'turn/start') {
-        this.ensureMainSandbox(session)
+      if (event.type === 'turn/start' && this.isInitialTurnStart(session)) {
+        this.initializeAfterAppend(session)
         // The turn boundary is the first reliable lifecycle event for a
         // newly selected preset. Initialize here before the first model
         // message; the user/message branch below remains an idempotent
         // recovery path for hosts that do not publish turn/start first.
-        this.maybeInitialize(session)
       }
-      if (event.type === 'user/message' && event.data.source.kind === 'user') {
-        this.ensureMainSandbox(session)
-        this.maybeInitialize(session)
+      if (event.type === 'user/message'
+        && event.data.source.kind === 'user'
+        && this.isInitialUserMessage(session)) {
+        this.initializeAfterAppend(session)
       }
       observeWorkflowMessage(session, event, {
         state: live.state,
         waiters: live.waiters,
         commit: (type, data) => this.commit(session, type, data),
       })
-    })
+    }, { global: true })
     ctx.on('agent/status', ({ agent, status }) => {
       const owner = this.workflowForChild(agent.id)
       if (owner === undefined) return
       owner.runtime.waiters.noteChildActivity(String(agent.id), status)
+    }, { global: true })
+    ctx.on('agent/session-start', ({ agent }) => {
+      if (!isAutoReportMainSession(agent.session)) return
+      // The role sessions are created before any Main delegation. They stay
+      // idle until the user or Main addresses them, matching AutoReport's
+      // resident-loop model without consuming a startup model request.
+      void this.ensureResidentRoles(agent).catch(error => this.logResidentFailure(error))
+    }, { global: true })
+    ctx.on('agent/disposed', ({ agent }) => {
+      if (isAutoReportMainSession(agent.session)) void this.disposeResidentFor(agent.id)
+    }, { global: true })
+    const agents = ctx.get('agents') as { list?: () => Agent[] } | undefined
+    for (const agent of agents?.list?.() ?? []) {
+      if (isAutoReportMainSession(agent.session)) {
+        void this.ensureResidentRoles(agent).catch(error => this.logResidentFailure(error))
+      }
+    }
+    ctx.effect(() => () => {
+      void this.disposeResidentRoles()
+    }, 'autoreportdsh.residentRoles()')
+  }
+
+  /** Resolve the currently live resident child for direct UI/tool routing. */
+  residentChild(childSessionId: SessionId): Agent | undefined {
+    for (const byRole of this.residentHandles.values()) {
+      for (const handle of byRole.values()) {
+        if (handle.agent.id === childSessionId) return handle.agent
+      }
+    }
+    return undefined
+  }
+
+  /** Ensure one fixed role has a durable, idle child Session and live Agent. */
+  async ensureResidentRole(
+    parent: Agent,
+    role: SpecialistRole,
+    signal: AbortSignal = new AbortController().signal,
+  ): Promise<Agent | undefined> {
+    const parentId = String(parent.id)
+    let byRole = this.residentProvisioning.get(parentId)
+    if (byRole === undefined) {
+      byRole = new Map()
+      this.residentProvisioning.set(parentId, byRole)
+    }
+    const existing = byRole.get(role)
+    if (existing !== undefined) return existing
+    const operation = this.provisionResidentRole(parent, role, signal)
+    byRole.set(role, operation)
+    try {
+      return await operation
+    } finally {
+      if (byRole.get(role) === operation) byRole.delete(role)
+      if (byRole.size === 0) this.residentProvisioning.delete(parentId)
+    }
+  }
+
+  /** Ensure all four fixed subagents exist before the first user turn. */
+  async ensureResidentRoles(parent: Agent, signal?: AbortSignal): Promise<void> {
+    await Promise.all(allSpecialistRoles().map(role => this.ensureResidentRole(parent, role, signal)))
+  }
+
+  /** Deliver a coordinator message to a resident child without cold-resume. */
+  async deliverResidentChild(
+    parent: Agent,
+    childSessionId: SessionId,
+    content: ContentBlock[],
+    source: CoordinatorMessageSource,
+    signal: AbortSignal,
+  ): Promise<string | undefined> {
+    signal.throwIfAborted()
+    const child = this.residentChild(childSessionId)
+    if (child === undefined || child.session.header.parentSession !== parent.id) return undefined
+    const message = createUserMessage({ content, source })
+    child.followup(message)
+    return String(message.id)
+  }
+
+  /** Deliver a report from a resident child using DSH's normal steer relay. */
+  async reportFromResident(
+    child: Agent,
+    content: ContentBlock[],
+    signal: AbortSignal,
+  ): Promise<string | undefined> {
+    signal.throwIfAborted()
+    const entry = this.roleRegistry.lookup(child.id)
+    if (entry === undefined || this.residentChild(child.id) !== child) return undefined
+    const parentId = entry.binding.parentSessionId
+    const agents = this.ctx.get('agents') as { get?: (id: SessionId) => Agent | undefined } | undefined
+    const parent = agents?.get?.(parentId)
+    if (parent === undefined) throw new Error('direct parent is not live; report was not delivered')
+    const message = createUserMessage({
+      content: [
+        { type: 'text', text: `Background subagent ${child.id} reported:` },
+        ...content,
+      ],
+      source: {
+        kind: 'subagent-report',
+        form: 'relay',
+        senderSessionId: child.id,
+      } satisfies SubagentReportMessageSource,
     })
+    parent.steer(message)
+    return String(message.id)
+  }
+
+  /** Create or resume one resident role without sending an initial prompt. */
+  private async provisionResidentRole(parent: Agent, role: SpecialistRole, signal: AbortSignal): Promise<Agent | undefined> {
+    const parentSession = parent.session
+    const agents = this.ctx.get('agents') as {
+      get?: (id: SessionId) => Agent | undefined
+      create?: (options: object) => Promise<AgentHandle>
+      resume?: (options: { resumeSessionId: SessionId; agentOptions?: Agent['options']; setup?: (ctx: Context) => void }) => Promise<AgentHandle>
+      withInitiator?: <T>(agent: Agent, operation: () => T) => T
+    } | undefined
+    // The assembled unit tests deliberately provide only the subagent seam;
+    // leave their legacy lazy path untouched when the Agent factory is absent.
+    if (agents?.get === undefined || agents.create === undefined || agents.resume === undefined) return undefined
+    const live = this.forSession(parentSession)
+    let binding = live.state.bindingForRole(role)
+    let createdReservation = false
+    if (binding === undefined || binding.provisioning === 'failed') {
+      const childId = SessionId(randomUUID())
+      const reservation = {
+        version: AUTOREPORT_SCHEMA_VERSION,
+        role,
+        childSessionId: childId,
+        parentSessionId: parent.id,
+        workflowId: live.state.projection().meta?.workflowId ?? String(parent.id),
+        provisioning: 'reserved' as const,
+        ...(binding === undefined ? {} : { supersedes: binding.childSessionId }),
+      }
+      this.commit(parentSession, 'autoreport/role-binding', reservation)
+      if (binding !== undefined && this.roleRegistry.lookup(binding.childSessionId) !== undefined) {
+        this.roleRegistry.rebind(role, binding.childSessionId, reservation)
+      } else {
+        this.roleRegistry.registerReserved(reservation)
+      }
+      binding = reservation
+      createdReservation = true
+    } else if (this.roleRegistry.lookup(binding.childSessionId) === undefined) {
+      this.roleRegistry.registerReserved(binding)
+    }
+
+    if (binding === undefined) return undefined
+    const alreadyLive = agents.get(binding.childSessionId)
+    if (alreadyLive !== undefined) {
+      this.markResidentActive(parentSession, binding, role, alreadyLive)
+      // A live child that this runtime did not create belongs to the DSH
+      // continuation manager (or another owner); leave delivery on its
+      // official followup/report path instead of bypassing its inbox manager.
+      return alreadyLive
+    }
+
+    signal.throwIfAborted()
+    const route = this.currentUserSettings().specialistModel ?? this.config.specialistModel
+    const agentOptions: Agent['options'] = {
+      ...(parent.options.provider === undefined ? {} : { provider: parent.options.provider }),
+      ...(parent.options.model === undefined ? {} : { model: parent.options.model }),
+      ...(parent.options.maxTokens === undefined ? {} : { maxTokens: parent.options.maxTokens }),
+      ...(route === undefined ? {} : { provider: route.provider, model: route.model }),
+    }
+    const persona = loadSpecialistPersona(role)
+    const toolFilter = { deny: ['send_to_agent', 'ask_user_question'] }
+    const descriptor = snapshotSubagentDescriptor({
+      mode: 'continuable',
+      provider: 'spawn',
+      label: `AutoReport ${role}`,
+      ...(agentOptions.provider === undefined ? {} : { agentProvider: agentOptions.provider }),
+      ...(agentOptions.model === undefined ? {} : { agentModel: agentOptions.model }),
+      persona,
+      toolFilter,
+    })
+    const seed = seedDescriptorTurn(binding.childSessionId, undefined, descriptor)
+    const setup = async (childCtx: Context): Promise<void> => {
+      const child = childCtx.agent
+      if (child === undefined) throw new Error(`resident ${role} setup has no child agent`)
+      applyChildComposition(childCtx, parent, { persona, toolFilter })
+      // The parent preset is joined synchronously above, but its scoped skill
+      // service is exposed through Cordis injection. Wait for that capability
+      // before publishing the child so REPORT skills and the role report tool
+      // are present from the first resident request.
+      await childCtx.inject(['skills'], (skillCtx) => {
+        skillCtx.effect(
+          () => installRoutedReportTool(skillCtx, this.ctx, this),
+          `autoreportdsh.resident.${role}()`,
+        )
+      })
+    }
+    try {
+      const persistence = this.ctx.get('sessionPersistence') as { inspect?: (id: SessionId, signal: AbortSignal) => Promise<unknown> } | undefined
+      let persisted = false
+      if (persistence?.inspect !== undefined) {
+        try {
+          await persistence.inspect(binding.childSessionId, signal)
+          persisted = true
+        } catch {
+          persisted = false
+        }
+      }
+      const createOrResume = (): Promise<AgentHandle> => persisted
+        ? agents.resume!({ resumeSessionId: binding.childSessionId, agentOptions, setup })
+        : agents.create!({
+            sessionId: binding.childSessionId,
+            seed,
+            meta: {
+              ...(parent.session.header.cwd === undefined ? {} : { cwd: parent.session.header.cwd }),
+              parentSession: parent.id,
+              origin: 'subagent',
+              delegationDepth: 1,
+            },
+            agentOptions,
+            setup,
+          } as never)
+      const handle = await (agents.withInitiator === undefined
+        ? createOrResume()
+        : agents.withInitiator(parent, createOrResume))
+      this.storeResident(parent, role, handle)
+      this.markResidentActive(parentSession, binding, role, handle.agent)
+      return handle.agent
+    } catch (error: unknown) {
+      if (createdReservation && this.roleRegistry.lookup(binding.childSessionId) !== undefined) {
+        this.roleRegistry.revoke(binding.childSessionId)
+        this.commit(parentSession, 'autoreport/role-binding', { ...binding, provisioning: 'failed' })
+      }
+      throw error
+    }
+  }
+
+  private markResidentActive(session: Session, binding: import('./workflow/events.js').RoleBindingSnapshot, _role: SpecialistRole, _agent: Agent): void {
+    if (binding.provisioning !== 'active') {
+      this.commit(session, 'autoreport/role-binding', { ...binding, provisioning: 'active' })
+      this.roleRegistry.markActive(binding.childSessionId)
+    }
+  }
+
+  private storeResident(parent: Agent, role: SpecialistRole, handle: AgentHandle): void {
+    let byRole = this.residentHandles.get(String(parent.id))
+    if (byRole === undefined) {
+      byRole = new Map()
+      this.residentHandles.set(String(parent.id), byRole)
+    }
+    if (!byRole.has(role)) byRole.set(role, handle)
+  }
+
+  private async disposeResidentRoles(): Promise<void> {
+    const handles = [...this.residentHandles.values()].flatMap(byRole => [...byRole.values()])
+    this.residentHandles.clear()
+    await Promise.allSettled(handles.map(handle => handle.dispose()))
+  }
+
+  private async disposeResidentFor(parentId: SessionId): Promise<void> {
+    const byRole = this.residentHandles.get(String(parentId))
+    if (byRole === undefined) return
+    this.residentHandles.delete(String(parentId))
+    await Promise.allSettled([...byRole.values()].map(handle => handle.dispose()))
+  }
+
+  private logResidentFailure(error: unknown): void {
+    try {
+      this.ctx.logger.warn('autoreportdsh: resident subagent provisioning failed: %s', error instanceof Error ? error.message : String(error))
+    } catch {
+      // Tests may use a bare context without a logger.
+    }
   }
 
   /**
@@ -278,6 +560,41 @@ export default class AutoReportWorkflowRuntime extends Service {
     applyRoleSandbox(session, 'MAIN', root)
   }
 
+  /** Whether the observed user message is the first real user input. */
+  private isInitialUserMessage(session: Session): boolean {
+    return session.events.filter(event =>
+      event.type === 'user/message' && event.data.source.kind === 'user',
+    ).length === 1
+  }
+
+  /** Whether the observed turn boundary is the first turn in this session. */
+  private isInitialTurnStart(session: Session): boolean {
+    return session.events.filter(event => event.type === 'turn/start').length === 1
+  }
+
+  /**
+   * Run first-turn side effects after the current Session append has
+   * published. DSH intentionally rejects re-entrant appends from a
+   * `session/event` observer; direct test emitters do not have that guard, so
+   * the fast path remains synchronous there.
+   */
+  private initializeAfterAppend(session: Session): void {
+    try {
+      this.ensureMainSandbox(session)
+      this.maybeInitialize(session)
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error)
+      if (!message.includes('session append cannot reenter')) throw error
+      const id = String(session.id)
+      if (this.pendingPostCommitInitialization.has(id)) return
+      this.pendingPostCommitInitialization.add(id)
+      queueMicrotask(() => {
+        this.pendingPostCommitInitialization.delete(id)
+        if (this.ownsSession(session)) this.initializeAfterAppend(session)
+      })
+    }
+  }
+
   /**
    * Append one ignorable domain event and synchronously update its projection.
    * Applying twice through the Session observer is safe because mutable
@@ -355,8 +672,7 @@ export default class AutoReportWorkflowRuntime extends Service {
     // The host command wrapper admits only autoreport callers; retain
     // this gate here as defense in depth for any future direct caller.
     if (!isAutoReportMainSession(session)) return
-    const live = this.forSession(session)
-    if (live.state.projection().meta?.initialized === true) return
+    this.forSession(session)
     const root = this.config.workspaceRoot ?? session.header.cwd
     if (root === undefined || root.length === 0) return
     let settings: WorkflowSettingsSnapshot
@@ -370,9 +686,8 @@ export default class AutoReportWorkflowRuntime extends Service {
       })
       ensureInitialized(root, settings.reportLanguage, this.overlayRoot)
     } catch (error: unknown) {
-      // A broken EXTERNAL settings document must not wedge every first turn;
-      // the next user message retries after repair. The /init command
-      // path surfaces the same failure loudly instead of skipping.
+      // A broken external settings document must not wedge the first turn;
+      // the explicit /init path surfaces the same failure loudly for repair.
       const message = error instanceof Error ? error.message : String(error)
       try {
         this.ctx.logger.warn('autoreportdsh: skipped workflow initialization: %s', message)

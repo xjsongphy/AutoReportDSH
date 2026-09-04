@@ -43,6 +43,7 @@ import {
   isManagedPythonSetting,
   type PythonCandidate,
 } from './python-detect.js'
+import type { MineruStatus } from './client/mineru-status-types.js'
 
 /** Schema-default workflow policy applied below every other layer. */
 export const WORKFLOW_SETTINGS_SCHEMA_DEFAULTS: Readonly<{
@@ -74,6 +75,8 @@ export interface AutoReportUserSettings {
    * the card never writes this field.
    */
   pythonEnvironments?: readonly PythonEnvironmentOption[]
+  /** Host-detected MinerU CLI/auth state; composition-only, never written by the card. */
+  mineruStatus?: MineruStatus
 }
 
 /** One detected interpreter published on the composition settings layer. */
@@ -104,6 +107,12 @@ const PYTHON_ENVIRONMENT_SCHEMA = z.object({
   version: z.string(),
 })
 
+const MINERU_STATUS_SCHEMA = z.object({
+  installed: z.boolean().default(false),
+  tokenConfigured: z.boolean().default(false),
+  tokenSource: z.union(['environment', 'config']),
+})
+
 /** Schemastery schema resolving the `'autoreport'` user-settings namespace standalone. */
 export const AUTO_REPORT_USER_SETTINGS_SCHEMA: z<AutoReportUserSettings> = z.object({
   defaultReportLanguage: z.union(['latex', 'typst'] as const).default(WORKFLOW_SETTINGS_SCHEMA_DEFAULTS.reportLanguage),
@@ -112,12 +121,14 @@ export const AUTO_REPORT_USER_SETTINGS_SCHEMA: z<AutoReportUserSettings> = z.obj
   delegationWaitTimeoutMs: z.number().default(WORKFLOW_SETTINGS_SCHEMA_DEFAULTS.delegationWaitTimeoutMs),
   pythonExecutable: z.string(),
   pythonEnvironments: z.array(PYTHON_ENVIRONMENT_SCHEMA).default([]),
+  mineruStatus: MINERU_STATUS_SCHEMA,
 }) as unknown as z<AutoReportUserSettings>
 
 /** Convert composition defaults into the base layer for DSH user settings. */
 export function autoReportUserSettingsBase(
   config: Config,
   environments: readonly PythonCandidate[] = [],
+  mineruStatus?: MineruStatus,
 ): AutoReportUserSettings {
   return {
     defaultReportLanguage: config.defaultReportLanguage,
@@ -126,6 +137,7 @@ export function autoReportUserSettingsBase(
     ...(config.specialistModel === undefined ? {} : { specialistModel: config.specialistModel }),
     ...(config.pythonExecutable === undefined ? {} : { pythonExecutable: config.pythonExecutable }),
     pythonEnvironments: environments.map(asEnvironmentOption),
+    ...(mineruStatus === undefined ? {} : { mineruStatus }),
   }
 }
 

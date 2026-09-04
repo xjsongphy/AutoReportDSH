@@ -29,6 +29,11 @@ export function apply(ctx: Context): void {
   installManifestTool(ctx, ctx, 'MAIN')
   ctx.tools.register(createSendToAgentTool({
     subagents: ctx.subagents,
+    resident: {
+      ensure: (parent, role, signal) => ctx.autoreportWorkflow.ensureResidentRole(parent, role, signal),
+      deliver: (parent, childSessionId, content, source, signal) =>
+        ctx.autoreportWorkflow.deliverResidentChild(parent, childSessionId, content, source, signal),
+    },
     workflow: ctx.autoreportWorkflow,
     config: ctx.autoreportWorkflow.config,
   }))
