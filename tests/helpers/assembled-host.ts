@@ -90,7 +90,7 @@ export interface Assembled {
   mainSession: Session
   continuableSetups: ((childCtx: Parameters<typeof reportRouterModule.installRoutedReportTool>[0]) => () => void)[]
   startedSpecs: { childId: unknown; label: string; prompt: string }[]
-  reportInitCommand: { handler: (invocation: unknown) => Promise<{ kind: string; text?: string }> } | undefined
+  reportInitCommand: { name: string; handler: (invocation: unknown) => Promise<{ kind: string; text?: string }> } | undefined
   presetSkillNames: string[]
   skillProviders: string[]
   pythonResolve: (execution: { agent?: { session: Session } }) => Record<string, string>
@@ -179,7 +179,7 @@ export async function assemble(options: AssembleOptions = {}): Promise<Assembled
   let reportInitCommand: Assembled['reportInitCommand']
   ctx.provide('commands', {
     register: (definition: Assembled['reportInitCommand']) => {
-      reportInitCommand = definition
+      if (definition?.name === 'init') reportInitCommand = definition
       return () => {}
     },
   } as never)

@@ -9,21 +9,25 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
+import type {} from '@deepseek-ai/dsh-commands'
 import { registerMainSkills } from './skills-preset.js'
 import { installReferencesSkills } from './skills-references.js'
+import { createAgentsCommand } from './agents-command.js'
 import { installManifestTool } from './tools/manifest.js'
 import { createSendToAgentTool } from './tools/send-to-agent.js'
 import type {} from './runtime.js'
 
 export const name = 'autoreportdsh-preset'
-export const inject = ['tools', 'skills', 'subagents', 'autoreportWorkflow'] as const
+export const inject = ['tools', 'skills', 'subagents', 'commands', 'autoreportWorkflow'] as const
 
 /**
- * Register AutoReport's current MAIN tools. Domain skills are registered only
- * in role-bound specialist child scopes by the continuable router.
+ * Register AutoReport's explicit resident command and current MAIN tools.
+ * Domain skills are registered only in role-bound specialist child scopes by
+ * the continuable router.
  * @param ctx - The `autoreport` preset scope.
  */
 export function apply(ctx: Context): void {
+  ctx.commands.register(createAgentsCommand(ctx.autoreportWorkflow))
   installReferencesSkills(ctx)
   registerMainSkills(ctx, ctx.autoreportWorkflow.overlayRoot)
   installManifestTool(ctx, ctx, 'MAIN')
