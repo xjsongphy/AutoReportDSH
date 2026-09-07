@@ -233,8 +233,8 @@ export default class AutoReportWorkflowRuntime extends Service {
 
   /**
    * Explicitly activate the resident subagent set. The first real user
-   * message and the `/agents` command share this path; preset selection and
-   * history restoration do not call it.
+   * message uses this path; preset selection and history restoration do not
+   * call it.
    */
   async activateResidentRoles(parent: Agent, signal?: AbortSignal): Promise<void> {
     this.ensureMainSandbox(parent.session)

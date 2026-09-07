@@ -6,7 +6,6 @@ import { apply } from '../src/preset.js'
 describe('autoreport preset contribution', () => {
   it('registers only the current fixed-workflow MAIN tools', () => {
     const tools: string[] = []
-    const commands: string[] = []
     const skills: string[] = []
     let referencesProvider = 0
     const skillsService = {
@@ -27,12 +26,6 @@ describe('autoreport preset contribution', () => {
           return () => {}
         },
       },
-      commands: {
-        register: (definition: { name: string }) => {
-          commands.push(definition.name)
-          return () => {}
-        },
-      },
       skills: skillsService,
       systemPrompt: { section: () => () => {} },
       subagents: {},
@@ -50,7 +43,6 @@ describe('autoreport preset contribution', () => {
     apply(context)
 
     expect(tools.sort()).toEqual(['manifest', 'send_to_agent'])
-    expect(commands).toEqual(['agents'])
     expect(skills).toEqual(['pdf-reference-reader'])
     expect(referencesProvider).toBe(1)
   })
