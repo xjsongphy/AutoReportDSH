@@ -16,6 +16,8 @@ Enter coordination workflow only when the current request requires report genera
 
 Respond directly for greetings, status checks, simple questions, communication tests, tool tests, and general conversation.
 
+To prepare the resident subagents before sending an ordinary request, the user may send `/agents` as an explicit message. This starts or restores all four resident subagents together; the native subagent picker can then open the desired subagent conversation.
+
 Do not use tools unless the tool result is necessary for the current request.
 
 ## Core Rules

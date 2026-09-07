@@ -96,6 +96,10 @@ export default class AutoReportWorkflowRuntime extends Service {
   private readonly pendingPostCommitInitialization = new Set<string>()
   /** Resident AutoReport children, grouped by their owning MAIN session. */
   private readonly residentHandles = new Map<string, Map<SpecialistRole, AgentHandle>>()
+  /** Published agents indexed independently of the scoped Agent registry. */
+  private readonly liveAgents = new Map<string, Agent>()
+  /** Main sessions whose current process observed an explicit first message. */
+  private readonly pendingResidentActivations = new Set<string>()
   /** Coalesce startup and first-dispatch provisioning for one role. */
   private readonly residentProvisioning = new Map<string, Map<SpecialistRole, Promise<Agent | undefined>>>()
   /** Current DSH-resolved user defaults; each new workflow snapshots this once. */
@@ -148,22 +152,12 @@ export default class AutoReportWorkflowRuntime extends Service {
       live.state.apply(event)
       if (event.type === 'turn/start' && this.isInitialTurnStart(session)) {
         this.initializeAfterAppend(session)
-        this.ensureResidentRolesForSession(session)
-        // The turn boundary is the first reliable lifecycle event for a
-        // newly selected preset. Initialize here before the first model
-        // message; the user/message branch below remains an idempotent
-        // recovery path for hosts that do not publish turn/start first.
       }
       if (event.type === 'user/message'
         && event.data.source.kind === 'user'
         && this.isInitialUserMessage(session)) {
         this.initializeAfterAppend(session)
-        this.ensureResidentRolesForSession(session)
-      }
-      if (event.type === 'agent-preset/selected' && isAutoReportMainSession(session)) {
-        // A blank DSH session can be composed after agent/session-start. In
-        // that path the startup listener has already run before membership is
-        // visible, so retry provisioning at the actual preset-selection event.
+        this.pendingResidentActivations.add(String(session.id))
         this.ensureResidentRolesForSession(session)
       }
       observeWorkflowMessage(session, event, {
@@ -177,25 +171,25 @@ export default class AutoReportWorkflowRuntime extends Service {
       if (owner === undefined) return
       owner.runtime.waiters.noteChildActivity(String(agent.id), status)
     }, { global: true })
-    ctx.on('agent/session-start', ({ agent }) => {
-      if (!isAutoReportMainSession(agent.session)) return
-      // The role sessions are created before any Main delegation. They stay
-      // idle until the user or Main addresses them, matching AutoReport's
-      // resident-loop model without consuming a startup model request.
-      void this.ensureResidentRoles(agent).catch(error => this.logResidentFailure(error))
+    ctx.on('agent/created', ({ agent }) => {
+      // Keep a reference only. Creation itself must not activate AutoReport;
+      // the first real user message below remains the sole activation gate.
+      this.liveAgents.set(String(agent.id), agent)
+      if (this.pendingResidentActivations.has(String(agent.id))) {
+        this.startPendingResidentActivation(agent)
+      }
     }, { global: true })
     ctx.on('agent/disposed', ({ agent }) => {
+      this.liveAgents.delete(String(agent.id))
       if (isAutoReportMainSession(agent.session)) void this.disposeResidentFor(agent.id)
     }, { global: true })
-    const agents = ctx.get('agents') as { list?: () => Agent[] } | undefined
-    for (const agent of agents?.list?.() ?? []) {
-      if (isAutoReportMainSession(agent.session)) {
-        void this.ensureResidentRoles(agent).catch(error => this.logResidentFailure(error))
-      }
-    }
     ctx.effect(() => () => {
       void this.disposeResidentRoles()
     }, 'autoreportdsh.residentRoles()')
+    const existingAgents = ctx.get('agents') as { list?: () => Agent[] } | undefined
+    for (const agent of existingAgents?.list?.() ?? []) {
+      this.liveAgents.set(String(agent.id), agent)
+    }
   }
 
   /** Resolve the currently live resident child for direct UI/tool routing. */
@@ -232,21 +226,77 @@ export default class AutoReportWorkflowRuntime extends Service {
     }
   }
 
-  /** Ensure all four fixed subagents exist before the first user turn. */
+  /** Ensure all four fixed subagents exist after an explicit user action. */
   async ensureResidentRoles(parent: Agent, signal?: AbortSignal): Promise<void> {
     await Promise.all(allSpecialistRoles().map(role => this.ensureResidentRole(parent, role, signal)))
   }
 
-  /** Retry resident provisioning when a blank session selects AutoReport late. */
+  /**
+   * Explicitly activate the resident subagent set. The first real user
+   * message and the `/agents` command share this path; preset selection and
+   * history restoration do not call it.
+   */
+  async activateResidentRoles(parent: Agent, signal?: AbortSignal): Promise<void> {
+    this.ensureMainSandbox(parent.session)
+    this.maybeInitialize(parent.session)
+    await this.ensureResidentRoles(parent, signal)
+  }
+
+  /** Start or restore residents after the first real user message. */
   private ensureResidentRolesForSession(session: Session): void {
-    const agents = this.ctx.get('agents') as {
+    const findAgent = (): Agent | undefined => {
+      const remembered = this.liveAgents.get(String(session.id))
+      if (remembered !== undefined) return remembered
+      const agents = this.ctx.get('agents') as {
+        get?: (id: SessionId) => Agent | undefined
+        list?: () => Agent[]
+      } | undefined
+      return agents?.get?.(session.id)
+        ?? agents?.list?.().find(candidate => candidate.session.id === session.id)
+    }
+    const agent = findAgent()
+    if (agent !== undefined) {
+      this.startPendingResidentActivation(agent)
+      return
+    }
+    // DSH may publish the session event just before the corresponding Agent
+    // enters the registry. Retry once after publication, still gated by the
+    // already-observed first user message rather than by preset selection.
+    queueMicrotask(() => {
+      const published = findAgent()
+      if (published !== undefined) {
+        this.startPendingResidentActivation(published)
+      }
+    })
+  }
+
+  private startPendingResidentActivation(agent: Agent): void {
+    const id = String(agent.id)
+    if (!this.pendingResidentActivations.delete(id)) return
+    // `session/event` observers run while the user-message append is being
+    // published. Sandbox/workflow/role-binding events are their own appends,
+    // so defer activation until that publication has fully unwound.
+    queueMicrotask(() => {
+      void this.activateResidentRoles(agent).catch(error => this.logResidentFailure(error))
+    })
+  }
+
+  /**
+   * Find the live Agent registry visible to a parent. Child creation belongs
+   * to the parent's scoped registry so DSH can enforce structured ownership.
+   */
+  private agentsForParent(parent: Agent): {
+    get?: (id: SessionId) => Agent | undefined
+    create?: (options: object) => Promise<AgentHandle>
+    resume?: (options: { resumeSessionId: SessionId; agentOptions?: Agent['options']; setup?: (ctx: Context) => void }) => Promise<AgentHandle>
+    withInitiator?: <T>(agent: Agent, operation: () => T) => T
+  } | undefined {
+    return (parent.ctx?.get('agents') ?? this.ctx.get('agents')) as {
       get?: (id: SessionId) => Agent | undefined
-      list?: () => Agent[]
+      create?: (options: object) => Promise<AgentHandle>
+      resume?: (options: { resumeSessionId: SessionId; agentOptions?: Agent['options']; setup?: (ctx: Context) => void }) => Promise<AgentHandle>
+      withInitiator?: <T>(agent: Agent, operation: () => T) => T
     } | undefined
-    const agent = agents?.get?.(session.id)
-      ?? agents?.list?.().find(candidate => candidate.session.id === session.id)
-    if (agent === undefined) return
-    void this.ensureResidentRoles(agent).catch(error => this.logResidentFailure(error))
   }
 
   /** Deliver a coordinator message to a resident child without cold-resume. */
@@ -296,12 +346,7 @@ export default class AutoReportWorkflowRuntime extends Service {
   /** Create or resume one resident role without sending an initial prompt. */
   private async provisionResidentRole(parent: Agent, role: SpecialistRole, signal: AbortSignal): Promise<Agent | undefined> {
     const parentSession = parent.session
-    const agents = this.ctx.get('agents') as {
-      get?: (id: SessionId) => Agent | undefined
-      create?: (options: object) => Promise<AgentHandle>
-      resume?: (options: { resumeSessionId: SessionId; agentOptions?: Agent['options']; setup?: (ctx: Context) => void }) => Promise<AgentHandle>
-      withInitiator?: <T>(agent: Agent, operation: () => T) => T
-    } | undefined
+    const agents = this.agentsForParent(parent)
     // The assembled unit tests deliberately provide only the subagent seam;
     // leave their legacy lazy path untouched when the Agent factory is absent.
     if (agents?.get === undefined || agents.create === undefined || agents.resume === undefined) return undefined
