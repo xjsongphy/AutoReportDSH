@@ -15,9 +15,8 @@ concurrency:
 
 env:
   NODE_VERSION: '22.19.0'
-  # Public upstream base. Later steps apply the compatibility patches required
-  # until DSH releases Session.append(..., { ignorable: true }) and
-  # sandbox/workspace-root.
+  # Public upstream base. Later steps apply the source-only sandbox compatibility
+  # shim required by the pinned development checkout.
   DSH_REF: 'b150a551b8d465e31e418e1b2eaf5e79bbb7d28e'
 
 defaults:
@@ -58,12 +57,10 @@ jobs:
           path: deepseek-harness
           persist-credentials: false
 
-      - name: Apply required DSH compatibility patches
+      - name: Apply source-only DSH compatibility patch
         working-directory: deepseek-harness
         shell: bash
         run: |
-          git apply --ignore-whitespace --check ../AutoReportDSH/patches/deepseek-harness-ignorable-append.patch
-          git apply --ignore-whitespace ../AutoReportDSH/patches/deepseek-harness-ignorable-append.patch
           git apply --ignore-whitespace --check ../AutoReportDSH/patches/deepseek-harness-sandbox-workspace-root.patch
           git apply --ignore-whitespace ../AutoReportDSH/patches/deepseek-harness-sandbox-workspace-root.patch
 

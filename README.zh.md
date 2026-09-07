@@ -164,7 +164,7 @@ $DSH_HOME/
 ```text
 AutoReportDSH/
 ├── cordis.template.yml    host + report-router overlay
-├── patches/               sibling Harness API 补丁
+├── patches/               仅供源码测试的 Harness API shim
 ├── presets/autoreport/    user preset（id = 目录名）
 ├── resources/             捆绑的 persona、skills、LaTeX 模板
 ├── scripts/               preset 安装、资源同步、client 构建

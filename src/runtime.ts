@@ -661,7 +661,7 @@ export default class AutoReportWorkflowRuntime extends Service {
   }
 
   /**
-   * Append one ignorable domain event and synchronously update its projection.
+   * Append one domain event and synchronously update its projection.
    * Applying twice through the Session observer is safe because mutable
    * workflow snapshots are keyed last-write-wins.
    * @param session - owning Main Session.

@@ -7,7 +7,7 @@
 
 import { resolve } from 'node:path'
 import type { Session } from '@deepseek-ai/dsh-session'
-import { setSandboxMode, setSandboxWorkspaceRoot } from '@deepseek-ai/dsh-sandbox-policy'
+import { setSandboxMode } from '@deepseek-ai/dsh-sandbox-policy'
 import { rolePolicy, type AutoReportRole } from '../roles.js'
 
 /**
@@ -31,5 +31,16 @@ export function roleWritableRoot(workspaceRoot: string, role: AutoReportRole): s
  */
 export function applyRoleSandbox(session: Session, role: AutoReportRole, workspaceRoot: string): void {
   setSandboxMode(session, 'workspace-write')
-  setSandboxWorkspaceRoot(session, roleWritableRoot(workspaceRoot, role))
+  // `sandbox/workspace-root` is an AutoReport-owned extension event. The
+  // current published DSH exposes no third-party setter for it; the host
+  // plugin registers this event with session persistence before using it.
+  // Keep the navigation cwd unchanged while the AutoReport tool guard and
+  // newer DSH consumers fold this narrower writable root.
+  const append = session.append as unknown as (
+    type: string,
+    data: unknown,
+  ) => unknown
+  append.call(session, 'sandbox/workspace-root', {
+    workspaceRoot: roleWritableRoot(workspaceRoot, role),
+  })
 }

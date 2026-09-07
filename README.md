@@ -177,7 +177,7 @@ $DSH_HOME/
 ```text
 AutoReportDSH/
 ├── cordis.template.yml    host + report-router overlay
-├── patches/               sibling Harness API patches
+├── patches/               source-only Harness API test shim
 ├── presets/autoreport/    user preset (id = directory name)
 ├── resources/             bundled personas, skills, LaTeX templates
 ├── scripts/               preset install, resource sync, client build
@@ -213,8 +213,9 @@ The test reads the providers from that DSH home and declares none of its own. Se
 [docs/live-provider-testing.md](docs/live-provider-testing.md).
 
 CI (`.github/workflows/ci.yml`) runs on Linux, macOS, and Windows against the
-pinned DSH compatibility checkout. It applies the temporary patches, then runs
-install, keyless tests, typecheck, and build. See
+pinned DSH compatibility checkout. It applies one source-only sandbox test shim,
+then runs install, keyless tests, typecheck, and build. The user-facing plugin
+install does not patch DSH. See
 [docs/dependencies.md](docs/dependencies.md) for the dependency pin.
 
 Design and implementation notes: **[PLAN.md](PLAN.md)**.

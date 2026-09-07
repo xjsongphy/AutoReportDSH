@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { Session, SessionId, KNOWN_SESSION_EVENT_TYPES } from '@deepseek-ai/dsh-session'
+import { Session, SessionId } from '@deepseek-ai/dsh-session'
 import { appendWorkflowEvent } from '../src/workflow/store.js'
 
-describe('appendWorkflowEvent (persistence gate)', () => {
-  it('writes autoreport/* records through the official writer with ignorable: true', () => {
+describe('appendWorkflowEvent (persistence vocabulary)', () => {
+  it('writes autoreport/* records through the official writer', () => {
     const session = Session.create(SessionId('wf-store'))
     const event = appendWorkflowEvent(session, 'autoreport/workflow', {
       version: 1,
@@ -12,12 +12,9 @@ describe('appendWorkflowEvent (persistence gate)', () => {
       language: 'latex',
       initialized: false,
     })
-    expect(event.ignorable).toBe(true)
-    expect(session.events[0]?.ignorable).toBe(true)
+    expect(event.ignorable).toBeUndefined()
+    expect(session.events[0]?.ignorable).toBeUndefined()
     expect(Object.isFrozen(session.events[0])).toBe(true)
-    // The stock vocabulary must NOT contain our out-of-tree types; the
-    // ignorable marker is what keeps cold loads of such logs openable.
-    expect(KNOWN_SESSION_EVENT_TYPES.has('autoreport/workflow')).toBe(false)
   })
 
   it('keeps non-autoreport appends untouched by the helper contract', () => {

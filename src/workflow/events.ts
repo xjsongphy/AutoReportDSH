@@ -2,8 +2,8 @@
  * The `autoreport/*` session-event vocabulary: complete-snapshot facts folded
  * into the durable report-workflow projection (PLAN.md §2.6). Every payload is
  * a whole snapshot — replay is last-write-wins per key — and every append goes
- * through {@link ../store} so the record carries `ignorable: true` and stock
- * DSH readers skip it instead of refusing the log.
+ * through {@link ../store} after the host plugin registers the vocabulary with
+ * DSH's persistence reader.
  *
  * Log-only vocabulary: no member here enters model history or the ordered
  * surface, so all records survive compaction unchanged.
@@ -218,7 +218,7 @@ declare module '@deepseek-ai/dsh-session/types' {
   interface SessionEventMap {
     /**
      * Workflow-level metadata (workspace, language, initialization). Log-only
-     * AutoReport fact written with `ignorable: true`; latest write wins.
+     * AutoReport fact; latest write wins.
      */
     'autoreport/workflow': WorkflowMetaSnapshot
     /**

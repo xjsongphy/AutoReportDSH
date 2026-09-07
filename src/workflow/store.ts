@@ -1,8 +1,8 @@
 /**
  * The single writer seam for `autoreport/*` events. Every AutoReport record
- * goes through {@link appendWorkflowEvent} so it carries `ignorable: true`
- * (PLAN.md persistence gate): stock DSH readers skip the unknown type instead
- * of refusing the session, while this plugin's fold reconstructs full state.
+ * goes through {@link appendWorkflowEvent} and is written by DSH's official
+ * `Session.append` path. The host plugin registers this vocabulary with the
+ * running DSH process before any AutoReport session is created or resumed.
  *
  * Monkey-patching `Session`, constructing events outside `Session.append`, or
  * writing straight to a persistence backend are all forbidden alternatives.
@@ -32,9 +32,9 @@ export function isAutoreportEvent(type: SessionEventType): boolean {
 }
 
 /**
- * Append one AutoReport domain fact through the official writer with the
- * ignorable marker. The returned event is the committed log entry: assigned
- * `seq`/`time` plus the frozen data snapshot.
+ * Append one AutoReport domain fact through the official writer. The returned
+ * event is the committed log entry: assigned `seq`/`time` plus the frozen data
+ * snapshot.
  * @param session - owning session (MAIN's workflow session in practice).
  * @param type - one of the AutoReport `autoreport/*` types.
  * @param data - complete payload snapshot; must be JSON-serializable.
@@ -52,7 +52,6 @@ export function appendWorkflowEvent<T extends keyof SessionEventMap & string>(
     this: Session,
     type: K,
     data: SessionEventMap[K],
-    opts?: { ignorable?: true },
   ) => SessionEvent<K>
-  return append.call(session, type as never, data as never, { ignorable: true }) as SessionEvent<T>
+  return append.call(session, type as never, data as never) as SessionEvent<T>
 }

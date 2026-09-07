@@ -14,6 +14,7 @@ import { installAutoReportPythonEnv } from './python-env.js'
 import AutoReportWorkflowRuntime, { type RuntimeOptions } from './runtime.js'
 import { createReportInitCommand } from './workspace/command.js'
 import { loadProjectSettings, saveProjectSettings, workspaceIdForRoot } from './settings.js'
+import { registerAutoReportSessionEvents } from './session-events.js'
 import { installTurnGuards } from './workflow/turn-guard.js'
 import { syncManagedResources } from './workspace/resource-sync.js'
 
@@ -63,6 +64,10 @@ export function resolveHostConfig(raw: Partial<Config> = {}): Config {
  *   the DSH home itself.
  */
 export async function apply(ctx: Context, config: Partial<Config> = {}, options: RuntimeOptions = {}): Promise<void> {
+  // This must run before any AutoReport session is created or resumed. DSH
+  // validates persisted event vocabulary outside the agent loop, so an Agent
+  // Loop listener would be too late to make the log restorable.
+  await registerAutoReportSessionEvents()
   const resolved = resolveHostConfig(config)
   const runtime = new AutoReportWorkflowRuntime(ctx, resolved, options)
   if (options.skipResourceSync !== true) {
