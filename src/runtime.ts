@@ -66,7 +66,7 @@ export interface ParentWorkflowRuntime {
 export interface RuntimeOptions {
   /** Harness home override for external project settings; absent resolves the DSH home. */
   readonly settingsHome?: string
-  /** @deprecated Resource sync is explicit and never runs during host startup. */
+  /** Legacy option retained for tests; resource sync is explicit and never runs during host startup. */
   readonly skipResourceSync?: boolean
   /** Interpreter discovery overlay; tests disable conda/PATH scans. */
   readonly pythonDetect?: PythonDetectOptions

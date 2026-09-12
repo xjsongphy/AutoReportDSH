@@ -27,12 +27,12 @@ The workflow ports the report pipeline of
 - **Directory permission isolation** — every role is pinned to its own writable root by DSH's `workspace-write` sandbox (table below)
 - **LaTeX and Typst reports** — per-project language with bundled templates, themes, bibliography assets, and compile skills; Python for data processing and plotting
 - **Your DSH providers** — model routes and credentials come from DSH's own configuration
-- **Kept-current resources** — templates, themes, and skills refresh from their remotes each time the plugin starts; `pnpm run sync:resources` triggers the same refresh by hand
+- **Deterministic bundled resources** — templates, themes, and skills ship with the plugin; `pnpm run sync:resources` is an explicit maintenance action, never a startup download
 - **Everything bundled** — personas, templates, and skills ship with the plugin, so a fresh workspace runs immediately
 
 ### Workflow
 - **Auto-initialized workspace** — Main's first turn initializes the workspace once; `/init` is available for explicit repair or language selection
-- **Task and artifact tracking** — Main delegates through `send_to_agent`; specialists describe their outputs in a shared `manifest`, so the next role finds them without being told; each task ends with a declared completion
+- **Task and artifact tracking** — Main delegates through `send_to_agent` and maintains durable checklist/status state with `workflow_task`; specialists describe outputs in a shared `manifest`, so the next role finds them without being told
 - **Continuable specialists** — every specialist keeps its role context across follow-up tasks; chatting with one directly stays an ordinary conversation
 - **Stock DSH elsewhere** — a session started without the `autoreport` preset behaves exactly like DSH without this plugin
 
@@ -218,7 +218,7 @@ then runs install, keyless tests, typecheck, and build. The user-facing plugin
 install does not patch DSH. See
 [docs/dependencies.md](docs/dependencies.md) for the dependency pin.
 
-Design and implementation notes: **[PLAN.md](PLAN.md)**.
+Design and implementation notes: **[PLAN.md](PLAN.md)**. Product boundary and non-goals: **[docs/own-features.md](docs/own-features.md)**.
 
 ## Credits
 

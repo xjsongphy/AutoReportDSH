@@ -15,12 +15,13 @@ iterating rapidly; PLAN.md risk 9).
 ## Compatibility seams
 
 The file under `patches/` is a temporary source-test shim for the pinned
-development checkout; it is not required by the user-facing plugin install
-and is not DSH's plugin distribution mechanism. DSH's supported plugin path is
-an npm bundle declaring `dsh.bundle.patch` and installed with
-`dsh plugin --profile <name> add <package>`. The source installer does not apply
-this shim or modify DSH. It is used only by CI and contributors who build
-against the pinned development checkout.
+development checkout; it is not DSH's plugin distribution mechanism. DSH's
+supported plugin path is an npm bundle declaring `dsh.bundle.patch` and
+installed with `dsh plugin --profile <name> add <package>`. The source installer
+does not apply this shim or modify DSH. Until the workspace-root API is
+upstreamed in a documented release, a user-facing install must use a DSH build
+that already implements it; host activation now fails loudly when the running
+sandbox policy cannot consume `sandbox/workspace-root`.
 
 At host-plugin activation, AutoReport registers its own session event names in
 the running DSH process's session vocabulary. This is an in-process operation:
