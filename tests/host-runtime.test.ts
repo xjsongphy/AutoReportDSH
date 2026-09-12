@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
+import type { Agent } from '@deepseek-ai/dsh-agent'
 import { SettingsProvider, type SettingsNamespace } from '@deepseek-ai/dsh-settings'
 import { Session, SessionId } from '@deepseek-ai/dsh-session'
 import {
@@ -271,6 +272,42 @@ describe('host workflow runtime', () => {
     expect(runtime.ownsSession(session)).toBe(true)
     expect(effectiveSandboxMode(session.events)).toBe('workspace-write')
     expect(effectiveSandboxWorkspaceRoot(session.events)).toBe(resolve(root, 'Outline'))
+  })
+
+  it('does not create resident children just because MAIN received its first message', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'autoreport-runtime-'))
+    tempDirs.push(root)
+    const ctx = new Context()
+    const session = rootSession('lazy-residents', AUTOREPORT_MAIN_PRESET, root)
+    const mainAgent = { id: session.id, session } as Agent
+    const created: unknown[] = []
+    const createChild = async (options: { sessionId: SessionId }): Promise<{ agent: Agent; dispose: () => Promise<void> }> => {
+      created.push(options)
+      const child = Session.create(options.sessionId, undefined, {
+        version: 0,
+        id: options.sessionId,
+        createdAt: Date.now(),
+        parentSession: session.id,
+      })
+      return { agent: { id: child.id, session: child } as Agent, dispose: async () => {} }
+    }
+    ctx.provide('agents', {
+      list: () => [mainAgent],
+      get: (id: SessionId) => id === mainAgent.id ? mainAgent : undefined,
+      create: createChild,
+      resume: createChild,
+    } as never)
+    createRuntime(ctx, { ...CONFIG, workspaceRoot: root })
+
+    const message = createUserMessage({
+      content: [{ type: 'text', text: 'start the report' }],
+      source: { kind: 'user' },
+    })
+    ctx.emit('session/event', session, session.append('user/message', message, { surfaceOp: 'append' }))
+    await new Promise<void>(resolve => { setTimeout(resolve, 0) })
+
+    expect(created).toHaveLength(0)
+    expect(session.events.some(event => event.type === 'autoreport/role-binding')).toBe(false)
   })
 
   it('initializes on the first turn boundary after a preset selection', () => {

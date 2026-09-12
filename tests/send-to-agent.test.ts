@@ -7,6 +7,7 @@ import { WaiterRegistry } from '../src/workflow/waiters.js'
 import type { Config } from '../src/config.js'
 import {
   AUTOREPORT_SCHEMA_VERSION,
+  type RoleBindingSnapshot,
   type TaskSnapshot,
   type WorkflowMetaSnapshot,
 } from '../src/workflow/events.js'
@@ -130,6 +131,56 @@ describe('send_to_agent', () => {
       scopes: ['Plots'],
     })
     expect(subagents.startContinuable).toHaveBeenCalledOnce()
+  })
+
+  it('creates and immediately briefs only the dispatched resident subagent', async () => {
+    const { session, state, roleRegistry, workflow, subagents } = harness()
+    const childId = SessionId('resident-report')
+    const ensure = vi.fn(async (parent: { id: SessionId }, role: string) => {
+      expect(parent.id).toBe(session.id)
+      expect(role).toBe('REPORT')
+      const reserved: RoleBindingSnapshot = {
+        version: AUTOREPORT_SCHEMA_VERSION,
+        role: 'REPORT',
+        childSessionId: childId,
+        parentSessionId: session.id,
+        workflowId: 'wf-1',
+        provisioning: 'reserved',
+      }
+      workflow.commit(session, 'autoreport/role-binding', reserved)
+      roleRegistry.registerReserved(reserved)
+      workflow.commit(session, 'autoreport/role-binding', { ...reserved, provisioning: 'active' })
+      roleRegistry.markActive(childId)
+      return { id: childId } as never
+    })
+    const deliver = vi.fn(async (_parent, receivedChildId: SessionId, content: Array<{ type: string; text?: string }>) => {
+      expect(receivedChildId).toBe(childId)
+      expect(content[0]?.text).toContain('AutoReport task task-2')
+      expect(content[0]?.text).toContain('Role: REPORT')
+      return 'resident-message'
+    })
+    const tool = createSendToAgentTool({
+      subagents,
+      resident: { ensure, deliver },
+      workflow,
+      config: CONFIG,
+      persona: () => 'persona-text',
+    })
+    const result = await tool.execute({
+      role: 'REPORT',
+      prompt: 'Write the report from completed results',
+      wait: false,
+    } as never, {
+      agent: { id: session.id, session },
+      signal: new AbortController().signal,
+    } as never) as Record<string, unknown>
+
+    expect(result).toMatchObject({ status: 'delegated', task_id: 'task-2', message_id: 'resident-message' })
+    expect(ensure).toHaveBeenCalledOnce()
+    expect(deliver).toHaveBeenCalledOnce()
+    expect(subagents.startContinuable).not.toHaveBeenCalled()
+    expect(subagents.followup).not.toHaveBeenCalled()
+    expect([...state.projection().bindingsByRole.keys()]).toEqual(['REPORT'])
   })
 
   it('rebinds and starts fresh when followup is NOT_RESUMABLE', async () => {
