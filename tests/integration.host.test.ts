@@ -121,6 +121,36 @@ describe('integration: assembled host (real context)', () => {
     }))
   })
 
+  it('maintains the durable task board through MAIN workflow_task', async () => {
+    const assembled = await boot()
+    admitFirstTurn(assembled)
+
+    const dispatched = await execute(assembled.ctx, 'send_to_agent', {
+      role: 'THEORY', prompt: 'derive the governing equation', wait: false,
+      steps: [{ description: 'derive the equation' }],
+    }, assembled.mainAgent, assembled.mainSession)
+    expect(dispatched.isError, dispatched.text).toBe(false)
+
+    const updated = await execute(assembled.ctx, 'workflow_task', {
+      action: 'update', task_id: 'task-1',
+      steps: [{ description: 'derive the equation', done: true }, { description: 'check units' }],
+    }, assembled.mainAgent, assembled.mainSession)
+    expect(updated.isError, updated.text).toBe(false)
+    expect((updated.value as { task: { steps: unknown[] } }).task.steps).toHaveLength(2)
+
+    const cancelled = await execute(assembled.ctx, 'workflow_task', {
+      action: 'cancel', task_id: 'task-1',
+    }, assembled.mainAgent, assembled.mainSession)
+    expect(cancelled.isError, cancelled.text).toBe(false)
+    expect(assembled.runtime.forSession(assembled.mainSession).state.getTask('task-1')?.status).toBe('cancelled')
+
+    const reopened = await execute(assembled.ctx, 'workflow_task', {
+      action: 'reopen', task_id: 'task-1',
+    }, assembled.mainAgent, assembled.mainSession)
+    expect(reopened.isError, reopened.text).toBe(false)
+    expect(assembled.runtime.forSession(assembled.mainSession).state.getTask('task-1')?.status).toBe('pending')
+  })
+
   it('runs the whole delegation round trip: reserve -> authorized first call -> denial -> report -> artifacts -> manifest', async () => {
     const assembled = await boot()
     admitFirstTurn(assembled)

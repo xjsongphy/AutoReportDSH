@@ -42,7 +42,7 @@ describe('autoreport preset contribution', () => {
 
     apply(context)
 
-    expect(tools.sort()).toEqual(['manifest', 'send_to_agent'])
+    expect(tools.sort()).toEqual(['manifest', 'send_to_agent', 'workflow_task'])
     expect(skills).toEqual(['pdf-reference-reader'])
     expect(referencesProvider).toBe(1)
   })

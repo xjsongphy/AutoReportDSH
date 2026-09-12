@@ -23,6 +23,8 @@ import type { WaiterOutcome } from '../workflow/waiters.js'
 const MAX_PROMPT = 16_384
 const MAX_CONTEXT = 8_192
 const MAX_SUBJECT = 256
+const MAX_STEPS = 64
+const MAX_STEP_LENGTH = 512
 const MIN_TIMEOUT_MS = 1
 const MAX_TIMEOUT_MS = 900_000
 
@@ -116,6 +118,20 @@ function normalizeTimeout(raw: unknown, fallback: number): number {
 function isNotResumable(error: unknown): boolean {
   if (error instanceof SubagentError && error.code === 'NOT_RESUMABLE') return true
   return (error as { code?: string }).code === 'NOT_RESUMABLE'
+}
+
+function taskSteps(raw: unknown): Array<{ description: string; done: boolean }> {
+  if (raw === undefined) return []
+  if (!Array.isArray(raw) || raw.length > MAX_STEPS) throw new Error(`steps must contain at most ${MAX_STEPS} items`)
+  return raw.map((item, index) => {
+    if (typeof item !== 'object' || item === null || Array.isArray(item)) throw new Error(`steps[${index}] must be an object`)
+    const step = item as Record<string, unknown>
+    if (typeof step.description !== 'string' || step.description.trim().length === 0 || step.description.length > MAX_STEP_LENGTH) {
+      throw new Error(`steps[${index}].description must be a non-empty string up to ${MAX_STEP_LENGTH} chars`)
+    }
+    if (step.done !== undefined && typeof step.done !== 'boolean') throw new Error(`steps[${index}].done must be boolean`)
+    return { description: step.description.trim(), done: step.done === true }
+  })
 }
 
 function subjectFromPrompt(prompt: string, rawSubject: unknown): string {
@@ -214,6 +230,7 @@ export function createSendToAgentTool(deps: SendToAgentDependencies): ToolDefini
       prompt: { type: 'string', required: true, description: 'Task goal; include only the goal, relevant input locations, dependencies, and explicit user constraints.' },
       subject: { type: 'string', description: 'Short task subject when auto-creating a task.' },
       dependencies: { type: 'array', items: { type: 'string' }, description: 'Task ids that must complete first.' },
+      steps: { type: 'array', items: { type: 'object', additionalProperties: false, properties: { description: { type: 'string', required: true }, done: { type: 'boolean' } } }, description: 'Initial durable checklist when auto-creating a task.' },
       task_id: { type: 'string', description: 'Existing task id for redispatch or follow-up.' },
       context: { type: 'string', description: 'Explicit user constraints the subagent must preserve.' },
       wait: { type: 'boolean', description: 'Wait for the workflow report; default true.' },
@@ -262,7 +279,7 @@ export function createSendToAgentTool(deps: SendToAgentDependencies): ToolDefini
           dependencies,
           status: 'pending',
           revision: 1,
-          steps: [],
+          steps: taskSteps(args.steps),
           scopes: [roleToScope(role)],
         }
         deps.workflow.commit(parentSession, 'autoreport/task', task)

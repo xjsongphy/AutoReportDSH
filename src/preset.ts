@@ -13,6 +13,7 @@ import { registerMainSkills } from './skills-preset.js'
 import { installReferencesSkills } from './skills-references.js'
 import { installManifestTool } from './tools/manifest.js'
 import { createSendToAgentTool } from './tools/send-to-agent.js'
+import { installWorkflowTaskTool } from './tools/workflow-task.js'
 import type {} from './runtime.js'
 
 export const name = 'autoreportdsh-preset'
@@ -28,6 +29,7 @@ export function apply(ctx: Context): void {
   installReferencesSkills(ctx)
   registerMainSkills(ctx, ctx.autoreportWorkflow.overlayRoot)
   installManifestTool(ctx, ctx, 'MAIN')
+  installWorkflowTaskTool(ctx, ctx)
   ctx.tools.register(createSendToAgentTool({
     subagents: ctx.subagents,
     resident: {

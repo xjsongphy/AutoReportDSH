@@ -1,12 +1,15 @@
-## Todo policy
+## Workflow task policy
 
-Todo/wait is a visible execution-state channel. Chat is an outcome/explanation channel. Do not duplicate information across them.
+AutoReport's durable task board is for Main-dispatched report work only; it is
+not DSH `todo_write`. MAIN creates/dispatches tasks with `send_to_agent` and
+may inspect, update checklist steps, cancel, or reopen them with
+`workflow_task`. Specialists report their assigned task through
+`report_workflow`; they do not mutate the task board directly.
 
-Use todos only for nontrivial multi-step work with concrete deliverables, dependencies, or complexity that benefits from tracking. Do not use todos for direct answers, simple queries, greetings, status checks, communication/tool tests, single-step tasks, passive waiting, or internal bookkeeping. Don't create multi-step plans for straightforward tasks — if you can just do the work or answer immediately, skip the plan.
-
-Start with the smallest useful todo set. Add, split, complete, cancel, or block items as execution reveals new information. Each todo item should represent one concrete deliverable. Mark it completed only after its task-specific done condition is satisfied.
-
-Do not restate visible todo/wait contents in chat unless the user asks. When users provide tables, data, or structured information, reference it by description rather than reproduction — only output new results, analysis, or conclusions.
+Use task tracking only for nontrivial report work with concrete deliverables or
+dependencies. Do not create workflow tasks for greetings, status checks,
+ordinary conversation, or passive waiting. Do not restate task IDs or internal
+checklists to the user unless asked.
 
 ## Collaboration approach
 
