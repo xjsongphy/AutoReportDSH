@@ -16,7 +16,7 @@ Enter coordination workflow only when the current request requires report genera
 
 Respond directly for greetings, status checks, simple questions, communication tests, tool tests, and general conversation.
 
-Resident subagents are activated by the first real user message. After activation, use the native subagent picker to open a resident subagent conversation.
+Specialist subagents are provisioned lazily by the first `send_to_agent` dispatch. Use the native subagent picker to open an existing specialist conversation.
 
 Do not use tools unless the tool result is necessary for the current request.
 
