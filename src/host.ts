@@ -16,7 +16,6 @@ import { createReportInitCommand } from './workspace/command.js'
 import { loadProjectSettings, saveProjectSettings, workspaceIdForRoot } from './settings.js'
 import { registerAutoReportSessionEvents } from './session-events.js'
 import { installTurnGuards } from './workflow/turn-guard.js'
-import { syncManagedResources } from './workspace/resource-sync.js'
 
 export const name = 'autoreportdsh-host'
 // `apply()` registers the host-wide `/init` command through the commands
@@ -68,28 +67,20 @@ export async function apply(ctx: Context, config: Partial<Config> = {}, options:
   // validates persisted event vocabulary outside the agent loop, so an Agent
   // Loop listener would be too late to make the log restorable.
   await registerAutoReportSessionEvents()
+  // A registered event name is not enough: role isolation needs the host
+  // policy service to *consume* sandbox/workspace-root as its writable root.
+  // Refuse a known-incompatible DSH rather than silently widening every role
+  // to the experiment workspace. Bare unit-test contexts may omit the service.
+  const sandboxPolicy = ctx.get('sandboxPolicy') as { workspaceRootOverrideOf?: unknown } | undefined
+  if (sandboxPolicy !== undefined && typeof sandboxPolicy.workspaceRootOverrideOf !== 'function') {
+    throw new Error('autoreportdsh: this DSH sandbox policy does not support sandbox/workspace-root; install the documented compatible DSH release')
+  }
   const resolved = resolveHostConfig(config)
   const runtime = new AutoReportWorkflowRuntime(ctx, resolved, options)
-  if (options.skipResourceSync !== true) {
-    try {
-      const outcomes = await syncManagedResources({ overlayRoot: runtime.overlayRoot })
-      const failed = outcomes.filter(entry => entry.status === 'failed').length
-      if (failed > 0) {
-        try {
-          ctx.logger.warn('autoreportdsh: resource sync kept overlay copies for %d failed file(s)', failed)
-        } catch {
-          // A bare test Context may lack a working logger.
-        }
-      }
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : String(error)
-      try {
-        ctx.logger.warn('autoreportdsh: resource sync skipped: %s', message)
-      } catch {
-        // A bare test Context may lack a working logger.
-      }
-    }
-  }
+  // Resource refresh is deliberately explicit (`pnpm run sync:resources`),
+  // never a startup side effect. Bundled resources keep a fresh/offline
+  // install deterministic and prevent a mutable remote prompt from being
+  // loaded merely by opening DSH.
   ctx.tools.guard(createRoleToolGuard({
     registry: runtime.roleRegistry,
     isMainSession: sessionId => runtime.isMainSession(sessionId),
