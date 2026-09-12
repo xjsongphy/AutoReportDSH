@@ -69,9 +69,9 @@ describe('materializeResources', () => {
     expect(readFileSync(join(root, 'Report/mpltx.cls'), 'utf8')).toContain('ProvidesClass')
   })
 
-  it('writes every typst resource into Report/ for a fresh workspace', () => {
+  it('writes every bundled typst resource into Report/ for a fresh offline workspace', () => {
     const root = tempRoot()
-    const { written, skipped } = materializeResources(root, 'typst', overlayRoot())
+    const { written, skipped } = materializeResources(root, 'typst')
     expect(written.sort()).toEqual([
       'Report/american-physics-society.csl',
       'Report/bibli.bib',
@@ -117,6 +117,6 @@ describe('resourcesRoot', () => {
     const root = resourcesRoot()
     expect(existsSync(join(root, 'latex/templates/main.tex'))).toBe(true)
     expect(existsSync(join(root, 'skills/experiment-report-writer.md'))).toBe(true)
-    expect(existsSync(join(root, 'typst/themes/mplts.typ'))).toBe(false)
+    expect(existsSync(join(root, 'typst/themes/mplts.typ'))).toBe(true)
   })
 })

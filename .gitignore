@@ -3,14 +3,7 @@ dist/
 *.log
 .cdkit/
 cordis.overlay.generated.yml
-TODO.md
 
-# External remotes land in $DSH_HOME/autoreport/resources, never this tree.
+# Sync state is runtime-local; the last-known-good report resources themselves
+# are bundled so a fresh/offline install is usable.
 /resources/.sync-state.json
-/resources/skills/latex-compile.md
-/resources/typst/LICENSE
-/resources/typst/skills/
-/resources/typst/themes/mplts.typ
-/resources/typst/templates/main.typ
-/resources/typst/templates/bibli.bib
-/resources/typst/templates/american-physics-society.csl

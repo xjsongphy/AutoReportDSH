@@ -39,9 +39,11 @@ describe('loadBundledSkills', () => {
   it('loads every bundled skill document', () => {
     expect(skills.map(skill => skill.name)).toEqual([
       'experiment-report-writer',
+      'latex-compile',
       'pdf-reference-reader',
       'report-language-latex',
       'report-language-typst',
+      'typst',
       'typst-compile',
     ])
   })

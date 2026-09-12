@@ -56,7 +56,7 @@ const LATEX_FILES: readonly ResourceFile[] = Object.freeze([
   { destination: 'Report/mpltx.cls', resourcePath: 'latex/themes/mpltx.cls' },
 ])
 
-/** Typst assets installed at the `Report/` root (synced into the overlay). */
+/** Typst assets installed at the `Report/` root (bundled; an explicit overlay may override). */
 const TYPST_FILES: readonly ResourceFile[] = Object.freeze([
   { destination: 'Report/main.typ', resourcePath: 'typst/templates/main.typ' },
   { destination: 'Report/mplts.typ', resourcePath: 'typst/themes/mplts.typ' },
@@ -137,7 +137,7 @@ export function resolveResourceFile(resourcePath: string, overlayRoot?: string):
  * wins over the template, matching AutoReportCLI's create-missing-only rule.
  * @param root - absolute experiment workspace root.
  * @param language - report engine selecting the resource set.
- * @param overlayRoot - global synced overlay; required for Typst templates.
+ * @param overlayRoot - optional global overlay for explicitly refreshed resources.
  * @returns result record separating writes from skips.
  */
 export function materializeResources(
@@ -172,7 +172,7 @@ export function materializeResources(
  * then materialize missing resources for `language`.
  * @param root - absolute experiment workspace root.
  * @param language - report engine selecting the resource set.
- * @param overlayRoot - global synced overlay for Typst (and any overlay skills).
+ * @param overlayRoot - optional global overlay for explicitly refreshed resources.
  * @returns combined action manifest for callers that surface a summary.
  */
 export function ensureInitialized(
