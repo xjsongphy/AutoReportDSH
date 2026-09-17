@@ -4,7 +4,7 @@ import { Context } from '@deepseek-ai/cordis'
 import { describe, expect, it } from 'vitest'
 // DSH's published `/client` entry is a window.__ModuleLoader__ bundle; tests
 // load the TypeScript service (the package exports `./src/*` for this).
-import { SlotRegistry } from '@deepseek-ai/dsh-client-runtime/src/client/slots.ts'
+import { SlotRegistry } from '@deepseek-ai/dsh-client-ui-renderer/src/client/registry.ts'
 import { apply, inject, AUTOREPORT_SETTINGS_NAMESPACE, SETTINGS_NS } from '../../src/client/index.js'
 import { stubSettingsScope } from './stub-scope.js'
 import type { AutoReportCardSettings } from '../../src/client/controller.js'

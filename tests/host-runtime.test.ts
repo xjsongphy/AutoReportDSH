@@ -5,11 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { SettingsProvider, type SettingsNamespace } from '@deepseek-ai/dsh-settings'
-import { Session, SessionId } from '@deepseek-ai/dsh-session'
-import {
-  effectiveSandboxMode,
-  effectiveSandboxWorkspaceRoot,
-} from '@deepseek-ai/dsh-sandbox-policy/src/session-mode.ts'
+import { SESSION_FORMAT_VERSION, Session, SessionId } from '@deepseek-ai/dsh-session'
 import type { Config } from '../src/config.js'
 import AutoReportWorkflowRuntime from '../src/runtime.js'
 import { AUTOREPORT_MAIN_PRESET, isAutoReportMainSession } from '../src/membership.js'
@@ -59,7 +55,8 @@ class MemorySettings extends SettingsProvider {
 /** A detached root session whose header names its composing agent preset. */
 function rootSession(id: string, preset: string | undefined, cwd?: string): Session {
   return Session.create(SessionId(id), undefined, {
-    version: 0,
+    version: SESSION_FORMAT_VERSION,
+    isSeeded: false,
     id: SessionId(id),
     createdAt: Date.now(),
     ...(preset === undefined ? {} : { agentPreset: preset }),
@@ -152,7 +149,8 @@ describe('host workflow runtime', () => {
     const ctx = new Context()
     const runtime = createRuntime(ctx, CONFIG)
     const child = Session.create(SessionId('child'), undefined, {
-      version: 0,
+      version: SESSION_FORMAT_VERSION,
+      isSeeded: false,
       id: SessionId('child'),
       createdAt: Date.now(),
       parentSession: SessionId('main'),
@@ -215,9 +213,9 @@ describe('host workflow runtime', () => {
     expect(runtime.isMainSession(SessionId('stock-main'))).toBe(false)
     expect(runtime.ownsSession(stock)).toBe(false)
     for (const dir of REQUIRED_DIRS) expect(existsSync(join(root, dir))).toBe(false)
-    expect(stock.events.some(event => event.type.startsWith('autoreport/'))).toBe(false)
-    expect(stock.events.some(event => event.type === 'sandbox/mode')).toBe(false)
-    expect(stock.events.some(event => event.type === 'sandbox/workspace-root')).toBe(false)
+    expect(stock.snapshotEvents().some(event => event.type.startsWith('autoreport/'))).toBe(false)
+    expect(stock.snapshotEvents().some(event => event.type === 'sandbox/mode')).toBe(false)
+    expect(stock.snapshotEvents().some(event => event.type === 'sandbox/workspace-root')).toBe(false)
     expect(() => runtime.forSession(stock)).toThrow(/requires the 'autoreport' preset/)
   })
 
@@ -245,18 +243,15 @@ describe('host workflow runtime', () => {
     const session = rootSession('blank-switch', undefined, root)
 
     session.append('agent-preset/selected', { agentPreset: AUTOREPORT_MAIN_PRESET })
-    ctx.emit('session/event', session, session.events.at(-1)!)
+    ctx.emit('session/event', session, session.snapshotEvents().at(-1)!)
     session.append('agent-preset/selected', { agentPreset: 'standard' })
-    ctx.emit('session/event', session, session.events.at(-1)!)
+    ctx.emit('session/event', session, session.snapshotEvents().at(-1)!)
 
-    expect(effectiveSandboxMode(session.events)).toBeUndefined()
-    expect(effectiveSandboxWorkspaceRoot(session.events)).toBeUndefined()
-    expect(session.events.some(event => event.type === 'sandbox/mode')).toBe(false)
-    expect(session.events.some(event => event.type === 'sandbox/workspace-root')).toBe(false)
+    expect(session.snapshotEvents().some(event => event.type === 'sandbox/mode')).toBe(false)
     expect(runtime.ownsSession(session)).toBe(false)
   })
 
-  it('pins MAIN sandbox to Outline after the first user message on autoreport', () => {
+  it('pins MAIN sandbox mode to workspace-write after the first user message on autoreport', () => {
     const root = mkdtempSync(join(tmpdir(), 'autoreport-runtime-'))
     tempDirs.push(root)
     const ctx = new Context()
@@ -270,8 +265,48 @@ describe('host workflow runtime', () => {
     ctx.emit('session/event', session, session.append('user/message', message, { surfaceOp: 'append' }))
 
     expect(runtime.ownsSession(session)).toBe(true)
-    expect(effectiveSandboxMode(session.events)).toBe('workspace-write')
-    expect(effectiveSandboxWorkspaceRoot(session.events)).toBe(resolve(root, 'Outline'))
+    const modeEvents = session.snapshotEvents().filter(event => event.type === 'sandbox/mode')
+    expect(modeEvents.map(event => event.data)).toEqual([{ mode: 'workspace-write' }])
+    expect(runtime.roleFor('main-sandbox')).toBe('MAIN')
+  })
+
+  it('maps bound children and Main through roleFor and leaves stock sessions undefined', () => {
+    const root = mkdtempSync(join(tmpdir(), 'autoreport-runtime-'))
+    tempDirs.push(root)
+    const ctx = new Context()
+    const runtime = createRuntime(ctx, { ...CONFIG, workspaceRoot: root })
+    const session = rootSession('role-lookup', AUTOREPORT_MAIN_PRESET, root)
+    ctx.emit('session/event', session, session.append('turn/start', { turn: 1 }))
+
+    expect(runtime.roleFor('role-lookup')).toBe('MAIN')
+    expect(runtime.roleFor('no-such-session')).toBeUndefined()
+  })
+
+  it('wraps a mounted sandbox policy so an owned MAIN session resolves its role root', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'autoreport-runtime-'))
+    tempDirs.push(root)
+    const ctx = new Context()
+    const fake = {
+      resolve: (request: { session?: { id: unknown } } = {}) => {
+        void request
+        return { mode: 'workspace-write', workspaceRoot: root }
+      },
+    }
+    ctx.provide('sandboxPolicy', fake as never)
+    ctx.provide('tools', { guard: () => () => {} } as never)
+    const { apply: applyHost } = await import('../src/host.js')
+    await applyHost(ctx, { ...CONFIG, workspaceRoot: root }, {
+      pythonDetect: ISOLATED_PYTHON_DETECT,
+      skipResourceSync: true,
+    })
+
+    const session = rootSession('wrap-main', AUTOREPORT_MAIN_PRESET, root)
+    ctx.emit('session/event', session, session.append('turn/start', { turn: 1 }))
+
+    expect(fake.resolve({ session }).workspaceRoot).toBe(resolve(root, 'Outline'))
+    // A foreign session keeps the stock root.
+    const stock = rootSession('stock-wrap', undefined, root)
+    expect(fake.resolve({ session: stock }).workspaceRoot).toBe(root)
   })
 
   it('does not create resident children just because MAIN received its first message', async () => {
@@ -284,7 +319,8 @@ describe('host workflow runtime', () => {
     const createChild = async (options: { sessionId: SessionId }): Promise<{ agent: Agent; dispose: () => Promise<void> }> => {
       created.push(options)
       const child = Session.create(options.sessionId, undefined, {
-        version: 0,
+        version: SESSION_FORMAT_VERSION,
+        isSeeded: false,
         id: options.sessionId,
         createdAt: Date.now(),
         parentSession: session.id,
@@ -307,7 +343,7 @@ describe('host workflow runtime', () => {
     await new Promise<void>(resolve => { setTimeout(resolve, 0) })
 
     expect(created).toHaveLength(0)
-    expect(session.events.some(event => event.type === 'autoreport/role-binding')).toBe(false)
+    expect(session.snapshotEvents().some(event => event.type === 'autoreport/role-binding')).toBe(false)
   })
 
   it('initializes on the first turn boundary after a preset selection', () => {

@@ -64,12 +64,12 @@ describe('semantic file notes', () => {
       descriptionUpdatedAt: 30,
       producedBy: 'THEORY',
     })
-    const state = WorkflowState.fromEvents(session.events)
+    const state = WorkflowState.fromEvents(session.snapshotEvents())
     expect(state.projection().fileNotes.get('Theory/model.md')?.description).toBe('linearized pendulum')
     expect(staleDescribedPaths(state.projection(), SessionId('child-theory'))).toEqual([])
 
     appendWorkflowEvent(session, 'autoreport/artifact', artifact('Theory/model.md', 40))
-    const later = WorkflowState.fromEvents(session.events)
+    const later = WorkflowState.fromEvents(session.snapshotEvents())
     expect(staleDescribedPaths(later.projection(), SessionId('child-theory'))).toEqual(['Theory/model.md'])
   })
 
@@ -98,7 +98,7 @@ describe('semantic file notes', () => {
     }
     appendWorkflowEvent(session, 'autoreport/delegation', delegation)
     appendWorkflowEvent(session, 'autoreport/artifact', artifact('Theory/equations.md', 20))
-    const projection = WorkflowState.fromEvents(session.events).projection()
+    const projection = WorkflowState.fromEvents(session.snapshotEvents()).projection()
     expect(staleDescribedPathsForDelegation(projection, delegation)).toEqual(['Theory/equations.md'])
   })
 
@@ -147,7 +147,7 @@ describe('semantic file notes', () => {
         produced_files: ['Theory/model.md'],
       },
     })
-    const text = roleHandoffText(WorkflowState.fromEvents(session.events).projection(), 'THEORY')
+    const text = roleHandoffText(WorkflowState.fromEvents(session.snapshotEvents()).projection(), 'THEORY')
     expect(text).toContain('Role memory for THEORY')
     expect(text).toContain('Theory/model.md: linearized model')
     expect(text).toContain('neglect friction')

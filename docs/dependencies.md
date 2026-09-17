@@ -7,36 +7,42 @@ iterating rapidly; PLAN.md risk 9).
 
 - Checkout: sibling directory `../deepseek-harness` (all `link:` specifiers are
   repository-relative so clean clones, CI, and other machines resolve them)
-- Public upstream base: `b150a551b8d465e31e418e1b2eaf5e79bbb7d28e`
-  (`dsh-v0.1.1-rc.2`)
-- Local development Harness: the sibling checkout with the source-test shim applied
-  for per-session `sandbox/workspace-root`
+- Upstream base: `0d1f50007f` (`dsh-v0.1.6-alpha.1`, branch `master-sync` in the
+  sibling checkout) — the plugin targets the LATEST upstream, not the retired
+  `dsh-v0.1.1-rc.2` base it was originally written against.
+- Local development Harness: the sibling checkout carries one cherry-picked
+  upstream-candidate commit (`feat(session): append accepts { ignorable: true }
+  for non-surface events`). No source shim, no per-session sandbox-root patch.
 
 ## Compatibility seams
 
-The file under `patches/` is a temporary source-test shim for the pinned
-development checkout; it is not DSH's plugin distribution mechanism. DSH's
-supported plugin path is an npm bundle declaring `dsh.bundle.patch` and
-installed with `dsh plugin --profile <name> add <package>`. The source installer
-does not apply this shim or modify DSH. Until the workspace-root API is
-upstreamed in a documented release, a user-facing install must use a DSH build
-that already implements it; host activation now fails loudly when the running
-sandbox policy cannot consume `sandbox/workspace-root`.
+Per-role writable roots no longer require any DSH modification. The host plugin
+wraps the running `ctx.sandboxPolicy` singleton's `resolve` in its own memory
+(`src/policy/sandbox-override.ts`): AutoReport-owned sessions resolve their role
+directory as the `workspace-write` root, and every other session resolves
+byte-identical to stock. Activation self-checks the wrap and fails loud when the
+host refuses it, so a role can never silently run on the full experiment root.
+The former `patches/deepseek-harness-sandbox-workspace-root.patch` source shim
+and the `sandbox/workspace-root` session event are retired.
 
-At host-plugin activation, AutoReport registers its own session event names in
-the running DSH process's session vocabulary. This is an in-process operation:
-it does not edit DSH files, replace the Agent Loop, monkey-patch `Session`, or
-change stock DSH sessions. It is needed because the current DSH release has no
-public third-party event-registration API. The registration includes
-`sandbox/workspace-root`, which AutoReport uses for per-role writable roots.
+Third-party session events are now carried by upstream's own compatibility
+mechanism: `autoreport/*` records are written through `Session.append` with
+`ignorable: true`, which the first-party persistence reader accepts and skips on
+replay. The in-process `KNOWN_SESSION_EVENT_TYPES` registration is gone — it was
+the mechanism upstream explicitly rejected. The write-side option is currently a
+cherry-picked commit in the development checkout and is the first upstream PR
+candidate; until it lands, a user-facing install needs a DSH build whose
+`Session.append` accepts `AppendOptions.ignorable`.
 
-The source checkout still uses this local shim so its tests can exercise the
-sandbox-root API directly. End users install the plugin through the normal DSH
-profile path and do not clone or patch DSH.
+Child-scoped composition rides `agent/created` plus `agent.ctx.inject`; the
+former `ctx.subagents.registerContinuableSetup` seam was removed upstream along
+with the standalone stock report tool, whose role is now played by adjacent-agent
+`send_message` and the host-only prompt delivery symbol.
 
-`@deepseek-ai/dsh-settings` is already present in the public base and supplies the AutoReport
-user-settings namespace. Once the sandbox workspace-root override is released upstream, update
-the plugin's published compatibility range and remove the CI-only patch file.
+`@deepseek-ai/dsh-settings` supplies the AutoReport user-settings namespace
+through `ctx.settings.installSection`. Once both upstream candidates land (the
+append option, and any future first-class per-session root override), update the
+plugin's published compatibility range and delete this section's dev-only notes.
 
 ## Wiring decision
 

@@ -26,8 +26,9 @@ function workflowWithSettings(settings: WorkflowSettingsSnapshot) {
 
 function childContext() {
   const listeners = new Map<string, ((...args: never[]) => unknown)[]>()
+  const childAgent = { id: SessionId('child-selection') }
   const child = {
-    agent: { id: SessionId('child-selection') },
+    agent: childAgent,
     on: (event: string, listener: (...args: never[]) => unknown) => {
       const list = listeners.get(event) ?? []
       list.push(listener)
@@ -53,14 +54,14 @@ function childContext() {
     }
     return next()
   }
-  return { child, invoke, listeners }
+  return { child, childAgent, invoke, listeners }
 }
 
 describe('specialist model selection', () => {
   it('uses DSH agent-scoped selection from the frozen workflow snapshot, then releases it', async () => {
-    const { child, invoke } = childContext()
+    const { child, childAgent, invoke } = childContext()
 
-    const dispose = installSpecialistModelSelection(child, {
+    const dispose = installSpecialistModelSelection(child, childAgent as never, {
       roleRegistry: new RoleRegistry(),
       config: CONFIG,
       workflowForChild: () => workflowWithSettings({
@@ -97,9 +98,9 @@ describe('specialist model selection', () => {
   })
 
   it('releases the snapshot pin when the first agent request throws', async () => {
-    const { child, invoke } = childContext()
+    const { child, childAgent, invoke } = childContext()
 
-    const dispose = installSpecialistModelSelection(child, {
+    const dispose = installSpecialistModelSelection(child, childAgent as never, {
       roleRegistry: new RoleRegistry(),
       config: CONFIG,
       workflowForChild: () => workflowWithSettings({
@@ -137,9 +138,9 @@ describe('specialist model selection', () => {
   })
 
   it('does not install a route when the snapshot inherits Main', () => {
-    const { child, listeners } = childContext()
+    const { child, childAgent, listeners } = childContext()
 
-    const dispose = installSpecialistModelSelection(child, {
+    const dispose = installSpecialistModelSelection(child, childAgent as never, {
       roleRegistry: new RoleRegistry(),
       config: {
         ...CONFIG,
@@ -157,9 +158,9 @@ describe('specialist model selection', () => {
   })
 
   it('does not fall back to composition config when no snapshot exists', () => {
-    const { child, listeners } = childContext()
+    const { child, childAgent, listeners } = childContext()
 
-    const dispose = installSpecialistModelSelection(child, {
+    const dispose = installSpecialistModelSelection(child, childAgent as never, {
       roleRegistry: new RoleRegistry(),
       config: {
         ...CONFIG,

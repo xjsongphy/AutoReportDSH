@@ -6,20 +6,22 @@ import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
-import { CallId } from '@deepseek-ai/dsh-llm'
+import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import AgentRegistry from '@deepseek-ai/dsh-agent'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { SandboxBashExecutor } from '@deepseek-ai/dsh-bash-sandbox'
 import { LocalSandboxProvider } from '@deepseek-ai/dsh-sandbox-local'
 import { bwrapProfileArgs, seatbeltProfileArgs } from '@deepseek-ai/dsh-sandbox-local/src/profiles.ts'
 import SandboxPolicyService from '@deepseek-ai/dsh-sandbox-policy'
-import { Session, SessionId } from '@deepseek-ai/dsh-session'
+import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
+import { SESSION_FORMAT_VERSION, Session, SessionId } from '@deepseek-ai/dsh-session'
 import * as BashEnvPlugin from '@deepseek-ai/dsh-shell-env'
 import LocalSubprocessRuntime from '@deepseek-ai/dsh-subprocess-local'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
 import * as ToolBash from '@deepseek-ai/dsh-tool-bash'
-import { applyRoleSandbox } from '../src/policy/sandbox-roots.js'
+import { installSandboxOverride } from '../src/policy/sandbox-override.js'
+import { applyRoleSandbox, roleWritableRoot } from '../src/policy/sandbox-roots.js'
 import type { AutoReportRole } from '../src/roles.js'
 
 /**
@@ -31,6 +33,7 @@ import type { AutoReportRole } from '../src/roles.js'
  */
 
 const testToolSignal = new AbortController().signal
+let liveRoleRoots: Map<string, AutoReportRole> = new Map()
 const requireFromHere = createRequire(import.meta.url)
 const SANDBOX_DENIAL = /file access denied|access is denied|access to the path|permission denied|sandbox.*denied/i
 
@@ -116,7 +119,25 @@ async function setupHarness(experimentRoot: string): Promise<Context> {
       probeLandlock: () => 'unusable',
     }
   }
+  await next.plugin(SessionProjectionRegistry)
   await next.plugin(SandboxPolicyService, { mode: 'workspace-write', workspaceRoot: experimentRoot })
+  // Route each registered role session to its role directory at enforcement
+  // time — the same in-process wrap the host plugin installs in production.
+  const roleRoots = new Map<string, AutoReportRole>()
+  liveRoleRoots = roleRoots
+  installSandboxOverride(
+    next.get('sandboxPolicy') as Parameters<typeof installSandboxOverride>[0],
+    {
+      roleRootOf: session => {
+        const role = roleRoots.get(String(session.id))
+        if (role === undefined) return undefined
+        const root = typeof session.header?.cwd === 'string' ? session.header.cwd : undefined
+        if (root === undefined || root.length === 0) return undefined
+        return roleWritableRoot(root, role)
+      },
+      probeRoot: roleWritableRoot(experimentRoot, 'MAIN'),
+    },
+  )
   await next.plugin(BashEnvPlugin)
   await next.plugin(SandboxBashExecutor, { cwd: experimentRoot, timeoutMs: 30_000, graceMs: 200 })
   await next.plugin(ToolBash)
@@ -148,12 +169,14 @@ function registerAgent(harness: Context, session: Session): Agent {
 function sessionForRole(experimentRoot: string, role: AutoReportRole, label: string): Session {
   const sessionId = SessionId(`bash-live-${label}`)
   const session = Session.create(sessionId, undefined, {
-    version: 0,
+    version: SESSION_FORMAT_VERSION,
+    isSeeded: false,
     id: sessionId,
     createdAt: Date.now(),
     cwd: experimentRoot,
   })
   applyRoleSandbox(session, role, experimentRoot)
+  liveRoleRoots.set(String(sessionId), role)
   return session
 }
 
@@ -165,7 +188,7 @@ function callBash(harness: Context, command: string, agent: Agent) {
   const workdir = agent.session.header.cwd
   return harness.tools.execute({
     signal: testToolSignal,
-    callId: CallId(`call-${++callCounter}`),
+    callId: ToolCallId(`call-${++callCounter}`),
     name: 'bash',
     arguments: {
       command,

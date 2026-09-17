@@ -149,10 +149,11 @@ mechanism cannot conditionally contribute by pre-provisioned role, the compiler 
 be inherited by all subagents but its tool visibility and runtime guard must still deny it
 outside Report; Main must never inherit it.
 
-The stock `@deepseek-ai/dsh-tool-subagent-report` contribution is replaced for this profile,
-not mounted alongside the AutoReport contribution. The overlay must patch/disable the stock
-`tool-subagent-report` row and install the AutoReport child setup in its place. This prevents
-an unstructured `report("done")` bypass beside `report_workflow(...)`.
+The stock `@deepseek-ai/dsh-tool-subagent-report` contribution no longer exists upstream
+(removed in the 2026-08-27 unified-steer change), so nothing mounts beside the AutoReport
+contribution and no row needs disabling. AutoReport subagents receive only `report_workflow`
+plus the stock adjacent-agent `send_message`; the unstructured `report("done")` bypass is gone
+by construction.
 
 The preset is installed into DSH’s existing writable user preset root:
 `$DSH_HOME/.agent-presets/autoreport/`. The install script copies the preset
@@ -314,12 +315,12 @@ RoleRegistry lookup
         └── ordinary DSH child   → stock report
 ```
 
-The stock `@deepseek-ai/dsh-tool-subagent-report` row is disabled/replaced so it does not
-register a second setup. The AutoReport router reuses DSH’s exported stock
-`installReportTool` for ordinary children rather than reimplementing generic reporting.
-AutoReport subagents receive only `report_workflow`, following the same
-`registerContinuableSetup()` → child-scoped `tools.register()` →
-`ctx.subagents.reportFrom()` pattern as DSH’s stock adapter.
+The stock report row is gone upstream, so the router contributes nothing for ordinary
+children — they keep the base bundle’s adjacent-agent messaging. AutoReport subagents receive
+only `report_workflow`, installed through the router’s `agent/created` listener into the
+child’s own scope (`agent.ctx.inject()` → `tools.register()`), and their structured report
+reaches MAIN through the host-only prompt delivery symbol (or `sendMessage` for
+manager-owned children).
 
 Its validated envelope is:
 
@@ -733,7 +734,7 @@ and where it lives in the codebase:
 | 13 | Subagent prompt rule | **Implemented** — rule present exactly once in each subagent persona; duplicate removed from Common.md |
 | 14 | Role permissions unchanged by human turns | **Enforced** — guard keys on child session identity regardless of message source |
 | 15 | Parent-owned continuation semantics | **Reused** — DSH continuation contract untouched; no independent subagent lifecycle |
-| 16 | Strictly scoped compatibility hooks | **Implemented** — report router falls back to stock `installReportTool` for non-AutoReport children; verified by keyless router tests |
+| 16 | Strictly scoped compatibility hooks | **Implemented** — the router installs nothing for non-AutoReport children (stock messaging comes from the base bundle) and routes bound roles through `agent/created` + child-scope injection; verified by keyless router tests |
 
 ## 3. Testing and acceptance
 

@@ -1,0 +1,46 @@
+/**
+ * Ambient declarations for the browser-half context contracts AutoReportDSH's
+ * card consumes. The former `@deepseek-ai/dsh-client-runtime` package was
+ * split upstream into the `ui-*` client packages; these imports are type-only,
+ * so the structural shapes below keep the card compiling against the running
+ * DSH client services (`slots`, `locale`, `settingsScope`, `sessions`,
+ * `connection`) without importing any browser bundle. Runtime wiring is the
+ * `dsh.client` manifest plus the `inject` array, unchanged. Store and settings
+ * types come from their real owners (`@deepseek-ai/dsh-client-store`,
+ * `@deepseek-ai/dsh-client-ui-settings/client`).
+ */
+
+declare module '@deepseek-ai/dsh-client-runtime/client' {
+  /** Branded session identifier as surfaced to client slots. */
+  export type SessionId = string
+
+  /** Session listing face used to decide AutoReport subagent membership. */
+  export interface ISessions {
+    subagentAddress(sessionId: SessionId): { parentSessionId: SessionId } | undefined
+    list: {
+      getSnapshot(): {
+        byId: Record<string, { agentPreset?: string } & Record<string, unknown>>
+      }
+    }
+  }
+
+  /** The browser-half cordis context a `/client` entry's `apply` receives. */
+  export interface ClientContext {
+    get<T = unknown>(name: string): T | undefined
+    inject<const K extends readonly string[]>(
+      names: K,
+      handler: (scope: ClientContext) => void,
+    ): void
+    effect(fn: () => (() => void) | void, name?: string): void
+    locale: {
+      register(namespace: string, dictionaries: Record<string, unknown>): void
+    }
+    settingsScope: {
+      bind<T>(options: { namespace: string }): import('@deepseek-ai/dsh-client-ui-settings/client').SettingsScope<T>
+    }
+    slots: {
+      inject(slot: string, register: () => unknown): void
+      register(declaration: Record<string, unknown>, component: unknown): unknown
+    }
+  }
+}

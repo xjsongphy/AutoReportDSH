@@ -37,6 +37,8 @@ export function apply(ctx: Context): void {
       deliver: (parent, childSessionId, content, source, signal) =>
         ctx.autoreportWorkflow.deliverResidentChild(parent, childSessionId, content, source, signal),
     },
+    deliverChild: (parent, childSessionId, content, source, signal) =>
+      ctx.autoreportWorkflow.deliverChild(parent, childSessionId, content, source, signal),
     workflow: ctx.autoreportWorkflow,
     config: ctx.autoreportWorkflow.config,
   }))

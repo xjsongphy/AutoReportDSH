@@ -251,9 +251,9 @@ export class WorkflowState {
    * caller owns the cordis-level subscription; this only replays what already
    * exists in the log so a late subscriber starts consistent.
    * @param session - session whose existing log seeds the state.
-   * @returns this state seeded from `session.events`.
+   * @returns this state seeded from `session.snapshotEvents()`.
    */
   static fromSession(session: Session): WorkflowState {
-    return WorkflowState.fromEvents(session.events)
+    return WorkflowState.fromEvents(session.snapshotEvents())
   }
 }

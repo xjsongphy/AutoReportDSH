@@ -11,8 +11,9 @@ import { dirname, join } from 'node:path'
 import { expect } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
-import { CallId, createUserMessage, type UserMessage } from '@deepseek-ai/dsh-llm'
-import { Session, SessionId, type SessionEvent } from '@deepseek-ai/dsh-session'
+import { ToolCallId, createUserMessage, type UserMessage } from '@deepseek-ai/dsh-llm'
+import { deliverSubagentPrompt } from '@deepseek-ai/dsh-subagent/internal'
+import { SESSION_FORMAT_VERSION, Session, SessionId, type SessionEvent } from '@deepseek-ai/dsh-session'
 import ToolRuntime, { defineTool } from '@deepseek-ai/dsh-tools'
 import type { Config } from '../../src/config.js'
 import { apply as applyHost } from '../../src/host.js'
@@ -44,13 +45,14 @@ export interface RecordedSection {
 }
 
 export interface ChildRecorder {
+  readonly agent: Agent
   readonly ctx: Parameters<typeof reportRouterModule.installRoutedReportTool>[0]
   readonly toolNames: string[]
   readonly skillNames: string[]
   readonly sections: RecordedSection[]
 }
 
-export function makeChildRecorder(id: string): ChildRecorder {
+export function makeChildRecorder(id: string, workflow?: AutoReportWorkflowRuntime): ChildRecorder {
   const toolNames: string[] = []
   const skillNames: string[] = []
   const sections: RecordedSection[] = []
@@ -61,14 +63,15 @@ export function makeChildRecorder(id: string): ChildRecorder {
     },
     registerProvider: () => () => {},
   }
+  const agent = { id: SessionId(`${id}`) } as Agent
   const ctx = {
-    agent: { id: SessionId(`${id}`) } as Agent,
     get: (name: string) => name === 'skills' ? skillsService : undefined,
     tools: {
       register: (tool: { name: string }) => {
         toolNames.push(tool.name)
         return () => {}
       },
+      restrict: () => () => {},
     },
     systemPrompt: {
       section: (section: { name: string; text: string }) => {
@@ -77,8 +80,15 @@ export function makeChildRecorder(id: string): ChildRecorder {
       },
     },
     skills: skillsService,
+    inject: (names: readonly string[], handler: (scope: unknown) => void) => {
+      void names
+      handler(ctx)
+      return { dispose: async () => {} }
+    },
+    autoreportWorkflow: workflow,
   }
-  return { ctx: ctx as ChildRecorder['ctx'], toolNames, skillNames, sections }
+  ;(agent as { ctx?: unknown }).ctx = ctx
+  return { agent, ctx: ctx as ChildRecorder['ctx'], toolNames, skillNames, sections }
 }
 
 export interface Assembled {
@@ -88,7 +98,7 @@ export interface Assembled {
   home: string
   mainAgent: Agent
   mainSession: Session
-  continuableSetups: ((childCtx: Parameters<typeof reportRouterModule.installRoutedReportTool>[0]) => () => void)[]
+  routeChild: (recorder: ChildRecorder) => void
   startedSpecs: { childId: unknown; label: string; prompt: string }[]
   reportInitCommand: { handler: (invocation: unknown) => Promise<{ kind: string; text?: string }> } | undefined
   presetSkillNames: string[]
@@ -125,7 +135,6 @@ export async function assemble(options: AssembleOptions = {}): Promise<Assembled
   })()
   seedSyncedResourceStubs(syncedResourcesRoot(home))
 
-  const continuableSetups: Assembled['continuableSetups'] = []
   const startedSpecs: Assembled['startedSpecs'] = []
   const presetSkillNames: string[] = []
   const skillProviders: string[] = []
@@ -134,7 +143,8 @@ export async function assemble(options: AssembleOptions = {}): Promise<Assembled
 
   const sessionId = SessionId(options.mainSessionId ?? options.mainSession?.id ?? 'it-main')
   const mainSession = options.mainSession ?? Session.create(sessionId, undefined, {
-    version: 0,
+    version: SESSION_FORMAT_VERSION,
+    isSeeded: false,
     id: sessionId,
     createdAt: Date.now(),
     cwd: workspaceRoot,
@@ -149,10 +159,6 @@ export async function assemble(options: AssembleOptions = {}): Promise<Assembled
   } as Agent
 
   ctx.provide('subagents', {
-    registerContinuableSetup: (contribution: Assembled['continuableSetups'][number]) => {
-      continuableSetups.push(contribution)
-      return () => {}
-    },
     startContinuable: async (spec: {
       childId: unknown
       label: string
@@ -167,12 +173,18 @@ export async function assemble(options: AssembleOptions = {}): Promise<Assembled
       return { childId: spec.childId, messageId: 'accepted-msg-1' }
     },
     followup: async () => followupImpl(),
-    reportFrom: async (agent: Agent, content: { type: string; text?: string }[]) => {
-      const message = createUserMessage({
-        content,
-        source: { kind: 'subagent-report', form: 'relay', senderSessionId: agent.id },
-      })
-      publish(ctx, mainSession, 'user/message', message, { surfaceOp: 'append' })
+    [deliverSubagentPrompt]: async () => followupImpl(),
+    sendMessage: async (agent: Agent, targetId: SessionId, content: { type: string; text?: string }[]) => {
+      // Adjacent-agent messaging replaced the stock report relay; the child's
+      // structured report reaches MAIN as a relayed user message.
+      const target = String(targetId) === String(mainSession.id) ? mainSession : undefined
+      if (target !== undefined) {
+        const message = createUserMessage({
+          content,
+          source: { kind: 'subagent-report', form: 'relay', senderSessionId: agent.id },
+        })
+        publish(ctx, target, 'user/message', message, { surfaceOp: 'append' })
+      }
       return 'report-msg-1'
     },
   } as never)
@@ -277,7 +289,9 @@ export async function assemble(options: AssembleOptions = {}): Promise<Assembled
     home,
     mainAgent,
     mainSession,
-    continuableSetups,
+    routeChild: (recorder: ChildRecorder) => {
+      ctx.emit('agent/created', { agent: recorder.agent, source: 'fresh' } as never)
+    },
     startedSpecs,
     reportInitCommand,
     presetSkillNames,
@@ -301,7 +315,7 @@ export async function execute(
   session?: Session,
 ): Promise<{ isError: boolean; text: string; value: unknown }> {
   callCounter += 1
-  const callId = CallId(`it-${callCounter}`)
+  const callId = ToolCallId(`it-${callCounter}`)
   const callSeq = session === undefined
     ? undefined
     : publish(ctx, session, 'tool/call', {
@@ -385,7 +399,8 @@ export async function dispatch(
   if (binding === undefined) throw new Error(`no binding for ${args.role}`)
   const childId = String(binding.childSessionId)
   const childSession = Session.create(SessionId(childId), undefined, {
-    version: 0,
+    version: SESSION_FORMAT_VERSION,
+    isSeeded: false,
     id: SessionId(childId),
     createdAt: Date.now(),
     cwd: assembled.workspaceRoot,
@@ -439,10 +454,8 @@ export function stopTurn(assembled: Assembled, agent: Agent, turn = 1): void {
 }
 
 export function specialistSkills(assembled: Assembled, childId: string): ChildRecorder {
-  const setup = assembled.continuableSetups[0]
-  if (setup === undefined) throw new Error('router registered no continuable setup')
-  const recorder = makeChildRecorder(childId)
-  setup(recorder.ctx)
+  const recorder = makeChildRecorder(childId, assembled.runtime)
+  assembled.routeChild(recorder)
   return recorder
 }
 
@@ -459,11 +472,11 @@ export async function specialistWrite(
 }
 
 export function eventTypes(session: Session): string[] {
-  return session.events.map(event => event.type)
+  return session.snapshotEvents().map(event => event.type)
 }
 
 export function userMessages(session: Session): UserMessage[] {
-  return session.events
+  return session.snapshotEvents()
     .filter((event): event is SessionEvent<'user/message'> => event.type === 'user/message')
     .map(event => event.data)
 }

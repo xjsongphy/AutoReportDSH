@@ -1,5 +1,6 @@
 import type { Session, SessionEvent, SessionId } from '@deepseek-ai/dsh-session'
-import type { SubagentReportMessageSource, SubagentSettledMessageSource } from '@deepseek-ai/dsh-subagent'
+import type { SubagentSettledMessageSource } from '@deepseek-ai/dsh-subagent'
+import type { SubagentReportMessageSource } from '../messages.js'
 import type { DelegationSnapshot, TaskSnapshot } from './events.js'
 import { delegationKey, parseWorkflowEnvelopeFromText } from './protocol.js'
 import type { WorkflowState } from './service.js'
@@ -217,5 +218,5 @@ export function recoverWorkflowReports(
   session: Session,
   deps: WorkflowReportObserverDependencies,
 ): void {
-  for (const event of session.events) observeWorkflowMessage(session, event, deps)
+  for (const event of session.snapshotEvents()) observeWorkflowMessage(session, event, deps)
 }

@@ -56,7 +56,7 @@ declare module '@deepseek-ai/dsh-session/types' {
  * @returns the effective preset id, or `undefined` when none was recorded.
  */
 export function resolveAgentPreset(session: Session): string | undefined {
-  const events = session.events
+  const events = session.snapshotEvents()
   for (let index = events.length - 1; index >= 0; index -= 1) {
     const event = events[index]
     if (event?.type === 'agent-preset/selected') return event.data.agentPreset

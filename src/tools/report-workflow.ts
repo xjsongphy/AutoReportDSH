@@ -85,12 +85,21 @@ export function installWorkflowReportTool(childCtx: Context, hostCtx: Context, r
         const residentReport = typeof runtime?.reportFromResident === 'function'
           ? runtime.reportFromResident(exec.agent as Agent, content, exec.signal)
           : undefined
-        const messageId = await residentReport
-          ?? await hostCtx.subagents.reportFrom(exec.agent as Agent, content, {
-            delivery: 'next-step',
+        let messageId = await residentReport
+        if (messageId === undefined) {
+          // Non-resident (manager-owned) child: the adjacent-agent messaging
+          // seam replaced the stock report relay upstream. The durable parent
+          // is the role binding's owner, falling back to session lineage.
+          const caller = exec.agent as Agent
+          const parentId = runtime?.roleRegistry?.lookup(caller.id)?.binding.parentSessionId
+            ?? caller.session?.header.parentSession
+          if (parentId === undefined) throw new Error('reporting child has no bound parent; report was not delivered')
+          const sent = await hostCtx.subagents.sendMessage(caller, parentId, content, {
             signal: exec.signal,
           })
-        return { messageId: String(messageId) }
+          messageId = String(sent)
+        }
+        return { messageId }
       },
       presentCall: args => ({ card: 'generic', title: `report_workflow ${String(args.status)}`, kind: 'other', rawInput: args }),
     })))

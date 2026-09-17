@@ -38,7 +38,7 @@ describe('AutoReport manifest projection', () => {
       updatedAt: 1_756_634_453_000,
     })
 
-    const manifest = projectManifest(WorkflowState.fromEvents(session.events).projection(), 'THEORY', () => 0)
+    const manifest = projectManifest(WorkflowState.fromEvents(session.snapshotEvents()).projection(), 'THEORY', () => 0)
     expect(manifest).toEqual({
       agent_type: 'theory',
       updated_at: '2025-08-31T10:00:53+00:00',
@@ -55,7 +55,7 @@ describe('AutoReport manifest projection', () => {
 
   it('returns an empty but valid manifest for a role without artifacts', () => {
     const session = Session.create(SessionId('manifest-empty'))
-    const manifest = projectManifest(WorkflowState.fromEvents(session.events).projection(), 'REPORT', () => 0)
+    const manifest = projectManifest(WorkflowState.fromEvents(session.snapshotEvents()).projection(), 'REPORT', () => 0)
     expect(manifest).toEqual({
       agent_type: 'report',
       updated_at: '1970-01-01T00:00:00+00:00',

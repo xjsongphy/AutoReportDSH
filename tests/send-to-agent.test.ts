@@ -73,6 +73,7 @@ function harness() {
   }
   const tool = createSendToAgentTool({
     subagents,
+    deliverChild: (...args: unknown[]) => subagents.followup(...args as never),
     workflow,
     config: CONFIG,
     now: () => 1_700_000_000_000,
@@ -213,6 +214,7 @@ describe('send_to_agent', () => {
     }
     const tool = createSendToAgentTool({
       subagents,
+      deliverChild: (...args: unknown[]) => subagents.followup(...args as never),
       workflow,
       config: CONFIG,
       childId: () => ids.shift() ?? SessionId('child-overflow'),
@@ -455,6 +457,7 @@ describe('send_to_agent', () => {
     const startContinuable = vi.fn(async (spec: { childId?: SessionId; request?: { agentOptions?: unknown } }) => ({ childId: spec.childId, messageId: 'msg-snap' }))
     const tool = createSendToAgentTool({
       subagents: { startContinuable, followup: vi.fn(async () => 'msg-f') },
+      deliverChild: vi.fn(async () => 'msg-f'),
       workflow,
       // Composition route must be IGNORED while a snapshot exists.
       config: { ...CONFIG, specialistModel: { provider: 'stale-provider', model: 'stale-model' } },
@@ -489,6 +492,7 @@ describe('send_to_agent', () => {
     const startContinuable = vi.fn(async (spec: { childId?: SessionId; request?: { agentOptions?: unknown } }) => ({ childId: spec.childId, messageId: 'msg-inherit' }))
     const tool = createSendToAgentTool({
       subagents: { startContinuable, followup: vi.fn(async () => 'msg-f') },
+      deliverChild: vi.fn(async () => 'msg-f'),
       workflow,
       config: { ...CONFIG, specialistModel: { provider: 'comp-provider', model: 'comp-model' } },
       childId: () => SessionId('child-inherit'),

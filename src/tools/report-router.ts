@@ -1,7 +1,6 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { installModelSelection, type Agent, type ModelSelection } from '@deepseek-ai/dsh-agent'
 import { ReasoningEffortId } from '@deepseek-ai/dsh-llm'
-import { installReportTool } from '@deepseek-ai/dsh-tool-subagent-report'
 import type AutoReportWorkflowRuntime from '../runtime.js'
 import { applyRoleSandbox } from '../policy/sandbox-roots.js'
 import { installWorkflowReportTool } from './report-workflow.js'
@@ -50,8 +49,7 @@ type RoutedWorkflow = Pick<AutoReportWorkflowRuntime, 'roleRegistry' | 'config' 
  * over the Host selection the conversation-window picker writes. Main
  * inheritance installs nothing.
  */
-export function installSpecialistModelSelection(childCtx: Context, workflow: RoutedWorkflow): (() => void) | undefined {
-  const child = childCtx.agent as Agent
+export function installSpecialistModelSelection(childCtx: Context, child: Agent, workflow: RoutedWorkflow): (() => void) | undefined {
   const selected = workflow.workflowForChild(child.id)?.runtime.state.projection().meta?.settings?.specialistModel
   if (selected === undefined || selected.inheritMain) return undefined
   const route = selected
@@ -81,26 +79,30 @@ export function installSpecialistModelSelection(childCtx: Context, workflow: Rou
 /**
  * Route one continuable child's report surface by pre-provisioned role.
  * AutoReport children get the structured protocol and role skills; ordinary
- * DSH children keep the maintained stock implementation.
+ * DSH children need nothing here — their messaging is the stock adjacent-agent
+ * `send_message` surface the base bundle mounts (the standalone stock report
+ * tool was removed upstream in the 2026-08-27 unified-steer change).
  * @param childCtx - unpublished continuable child scope.
+ * @param child - the child agent being composed.
  * @param hostCtx - host context carrying shared services.
  * @param workflow - AutoReport role registry, config, and owning-session lookup.
  * @returns child-scoped disposer.
  */
 export function installRoutedReportTool(
   childCtx: Context,
+  child: Agent,
   hostCtx: Context,
   workflow: RoutedWorkflow,
 ): () => void {
-  const child = childCtx.agent as Agent
   const entry = workflow.roleRegistry.lookup(child.id)
-  if (entry === undefined) return installReportTool(childCtx, hostCtx, 'next-step')
+  if (entry === undefined) return () => {}
+  routedChildren.add(child)
 
   const disposers: (() => void)[] = []
   try {
     disposers.push(installManifestTool(childCtx, hostCtx, entry.binding.role))
     disposers.push(installWorkflowReportTool(childCtx, hostCtx, entry.binding.role))
-    const disposeModelSelection = installSpecialistModelSelection(childCtx, workflow)
+    const disposeModelSelection = installSpecialistModelSelection(childCtx, child, workflow)
     if (disposeModelSelection !== undefined) disposers.push(disposeModelSelection)
     const language = workflow.workflowForChild(child.id)?.runtime.state.projection().meta?.settings?.reportLanguage
       ?? workflow.config.defaultReportLanguage
@@ -141,7 +143,23 @@ export function installRoutedReportTool(
   }
 }
 
-/** Register exactly one global continuable-child setup router. */
+/** Agents whose report surface this process already routed. */
+const routedChildren = new WeakSet<Agent>()
+
+/**
+ * Register the child report router. Master dsh removed the continuable-setup
+ * composition seam, so routing rides `agent/created`: every published agent
+ * whose RoleRegistry binding exists gets the structured protocol installed in
+ * its own scope. Resident roles install during their creation setup (marked
+ * in {@link routedChildren}); this listener covers manager-owned children.
+ */
 export function apply(ctx: Context): void {
-  ctx.subagents.registerContinuableSetup(childCtx => installRoutedReportTool(childCtx, ctx, ctx.autoreportWorkflow))
+  ctx.on('agent/created', ({ agent }) => {
+    if (routedChildren.has(agent)) return undefined
+    // The injected fiber rides the agent's own scope and is disposed with it.
+    agent.ctx.inject(['tools', 'subagents', 'systemPrompt', 'skills', 'autoreportWorkflow'], childCtx => {
+      installRoutedReportTool(childCtx, agent, ctx, childCtx.autoreportWorkflow)
+    })
+    return undefined
+  })
 }

@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { Session, SessionId } from '@deepseek-ai/dsh-session'
+import { SESSION_FORMAT_VERSION, Session, SessionId } from '@deepseek-ai/dsh-session'
 import { AUTOREPORT_MAIN_PRESET, isAutoReportMainSession, resolveAgentPreset } from '../src/membership.js'
 
 /** A detached root session whose header names its composing agent preset. */
 function rootSession(id: string, preset: string | undefined): Session {
   return Session.create(SessionId(id), undefined, {
-    version: 0,
+    version: SESSION_FORMAT_VERSION,
+    isSeeded: false,
     id: SessionId(id),
     createdAt: Date.now(),
     ...(preset === undefined ? {} : { agentPreset: preset }),
@@ -29,7 +30,8 @@ describe('AutoReport session membership', () => {
 
   it('never admits continuable children through the preset alone', () => {
     const child = Session.create(SessionId('child'), undefined, {
-      version: 0,
+      version: SESSION_FORMAT_VERSION,
+      isSeeded: false,
       id: SessionId('child'),
       createdAt: Date.now(),
       parentSession: SessionId('main'),

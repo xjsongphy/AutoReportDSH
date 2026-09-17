@@ -1,21 +1,21 @@
 import { randomUUID } from 'node:crypto'
 import { Service, type Context } from '@deepseek-ai/cordis'
 import type { Agent, AgentHandle } from '@deepseek-ai/dsh-agent'
-import { applyChildComposition, seedDescriptorTurn, snapshotSubagentDescriptor } from '@deepseek-ai/dsh-subagent'
+import { PERSONA_PREFIX_SECTION } from '@deepseek-ai/dsh-system-prompt'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { ContentBlock } from '@deepseek-ai/dsh-llm'
 import { SessionId, type Session, type SessionEvent, type SessionEventMap, type SessionEventType } from '@deepseek-ai/dsh-session'
 import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
-import { installSettingsSection } from '@deepseek-ai/dsh-settings'
+import { deliverSubagentPrompt, type HostPromptDeliverer } from '@deepseek-ai/dsh-subagent/internal'
 import type { Config } from './config.js'
+import type { CoordinatorMessageSource, SubagentReportMessageSource } from './messages.js'
 import { AUTOREPORT_MAIN_PRESET, isAutoReportMainSession } from './membership.js'
 import { emptyArtifactFoldState, foldArtifact, type ArtifactCaller, type ArtifactFoldState } from './artifacts/observer.js'
 import { AUTOREPORT_SCHEMA_VERSION, type WorkflowMetaSnapshot } from './workflow/events.js'
 import { delegationKey } from './workflow/protocol.js'
 import { installRoutedReportTool } from './tools/report-router.js'
-import { allSpecialistRoles, type SpecialistRole } from './roles.js'
+import { allSpecialistRoles, type AutoReportRole, type SpecialistRole } from './roles.js'
 import { loadSpecialistPersona } from './personas.js'
-import type { CoordinatorMessageSource, SubagentReportMessageSource } from '@deepseek-ai/dsh-subagent'
 import { WorkflowState, type WorkflowProjection } from './workflow/service.js'
 import { RoleRegistry } from './workflow/role-registry.js'
 import { WaiterRegistry } from './workflow/waiters.js'
@@ -128,12 +128,23 @@ export default class AutoReportWorkflowRuntime extends Service {
       mineruStatus,
     )
     this.userSettingsSource = () => userSettingsBase
-    installSettingsSection(ctx, AUTOREPORT_SETTINGS_NAMESPACE, AUTO_REPORT_USER_SETTINGS_SCHEMA, userSettingsBase, {
-      setSource: current => { this.userSettingsSource = current },
-      validate: value => validatePythonExecutableSetting(value, dshHome),
-      // Settings are deliberately read only when a workflow is created;
-      // existing snapshots must not change under an in-flight report.
-      onChange: () => {},
+    // Master dsh moved the section installer onto the settings service itself;
+    // the inject defers registration until a provider is mounted (pure test
+    // contexts without settings keep working).
+    ctx.inject(['settings'], sctx => {
+      sctx.settings.installSection(
+        ctx,
+        AUTOREPORT_SETTINGS_NAMESPACE,
+        AUTO_REPORT_USER_SETTINGS_SCHEMA,
+        userSettingsBase,
+        {
+          setSource: current => { this.userSettingsSource = current },
+          validate: value => validatePythonExecutableSetting(value, dshHome),
+          // Settings are deliberately read only when a workflow is created;
+          // existing snapshots must not change under an in-flight report.
+          onChange: () => {},
+        },
+      )
     })
     ctx.on('session/event', (session, event) => {
       // Coexistence gate (PLAN.md compatibility invariant): sessions that did
@@ -172,6 +183,7 @@ export default class AutoReportWorkflowRuntime extends Service {
       // first role dispatch, so a new MAIN does not accumulate blank child
       // sessions that the UI renders as the global empty hero.
       this.liveAgents.set(String(agent.id), agent)
+      return undefined
     }, { global: true })
     ctx.on('agent/disposed', ({ agent }) => {
       this.liveAgents.delete(String(agent.id))
@@ -243,13 +255,13 @@ export default class AutoReportWorkflowRuntime extends Service {
   private agentsForParent(parent: Agent): {
     get?: (id: SessionId) => Agent | undefined
     create?: (options: object) => Promise<AgentHandle>
-    resume?: (options: { resumeSessionId: SessionId; agentOptions?: Agent['options']; setup?: (ctx: Context) => void }) => Promise<AgentHandle>
+    resume?: (options: { resumeSessionId: SessionId; agentOptions?: Agent['options']; setup?: (ctx: Context, agent: Agent) => unknown }) => Promise<AgentHandle>
     withInitiator?: <T>(agent: Agent, operation: () => T) => T
   } | undefined {
     return (parent.ctx?.get('agents') ?? this.ctx.get('agents')) as {
       get?: (id: SessionId) => Agent | undefined
       create?: (options: object) => Promise<AgentHandle>
-      resume?: (options: { resumeSessionId: SessionId; agentOptions?: Agent['options']; setup?: (ctx: Context) => void }) => Promise<AgentHandle>
+      resume?: (options: { resumeSessionId: SessionId; agentOptions?: Agent['options']; setup?: (ctx: Context, agent: Agent) => unknown }) => Promise<AgentHandle>
       withInitiator?: <T>(agent: Agent, operation: () => T) => T
     } | undefined
   }
@@ -296,6 +308,25 @@ export default class AutoReportWorkflowRuntime extends Service {
     })
     parent.steer(message)
     return String(message.id)
+  }
+
+  /**
+   * Deliver one host-protocol briefing onto any direct continuable child —
+   * including manager-owned children this runtime does not hold resident —
+   * through the official symbol-keyed delivery seam as a distinct turn.
+   */
+  async deliverChild(
+    parent: Agent,
+    childSessionId: SessionId,
+    content: ContentBlock[],
+    source: CoordinatorMessageSource,
+    signal: AbortSignal,
+  ): Promise<string> {
+    signal.throwIfAborted()
+    const subagents = this.ctx.get('subagents') as HostPromptDeliverer | undefined
+    if (subagents === undefined) throw new Error('subagents service is unavailable; child delivery failed')
+    const messageId = await subagents[deliverSubagentPrompt](parent, childSessionId, content, source, signal, 'queue')
+    return String(messageId)
   }
 
   /** Create or resume one resident role without sending an initial prompt. */
@@ -350,28 +381,21 @@ export default class AutoReportWorkflowRuntime extends Service {
       ...(route === undefined ? {} : { provider: route.provider, model: route.model }),
     }
     const persona = loadSpecialistPersona(role)
-    const toolFilter = { deny: ['send_to_agent', 'ask_user_question'] }
-    const descriptor = snapshotSubagentDescriptor({
-      mode: 'continuable',
-      provider: 'spawn',
-      label: `AutoReport ${role}`,
-      ...(agentOptions.provider === undefined ? {} : { agentProvider: agentOptions.provider }),
-      ...(agentOptions.model === undefined ? {} : { agentModel: agentOptions.model }),
-      persona,
-      toolFilter,
-    })
-    const seed = seedDescriptorTurn(binding.childSessionId, undefined, descriptor)
-    const setup = async (childCtx: Context): Promise<void> => {
-      const child = childCtx.agent
+    const setup = async (childCtx: Context, child: Agent): Promise<void> => {
       if (child === undefined) throw new Error(`resident ${role} setup has no child agent`)
-      applyChildComposition(childCtx, parent, { persona, toolFilter })
+      // Master dsh moved persona/tool-filter composition into the continuation
+      // providers; resident roles are created directly, so the shadow and the
+      // deny-list are applied through their own seams: naming the deployment
+      // persona section replaces it instead of duplicating it.
+      childCtx.systemPrompt.section({ name: PERSONA_PREFIX_SECTION, order: 0, text: persona })
+      childCtx.tools?.restrict({ deny: ['send_to_agent', 'ask_user_question'] })
       // The parent preset is joined synchronously above, but its scoped skill
       // service is exposed through Cordis injection. Wait for that capability
       // before publishing the child so REPORT skills and the role report tool
       // are present from the first resident request.
       await childCtx.inject(['skills'], (skillCtx) => {
         skillCtx.effect(
-          () => installRoutedReportTool(skillCtx, this.ctx, this),
+          () => installRoutedReportTool(skillCtx, child, this.ctx, this),
           `autoreportdsh.resident.${role}()`,
         )
       })
@@ -391,7 +415,6 @@ export default class AutoReportWorkflowRuntime extends Service {
         ? agents.resume!({ resumeSessionId: binding.childSessionId, agentOptions, setup })
         : agents.create!({
             sessionId: binding.childSessionId,
-            seed,
             meta: {
               ...(parent.session.header.cwd === undefined ? {} : { cwd: parent.session.header.cwd }),
               parentSession: parent.id,
@@ -513,6 +536,18 @@ export default class AutoReportWorkflowRuntime extends Service {
   }
 
   /**
+   * AutoReport role bound to one session: MAIN membership or a RoleRegistry
+   * child binding. Foreign sessions produce `undefined`, so the sandbox
+   * override and any other role-derived policy leave them untouched.
+   * @param sessionId - candidate session id.
+   */
+  roleFor(sessionId: string): AutoReportRole | undefined {
+    const main = this.mainSessions.get(sessionId)
+    if (main !== undefined && isAutoReportMainSession(main)) return 'MAIN'
+    return this.roleRegistry.lookup(sessionId as SessionId)?.binding.role
+  }
+
+  /**
    * Whether one observed session belongs to this deployment: a top-level
    * session actually running the `autoreport` preset, or a continuable
    * child bound in the RoleRegistry (reserved before its publication).
@@ -574,14 +609,14 @@ export default class AutoReportWorkflowRuntime extends Service {
 
   /** Whether the observed user message is the first real user input. */
   private isInitialUserMessage(session: Session): boolean {
-    return session.events.filter(event =>
+    return session.snapshotEvents().filter(event =>
       event.type === 'user/message' && event.data.source.kind === 'user',
     ).length === 1
   }
 
   /** Whether the observed turn boundary is the first turn in this session. */
   private isInitialTurnStart(session: Session): boolean {
-    return session.events.filter(event => event.type === 'turn/start').length === 1
+    return session.snapshotEvents().filter(event => event.type === 'turn/start').length === 1
   }
 
   /**

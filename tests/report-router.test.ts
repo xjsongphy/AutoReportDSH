@@ -3,18 +3,13 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, describe, expect, it, vi } from 'vitest'
 import type { Context } from '@deepseek-ai/cordis'
-import { Session, SessionId } from '@deepseek-ai/dsh-session'
-import {
-  effectiveSandboxMode,
-  effectiveSandboxWorkspaceRoot,
-} from '@deepseek-ai/dsh-sandbox-policy/src/session-mode.ts'
+import { SESSION_FORMAT_VERSION, Session, SessionId } from '@deepseek-ai/dsh-session'
 import { RoleRegistry } from '../src/workflow/role-registry.js'
 import type { Config } from '../src/config.js'
 import { AUTOREPORT_SCHEMA_VERSION, type RoleBindingSnapshot } from '../src/workflow/events.js'
 import { installRoutedReportTool } from '../src/tools/report-router.js'
 import { installManifestTool } from '../src/tools/manifest.js'
 import { installWorkflowReportTool } from '../src/tools/report-workflow.js'
-import { roleWritableRoot } from '../src/policy/sandbox-roots.js'
 import { seedSyncedResourceStubs } from './helpers/synced-resource-stubs.js'
 import { appendWorkflowEvent } from '../src/workflow/store.js'
 import { WorkflowState } from '../src/workflow/service.js'
@@ -38,10 +33,12 @@ function childContext(id = 'child-1', cwd?: string) {
   const providers: string[] = []
   const sessionId = SessionId(id)
   const session = Session.create(sessionId, undefined, {
-    version: 0,
+    version: SESSION_FORMAT_VERSION,
+    isSeeded: false,
     id: sessionId,
     createdAt: Date.now(),
     cwd: cwd ?? '/tmp/autoreport-workspace',
+    parentSession: SessionId('main'),
   })
   const skillsService = {
     register: (skill: { name: string }) => {
@@ -70,26 +67,28 @@ function childContext(id = 'child-1', cwd?: string) {
     },
     skills: skillsService,
   }
-  return { ctx: ctx as unknown as Context, tools, skills, sections, providers, session }
+  return { ctx: ctx as unknown as Context, agent: { id: sessionId, session }, tools, skills, sections, providers, session }
 }
 
 function hostContext() {
-  const reportFrom = vi.fn(async () => 'report-msg')
+  const sendMessage = vi.fn(async () => 'report-msg')
   return {
     ctx: {
-      subagents: { reportFrom },
+      subagents: { sendMessage },
     } as unknown as Context,
-    reportFrom,
+    sendMessage,
   }
 }
 
 describe('report router', () => {
-  it('installs stock report for ordinary DSH children', () => {
+  it('installs nothing for ordinary DSH children', () => {
+    // The stock report tool was removed upstream (2026-08-27 unified-steer
+    // change); ordinary children keep the base bundle's adjacent-agent
+    // messaging, so the router contributes nothing for them.
     const child = childContext()
     const host = hostContext()
-    installRoutedReportTool(child.ctx, host.ctx, { roleRegistry: new RoleRegistry(), config: CONFIG, workflowForChild: () => undefined, overlayRoot })
-    expect(child.tools.map(tool => tool.name)).toEqual(['report'])
-    expect(child.sections.some(section => section.name === 'tool:report')).toBe(true)
+    installRoutedReportTool(child.ctx, child.agent as never, host.ctx, { roleRegistry: new RoleRegistry(), config: CONFIG, workflowForChild: () => undefined, overlayRoot })
+    expect(child.tools.map(tool => tool.name)).toEqual([])
     expect(child.providers).toEqual([])
   })
 
@@ -107,14 +106,15 @@ describe('report router', () => {
       provisioning: 'reserved',
     }
     roleRegistry.registerReserved(binding)
-    installRoutedReportTool(child.ctx, host.ctx, { roleRegistry, config: CONFIG, workflowForChild: () => undefined, overlayRoot })
+    installRoutedReportTool(child.ctx, child.agent as never, host.ctx, { roleRegistry, config: CONFIG, workflowForChild: () => undefined, overlayRoot })
     expect(child.tools.map(tool => tool.name)).toEqual(['manifest', 'report_workflow'])
     expect(child.skills).toEqual([])
     expect(child.sections.some(section => section.name === 'tool:report-workflow')).toBe(false)
     expect(child.sections.some(section => section.name === 'report-environment')).toBe(false)
     expect(child.tools.some(tool => tool.name === 'report')).toBe(false)
-    expect(effectiveSandboxMode(child.session.events)).toBe('workspace-write')
-    expect(effectiveSandboxWorkspaceRoot(child.session.events)).toBe(roleWritableRoot(workspaceRoot, 'THEORY'))
+    expect(
+      child.session.snapshotEvents().filter(event => event.type === 'sandbox/mode').map(event => event.data),
+    ).toEqual([{ mode: 'workspace-write' }])
     expect(child.providers).toEqual(['autoreport-references'])
   })
 
@@ -131,7 +131,7 @@ describe('report router', () => {
       workflowId: 'wf',
       provisioning: 'reserved',
     })
-    installRoutedReportTool(child.ctx, host.ctx, { roleRegistry, config: CONFIG, workflowForChild: () => undefined, overlayRoot })
+    installRoutedReportTool(child.ctx, child.agent as never, host.ctx, { roleRegistry, config: CONFIG, workflowForChild: () => undefined, overlayRoot })
     expect(child.tools.map(tool => tool.name)).toEqual(['manifest', 'report_workflow'])
     expect(child.skills.map(skill => skill.name)).toEqual([
       'experiment-report-writer',
@@ -147,7 +147,9 @@ describe('report router', () => {
       'autoreport:skill:experiment-report-writer',
       'autoreport:skill:latex-compile',
     ]))
-    expect(effectiveSandboxWorkspaceRoot(child.session.events)).toBe(roleWritableRoot(workspaceRoot, 'REPORT'))
+    expect(
+      child.session.snapshotEvents().filter(event => event.type === 'sandbox/mode').map(event => event.data),
+    ).toEqual([{ mode: 'workspace-write' }])
     expect(child.providers).toEqual(['autoreport-references'])
   })
 
@@ -174,7 +176,7 @@ describe('report router', () => {
       skills: { register: () => () => {} },
       get: () => undefined,
     } as unknown as Context
-    installRoutedReportTool(ctx, hostContext().ctx, { roleRegistry, config: CONFIG, workflowForChild: () => undefined, overlayRoot })
+    installRoutedReportTool(ctx, { id: SessionId('child-stock'), session: undefined } as never, hostContext().ctx, { roleRegistry, config: CONFIG, workflowForChild: () => undefined, overlayRoot })
     expect(tools.map(tool => tool.name)).toEqual(['manifest', 'report_workflow'])
   })
 })
@@ -189,7 +191,7 @@ describe('report_workflow', () => {
     return tool
   }
 
-  it('serializes a validated envelope through reportFrom', async () => {
+  it('serializes a validated envelope through adjacent messaging', async () => {
     const child = childContext()
     const host = hostContext()
     installWorkflowReportTool(child.ctx, host.ctx, 'REPORT')
@@ -199,10 +201,10 @@ describe('report_workflow', () => {
       status: 'success',
       response: 'compiled',
       produced_files: ['Report/main.pdf'],
-    }, { agent: { id: SessionId('child-1') }, signal: new AbortController().signal })
+    }, { agent: child.agent, signal: new AbortController().signal })
     expect(result).toEqual({ messageId: 'report-msg' })
-    expect(host.reportFrom).toHaveBeenCalledOnce()
-    const content = host.reportFrom.mock.calls[0]?.[1] as { type: string; text: string }[]
+    expect(host.sendMessage).toHaveBeenCalledOnce()
+    const content = host.sendMessage.mock.calls[0]?.[2] as { type: string; text: string }[]
     expect(content[0]?.text).toContain('REPORT → MAIN')
     expect(content[0]?.text).toContain('Details')
     expect(JSON.parse(content[1]?.text ?? '{}')).toMatchObject({
@@ -223,8 +225,8 @@ describe('report_workflow', () => {
       delegation_revision: 1,
       status: 'blocked',
       response: 'need data',
-    }, { agent: { id: SessionId('child-1') }, signal: new AbortController().signal })).rejects.toThrow(/invalid workflow report/)
-    expect(host.reportFrom).not.toHaveBeenCalled()
+    }, { agent: child.agent, signal: new AbortController().signal })).rejects.toThrow(/invalid workflow report/)
+    expect(host.sendMessage).not.toHaveBeenCalled()
   })
 
   function hostWithDirtyTheory() {
@@ -280,13 +282,13 @@ describe('report_workflow', () => {
         return event
       },
     }
-    const reportFrom = vi.fn(async () => 'report-msg')
+    const sendMessage = vi.fn(async () => 'report-msg')
     return {
       ctx: {
-        subagents: { reportFrom },
+        subagents: { sendMessage },
         get: (name: string) => name === 'autoreportWorkflow' ? runtime : undefined,
       } as unknown as Context,
-      reportFrom,
+      sendMessage,
       runtime,
       state,
       session,
@@ -298,7 +300,7 @@ describe('report_workflow', () => {
     const host = hostWithDirtyTheory()
     installManifestTool(child.ctx, host.ctx, 'THEORY')
     installWorkflowReportTool(child.ctx, host.ctx, 'THEORY')
-    const exec = { agent: { id: SessionId('child-1') }, signal: new AbortController().signal }
+    const exec = { agent: child.agent, signal: new AbortController().signal }
     const report = {
       task_id: 'task-3',
       delegation_revision: 1,
@@ -308,7 +310,7 @@ describe('report_workflow', () => {
     }
     await expect(toolNamed(child.tools, 'report_workflow').execute(report, exec))
       .rejects.toThrow(/manifest descriptions are stale/)
-    expect(host.reportFrom).not.toHaveBeenCalled()
+    expect(host.sendMessage).not.toHaveBeenCalled()
 
     const described = await toolNamed(child.tools, 'manifest').execute({
       action: 'update',
@@ -325,14 +327,14 @@ describe('report_workflow', () => {
 
     await expect(toolNamed(child.tools, 'report_workflow').execute(report, exec))
       .resolves.toEqual({ messageId: 'report-msg' })
-    expect(host.reportFrom).toHaveBeenCalledOnce()
+    expect(host.sendMessage).toHaveBeenCalledOnce()
   })
 
   it('reads another role manifest but only updates its bound role', async () => {
     const child = childContext()
     const host = hostWithDirtyTheory()
     installManifestTool(child.ctx, host.ctx, 'THEORY')
-    const exec = { agent: { id: SessionId('child-1') }, signal: new AbortController().signal }
+    const exec = { agent: child.agent, signal: new AbortController().signal }
     const readOther = await toolNamed(child.tools, 'manifest').execute({
       action: 'read',
       agent: 'report',
@@ -363,7 +365,7 @@ describe('report_workflow', () => {
     })
   })
 
-  it('returns the accepted reportMessageId without calling reportFrom again', async () => {
+  it('returns the accepted reportMessageId without calling sendMessage again', async () => {
     const child = childContext()
     const host = hostWithDirtyTheory()
     host.runtime.commit(host.session, 'autoreport/delegation', {
@@ -392,9 +394,9 @@ describe('report_workflow', () => {
       status: 'success',
       response: 'retry after crash',
       produced_files: ['Theory/model.md'],
-    }, { agent: { id: SessionId('child-1') }, signal: new AbortController().signal }))
+    }, { agent: child.agent, signal: new AbortController().signal }))
       .resolves.toEqual({ messageId: 'already-accepted' })
-    expect(host.reportFrom).not.toHaveBeenCalled()
+    expect(host.sendMessage).not.toHaveBeenCalled()
   })
 
   it('allows blocked reports even when descriptions are stale', async () => {
@@ -407,8 +409,8 @@ describe('report_workflow', () => {
       status: 'blocked',
       block_type: 'missing_data',
       response: 'need raw csv',
-    }, { agent: { id: SessionId('child-1') }, signal: new AbortController().signal }))
+    }, { agent: child.agent, signal: new AbortController().signal }))
       .resolves.toEqual({ messageId: 'report-msg' })
-    expect(host.reportFrom).toHaveBeenCalledOnce()
+    expect(host.sendMessage).toHaveBeenCalledOnce()
   })
 })

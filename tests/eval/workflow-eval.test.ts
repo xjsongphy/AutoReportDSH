@@ -13,10 +13,8 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import type { Agent } from '@deepseek-ai/dsh-agent'
-import { Session, SessionId } from '@deepseek-ai/dsh-session'
+import { SESSION_FORMAT_VERSION, Session, SessionId } from '@deepseek-ai/dsh-session'
 import {
-  effectiveSandboxMode,
-  effectiveSandboxWorkspaceRoot,
 } from '@deepseek-ai/dsh-sandbox-policy/src/session-mode.ts'
 import { REQUIRED_DIRS } from '../../src/workspace/init.js'
 import { saveProjectSettings, workspaceIdForRoot } from '../../src/settings.js'
@@ -153,7 +151,7 @@ describe('workflow eval', () => {
       'autoreport/artifact',
       'autoreport/file-note',
     ]))
-    expect(assembled.mainSession.events.some(event => (
+    expect(assembled.mainSession.snapshotEvents().some(event => (
       event.type === 'user/message'
       && event.data.source.kind === 'subagent-report'
     ))).toBe(true)
@@ -425,7 +423,8 @@ describe('workflow eval', () => {
     const resumedChild = {
       agent: {
         session: Session.create(SessionId(child.childId), undefined, {
-          version: 0,
+          version: SESSION_FORMAT_VERSION,
+          isSeeded: false,
           id: SessionId(child.childId),
           createdAt: Date.now(),
           cwd: resumed.workspaceRoot,
@@ -438,7 +437,8 @@ describe('workflow eval', () => {
     })
     expect(resumed.pythonResolve({
       agent: { session: Session.create(SessionId('stock-py'), undefined, {
-        version: 0,
+        version: SESSION_FORMAT_VERSION,
+        isSeeded: false,
         id: SessionId('stock-py'),
         createdAt: Date.now(),
         cwd: resumed.workspaceRoot,
@@ -462,7 +462,8 @@ describe('workflow eval', () => {
     const stockCwd = mkdtempSync(join(tmpdir(), 'autoreport-eval-stock-'))
     assembled.ownedDirs.push(stockCwd)
     const stockSession = Session.create(SessionId('eval-stock'), undefined, {
-      version: 0,
+      version: SESSION_FORMAT_VERSION,
+      isSeeded: false,
       id: SessionId('eval-stock'),
       createdAt: Date.now(),
       cwd: stockCwd,
@@ -470,10 +471,10 @@ describe('workflow eval', () => {
     const stockAgent = { id: stockSession.id, session: stockSession } as Agent
     userTurn(assembled.ctx, stockSession, 'just answer')
     expect(assembled.runtime.ownsSession(stockSession)).toBe(false)
-    expect(stockSession.events.some(event => event.type.startsWith('autoreport/'))).toBe(false)
+    expect(stockSession.snapshotEvents().some(event => event.type.startsWith('autoreport/'))).toBe(false)
     for (const dir of REQUIRED_DIRS) expect(existsSync(join(stockCwd, dir))).toBe(false)
     expect(assembled.pythonResolve({ agent: stockAgent })).toEqual({})
-    expect(effectiveSandboxWorkspaceRoot(stockSession.events)).toBeUndefined()
+    expect(stockSession.snapshotEvents().some(event => event.type === 'sandbox/mode')).toBe(false)
 
     const stockWrite = await execute(assembled.ctx, 'write', {
       file_path: join(stockCwd, 'notes.txt'),
@@ -486,10 +487,11 @@ describe('workflow eval', () => {
     admitFirstTurn(assembled)
     await finishRole(assembled, 'THEORY', [{ path: 'Theory/theory.md', content: '# t\n' }])
     expect(assembled.runtime.ownsSession(stockSession)).toBe(false)
-    expect(stockSession.events.some(event => event.type.startsWith('autoreport/'))).toBe(false)
+    expect(stockSession.snapshotEvents().some(event => event.type.startsWith('autoreport/'))).toBe(false)
     expect(existsSync(join(stockCwd, 'Theory'))).toBe(false)
-    expect(effectiveSandboxMode(assembled.mainSession.events)).toBe('workspace-write')
-    expect(effectiveSandboxWorkspaceRoot(assembled.mainSession.events)).toContain('Outline')
+    expect(
+      assembled.mainSession.snapshotEvents().filter(event => event.type === 'sandbox/mode').map(event => event.data),
+    ).toEqual([{ mode: 'workspace-write' }])
 
     publish(assembled.ctx, assembled.mainSession, 'agent-preset/selected', { agentPreset: 'standard' })
     expect(assembled.runtime.ownsSession(assembled.mainSession)).toBe(false)

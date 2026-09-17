@@ -2,7 +2,8 @@ import { randomUUID } from 'node:crypto'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { ContentBlock } from '@deepseek-ai/dsh-llm'
 import { SessionId, type Session } from '@deepseek-ai/dsh-session'
-import type { CoordinatorMessageSource, SubagentRuntime } from '@deepseek-ai/dsh-subagent'
+import type { SubagentRuntime } from '@deepseek-ai/dsh-subagent'
+import type { CoordinatorMessageSource } from '../messages.js'
 import { SubagentError } from '@deepseek-ai/dsh-subagent'
 import { defineTool, type ToolDefinition } from '@deepseek-ai/dsh-tools'
 import type AutoReportWorkflowRuntime from '../runtime.js'
@@ -33,7 +34,12 @@ export type SendToAgentWorkflow = Pick<AutoReportWorkflowRuntime, 'roleRegistry'
 
 /** Dependencies used by the fixed-role delegation tool. */
 export interface SendToAgentDependencies {
-  readonly subagents: Pick<SubagentRuntime, 'startContinuable' | 'followup'>
+  readonly subagents: Pick<SubagentRuntime, 'startContinuable'>
+  /**
+   * Host delivery onto a manager-owned continuable child (the unified-steer
+   * seam; the former `SubagentRuntime.followup` wrapper is gone upstream).
+   */
+  readonly deliverChild: (parent: Agent, childSessionId: SessionId, content: ContentBlock[], source: CoordinatorMessageSource, signal: AbortSignal) => Promise<string>
   /** Resident AutoReport roles are addressed directly; legacy continuables remain supported. */
   readonly resident?: {
     ensure: (parent: Agent, role: SpecialistRole, signal: AbortSignal) => Promise<Agent | undefined>
@@ -383,10 +389,7 @@ export function createSendToAgentTool(deps: SendToAgentDependencies): ToolDefini
               exec.signal,
             )
             if (residentMessage !== undefined) return residentMessage
-            return String(await deps.subagents.followup(parent, bound.childSessionId, briefing(false), {
-              source,
-              signal: exec.signal,
-            }))
+            return await deps.deliverChild(parent, bound.childSessionId, briefing(false), source, exec.signal)
           } catch (error: unknown) {
             if (!rebindAttempted && isNotResumable(error)) {
               rebindAttempted = true
@@ -490,6 +493,13 @@ export const inject = ['tools', 'subagents', 'autoreportWorkflow']
 export function apply(ctx: import('@deepseek-ai/cordis').Context): void {
   ctx.tools.register(createSendToAgentTool({
     subagents: ctx.subagents,
+    resident: {
+      ensure: (parent, role, signal) => ctx.autoreportWorkflow.ensureResidentRole(parent, role, signal),
+      deliver: (parent, childSessionId, content, source, signal) =>
+        ctx.autoreportWorkflow.deliverResidentChild(parent, childSessionId, content, source, signal),
+    },
+    deliverChild: (parent, childSessionId, content, source, signal) =>
+      ctx.autoreportWorkflow.deliverChild(parent, childSessionId, content, source, signal),
     workflow: ctx.autoreportWorkflow,
     config: ctx.autoreportWorkflow.config,
   }))

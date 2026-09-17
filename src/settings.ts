@@ -34,7 +34,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileS
 import { randomUUID } from 'node:crypto'
 import { dirname, join, resolve } from 'node:path'
 import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
-import { settingsNamespace } from '@deepseek-ai/dsh-settings'
+import type { SettingsNamespace } from '@deepseek-ai/dsh-settings'
 import z from '@deepseek-ai/schemastery'
 import type { Config, ReportLanguage, SpecialistRoute } from './config.js'
 import {
@@ -57,7 +57,7 @@ export const WORKFLOW_SETTINGS_SCHEMA_DEFAULTS: Readonly<{
 })
 
 /** Registered DSH namespace for AutoReport's user-level workflow defaults. */
-export const AUTOREPORT_SETTINGS_NAMESPACE = settingsNamespace('autoreport')
+export const AUTOREPORT_SETTINGS_NAMESPACE = 'autoreport' as SettingsNamespace
 
 export interface AutoReportUserSettings {
   /** Default report source language (schema default `latex`). */

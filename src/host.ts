@@ -9,12 +9,13 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { Config } from './config.js'
 import { isAutoReportMainSession } from './membership.js'
+import { installSandboxOverride } from './policy/sandbox-override.js'
+import { roleWritableRoot } from './policy/sandbox-roots.js'
 import { createRoleToolGuard } from './policy/tool-guard.js'
 import { installAutoReportPythonEnv } from './python-env.js'
 import AutoReportWorkflowRuntime, { type RuntimeOptions } from './runtime.js'
 import { createReportInitCommand } from './workspace/command.js'
 import { loadProjectSettings, saveProjectSettings, workspaceIdForRoot } from './settings.js'
-import { registerAutoReportSessionEvents } from './session-events.js'
 import { installTurnGuards } from './workflow/turn-guard.js'
 
 export const name = 'autoreportdsh-host'
@@ -63,20 +64,26 @@ export function resolveHostConfig(raw: Partial<Config> = {}): Config {
  *   the DSH home itself.
  */
 export async function apply(ctx: Context, config: Partial<Config> = {}, options: RuntimeOptions = {}): Promise<void> {
-  // This must run before any AutoReport session is created or resumed. DSH
-  // validates persisted event vocabulary outside the agent loop, so an Agent
-  // Loop listener would be too late to make the log restorable.
-  await registerAutoReportSessionEvents()
-  // A registered event name is not enough: role isolation needs the host
-  // policy service to *consume* sandbox/workspace-root as its writable root.
-  // Refuse a known-incompatible DSH rather than silently widening every role
-  // to the experiment workspace. Bare unit-test contexts may omit the service.
-  const sandboxPolicy = ctx.get('sandboxPolicy') as { workspaceRootOverrideOf?: unknown } | undefined
-  if (sandboxPolicy !== undefined && typeof sandboxPolicy.workspaceRootOverrideOf !== 'function') {
-    throw new Error('autoreportdsh: this DSH sandbox policy does not support sandbox/workspace-root; install the documented compatible DSH release')
-  }
+  // Role isolation resolves each AutoReport session's writable root through
+  // the host sandbox policy at enforcement time. Bare unit-test contexts may
+  // omit the service; a real deployment must accept the override — install
+  // self-checks and fails loud rather than silently widening every role to
+  // the experiment workspace.
+  const sandboxPolicy = ctx.get('sandboxPolicy') as Parameters<typeof installSandboxOverride>[0] | undefined
   const resolved = resolveHostConfig(config)
   const runtime = new AutoReportWorkflowRuntime(ctx, resolved, options)
+  if (sandboxPolicy !== undefined) {
+    installSandboxOverride(sandboxPolicy, {
+      roleRootOf: session => {
+        const role = runtime.roleFor(String(session.id))
+        if (role === undefined) return undefined
+        const root = resolved.workspaceRoot ?? (typeof session.header?.cwd === 'string' ? session.header.cwd : undefined)
+        if (root === undefined || root.length === 0) return undefined
+        return roleWritableRoot(root, role)
+      },
+      probeRoot: roleWritableRoot(resolved.workspaceRoot ?? process.cwd(), 'MAIN'),
+    })
+  }
   // Resource refresh is deliberately explicit (`pnpm run sync:resources`),
   // never a startup side effect. Bundled resources keep a fresh/offline
   // install deterministic and prevent a mutable remote prompt from being

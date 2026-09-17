@@ -77,10 +77,10 @@ describe.skipIf(skipReason !== undefined)('integration: installer CLI against a 
     expect(composed).not.toMatch(/__AUTOREPORT_[A-Z_]+__/)
     expect(composed).toContain(join(REPO_ROOT, 'dist', 'src', 'preset.js'))
 
-    // Overlay: stock child-report row disabled; host row is the package name
-    // so the client-module scan can resolve dsh.client; router stays a path.
+    // Overlay: no stock child-report row (removed upstream); host row is the
+    // package name so the client-module scan can resolve dsh.client; router
+    // stays a path.
     const overlay = readFileSync(OVERLAY_FILE, 'utf8')
-    expect(overlay).toMatch(/- id: tool-subagent-report\s*\n\s+disabled: true/)
     expect(overlay).toContain('- id: autoreportdsh-host')
     expect(overlay).toMatch(/name: autoreportdsh\s*$/m)
     expect(overlay).not.toContain(HOST_ENTRY)

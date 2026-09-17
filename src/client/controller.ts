@@ -5,7 +5,8 @@
  * module: a client bundle must not pull Node settings code.
  */
 
-import type { SettingsScope, SnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
+import type { SnapshotStore } from '@deepseek-ai/dsh-client-store'
+import type { SettingsScope } from '@deepseek-ai/dsh-client-ui-settings/client'
 import type { MineruStatus } from './mineru-status-types.js'
 import {
   CardForm, enumField, numberField, textField,

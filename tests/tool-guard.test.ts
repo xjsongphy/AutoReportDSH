@@ -42,7 +42,7 @@ function binding(role: RoleBindingSnapshot['role'], id: string): RoleBindingSnap
 
 function agent(id: string, cwd: string, header: Record<string, unknown> = {}): Agent {
   const sessionId = SessionId(id)
-  const session = { id: sessionId, events: [] as unknown[], header: { id: sessionId, cwd, ...header } } as Session
+  const session = { id: sessionId, snapshotEvents: () => [] as unknown[], header: { id: sessionId, cwd, ...header } } as Session
   return { id: sessionId, session } as Agent
 }
 

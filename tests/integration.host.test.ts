@@ -20,7 +20,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
-import { Session, SessionId } from '@deepseek-ai/dsh-session'
+import { SESSION_FORMAT_VERSION, Session, SessionId } from '@deepseek-ai/dsh-session'
 import { REQUIRED_DIRS } from '../src/workspace/init.js'
 import { resolveWorkflowSettings, workspaceIdForRoot } from '../src/settings.js'
 import { AUTOREPORT_SCHEMA_VERSION, type RoleBindingSnapshot } from '../src/workflow/events.js'
@@ -59,15 +59,12 @@ async function boot(options: Parameters<typeof assemble>[0] = {}): Promise<Assem
 describe('integration: assembled host (real context)', () => {
   it('registers exactly ONE continuable setup and routes it by RoleRegistry', async () => {
     const assembled = await boot()
-    expect(assembled.continuableSetups).toHaveLength(1)
-    const setup = assembled.continuableSetups[0]
-    if (setup === undefined) throw new Error('router registered no continuable setup')
 
-    // Ordinary DSH child keeps the stock report implementation.
-    const ordinary = makeChildRecorder('it-ordinary')
-    expect(setup(ordinary.ctx)).toBeTypeOf('function')
-    expect(ordinary.toolNames).toEqual(['report'])
-    expect(ordinary.sections.map(section => section.name)).toContain('tool:report')
+    // Ordinary DSH child: the router installs nothing — stock messaging comes
+    // from the base bundle since the standalone report tool was removed upstream.
+    const ordinary = makeChildRecorder('it-ordinary', assembled.runtime)
+    assembled.routeChild(ordinary)
+    expect(ordinary.toolNames).toEqual([])
 
     // A RESERVED specialist routes to the structured protocol + executor.
     const binding: RoleBindingSnapshot = {
@@ -79,8 +76,8 @@ describe('integration: assembled host (real context)', () => {
       provisioning: 'reserved',
     }
     assembled.runtime.roleRegistry.registerReserved(binding)
-    const theory = makeChildRecorder('it-theory')
-    setup(theory.ctx)
+    const theory = makeChildRecorder('it-theory', assembled.runtime)
+    assembled.routeChild(theory)
     expect(theory.toolNames).toEqual(['manifest', 'report_workflow'])
     expect(theory.skillNames).toEqual([])
     expect(theory.toolNames).not.toContain('report')
@@ -88,8 +85,8 @@ describe('integration: assembled host (real context)', () => {
 
     const reportBinding: RoleBindingSnapshot = { ...binding, role: 'REPORT', childSessionId: SessionId('it-report') }
     assembled.runtime.roleRegistry.registerReserved(reportBinding)
-    const reporter = makeChildRecorder('it-report')
-    setup(reporter.ctx)
+    const reporter = makeChildRecorder('it-report', assembled.runtime)
+    assembled.routeChild(reporter)
     expect(reporter.toolNames).toEqual(['manifest', 'report_workflow'])
     expect(reporter.skillNames).toEqual([
       'experiment-report-writer', 'report-language-latex', 'latex-compile',
@@ -98,11 +95,11 @@ describe('integration: assembled host (real context)', () => {
       'autoreport:skill:experiment-report-writer',
       'autoreport:skill:latex-compile',
     ]))
-    const plotter = makeChildRecorder('it-plotting-bound')
+    const plotter = makeChildRecorder('it-plotting-bound', assembled.runtime)
     assembled.runtime.roleRegistry.registerReserved({
       ...binding, role: 'PLOTTING', childSessionId: SessionId('it-plotting-bound'),
     })
-    setup(plotter.ctx)
+    assembled.routeChild(plotter)
     expect(plotter.toolNames).toEqual(['manifest', 'report_workflow'])
     expect(plotter.skillNames).toEqual([])
   })
@@ -171,7 +168,8 @@ describe('integration: assembled host (real context)', () => {
     expect(entry?.binding.provisioning).toBe('active')
 
     const childSession = Session.create(SessionId(childId!), undefined, {
-      version: 0,
+      version: SESSION_FORMAT_VERSION,
+      isSeeded: false,
       id: SessionId(childId!),
       createdAt: Date.now(),
       cwd: assembled.workspaceRoot,
@@ -265,7 +263,8 @@ describe('integration: assembled host (real context)', () => {
     // BEFORE settings persistence or workspace materialization.
     const stockCwd = makeTemp('autoreport-it-init-stock-')
     const stockSession = Session.create(SessionId('it-init-stock'), undefined, {
-      version: 0,
+      version: SESSION_FORMAT_VERSION,
+      isSeeded: false,
       id: SessionId('it-init-stock'),
       createdAt: Date.now(),
       cwd: stockCwd,
@@ -353,7 +352,8 @@ describe('integration: assembled host (real context)', () => {
     // deployment, with its own cwd OUTSIDE the experiment workspace.
     const stockCwd = makeTemp('autoreport-it-stock-')
     const stockSession = Session.create(SessionId('it-stock'), undefined, {
-      version: 0,
+      version: SESSION_FORMAT_VERSION,
+      isSeeded: false,
       id: SessionId('it-stock'),
       createdAt: Date.now(),
       cwd: stockCwd,
@@ -365,7 +365,7 @@ describe('integration: assembled host (real context)', () => {
 
     expect(assembled.runtime.isMainSession(stockSession.id)).toBe(false)
     expect(assembled.runtime.ownsSession(stockSession)).toBe(false)
-    expect(stockSession.events.some(event => event.type.startsWith('autoreport/'))).toBe(false)
+    expect(stockSession.snapshotEvents().some(event => event.type.startsWith('autoreport/'))).toBe(false)
     for (const dir of REQUIRED_DIRS) expect(existsSync(join(stockCwd, dir))).toBe(false)
     // Not even the configured experiment workspace was touched by the stock turn.
     for (const dir of REQUIRED_DIRS) expect(existsSync(join(assembled.workspaceRoot, dir))).toBe(false)

@@ -1,12 +1,8 @@
-import { mkdtempSync, mkdirSync, rmSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { Session, SessionId } from '@deepseek-ai/dsh-session'
-import {
-  effectiveSandboxMode,
-  effectiveSandboxWorkspaceRoot,
-} from '@deepseek-ai/dsh-sandbox-policy/src/session-mode.ts'
+import { SESSION_FORMAT_VERSION, Session, SessionId } from '@deepseek-ai/dsh-session'
 import { applyRoleSandbox, roleWritableRoot } from '../src/policy/sandbox-roots.js'
 
 const cleanup: string[] = []
@@ -35,30 +31,19 @@ describe('roleWritableRoot', () => {
 })
 
 describe('applyRoleSandbox', () => {
-  it('pins workspace-write mode and the role writable root without changing session cwd', () => {
+  it('pins workspace-write mode without changing session cwd', () => {
     const root = workspace()
     const session = Session.create(SessionId('sandbox-main'), undefined, {
-      version: 0,
+      version: SESSION_FORMAT_VERSION,
+      isSeeded: false,
       id: SessionId('sandbox-main'),
       createdAt: Date.now(),
       cwd: root,
     })
     applyRoleSandbox(session, 'DATA_ANALYSIS', root)
     expect(session.header.cwd).toBe(root)
-    expect(effectiveSandboxMode(session.events)).toBe('workspace-write')
-    expect(effectiveSandboxWorkspaceRoot(session.events)).toBe(resolve(root, 'Data/Processed'))
-  })
-
-  it('last call wins when reapplied for a different role', () => {
-    const root = workspace()
-    const session = Session.create(SessionId('sandbox-child'), undefined, {
-      version: 0,
-      id: SessionId('sandbox-child'),
-      createdAt: Date.now(),
-      cwd: root,
-    })
-    applyRoleSandbox(session, 'THEORY', root)
-    applyRoleSandbox(session, 'REPORT', root)
-    expect(effectiveSandboxWorkspaceRoot(session.events)).toBe(resolve(root, 'Report'))
+    expect(
+      session.snapshotEvents().filter(event => event.type === 'sandbox/mode').map(event => event.data),
+    ).toEqual([{ mode: 'workspace-write' }])
   })
 })

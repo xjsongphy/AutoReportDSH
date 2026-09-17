@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { Context } from '@deepseek-ai/cordis'
-import { Session, SessionId } from '@deepseek-ai/dsh-session'
+import { SESSION_FORMAT_VERSION, Session, SessionId } from '@deepseek-ai/dsh-session'
 import type { ToolExecution } from '@deepseek-ai/dsh-tools'
 import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
 import { dirname } from 'node:path'
@@ -13,7 +13,8 @@ import { managedPythonExecutable } from '../src/python-detect.js'
 
 function makeSession(id: string, cwd?: string): Session {
   return Session.create(SessionId(id), undefined, {
-    version: 0,
+    version: SESSION_FORMAT_VERSION,
+    isSeeded: false,
     id: SessionId(id),
     createdAt: Date.now(),
     ...(cwd === undefined ? {} : { cwd }),

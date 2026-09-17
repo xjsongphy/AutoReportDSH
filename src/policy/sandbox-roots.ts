@@ -1,7 +1,8 @@
 /**
- * Pin each AutoReport session to workspace-write with an independent DSH
- * writable root. Navigation stays on the experiment cwd; confinement uses
- * the role directory.
+ * Pin each AutoReport session to `workspace-write` sandbox mode. The role
+ * writable root itself is resolved by the sandbox-policy override
+ * (`sandbox-override.ts`) at enforcement time; navigation stays on the
+ * experiment cwd.
  * @module
  */
 
@@ -23,24 +24,15 @@ export function roleWritableRoot(workspaceRoot: string, role: AutoReportRole): s
 }
 
 /**
- * Record durable sandbox mode and writable-root overrides on one session.
- * Safe to call more than once: each call appends a new last-wins event.
+ * Pin `workspace-write` on one AutoReport session. Safe to call more than
+ * once: the last event wins. The role's writable root is NOT logged here —
+ * the host sandbox-policy override derives it from role membership at every
+ * enforcement call, so no session-vocabulary extension is needed.
  * @param session - MAIN or specialist session (cwd remains the experiment root).
- * @param role - role whose writable root is pinned.
- * @param workspaceRoot - experiment workspace root.
+ * @param role - role whose writable root the override resolves.
+ * @param workspaceRoot - experiment workspace root; the mode pin does not
+ *   need it, but call sites resolve it alongside the role.
  */
-export function applyRoleSandbox(session: Session, role: AutoReportRole, workspaceRoot: string): void {
+export function applyRoleSandbox(session: Session, _role: AutoReportRole, _workspaceRoot?: string): void {
   setSandboxMode(session, 'workspace-write')
-  // `sandbox/workspace-root` is an AutoReport-owned extension event. The
-  // current published DSH exposes no third-party setter for it; the host
-  // plugin registers this event with session persistence before using it.
-  // Keep the navigation cwd unchanged while the AutoReport tool guard and
-  // newer DSH consumers fold this narrower writable root.
-  const append = session.append as unknown as (
-    type: string,
-    data: unknown,
-  ) => unknown
-  append.call(session, 'sandbox/workspace-root', {
-    workspaceRoot: roleWritableRoot(workspaceRoot, role),
-  })
 }

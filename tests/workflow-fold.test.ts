@@ -133,7 +133,7 @@ describe('workflow fold scenario', () => {
     commit('autoreport/role-binding', bindingV2)
 
     // ---- assertions over a COLD FOLD (recovery from log only) ----
-    const state = WorkflowState.fromEvents(session.events)
+    const state = WorkflowState.fromEvents(session.snapshotEvents())
     expect(state.projection().meta).toBeUndefined()
     expect(state.getTask('task-7')?.status).toBe('running')
     expect(state.getTask('task-7')?.latestDelegationRevision).toBe(2)
@@ -160,7 +160,7 @@ describe('workflow fold scenario', () => {
     const session = Session.create(SessionId('incr'))
     const incremental = WorkflowState.empty()
     void incremental
-    const events = session.events.slice()
+    const events = session.snapshotEvents().slice()
     const batch = WorkflowState.fromEvents(events)
     const stepwise = WorkflowState.empty()
     for (const event of events) stepwise.apply(event)
@@ -171,7 +171,7 @@ describe('workflow fold scenario', () => {
     const state = WorkflowState.empty()
     const session = Session.create(SessionId('noise'))
     session.append('turn/start', { turn: 1 })
-    state.apply(session.events[0]!)
+    state.apply(session.snapshotEvents()[0]!)
     expect(state.projection().tasks.size).toBe(0)
   })
 })
