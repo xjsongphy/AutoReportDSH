@@ -63,6 +63,16 @@ jobs:
       - name: Enable Corepack
         run: corepack enable
 
+      # The live bash-confinement tests gate on a working OS sandbox (same as
+      # ci.yml): ubuntu-latest ships no bubblewrap, and AppArmor gates
+      # unprivileged user namespaces behind a sysctl.
+      - name: Install Linux bubblewrap
+        working-directory: ${{ github.workspace }}
+        run: |
+          sudo apt-get update && sudo apt-get install -y bubblewrap
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 \
+            || echo 'apparmor userns knob absent — the functional probe decides'
+
       - name: Install and build the harness
         working-directory: deepseek-harness
         run: |
