@@ -344,6 +344,70 @@ describe('host workflow runtime', () => {
     expect(fake.resolve({ session: stock }).workspaceRoot).toBe(root)
   })
 
+  it('resident setup joins the parent preset before restricting coordinator tools', async () => {
+    // Regression: the retargeted direct-creation path dropped the composeFrom
+    // join its applyChildComposition predecessor performed. On a real host the
+    // child scope then inherits no preset layer, so preset-plane names are not
+    // restrictable and tools.restrict() rejected the deny-list, failing every
+    // send_to_agent dispatch (session log 2bdd1396). The fake agents double
+    // here RUNS the production setup against a mock child context so the
+    // optional-chaining short circuit cannot mask the seam again.
+    const root = mkdtempSync(join(tmpdir(), 'autoreport-runtime-'))
+    tempDirs.push(root)
+    const ctx = new Context()
+    const session = rootSession('preset-join-main', AUTOREPORT_MAIN_PRESET, root)
+    const mainAgent = { id: session.id, session, options: {}, ctx: { get: () => undefined } } as unknown as Agent
+    // The join result flips mid-test: a parent that joined no preset must not
+    // name preset-plane tools, so the deny-list is skipped, not rejected.
+    let joinResult: string | undefined = AUTOREPORT_MAIN_PRESET
+    const composeFrom = vi.fn(() => joinResult)
+    const section = vi.fn(() => {})
+    const restrict = vi.fn(() => () => {})
+    const createChild = async (options: {
+      sessionId: SessionId
+      setup?: (childCtx: Context, agent: Agent) => unknown
+    }): Promise<{ agent: Agent; dispose: () => Promise<void> }> => {
+      const childCtx = {
+        get: (key: string) => key === 'agentPresets' ? { composeFrom } : undefined,
+        systemPrompt: { section },
+        tools: { restrict },
+        inject: async () => {},
+      } as unknown as Context
+      await options.setup?.(childCtx, { id: options.sessionId } as Agent)
+      const child = Session.create(options.sessionId, undefined, {
+        version: SESSION_FORMAT_VERSION,
+        isSeeded: false,
+        id: options.sessionId,
+        createdAt: Date.now(),
+        parentSession: session.id,
+      })
+      return { agent: { id: child.id, session: child } as Agent, dispose: async () => {} }
+    }
+    ctx.provide('agents', {
+      list: () => [mainAgent],
+      get: (id: SessionId) => id === mainAgent.id ? mainAgent : undefined,
+      create: createChild,
+      resume: createChild,
+    } as never)
+    const runtime = createRuntime(ctx, { ...CONFIG, workspaceRoot: root })
+    await runtime.ensureResidentRole(mainAgent, 'THEORY')
+
+    expect(composeFrom).toHaveBeenCalledTimes(1)
+    expect(composeFrom.mock.calls[0]?.[0]).toBeTypeOf('object')
+    // The persona section shadows the deployment persona and the deny-list
+    // lands on the coordinator tools — but only after the join succeeded.
+    expect(section).toHaveBeenCalledWith(expect.objectContaining({ name: 'deployment:persona-prefix' }))
+    expect(restrict).toHaveBeenCalledWith({ deny: ['send_to_agent', 'ask_user_question'] })
+
+    // Unjoined parent: nothing preset-plane is restrictable, so the deny-list
+    // is skipped rather than rejected.
+    joinResult = undefined
+    restrict.mockClear()
+    await runtime.ensureResidentRole(mainAgent, 'DATA_ANALYSIS')
+    expect(composeFrom).toHaveBeenCalledTimes(2)
+    expect(restrict).not.toHaveBeenCalled()
+  })
+
   it('does not create resident children just because MAIN received its first message', async () => {
     const root = mkdtempSync(join(tmpdir(), 'autoreport-runtime-'))
     tempDirs.push(root)

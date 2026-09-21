@@ -388,9 +388,15 @@ export default class AutoReportWorkflowRuntime extends Service {
       // Master dsh moved persona/tool-filter composition into the continuation
       // providers; resident roles are created directly, so the shadow and the
       // deny-list are applied through their own seams: naming the deployment
-      // persona section replaces it instead of duplicating it.
+      // persona section replaces it instead of duplicating it. The preset join
+      // itself cannot be skipped: the agent factory never mounts a preset for
+      // children, so without composeFrom this child's scope chain holds no
+      // preset scope — the preset-plane tool names are then neither visible to
+      // the role (no bash, read, or skills) nor restrictable, and
+      // tools.restrict() rejects the deny-list outright.
+      const joined = childCtx.get('agentPresets')?.composeFrom(childCtx, parent.ctx)
       childCtx.systemPrompt.section({ name: PERSONA_PREFIX_SECTION, order: 0, text: persona })
-      childCtx.tools?.restrict({ deny: ['send_to_agent', 'ask_user_question'] })
+      if (joined !== undefined) childCtx.tools?.restrict({ deny: ['send_to_agent', 'ask_user_question'] })
       // The parent preset is joined synchronously above, but its scoped skill
       // service is exposed through Cordis injection. Wait for that capability
       // before publishing the child so REPORT skills and the role report tool
