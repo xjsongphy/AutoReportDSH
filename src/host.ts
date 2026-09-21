@@ -17,6 +17,7 @@ import AutoReportWorkflowRuntime, { type RuntimeOptions } from './runtime.js'
 import { createReportInitCommand } from './workspace/command.js'
 import { loadProjectSettings, saveProjectSettings, workspaceIdForRoot } from './settings.js'
 import { registerAutoReportSessionEvents } from './session-events.js'
+import { describeDshVersionSupport, readRunningDshVersion } from './dsh-version.js'
 import { installTurnGuards } from './workflow/turn-guard.js'
 
 export const name = 'autoreportdsh-host'
@@ -73,6 +74,12 @@ export async function apply(ctx: Context, config: Partial<Config> = {}, options:
   const compatibility = await registerAutoReportSessionEvents({
     ...(options.sessionEventProbe === undefined ? {} : { markerProbe: options.sessionEventProbe }),
   })
+  // Version transparency, never a gate: the pin in docs/dependencies.md means
+  // "verified", not "exclusive". An unverified pair usually works — say so
+  // once, so a mid-session breakage can be attributed in one glance.
+  const support = describeDshVersionSupport(options.runningDshVersion ?? readRunningDshVersion())
+  if (support.verified) ctx.logger.info(support.message)
+  else ctx.logger.warn(support.message)
   if (!compatibility.markerPersisted) {
     ctx.logger.warn(
       'autoreportdsh: this DSH cannot persist the ignorable session-event marker; '

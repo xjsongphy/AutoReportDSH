@@ -72,6 +72,8 @@ export interface RuntimeOptions {
   readonly pythonDetect?: PythonDetectOptions
   /** Session-event marker probe override; tests model a DSH without the append option. */
   readonly sessionEventProbe?: () => boolean
+  /** Running dsh version override; absent reads the launcher anchor (tests pin it). */
+  readonly runningDshVersion?: string
 }
 
 /**
