@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { Session, SessionId } from '@deepseek-ai/dsh-session'
 import { validateStoredEvents } from '@deepseek-ai/dsh-session-persistence/src/storage-contract.ts'
+import { probeIgnorableMarker } from '../src/session-events.js'
 import { appendWorkflowEvent } from '../src/workflow/store.js'
 
 describe('appendWorkflowEvent (persistence vocabulary)', () => {
@@ -13,8 +14,14 @@ describe('appendWorkflowEvent (persistence vocabulary)', () => {
       language: 'latex',
       initialized: false,
     })
-    expect(event.ignorable).toBe(true)
-    expect(session.snapshotEvents()[0]?.ignorable).toBe(true)
+    if (probeIgnorableMarker()) {
+      expect(event.ignorable).toBe(true)
+      expect(session.snapshotEvents()[0]?.ignorable).toBe(true)
+    } else {
+      // A stock dsh ignores the option argument until it ships the append
+      // option; the helper still passes it, so the call is forward-compatible.
+      expect(event.ignorable).toBeUndefined()
+    }
     expect(Object.isFrozen(session.snapshotEvents()[0])).toBe(true)
   })
 
@@ -30,6 +37,13 @@ describe('appendWorkflowEvent (persistence vocabulary)', () => {
       title: 'theory',
       status: 'open',
     })
+    if (!probeIgnorableMarker()) {
+      // A stock dsh cannot persist the marker, so the unregistered unknown
+      // type must refuse the log — exactly why activation registers the
+      // vocabulary in-process on such a harness.
+      expect(() => validateStoredEvents(session.header, [event])).toThrow(/not marked ignorable/)
+      return
+    }
     expect(() =>
       validateStoredEvents(session.header, [event]),
     ).not.toThrow()

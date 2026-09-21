@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { KNOWN_SESSION_EVENT_TYPES, Session, SessionId } from '@deepseek-ai/dsh-session'
 import { validateStoredEvents } from '@deepseek-ai/dsh-session-persistence/src/storage-contract.ts'
-import { AUTOREPORT_SESSION_EVENT_TYPES, registerAutoReportSessionEvents } from '../src/session-events.js'
+import { AUTOREPORT_SESSION_EVENT_TYPES, probeIgnorableMarker, registerAutoReportSessionEvents } from '../src/session-events.js'
 
 describe('AutoReport session persistence vocabulary', () => {
   it('registers every plugin-owned event before session use', async () => {
@@ -45,10 +45,19 @@ describe('AutoReport session persistence vocabulary', () => {
     ).rejects.toThrow(/cannot make AutoReport session logs loadable/)
   })
 
-  it('tolerates a frozen vocabulary set when the appended marker is persisted', async () => {
-    const compatibility = await registerAutoReportSessionEvents({ registries: [] })
-    expect(compatibility.vocabularyRegistered).toBe(false)
-    expect(compatibility.markerPersisted).toBe(true)
+  it('tolerates a frozen vocabulary set only when the appended marker is persisted', async () => {
+    if (probeIgnorableMarker()) {
+      await expect(registerAutoReportSessionEvents({ registries: [] })).resolves.toMatchObject({
+        vocabularyRegistered: false,
+        markerPersisted: true,
+      })
+    } else {
+      // A stock dsh offers neither mechanism through these seams: activation
+      // must fail loud rather than write logs nobody can open.
+      await expect(
+        registerAutoReportSessionEvents({ registries: [] }),
+      ).rejects.toThrow(/cannot make AutoReport session logs loadable/)
+    }
   })
 
   it('makes an UNMARKED autoreport log loadable once the vocabulary is registered', async () => {

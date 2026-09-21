@@ -15,9 +15,12 @@ concurrency:
 
 env:
   NODE_VERSION: '22.19.0'
-  # Public upstream base. Later steps apply the source-only sandbox compatibility
-  # shim required by the pinned development checkout.
-  DSH_REF: 'b150a551b8d465e31e418e1b2eaf5e79bbb7d28e'
+  # Upstream base the plugin targets: dsh-v0.1.6-alpha.1 (docs/dependencies.md).
+  # The pinned development checkout additionally carries one upstream-candidate
+  # commit (Session.append { ignorable: true }) that is not on the public base
+  # yet; CI runs the stock base, where the in-process vocabulary registration
+  # carries log loadability and the marker probe degrades gracefully.
+  DSH_REF: '0d1f50007f9bca3f52b06e1c3074fa14d5fb0720'
 
 defaults:
   run:
@@ -56,13 +59,6 @@ jobs:
           ref: ${{ env.DSH_REF }}
           path: deepseek-harness
           persist-credentials: false
-
-      - name: Apply source-only DSH compatibility patch
-        working-directory: deepseek-harness
-        shell: bash
-        run: |
-          git apply --ignore-whitespace --check ../AutoReportDSH/patches/deepseek-harness-sandbox-workspace-root.patch
-          git apply --ignore-whitespace ../AutoReportDSH/patches/deepseek-harness-sandbox-workspace-root.patch
 
       - name: Set up pnpm
         uses: pnpm/action-setup@v4

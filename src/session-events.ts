@@ -100,8 +100,18 @@ function resolveSessionModule(anchor: string): string | undefined {
  */
 export function probeIgnorableMarker(session?: Session): boolean {
   const probe = session ?? Session.create(SessionId('autoreportdsh:compatibility-probe'))
-  const event = probe.append('turn/start', { turn: 1 }, { ignorable: true } as never)
-  return (event as { ignorable?: boolean }).ignorable === true
+  // The `ignorable` write option is not in a stock release yet: stock
+  // declarations reject a third `append` argument, while the pinned development
+  // checkout types it as the `AppendOptions` tuple member. Erasing the method's
+  // signature lets this call site compile against both. A stock runtime ignores
+  // the extra argument and returns an event without the marker.
+  const append = probe.append.bind(probe) as unknown as (
+    type: 'turn/start',
+    data: { turn: number },
+    options?: { ignorable?: boolean },
+  ) => { ignorable?: boolean }
+  const event = append('turn/start', { turn: 1 }, { ignorable: true })
+  return event.ignorable === true
 }
 
 /**
