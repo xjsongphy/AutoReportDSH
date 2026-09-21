@@ -3,6 +3,7 @@ dist/
 *.log
 .cdkit/
 cordis.overlay.generated.yml
+logs/
 
 # Sync state is runtime-local; the last-known-good report resources themselves
 # are bundled so a fresh/offline install is usable.
