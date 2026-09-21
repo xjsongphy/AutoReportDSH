@@ -1,18 +1,26 @@
 # Dependency wiring
 
 AutoReportDSH develops against a **pinned local harness checkout** (dsh is pre-release and
-iterating rapidly; PLAN.md risk 9).
+iterating rapidly; PLAN.md risk 9). The pin means **"verified against", not
+"exclusive"**: the plugin probes the seams it depends on and degrades gracefully
+where it can, so other dsh builds usually work — activation prints which pair
+is running (`src/dsh-version.ts`) instead of refusing.
 
 ## Pinned harness state
 
 - Checkout: sibling directory `../deepseek-harness` (all `link:` specifiers are
   repository-relative so clean clones, CI, and other machines resolve them)
-- Upstream base: `0d1f50007f` (`dsh-v0.1.6-alpha.1`, branch `master-sync` in the
-  sibling checkout) — the plugin targets the LATEST upstream, not the retired
-  `dsh-v0.1.1-rc.2` base it was originally written against.
-- Local development Harness: the sibling checkout carries one cherry-picked
-  upstream-candidate commit (`feat(session): append accepts { ignorable: true }
-  for non-surface events`). No source shim, no per-session sandbox-root patch.
+- Verified base: `6b1808f432` (`release(dsh): 0.1.6-alpha.2`, upstream
+  `master`) — the plugin targets the LATEST upstream release, not the retired
+  `dsh-v0.1.1-rc.2` base it was originally written against. CI runs its full
+  suite against exactly this commit; the `Canary` workflow re-runs the suite
+  nightly against upstream `master` to surface API drift early.
+- Local development Harness: the sibling checkout sits on the upstream release
+  commit (previously it carried a cherry-picked ignorable-append candidate;
+  that upstream change is NOT in alpha.2, so the marker probe degrades to the
+  in-process vocabulary mechanism — `Session.append` ignores the extra
+  argument and `probeIgnorableMarker` reports marker support by observation).
+  No source shim, no per-session sandbox-root patch.
 
 ## Compatibility seams
 
