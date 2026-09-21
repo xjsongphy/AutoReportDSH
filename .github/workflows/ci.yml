@@ -15,12 +15,10 @@ concurrency:
 
 env:
   NODE_VERSION: '22.19.0'
-  # Upstream base the plugin targets: dsh-v0.1.6-alpha.1 (docs/dependencies.md).
-  # The pinned development checkout additionally carries one upstream-candidate
-  # commit (Session.append { ignorable: true }) that is not on the public base
-  # yet; CI runs the stock base, where the in-process vocabulary registration
-  # carries log loadability and the marker probe degrades gracefully.
-  DSH_REF: '0d1f50007f9bca3f52b06e1c3074fa14d5fb0720'
+  # Upstream base the plugin is verified against: dsh-v0.1.6-alpha.2
+  # (docs/dependencies.md). The pin means "verified", not "exclusive": the
+  # plugin probes its host seams and warns — never refuses — on other builds.
+  DSH_REF: '6b1808f432adfa96ab6c2f033e158ca230422e16'
 
 defaults:
   run:

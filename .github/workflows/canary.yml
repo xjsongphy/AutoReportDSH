@@ -1,0 +1,81 @@
+# Nightly drift detector: run the plugin suite against upstream harness
+# master, so an API change that would break the next retarget shows up here —
+# days before a user hits it — instead of as a failed release CI run.
+#
+# This job is allowed to fail: a red canary is a signal to plan a retarget,
+# not a broken main. The pinned CI (ci.yml) remains the release gate.
+
+name: Canary
+
+on:
+  schedule:
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  NODE_VERSION: '22.19.0'
+
+defaults:
+  run:
+    working-directory: AutoReportDSH
+
+jobs:
+  upstream-master:
+    name: upstream master (drift probe)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Check out AutoReportDSH
+        uses: actions/checkout@v6
+        with:
+          path: AutoReportDSH
+          persist-credentials: false
+
+      - name: Check out the harness at upstream master
+        uses: actions/checkout@v6
+        with:
+          repository: deepseek-ai/deepseek-harness
+          ref: master
+          path: deepseek-harness
+          persist-credentials: false
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.7.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: |
+            AutoReportDSH/pnpm-lock.yaml
+            deepseek-harness/pnpm-lock.yaml
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Install and build the harness
+        working-directory: deepseek-harness
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm run build
+
+      - name: Install plugin dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Type-check and build plugin
+        run: |
+          pnpm run typecheck
+          pnpm run build
+
+      - name: Run test suite against upstream master
+        run: pnpm test
