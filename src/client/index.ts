@@ -43,17 +43,23 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 /** Required services (cordis fiber inject). */
 export const inject = ['slots', 'locale', 'connection', 'remote', 'settingsScope']
 
+/** Where the card sits in the Plugins page's Official group. */
+const CARD_ORDER = 50
+
 /**
- * Register the AutoReport settings card into the plugin-configuration tab.
+ * Register the AutoReport card into the Plugins page's `plugins.item` slot.
  * @param ctx - the browser plugin context.
  */
 export function apply(ctx: ClientContext): void {
   installCardStyles()
   ctx.effect(() => ctx.locale.register(SETTINGS_NS, { zh, en }), 'autoreportdsh: settings dictionaries')
+  const t = ctx.locale.bind(SETTINGS_NS)
   const card = new AutoReportCardController(ctx.settingsScope.bind({ namespace: AUTOREPORT_SETTINGS_NAMESPACE }))
-  ctx.slots.inject('settings.plugin.item', () => ctx.slots.register({
-    name: 'settings.plugin.item',
-    key: AUTOREPORT_SETTINGS_NAMESPACE,
+  ctx.slots.inject('plugins.item', () => ctx.slots.register({
+    name: 'plugins.item',
+    id: AUTOREPORT_SETTINGS_NAMESPACE,
+    order: CARD_ORDER,
+    label: () => t('title'),
     locale: SETTINGS_NS,
     inject: () => card.inject(),
   }, AutoReportCard))

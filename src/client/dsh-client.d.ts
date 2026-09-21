@@ -34,6 +34,8 @@ declare module '@deepseek-ai/dsh-client-runtime/client' {
     effect(fn: () => (() => void) | void, name?: string): void
     locale: {
       register(namespace: string, dictionaries: Record<string, unknown>): void
+      /** Bind a translation function to a registered namespace (alpha.2 client locale contract). */
+      bind(namespace: string): (key: string) => string
     }
     settingsScope: {
       bind<T>(options: { namespace: string }): import('@deepseek-ai/dsh-client-ui-settings/client').SettingsScope<T>

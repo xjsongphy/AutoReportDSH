@@ -4,21 +4,23 @@ import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-cli
 import type { AutoReportCardFace } from './controller.js'
 import { MineruStatusField, SelectField, ValueField, PythonField } from './fields.js'
 import { PluginCard } from './PluginCard.js'
-import type {} from '@deepseek-ai/dsh-client-ui-settings-plugins/client'
+// Type-only: the Plugins page's SlotMap merge (the 'plugins.item' entry).
+import type {} from '@deepseek-ai/dsh-client-ui-plugin-manager/client'
 
 /** Props the renderer binds for the AutoReport card. */
 export type AutoReportCardProps =
-  PropsRuntime<'settings.plugin.item'>
+  PropsRuntime<'plugins.item'>
   & PropsLocale<'settings.autoreport'>
   & InjectFace<AutoReportCardFace>
 
 /**
  * Render the AutoReport card.
- * @param props - locale copy, the card snapshot, and its form actions.
- * @returns the card.
+ * @param props - locale copy, the asked-for view, and the form state.
+ * @returns the one-liner for the Plugins page list, or the full form page.
  */
 export function AutoReportCard(props: AutoReportCardProps) {
   const { t } = props
+  if (props.view === 'summary') return t('description')
   const state = props.useAutoreportCard(snapshot => snapshot)
   const disabled = !state.writable
   const shared = {

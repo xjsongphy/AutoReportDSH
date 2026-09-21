@@ -51,7 +51,7 @@ async function bench() {
 function declareCards(slots: SlotRegistry): () => void {
   return slots.register({
     name: 'root',
-    children: { 'settings.plugin.item': { kind: 'keyed', scope: 'root' } },
+    children: { 'plugins.item': { kind: 'list', scope: 'root' } },
   } as never, () => null)
 }
 
@@ -66,7 +66,7 @@ describe('autoreport settings card apply', () => {
 
     await ctx.plugin({ inject: [...inject], apply }).await()
 
-    expect(slots.entries('settings.plugin.item').map(entry => entry.options.key))
+    expect(slots.entries('plugins.item').map(entry => entry.options.id))
       .toEqual([AUTOREPORT_SETTINGS_NAMESPACE])
     expect(locale.bind(SETTINGS_NS)('title')).toBe('AutoReport')
     locale.setLocale('en')
@@ -80,7 +80,7 @@ describe('autoreport settings card apply', () => {
     declareCards(slots)
 
     await Promise.resolve()
-    expect(slots.entries('settings.plugin.item')).toHaveLength(1)
+    expect(slots.entries('plugins.item')).toHaveLength(1)
   })
 
   it('collapses the card on teardown', async () => {
@@ -88,10 +88,10 @@ describe('autoreport settings card apply', () => {
     declareCards(slots)
     const fiber = ctx.plugin({ inject: [...inject], apply })
     await fiber.await()
-    expect(slots.entries('settings.plugin.item')).toHaveLength(1)
+    expect(slots.entries('plugins.item')).toHaveLength(1)
 
     await fiber.dispose()
 
-    expect(slots.entries('settings.plugin.item')).toHaveLength(0)
+    expect(slots.entries('plugins.item')).toHaveLength(0)
   })
 })
