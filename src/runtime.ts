@@ -70,6 +70,8 @@ export interface RuntimeOptions {
   readonly skipResourceSync?: boolean
   /** Interpreter discovery overlay; tests disable conda/PATH scans. */
   readonly pythonDetect?: PythonDetectOptions
+  /** Session-event marker probe override; tests model a DSH without the append option. */
+  readonly sessionEventProbe?: () => boolean
 }
 
 /**

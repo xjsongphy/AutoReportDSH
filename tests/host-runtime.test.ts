@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { SettingsProvider, type SettingsNamespace } from '@deepseek-ai/dsh-settings'
-import { SESSION_FORMAT_VERSION, Session, SessionId } from '@deepseek-ai/dsh-session'
+import { KNOWN_SESSION_EVENT_TYPES, SESSION_FORMAT_VERSION, Session, SessionId } from '@deepseek-ai/dsh-session'
 import type { Config } from '../src/config.js'
 import AutoReportWorkflowRuntime from '../src/runtime.js'
 import { AUTOREPORT_MAIN_PRESET, isAutoReportMainSession } from '../src/membership.js'
@@ -16,6 +16,7 @@ import { syncedResourcesRoot } from '../src/workspace/resource-sync.js'
 import { seedSyncedResourceStubs } from './helpers/synced-resource-stubs.js'
 import { ISOLATED_PYTHON_DETECT } from './helpers/managed-python-stub.js'
 import { AUTOREPORT_SCHEMA_VERSION } from '../src/workflow/events.js'
+import { AUTOREPORT_SESSION_EVENT_TYPES } from '../src/session-events.js'
 import { appendWorkflowEvent } from '../src/workflow/store.js'
 
 const tempDirs: string[] = []
@@ -280,6 +281,40 @@ describe('host workflow runtime', () => {
 
     expect(runtime.roleFor('role-lookup')).toBe('MAIN')
     expect(runtime.roleFor('no-such-session')).toBeUndefined()
+  })
+
+  it('registers the AutoReport session vocabulary before any session loads', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'autoreport-runtime-'))
+    tempDirs.push(root)
+    const ctx = new Context()
+    ctx.provide('tools', { guard: () => () => {} } as never)
+    const { apply: applyHost } = await import('../src/host.js')
+    await applyHost(ctx, { ...CONFIG, workspaceRoot: root }, {
+      pythonDetect: ISOLATED_PYTHON_DETECT,
+      skipResourceSync: true,
+    })
+
+    for (const type of AUTOREPORT_SESSION_EVENT_TYPES) {
+      expect(KNOWN_SESSION_EVENT_TYPES.has(type)).toBe(true)
+    }
+  })
+
+  it('warns when the running dsh cannot persist the ignorable marker', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'autoreport-runtime-'))
+    tempDirs.push(root)
+    const ctx = new Context()
+    ctx.provide('tools', { guard: () => () => {} } as never)
+    const warnings: unknown[][] = []
+    const logger = ctx.logger as unknown as { warn: (...args: unknown[]) => void }
+    logger.warn = (...args: unknown[]) => { warnings.push(args) }
+    const { apply: applyHost } = await import('../src/host.js')
+    await applyHost(ctx, { ...CONFIG, workspaceRoot: root }, {
+      pythonDetect: ISOLATED_PYTHON_DETECT,
+      skipResourceSync: true,
+      sessionEventProbe: () => false,
+    })
+
+    expect(warnings.flat().join(' ')).toMatch(/ignorable|portable|loadable/i)
   })
 
   it('wraps a mounted sandbox policy so an owned MAIN session resolves its role root', async () => {

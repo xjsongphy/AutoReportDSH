@@ -16,6 +16,7 @@ import { installAutoReportPythonEnv } from './python-env.js'
 import AutoReportWorkflowRuntime, { type RuntimeOptions } from './runtime.js'
 import { createReportInitCommand } from './workspace/command.js'
 import { loadProjectSettings, saveProjectSettings, workspaceIdForRoot } from './settings.js'
+import { registerAutoReportSessionEvents } from './session-events.js'
 import { installTurnGuards } from './workflow/turn-guard.js'
 
 export const name = 'autoreportdsh-host'
@@ -64,6 +65,21 @@ export function resolveHostConfig(raw: Partial<Config> = {}): Config {
  *   the DSH home itself.
  */
 export async function apply(ctx: Context, config: Partial<Config> = {}, options: RuntimeOptions = {}): Promise<void> {
+  // This must run before any AutoReport session is created or resumed: DSH
+  // validates the persisted event vocabulary at the session boundary, outside
+  // the agent loop. Registration makes the `autoreport/*` records loadable in
+  // this process; failing when neither loadability mechanism exists keeps the
+  // plugin from silently writing logs that no reader can open.
+  const compatibility = await registerAutoReportSessionEvents({
+    ...(options.sessionEventProbe === undefined ? {} : { markerProbe: options.sessionEventProbe }),
+  })
+  if (!compatibility.markerPersisted) {
+    ctx.logger.warn(
+      'autoreportdsh: this DSH cannot persist the ignorable session-event marker; '
+      + `${'autoreport/*'} records are loadable only in processes that load this plugin, `
+      + 'not by a plain dsh or a future build. Upgrade DSH to make the logs portable.',
+    )
+  }
   // Role isolation resolves each AutoReport session's writable root through
   // the host sandbox policy at enforcement time. Bare unit-test contexts may
   // omit the service; a real deployment must accept the override — install

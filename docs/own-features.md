@@ -63,15 +63,22 @@ restart/rebind tests prove it; in-memory event-fold tests alone are insufficient
 Role write isolation no longer depends on a DSH-side API: the host plugin wraps
 the in-process sandbox-policy singleton, so stock DSH confines each role to its
 own directory and the `patches/` source shim is retired (see
-`docs/dependencies.md`). Two upstream dependencies remain before a user-facing
-release may claim compatibility with an arbitrary DSH build:
+`docs/dependencies.md`).
 
-1. `Session.append` must accept `AppendOptions.ignorable` (development
-   workaround: one cherry-picked commit; upstream PR pending). Without it a
-   persisted `autoreport/*` log is unreadable by first-party readers.
-2. The subagent seam must keep exposing host-protocol child delivery and
-   `agent/created` scope injection; both are internal-leaning surfaces the
-   unified-steer change moved in 0.1.6-alpha.1.
+Session logs stay loadable through in-process vocabulary registration, verified
+against the stock release: a log carrying `autoreport/*` records loads once the
+plugin registers its names, and the plugin fails loud if a future DSH removes
+both that mechanism and the persisted-marker write option. The remaining gap is
+portability, not loadability: without upstream's `AppendOptions.ignorable` write
+option, a log is loadable where the plugin loads, not by a plain or future `dsh`
+build. Two upstream dependencies therefore remain before a release may claim
+compatibility with an arbitrary DSH build:
+
+1. `Session.append` accepting `AppendOptions.ignorable` (development workaround:
+   one cherry-picked commit; upstream PR pending) — closes the portability gap.
+2. The subagent seam keeping host-protocol child delivery and `agent/created`
+   scope injection; both are internal-leaning surfaces the unified-steer change
+   moved in 0.1.6-alpha.1.
 
 Likewise, the durable AutoReport task state is the workflow event log, not
 DSH's generic `todo_write`. The current Main-facing API creates and redispatches

@@ -25,14 +25,27 @@ host refuses it, so a role can never silently run on the full experiment root.
 The former `patches/deepseek-harness-sandbox-workspace-root.patch` source shim
 and the `sandbox/workspace-root` session event are retired.
 
-Third-party session events are now carried by upstream's own compatibility
-mechanism: `autoreport/*` records are written through `Session.append` with
-`ignorable: true`, which the first-party persistence reader accepts and skips on
-replay. The in-process `KNOWN_SESSION_EVENT_TYPES` registration is gone — it was
-the mechanism upstream explicitly rejected. The write-side option is currently a
-cherry-picked commit in the development checkout and is the first upstream PR
-candidate; until it lands, a user-facing install needs a DSH build whose
-`Session.append` accepts `AppendOptions.ignorable`.
+Third-party session events are loadable through two independent mechanisms, and
+host activation measures both (`src/session-events.ts`):
+
+1. **In-process vocabulary registration.** `KNOWN_SESSION_EVENT_TYPES` is a
+   runtime-mutable `Set`, and the reader consults that same object, so
+   registering the `autoreport/*` names at activation makes every later load in
+   this process accept them. Verified against the stock release installed on the
+   development machine (0.1.5-rc.1): the unregistered log is refused, and the
+   same log loads once registered. Nothing is persisted — a log opened without
+   this plugin loaded still refuses.
+2. **The persisted `ignorable` marker.** Records written with
+   `{ ignorable: true }` are self-describing and loadable anywhere, including
+   future builds and installations without the plugin. This is upstream's own
+   documented compatibility mechanism; the write-side option is not in a stock
+   release yet, so activation probes it and warns when it is missing.
+
+Activation fails loud only when NEITHER mechanism exists — the one state where
+the plugin would silently write logs no reader can open. The write-side option
+is a cherry-picked commit in the development checkout and remains the first
+upstream PR candidate; landing it upgrades every deployment from
+"loadable where the plugin loads" to "loadable anywhere".
 
 Child-scoped composition rides `agent/created` plus `agent.ctx.inject`; the
 former `ctx.subagents.registerContinuableSetup` seam was removed upstream along
