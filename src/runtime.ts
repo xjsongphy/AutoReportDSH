@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import { resolve } from 'node:path'
 import { Service, type Context } from '@deepseek-ai/cordis'
 import type { Agent, AgentHandle } from '@deepseek-ai/dsh-agent'
 import { PERSONA_PREFIX_SECTION } from '@deepseek-ai/dsh-system-prompt'
@@ -6,8 +7,9 @@ import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { ContentBlock } from '@deepseek-ai/dsh-llm'
 import { SessionId, type Session, type SessionEvent } from '@deepseek-ai/dsh-session'
 import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
+import type { SettingsProvider } from '@deepseek-ai/dsh-settings'
 import { deliverSubagentPrompt, type HostPromptDeliverer } from '@deepseek-ai/dsh-subagent/internal'
-import type { Config } from './config.js'
+import type { Config, ReportLanguage } from './config.js'
 import type { CoordinatorMessageSource, SubagentReportMessageSource } from './messages.js'
 import { AUTOREPORT_MAIN_PRESET, isAutoReportMainSession } from './membership.js'
 import { emptyArtifactFoldState, foldArtifact, type ArtifactCaller, type ArtifactFoldState } from './artifacts/observer.js'
@@ -35,7 +37,7 @@ import {
 import { observeWorkflowMessage, recoverWorkflowReports } from './workflow/report-observer.js'
 import { applyRoleSandbox } from './policy/sandbox-roots.js'
 import type { ReportSkillLanguage } from './skills-preset.js'
-import { ensureInitialized } from './workspace/init.js'
+import { ensureInitialized, switchReportLanguage } from './workspace/init.js'
 import { detectPythonEnvironments, missingAnalysisPackages, type PythonDetectOptions } from './python-detect.js'
 import { detectMineruStatus } from './mineru-status.js'
 import {
@@ -46,6 +48,7 @@ import {
   resolveWorkflowSettings,
   validatePythonExecutableSetting,
   workspaceIdForRoot,
+  type AutoReportProjectSettings,
   type AutoReportUserSettings,
   type WorkflowSettingsSnapshot,
 } from './settings.js'
@@ -112,6 +115,10 @@ export default class AutoReportWorkflowRuntime extends Service {
   private readonly residentProvisioning = new Map<string, Map<SpecialistRole, Promise<Agent | undefined>>>()
   /** Current DSH-resolved user defaults; each new workflow snapshots this once. */
   private userSettingsSource: () => AutoReportUserSettings
+  /** Settings provider when one is mounted; absent in settings-less test contexts. */
+  private settingsService: SettingsProvider | undefined
+  /** Last user settings this runtime observed, for diffing one change into a switch. */
+  private previousUserSettings: AutoReportUserSettings | undefined
 
   /**
    * Create the host runtime and observe committed report messages.
@@ -141,6 +148,7 @@ export default class AutoReportWorkflowRuntime extends Service {
     // the inject defers registration until a provider is mounted (pure test
     // contexts without settings keep working).
     ctx.inject(['settings'], sctx => {
+      this.settingsService = sctx.settings
       sctx.settings.installSection(
         ctx,
         AUTOREPORT_SETTINGS_NAMESPACE,
@@ -149,9 +157,10 @@ export default class AutoReportWorkflowRuntime extends Service {
         {
           setSource: current => { this.userSettingsSource = current },
           validate: value => validatePythonExecutableSetting(value, dshHome),
-          // Settings are deliberately read only when a workflow is created;
-          // existing snapshots must not change under an in-flight report.
-          onChange: () => {},
+          // Field values are still read only when a workflow is created; the
+          // one change that must reach the workspace on disk is a workspace's
+          // report language, which only the host can act on.
+          onChange: () => { this.observeUserSettingsChange() },
         },
       )
     })
@@ -784,9 +793,10 @@ export default class AutoReportWorkflowRuntime extends Service {
 
   /**
    * Idempotent first-turn workspace initialization for one Main session:
-   * resolves the settings chain (override > project > user > composition >
-   * defaults), materializes missing resources for the resolved language, then
-   * records the workflow once via {@link createWorkflow}.
+   * resolves the settings chain (override > workspace language > project >
+   * user > composition > defaults), materializes missing resources for the
+   * resolved language, then records the workflow once via
+   * {@link createWorkflow}.
    * @param session - Main session whose cwd (or configured root) is the experiment workspace.
    */
   maybeInitialize(session: Session): void {
@@ -802,9 +812,11 @@ export default class AutoReportWorkflowRuntime extends Service {
       settings = resolveWorkflowSettings({
         user: this.userSettingsSource(),
         project,
+        workspaceRoot: root,
         composition: this.config,
         dshHome: this.settingsHome ?? resolveDshHome(),
       })
+      this.adoptLegacyLanguage(root, project)
       ensureInitialized(root, settings.reportLanguage)
     } catch (error: unknown) {
       // A broken external settings document must not wedge the first turn;
@@ -819,6 +831,108 @@ export default class AutoReportWorkflowRuntime extends Service {
     }
     this.createWorkflow(session, settings)
     this.warnMissingAnalysisPackages(settings.pythonExecutable)
+  }
+
+  /**
+   * Language currently in effect for one workspace root under the live user
+   * settings: the authoritative map entry, else the legacy project setting,
+   * else the user default.
+   * @param root - absolute workspace root.
+   * @returns the language a workflow created now would resolve.
+   */
+  workspaceLanguageFor(root: string): ReportLanguage {
+    return this.effectiveLanguageFor(root, this.userSettingsSource())
+  }
+
+  /**
+   * Record a legacy `project.json` language in the authoritative map, once.
+   *
+   * Before this revision the only per-workspace language lived in that file, so
+   * a workspace configured by an older build would otherwise keep resolving
+   * from a layer the settings page can neither see nor set. Adopting it on the
+   * first initialization is idempotent: once the map carries the entry, later
+   * resolutions read it directly and never re-adopt.
+   * @param root - absolute workspace root.
+   * @param project - project settings already loaded for that root.
+   */
+  private adoptLegacyLanguage(root: string, project: AutoReportProjectSettings): void {
+    const key = resolve(root)
+    if (project.reportLanguage === undefined) return
+    if (this.userSettingsSource().workspaceLanguages?.[key] !== undefined) return
+    void this.writeWorkspaceLanguage(key, project.reportLanguage)
+  }
+
+  /**
+   * React to one user-settings change by switching the templates of every
+   * workspace whose resolved language moved.
+   *
+   * The first observation is not a change: it records the baseline. Later
+   * observations compare each key either snapshot carries, so a move recorded
+   * as a fresh map entry is diffed against the language in effect just before
+   * it (the legacy project setting, then the user default). A default-only
+   * change therefore switches nothing, because no key moves.
+   */
+  private observeUserSettingsChange(): void {
+    const next = this.userSettingsSource()
+    const previous = this.previousUserSettings
+    this.previousUserSettings = next
+    if (previous === undefined) return
+    const roots = new Set([
+      ...Object.keys(previous.workspaceLanguages ?? {}),
+      ...Object.keys(next.workspaceLanguages ?? {}),
+    ])
+    for (const root of roots) {
+      const before = this.effectiveLanguageFor(root, previous)
+      const after = this.effectiveLanguageFor(root, next)
+      if (before === after) continue
+      try {
+        switchReportLanguage(resolve(root), before, after)
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error)
+        try {
+          this.ctx.logger.warn('AutoReportDSH: language switch failed for %s: %s', root, message)
+        } catch {
+          // A bare test Context may lack a working logger; the switch already failed loud enough.
+        }
+      }
+    }
+  }
+
+  /**
+   * Language one workspace root resolves to under a given settings snapshot.
+   * @param root - absolute workspace root.
+   * @param settings - user settings snapshot the resolution runs against.
+   */
+  private effectiveLanguageFor(root: string, settings: AutoReportUserSettings): ReportLanguage {
+    const explicit = settings.workspaceLanguages?.[resolve(root)]
+    if (explicit !== undefined) return explicit
+    const legacy = loadProjectSettings(this.settingsHome, workspaceIdForRoot(root)).reportLanguage
+    return legacy ?? settings.defaultReportLanguage
+  }
+
+  /**
+   * Persist one workspace's language through the settings service. An absent
+   * provider (bare test contexts) or a refused write is logged, never thrown:
+   * the caller is a settings notification or a first turn, neither of which
+   * owns a user-facing failure path.
+   * @param root - resolved absolute workspace root, used as the map key.
+   * @param language - language to record.
+   */
+  private async writeWorkspaceLanguage(root: string, language: ReportLanguage): Promise<void> {
+    const settings = this.settingsService
+    if (settings === undefined) return
+    try {
+      await settings.mutate(AUTOREPORT_SETTINGS_NAMESPACE, [
+        { op: 'set', path: ['workspaceLanguages', root], value: language },
+      ])
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error)
+      try {
+        this.ctx.logger.warn('AutoReportDSH: could not record the workspace language: %s', message)
+      } catch {
+        // A bare test Context may lack a working logger.
+      }
+    }
   }
 
   /**

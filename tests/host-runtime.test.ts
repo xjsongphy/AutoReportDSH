@@ -11,7 +11,7 @@ import AutoReportWorkflowRuntime from '../src/runtime.js'
 import { AUTOREPORT_MAIN_PRESET, isAutoReportMainSession } from '../src/membership.js'
 import { REQUIRED_DIRS } from '../src/workspace/init.js'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
-import { resolveWorkflowSettings, saveProjectSettings, workspaceIdForRoot } from '../src/settings.js'
+import { AUTOREPORT_SETTINGS_NAMESPACE, resolveWorkflowSettings, saveProjectSettings, workspaceIdForRoot } from '../src/settings.js'
 import { ISOLATED_PYTHON_DETECT } from './helpers/managed-python-stub.js'
 import { AUTOREPORT_SCHEMA_VERSION } from '../src/workflow/events.js'
 import { appendWorkflowEvent } from '../src/workflow/store.js'
@@ -528,5 +528,54 @@ describe('host workflow runtime', () => {
     expect(live.state.currentDelegation('task-7')?.phase).toBe('completed')
     expect(live.state.currentDelegation('task-7')?.report?.response).toBe('processed.csv written')
     expect(live.state.getTask('task-7')?.status).toBe('completed')
+  })
+})
+
+describe('per-workspace language switching', () => {
+  /** The runtime installs its settings section from an inject callback, as a live host does. */
+  async function waitForSettingsSection(ctx: Context): Promise<void> {
+    await vi.waitFor(() => {
+      expect(ctx.settings.describe().some(entry => entry.ns === 'autoreport')).toBe(true)
+    })
+  }
+
+  it('resolves the language from the user workspace map and adopts a legacy project setting', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'autoreport-runtime-'))
+    const home = mkdtempSync(join(tmpdir(), 'autoreport-home-'))
+    tempDirs.push(root, home)
+    saveProjectSettings(home, workspaceIdForRoot(root), { reportLanguage: 'typst' })
+    const ctx = new Context()
+    await ctx.plugin(MemorySettings, { doc: { autoreport: {} } })
+    const runtime = createRuntime(ctx, { ...CONFIG, workspaceRoot: root }, { settingsHome: home })
+    await waitForSettingsSection(ctx)
+    const session = rootSession('main-adopt', AUTOREPORT_MAIN_PRESET)
+    runtime.maybeInitialize(session)
+    expect(runtime.forSession(session).state.projection().meta?.settings?.reportLanguage).toBe('typst')
+    // The first initialization adopts the legacy value into the authoritative map.
+    await vi.waitFor(() => {
+      expect(ctx.settings.describe().find(entry => entry.ns === 'autoreport')?.user)
+        .toMatchObject({ workspaceLanguages: { [root]: 'typst' } })
+    })
+  })
+
+  it('switches the workspace templates when the map changes under a live runtime', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'autoreport-runtime-'))
+    const home = mkdtempSync(join(tmpdir(), 'autoreport-home-'))
+    tempDirs.push(root, home)
+    const ctx = new Context()
+    await ctx.plugin(MemorySettings, { doc: { autoreport: {} } })
+    const runtime = createRuntime(ctx, { ...CONFIG, workspaceRoot: root }, { settingsHome: home })
+    await waitForSettingsSection(ctx)
+    const session = rootSession('main-switch', AUTOREPORT_MAIN_PRESET)
+    runtime.maybeInitialize(session)
+    expect(existsSync(join(root, 'Report/main.tex'))).toBe(true)
+
+    await ctx.settings.mutate(AUTOREPORT_SETTINGS_NAMESPACE, [
+      { op: 'set', path: ['workspaceLanguages', root], value: 'typst' },
+    ])
+    await vi.waitFor(() => {
+      expect(existsSync(join(root, 'Report/main.typ'))).toBe(true)
+    })
+    expect(existsSync(join(root, 'Report/main.tex'))).toBe(false)
   })
 })
