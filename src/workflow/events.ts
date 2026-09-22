@@ -214,43 +214,75 @@ export interface WorkflowMetaSnapshot {
   readonly settings?: WorkflowSettingsSnapshot
 }
 
-declare module '@deepseek-ai/dsh-session/types' {
-  interface SessionEventMap {
-    /**
-     * Workflow-level metadata (workspace, language, initialization). Log-only
-     * AutoReport fact; latest write wins.
-     */
-    'autoreport/workflow': WorkflowMetaSnapshot
-    /**
-     * Role↔child identity and provisioning state. Reservations land BEFORE
-     * `startContinuable()` so guards authorize the child's first tool call;
-     * rebinds supersede the prior binding for the role. Log-only.
-     */
-    'autoreport/role-binding': RoleBindingSnapshot
-    /**
-     * Whole task snapshot (subject, owner, checklist, dependencies, status).
-     * Every mutation replaces the snapshot; replay is last-write-wins per
-     * task id. Log-only.
-     */
-    'autoreport/task': TaskSnapshot
-    /**
-     * Whole delegation-attempt snapshot keyed by `(taskId, delegationRevision)`.
-     * Records WHY work waits (phase), never a live waiter; late reports for
-     * older revisions keep their own snapshots as stale evidence. Log-only.
-     */
-    'autoreport/delegation': DelegationSnapshot
-    /**
-     * One produced-file observation from a filesystem or process observer.
-     * Model claims never create these. Log-only.
-     */
-    'autoreport/artifact': ArtifactSnapshot
-    /**
-     * Agent-authored semantic description for one workspace-relative path.
-     * Last-write-wins per path. Log-only; never written into the experiment
-     * workspace.
-     */
-    'autoreport/file-note': FileNoteSnapshot
-    /** Agent-authored role-level manifest notes; last-write-wins per role. */
-    'autoreport/role-note': RoleNoteSnapshot
-  }
+/**
+ * AutoReport's own durable record payloads, keyed by record type.
+ *
+ * These are records in the plugin's own log (`src/workflow/store.ts`), NOT
+ * members of DSH's `SessionEventMap`. The plugin deliberately extends no host
+ * vocabulary: a session log it touched contains only DSH's own event types, so
+ * any harness build reads it without a registration step or an `ignorable`
+ * marker. Declaring the map locally is what keeps that boundary typed.
+ */
+export interface AutoReportRecordMap {
+  /**
+   * Workflow-level metadata (workspace, language, initialization). Log-only
+   * AutoReport fact; latest write wins.
+   */
+  'autoreport/workflow': WorkflowMetaSnapshot
+  /**
+   * Role↔child identity and provisioning state. Reservations land BEFORE
+   * `startContinuable()` so guards authorize the child's first tool call;
+   * rebinds supersede the prior binding for the role. Log-only.
+   */
+  'autoreport/role-binding': RoleBindingSnapshot
+  /**
+   * Whole task snapshot (subject, owner, checklist, dependencies, status).
+   * Every mutation replaces the snapshot; replay is last-write-wins per
+   * task id. Log-only.
+   */
+  'autoreport/task': TaskSnapshot
+  /**
+   * Whole delegation-attempt snapshot keyed by `(taskId, delegationRevision)`.
+   * Records WHY work waits (phase), never a live waiter; late reports for
+   * older revisions keep their own snapshots as stale evidence. Log-only.
+   */
+  'autoreport/delegation': DelegationSnapshot
+  /**
+   * One produced-file observation from a filesystem or process observer.
+   * Model claims never create these. Log-only.
+   */
+  'autoreport/artifact': ArtifactSnapshot
+  /**
+   * Agent-authored semantic description for one workspace-relative path.
+   * Last-write-wins per path. Log-only; never written into the experiment
+   * workspace.
+   */
+  'autoreport/file-note': FileNoteSnapshot
+  /** Agent-authored role-level manifest notes; last-write-wins per role. */
+  'autoreport/role-note': RoleNoteSnapshot
+}
+
+/** One record type the AutoReport log can hold. */
+export type AutoReportRecordType = keyof AutoReportRecordMap
+
+/** Every AutoReport record type, for validation and migration. */
+export const AUTOREPORT_RECORD_TYPES: readonly AutoReportRecordType[] = [
+  'autoreport/workflow',
+  'autoreport/role-binding',
+  'autoreport/task',
+  'autoreport/delegation',
+  'autoreport/artifact',
+  'autoreport/file-note',
+  'autoreport/role-note',
+]
+
+const RECORD_TYPE_SET: ReadonlySet<string> = new Set(AUTOREPORT_RECORD_TYPES)
+
+/**
+ * Whether a raw type name is one this build's workflow log understands.
+ * @param type - candidate record type from a log line or a legacy host event.
+ * @returns whether {@link AutoReportRecordMap} describes it.
+ */
+export function isAutoReportRecordType(type: string): type is AutoReportRecordType {
+  return RECORD_TYPE_SET.has(type)
 }

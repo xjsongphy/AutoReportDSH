@@ -16,11 +16,9 @@ is running (`src/dsh-version.ts`) instead of refusing.
   suite against exactly this commit; the `Canary` workflow re-runs the suite
   nightly against upstream `master` to surface API drift early.
 - Local development Harness: the sibling checkout sits on the upstream release
-  commit (previously it carried a cherry-picked ignorable-append candidate;
-  that upstream change is NOT in alpha.2, so the marker probe degrades to the
-  in-process vocabulary mechanism — `Session.append` ignores the extra
-  argument and `probeIgnorableMarker` reports marker support by observation).
-  No source shim, no per-session sandbox-root patch.
+  commit. No source shim, no per-session sandbox-root patch, and no
+  append-option dependency — the plugin writes only its own log, so the
+  `ignorable` marker is no longer needed by anything.
 
 ## Compatibility seams
 
@@ -33,27 +31,31 @@ host refuses it, so a role can never silently run on the full experiment root.
 The former `patches/deepseek-harness-sandbox-workspace-root.patch` source shim
 and the `sandbox/workspace-root` session event are retired.
 
-Third-party session events are loadable through two independent mechanisms, and
-host activation measures both (`src/session-events.ts`):
+**Session-log compatibility is no longer a compatibility seam, because the
+plugin puts nothing of its own in the session log.** AutoReport's durable
+records live in a log the plugin owns:
+`<home>/autoreport/<workspaceId>/workflow/<session id>/session.jsonl`
+(`src/workflow/store.ts`) — under the harness home, keyed by workspace, exactly
+where AutoReportCLI kept its per-workspace state. A session log this plugin
+produced therefore contains
+only DSH's own event types, and every harness build — plain, current, or future,
+with or without the plugin — reads it unmodified.
 
-1. **In-process vocabulary registration.** `KNOWN_SESSION_EVENT_TYPES` is a
-   runtime-mutable `Set`, and the reader consults that same object, so
-   registering the `autoreport/*` names at activation makes every later load in
-   this process accept them. Verified against the stock release installed on the
-   development machine (0.1.5-rc.1): the unregistered log is refused, and the
-   same log loads once registered. Nothing is persisted — a log opened without
-   this plugin loaded still refuses.
-2. **The persisted `ignorable` marker.** Records written with
-   `{ ignorable: true }` are self-describing and loadable anywhere, including
-   future builds and installations without the plugin. This is upstream's own
-   documented compatibility mechanism; the write-side option is not in a stock
-   release yet, so activation probes it and warns when it is missing.
+This replaced two mechanisms that both depended on the host:
 
-Activation fails loud only when NEITHER mechanism exists — the one state where
-the plugin would silently write logs no reader can open. The write-side option
-is a cherry-picked commit in the development checkout and remains the first
-upstream PR candidate; landing it upgrades every deployment from
-"loadable where the plugin loads" to "loadable anywhere".
+- **The persisted `ignorable` marker** is unreachable on 0.1.6-alpha.2:
+  `Session.append` now accepts options only for surface event types
+  (`...opts: T extends SurfaceEventType ? [SurfaceIntent<T>] : []`), and
+  `AppendOptions` no longer exists. All `autoreport/*` types are non-surface.
+- **In-process vocabulary registration** (`KNOWN_SESSION_EVENT_TYPES` is a
+  runtime-mutable `Set`) still works, but `known-event-types.ts` states upstream
+  rejected event-name registration by design: it "does not classify omission
+  safety and would make reads composition-dependent". Relying on it would mean
+  depending on a mutable set the host author has declared is not a mechanism.
+
+The retired `src/session-events.ts` also carried a marker probe and a
+fail-loud activation check; both are gone with the mechanism they guarded. See
+`docs/own-features.md` for the log's layout, naming, and durability bounds.
 
 Child-scoped composition rides `agent/created` plus `agent.ctx.inject`; the
 former `ctx.subagents.registerContinuableSetup` seam was removed upstream along

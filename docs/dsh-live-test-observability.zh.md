@@ -66,7 +66,7 @@ cd ~/Develop/AutoReportDSH
 - **模型选择器**：确认 MAIN 路由为 `openai-codex / gpt-5.6-luna`。已开始的 session 保留其已记录的路由。
 - **子 agent 面包屑/会话**：subagent 是持久的 continuable child sessions；可查看各角色对话。它们保持角色权限，不能获得 MAIN 的任意写入权。
 - **工具卡片**：检查 `bash`、`send_to_agent`、`report_workflow` 的参数与结果。REPORT 通过 bash 按 `latex-compile` / `typst-compile` skill 编译。
-- **报告任务状态**：`autoreport/*` 事件与 `send_to_agent` / `report_workflow` 结果给出 task、revision、waiting/completed/blocked/timeout 状态；不要以 UI todo 取代该工作流状态。
+- **报告任务状态**：`<home>/autoreport/<workspaceId>/workflow/<id>/session.jsonl` 里的 `autoreport/*` 记录与 `send_to_agent` / `report_workflow` 结果给出 task、revision、waiting/completed/blocked/timeout 状态；不要以 UI todo 取代该工作流状态。Trajectory 事件账本不再包含 `autoreport/*`。
 
 ## 5. 持久化日志、产物和最终报告
 
@@ -75,10 +75,19 @@ DSH session 是追加事件日志。每条 MAIN/child session 都记录：
 - `request/header` 与 `request/context`：实际 provider/model 和请求工具集合；
 - `assistant/message`：对话内容和可用 token usage；
 - `tool/call` / `tool/result`：工具参数、结果及错误；
-- `user/message`：用户输入、subagent `report_workflow`（`source.kind = subagent-report`）、以及 turn-stopping 二次启动（`source.plugin = autoreportdsh/turn-guard`，`summary` 为用户可读的 AutoReport resumed 文案）；
-- `autoreport/workflow`、`autoreport/task`、`autoreport/delegation`、`autoreport/role-binding`、`autoreport/artifact`、`autoreport/file-note`、`autoreport/role-note`：AutoReport 的 durable 状态。
+- `user/message`：用户输入、subagent `report_workflow`（`source.kind = subagent-report`）、以及 turn-stopping 二次启动（`source.plugin = autoreportdsh/turn-guard`，`summary` 为用户可读的 AutoReport resumed 文案）。
 
-不要另写一套 debug log。导出或打开原始 session 文件即可定位委派、报告、产物和为何 turn 被再次拉起。
+**AutoReport 的 durable 状态不在 session log 里。** 它写在插件自己的日志中，位于 harness home 下、按工作区归档：
+
+```text
+<home>/autoreport/<workspaceId>/workflow/<main session id>/session.jsonl
+```
+
+（`<workspaceId>` 是工作区绝对路径 SHA-256 的前 16 位；与该工作区的 `project.json` 同级。）
+
+每行一条记录（`autoreport/workflow`、`autoreport/task`、`autoreport/delegation`、`autoreport/role-binding`、`autoreport/artifact`、`autoreport/file-note`、`autoreport/role-note`），带 `seq` 与 epoch 毫秒 `time`；文件首行是 header。命名沿用 DSH 自己的 session 文件规则。这样 session log 只含 DSH 自身的词汇，任何 dsh 版本都能直接加载，不需要注册或标记。
+
+定位委派、报告、产物和「为何 turn 被再次拉起」时，对话相关看 session 文件，工作流状态看上面这个日志。日志刻意不放进实验工作区：`.autoreport` 在移植过来的策略里是**工作区内不可写**的保留名，不是存储位置。
 
 Web 的历史页、Chat 与 Trajectory 都从这些事件投影。会话导出功能可导出原始 session log，适合离线审计。
 

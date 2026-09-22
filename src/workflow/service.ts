@@ -1,18 +1,18 @@
 /**
  * The durable report-workflow projection (PLAN.md §2.6): folds `autoreport/*`
- * session events into authoritative task/delegation/binding/artifact state.
- * Folding is deterministic and replay-safe; snapshots are last-write-wins per
- * key, and late reports for older revisions stay in their own delegation
- * slots as stale evidence without touching the current attempt.
+ * records from the plugin's own workflow log into authoritative
+ * task/delegation/binding/artifact state. Folding is deterministic and
+ * replay-safe; snapshots are last-write-wins per key, and late reports for
+ * older revisions stay in their own delegation slots as stale evidence without
+ * touching the current attempt.
  *
  * Recovery inputs are exactly this projection plus the workspace files —
  * conversation history is never consulted (persistence/recovery rule).
  * @module
  */
 
-import type { Session, SessionEvent, SessionEventType } from '@deepseek-ai/dsh-session'
 import type { AutoReportRole, SpecialistRole } from '../roles.js'
-import { isAutoreportEvent } from './store.js'
+import type { WorkflowRecord } from './store.js'
 import { delegationKey } from './protocol.js'
 import type {
   ArtifactSnapshot,
@@ -89,23 +89,22 @@ export class WorkflowState {
   }
 
   /**
-   * Fold a complete event array (cold load / recovery path).
-   * @param events - session log slice containing any `autoreport/*` records.
+   * Fold a complete record array (cold load / recovery path).
+   * @param records - the workflow log's committed records, in file order.
    * @returns the folded state.
    */
-  static fromEvents(events: ReadonlyArray<SessionEvent<SessionEventType>>): WorkflowState {
+  static fromRecords(records: readonly WorkflowRecord[]): WorkflowState {
     const state = WorkflowState.empty()
-    for (const event of events) state.apply(event)
+    for (const record of records) state.apply(record)
     return state
   }
 
   /**
-   * Apply one event incrementally. Non-AutoReport events are ignored so
-   * callers may subscribe to the raw session stream unfiltered.
-   * @param event - a committed session event.
+   * Apply one record incrementally. The log holds nothing but AutoReport
+   * records, so no type filter is needed here.
+   * @param event - a committed workflow record.
    */
-  apply(event: SessionEvent<SessionEventType>): void {
-    if (!isAutoreportEvent(event.type)) return
+  apply(event: WorkflowRecord): void {
     switch (event.type) {
       case 'autoreport/workflow':
         this.builder.meta = event.data
@@ -246,14 +245,4 @@ export class WorkflowState {
     return { ...previous, steps: normalized, revision: previous.revision + 1 }
   }
 
-  /**
-   * Subscribe to a live session's future events (host wiring helper). The
-   * caller owns the cordis-level subscription; this only replays what already
-   * exists in the log so a late subscriber starts consistent.
-   * @param session - session whose existing log seeds the state.
-   * @returns this state seeded from `session.snapshotEvents()`.
-   */
-  static fromSession(session: Session): WorkflowState {
-    return WorkflowState.fromEvents(session.snapshotEvents())
-  }
 }

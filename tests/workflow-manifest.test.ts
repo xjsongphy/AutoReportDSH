@@ -1,13 +1,20 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, beforeEach } from 'vitest'
 import { Session, SessionId } from '@deepseek-ai/dsh-session'
 import { AUTOREPORT_SCHEMA_VERSION } from '../src/workflow/events.js'
 import { projectManifest } from '../src/workflow/manifest.js'
 import { appendWorkflowEvent } from '../src/workflow/store.js'
 import { WorkflowState } from '../src/workflow/service.js'
+import { workflowState } from './helpers/workflow-log.js'
+import { sessionIn, workspaceForTests, workflowState } from './helpers/workflow-log.js'
+
+// A fresh workspace per test: fixtures reuse session ids, so a shared root
+// would let one test's workflow log leak into the next.
+let WORKSPACE = workspaceForTests('workflow-manifest')
+beforeEach(() => { WORKSPACE = workspaceForTests('workflow-manifest') })
 
 describe('AutoReport manifest projection', () => {
   it('keeps the original shape while converting internal epoch times to ISO UTC', () => {
-    const session = Session.create(SessionId('manifest-main'))
+    const session = sessionIn(WORKSPACE, 'manifest-main')
     appendWorkflowEvent(session, 'autoreport/artifact', {
       version: AUTOREPORT_SCHEMA_VERSION,
       path: 'Theory/model.md',
@@ -38,7 +45,7 @@ describe('AutoReport manifest projection', () => {
       updatedAt: 1_756_634_453_000,
     })
 
-    const manifest = projectManifest(WorkflowState.fromEvents(session.snapshotEvents()).projection(), 'THEORY', () => 0)
+    const manifest = projectManifest(workflowState(session).projection(), 'THEORY', () => 0)
     expect(manifest).toEqual({
       agent_type: 'theory',
       updated_at: '2025-08-31T10:00:53+00:00',
@@ -54,8 +61,8 @@ describe('AutoReport manifest projection', () => {
   })
 
   it('returns an empty but valid manifest for a role without artifacts', () => {
-    const session = Session.create(SessionId('manifest-empty'))
-    const manifest = projectManifest(WorkflowState.fromEvents(session.snapshotEvents()).projection(), 'REPORT', () => 0)
+    const session = sessionIn(WORKSPACE, 'manifest-empty')
+    const manifest = projectManifest(workflowState(session).projection(), 'REPORT', () => 0)
     expect(manifest).toEqual({
       agent_type: 'report',
       updated_at: '1970-01-01T00:00:00+00:00',

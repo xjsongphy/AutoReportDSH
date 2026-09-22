@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { Session, SessionId } from '@deepseek-ai/dsh-session'
 import { appendWorkflowEvent } from '../src/workflow/store.js'
 import { WorkflowState } from '../src/workflow/service.js'
@@ -13,6 +13,8 @@ import {
 } from '../src/workflow/events.js'
 import { resolveWorkflowSettings, type WorkflowSettingsSnapshot } from '../src/settings.js'
 import { createSendToAgentTool, type SendToAgentWorkflow } from '../src/tools/send-to-agent.js'
+import { workflowState } from './helpers/workflow-log.js'
+import { sessionIn, workspaceForTests, workflowState } from './helpers/workflow-log.js'
 
 const CONFIG: Config = {
   defaultReportLanguage: 'latex',
@@ -50,8 +52,8 @@ function workflowMeta(settings: WorkflowSettingsSnapshot): WorkflowMetaSnapshot 
 }
 
 function harness() {
-  const session = Session.create(SessionId('main'))
-  const state = WorkflowState.fromSession(session)
+  const session = sessionIn(WORKSPACE, 'main')
+  const state = workflowState(session)
   const waiters = new WaiterRegistry()
   const roleRegistry = new RoleRegistry()
   const workflow: SendToAgentWorkflow = {
@@ -89,10 +91,15 @@ function harness() {
   return { session, state, waiters, roleRegistry, workflow, subagents, call }
 }
 
+// A fresh workspace per test: fixtures reuse session ids, so a shared root
+// would let one test's workflow log leak into the next.
+let WORKSPACE = workspaceForTests('send-to-agent')
+beforeEach(() => { WORKSPACE = workspaceForTests('send-to-agent') })
+
 describe('send_to_agent', () => {
   it('dispatches without a prior report_task when task_id is omitted', async () => {
-    const session = Session.create(SessionId('main'))
-    const state = WorkflowState.fromSession(session)
+    const session = sessionIn(WORKSPACE, 'main')
+    const state = workflowState(session)
     const waiters = new WaiterRegistry()
     const roleRegistry = new RoleRegistry()
     const workflow: SendToAgentWorkflow = {
@@ -185,8 +192,8 @@ describe('send_to_agent', () => {
   })
 
   it('rebinds and starts fresh when followup is NOT_RESUMABLE', async () => {
-    const session = Session.create(SessionId('main'))
-    const state = WorkflowState.fromSession(session)
+    const session = sessionIn(WORKSPACE, 'main')
+    const state = workflowState(session)
     const waiters = new WaiterRegistry()
     const roleRegistry = new RoleRegistry()
     const workflow: SendToAgentWorkflow = {
@@ -310,8 +317,8 @@ describe('send_to_agent', () => {
   })
 
   it('rebinds a failed role onto a new reserved child id', async () => {
-    const session = Session.create(SessionId('main'))
-    const state = WorkflowState.fromSession(session)
+    const session = sessionIn(WORKSPACE, 'main')
+    const state = workflowState(session)
     const waiters = new WaiterRegistry()
     const roleRegistry = new RoleRegistry()
     const workflow: SendToAgentWorkflow = {
@@ -437,8 +444,8 @@ describe('send_to_agent', () => {
   })
 
   it('routes the child through the snapshot specialist model and wait bound when present', async () => {
-    const session = Session.create(SessionId('main'))
-    const state = WorkflowState.fromSession(session)
+    const session = sessionIn(WORKSPACE, 'main')
+    const state = workflowState(session)
     const waiters = new WaiterRegistry()
     const roleRegistry = new RoleRegistry()
     const workflow: SendToAgentWorkflow = {
@@ -474,8 +481,8 @@ describe('send_to_agent', () => {
   })
 
   it('passes no agentOptions when the snapshot records explicit Main inheritance', async () => {
-    const session = Session.create(SessionId('main'))
-    const state = WorkflowState.fromSession(session)
+    const session = sessionIn(WORKSPACE, 'main')
+    const state = workflowState(session)
     const waiters = new WaiterRegistry()
     const roleRegistry = new RoleRegistry()
     const workflow: SendToAgentWorkflow = {

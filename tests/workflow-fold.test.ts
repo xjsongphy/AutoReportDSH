@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, beforeEach } from 'vitest'
 import { Session, SessionId } from '@deepseek-ai/dsh-session'
 import { appendWorkflowEvent } from '../src/workflow/store.js'
 import { WorkflowState } from '../src/workflow/service.js'
@@ -8,15 +8,21 @@ import type {
   RoleBindingSnapshot,
   TaskSnapshot,
 } from '../src/workflow/events.js'
+import { sessionIn, workflowRecords, workspaceForTests, workflowState } from './helpers/workflow-log.js'
 
 /**
  * End-to-end workflow-fold scenario (PLAN §2.3–2.6 + recovery rule):
  * reserve → active → create → dispatch rev1 → waiting_for_child → success
  * report rev1 → dispatch rev2 → late stale rev1 report → rebind mid-task.
  */
+// A fresh workspace per test: fixtures reuse session ids, so a shared root
+// would let one test's workflow log leak into the next.
+let WORKSPACE = workspaceForTests('workflow-fold')
+beforeEach(() => { WORKSPACE = workspaceForTests('workflow-fold') })
+
 describe('workflow fold scenario', () => {
   it('folds the whole lifecycle deterministically and keeps stale evidence', () => {
-    const session = Session.create(SessionId('fold-main'))
+    const session = sessionIn(WORKSPACE, 'fold-main')
     const commit = <T extends keyof SessionEventMap & string>(type: T, data: SessionEventMap[T]): void => {
       appendWorkflowEvent(session, type as never, data as never)
     }
@@ -133,7 +139,7 @@ describe('workflow fold scenario', () => {
     commit('autoreport/role-binding', bindingV2)
 
     // ---- assertions over a COLD FOLD (recovery from log only) ----
-    const state = WorkflowState.fromEvents(session.snapshotEvents())
+    const state = workflowState(session)
     expect(state.projection().meta).toBeUndefined()
     expect(state.getTask('task-7')?.status).toBe('running')
     expect(state.getTask('task-7')?.latestDelegationRevision).toBe(2)
@@ -156,20 +162,45 @@ describe('workflow fold scenario', () => {
     expect(state.projection().artifacts.map(artifact => artifact.path)).toEqual(['Data/Processed/fit.csv'])
   })
 
-  it('reconstructs identically when events arrive incrementally', () => {
-    const session = Session.create(SessionId('incr'))
-    const incremental = WorkflowState.empty()
-    void incremental
-    const events = session.snapshotEvents().slice()
-    const batch = WorkflowState.fromEvents(events)
+  it('reconstructs identically when records arrive incrementally', () => {
+    const session = sessionIn(WORKSPACE, 'incr')
+    appendWorkflowEvent(session, 'autoreport/task', {
+      version: 1,
+      taskId: 'task-9',
+      subject: 'Analyze',
+      role: 'DATA_ANALYSIS',
+      dependencies: [],
+      status: 'open',
+      revision: 1,
+      steps: [],
+      scopes: ['Data/Processed'],
+      latestDelegationRevision: 0,
+    })
+    appendWorkflowEvent(session, 'autoreport/task', {
+      version: 1,
+      taskId: 'task-9',
+      subject: 'Analyze',
+      role: 'DATA_ANALYSIS',
+      dependencies: [],
+      status: 'running',
+      revision: 2,
+      steps: [],
+      scopes: ['Data/Processed'],
+      latestDelegationRevision: 1,
+    })
+    const records = workflowRecords(session)
+    expect(records).toHaveLength(2)
+
+    const batch = WorkflowState.fromRecords(records)
     const stepwise = WorkflowState.empty()
-    for (const event of events) stepwise.apply(event)
-    expect(stepwise.projection().tasks.size).toBe(batch.projection().tasks.size)
+    for (const record of records) stepwise.apply(record)
+    expect(stepwise.projection()).toEqual(batch.projection())
+    expect(batch.projection().tasks.get('task-9')?.status).toBe('running')
   })
 
   it('ignores non-autoreport events during apply', () => {
     const state = WorkflowState.empty()
-    const session = Session.create(SessionId('noise'))
+    const session = sessionIn(WORKSPACE, 'noise')
     session.append('turn/start', { turn: 1 })
     state.apply(session.snapshotEvents()[0]!)
     expect(state.projection().tasks.size).toBe(0)

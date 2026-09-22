@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, beforeEach } from 'vitest'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import { Session, SessionId } from '@deepseek-ai/dsh-session'
 import { appendWorkflowEvent } from '../src/workflow/store.js'
@@ -6,6 +6,8 @@ import { WorkflowState } from '../src/workflow/service.js'
 import { WaiterRegistry } from '../src/workflow/waiters.js'
 import type { DelegationSnapshot, TaskSnapshot } from '../src/workflow/events.js'
 import { observeWorkflowMessage, recoverWorkflowReports } from '../src/workflow/report-observer.js'
+import { workflowState } from './helpers/workflow-log.js'
+import { sessionIn, workspaceForTests, workflowState } from './helpers/workflow-log.js'
 
 function seedWaiting(session: Session, state: WorkflowState, revision = 1): DelegationSnapshot {
   const task: TaskSnapshot = {
@@ -45,10 +47,15 @@ function observe(session: Session, state: WorkflowState, waiters: WaiterRegistry
   })
 }
 
+// A fresh workspace per test: fixtures reuse session ids, so a shared root
+// would let one test's workflow log leak into the next.
+let WORKSPACE = workspaceForTests('report-observer')
+beforeEach(() => { WORKSPACE = workspaceForTests('report-observer') })
+
 describe('report observer', () => {
   it('folds a valid success report into completed and settles the waiter', async () => {
-    const session = Session.create(SessionId('parent'))
-    const state = WorkflowState.fromSession(session)
+    const session = sessionIn(WORKSPACE, 'parent')
+    const state = workflowState(session)
     const waiters = new WaiterRegistry()
     seedWaiting(session, state)
     const pending = waiters.wait('task-7#1', 5_000)
@@ -72,8 +79,8 @@ describe('report observer', () => {
   })
 
   it('settles wait:true from the report delivery inbox splice before MAIN consumes it', async () => {
-    const session = Session.create(SessionId('parent'))
-    const state = WorkflowState.fromSession(session)
+    const session = sessionIn(WORKSPACE, 'parent')
+    const state = workflowState(session)
     const waiters = new WaiterRegistry()
     seedWaiting(session, state)
     const pending = waiters.wait('task-7#1', 5_000)
@@ -103,8 +110,8 @@ describe('report observer', () => {
   })
 
   it('keeps a late report as stale evidence without completing the current revision', () => {
-    const session = Session.create(SessionId('parent'))
-    const state = WorkflowState.fromSession(session)
+    const session = sessionIn(WORKSPACE, 'parent')
+    const state = workflowState(session)
     const waiters = new WaiterRegistry()
     seedWaiting(session, state, 1)
     seedWaiting(session, state, 2)
@@ -126,8 +133,8 @@ describe('report observer', () => {
   })
 
   it('accepts a valid report after this same revision timed out', () => {
-    const session = Session.create(SessionId('parent'))
-    const state = WorkflowState.fromSession(session)
+    const session = sessionIn(WORKSPACE, 'parent')
+    const state = workflowState(session)
     const waiters = new WaiterRegistry()
     const waiting = seedWaiting(session, state)
     state.apply(appendWorkflowEvent(session, 'autoreport/delegation', {
@@ -153,8 +160,8 @@ describe('report observer', () => {
   })
 
   it('ignores a later delivery with a different message id after a terminal report is accepted', () => {
-    const session = Session.create(SessionId('parent'))
-    const state = WorkflowState.fromSession(session)
+    const session = sessionIn(WORKSPACE, 'parent')
+    const state = workflowState(session)
     const waiters = new WaiterRegistry()
     seedWaiting(session, state)
     const first = session.append('user/message', createUserMessage({
@@ -191,8 +198,8 @@ describe('report observer', () => {
   })
 
   it('recovers a waiting attempt from a logged delivery that never produced autoreport/delegation', () => {
-    const session = Session.create(SessionId('parent'))
-    const warm = WorkflowState.fromSession(session)
+    const session = sessionIn(WORKSPACE, 'parent')
+    const warm = workflowState(session)
     seedWaiting(session, warm)
     session.append('user/message', createUserMessage({
       content: [{ type: 'text', text: JSON.stringify({
@@ -205,7 +212,7 @@ describe('report observer', () => {
       }) }],
       source: { kind: 'subagent-report', form: 'relay', senderSessionId: SessionId('child-da') },
     }), { surfaceOp: 'append' })
-    const cold = WorkflowState.fromSession(session)
+    const cold = workflowState(session)
     expect(cold.currentDelegation('task-7')?.phase).toBe('waiting_for_child')
     recoverWorkflowReports(session, {
       state: cold,
@@ -220,8 +227,8 @@ describe('report observer', () => {
   })
 
   it('is idempotent for a duplicate transport message id', () => {
-    const session = Session.create(SessionId('parent'))
-    const state = WorkflowState.fromSession(session)
+    const session = sessionIn(WORKSPACE, 'parent')
+    const state = workflowState(session)
     const waiters = new WaiterRegistry()
     seedWaiting(session, state)
     const message = createUserMessage({
@@ -244,8 +251,8 @@ describe('report observer', () => {
   })
 
   it('marks the task blocked when the child reports blocked', () => {
-    const session = Session.create(SessionId('parent'))
-    const state = WorkflowState.fromSession(session)
+    const session = sessionIn(WORKSPACE, 'parent')
+    const state = workflowState(session)
     const waiters = new WaiterRegistry()
     seedWaiting(session, state)
     const event = session.append('user/message', createUserMessage({
@@ -266,8 +273,8 @@ describe('report observer', () => {
   })
 
   it('marks the task failed for an invalid child report', () => {
-    const session = Session.create(SessionId('parent'))
-    const state = WorkflowState.fromSession(session)
+    const session = sessionIn(WORKSPACE, 'parent')
+    const state = workflowState(session)
     const waiters = new WaiterRegistry()
     seedWaiting(session, state)
     const event = session.append('user/message', createUserMessage({
@@ -280,8 +287,8 @@ describe('report observer', () => {
   })
 
   it('does not change the task when a stale report arrives', () => {
-    const session = Session.create(SessionId('parent'))
-    const state = WorkflowState.fromSession(session)
+    const session = sessionIn(WORKSPACE, 'parent')
+    const state = workflowState(session)
     const waiters = new WaiterRegistry()
     seedWaiting(session, state, 1)
     seedWaiting(session, state, 2)
@@ -301,8 +308,8 @@ describe('report observer', () => {
   })
 
   it('turns a malformed child report into an explicit quality failure', async () => {
-    const session = Session.create(SessionId('parent'))
-    const state = WorkflowState.fromSession(session)
+    const session = sessionIn(WORKSPACE, 'parent')
+    const state = workflowState(session)
     const waiters = new WaiterRegistry()
     seedWaiting(session, state)
     const pending = waiters.wait('task-7#1', 5_000)
@@ -317,8 +324,8 @@ describe('report observer', () => {
   })
 
   it('fails the current attempt when the child settles without a workflow report', async () => {
-    const session = Session.create(SessionId('parent'))
-    const state = WorkflowState.fromSession(session)
+    const session = sessionIn(WORKSPACE, 'parent')
+    const state = workflowState(session)
     const waiters = new WaiterRegistry()
     seedWaiting(session, state)
     const pending = waiters.wait('task-7#1', 5_000)
@@ -338,8 +345,8 @@ describe('report observer', () => {
   })
 
   it('ignores reports from an unbound child', () => {
-    const session = Session.create(SessionId('parent'))
-    const state = WorkflowState.fromSession(session)
+    const session = sessionIn(WORKSPACE, 'parent')
+    const state = workflowState(session)
     const waiters = new WaiterRegistry()
     seedWaiting(session, state)
     const event = session.append('user/message', createUserMessage({

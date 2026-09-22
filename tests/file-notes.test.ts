@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, beforeEach } from 'vitest'
 import { Session, SessionId } from '@deepseek-ai/dsh-session'
 import { AUTOREPORT_SCHEMA_VERSION, type ArtifactSnapshot, type FileNoteSnapshot } from '../src/workflow/events.js'
 import { appendWorkflowEvent } from '../src/workflow/store.js'
@@ -10,6 +10,8 @@ import {
 } from '../src/workflow/file-notes.js'
 import { formatWorkflowRelay } from '../src/workflow/display.js'
 import { parseWorkflowEnvelopeFromText } from '../src/workflow/protocol.js'
+import { workflowState } from './helpers/workflow-log.js'
+import { sessionIn, workspaceForTests, workflowState } from './helpers/workflow-log.js'
 
 function artifact(path: string, recordedAt: number, extras: Partial<ArtifactSnapshot> = {}): ArtifactSnapshot {
   return {
@@ -25,9 +27,14 @@ function artifact(path: string, recordedAt: number, extras: Partial<ArtifactSnap
   }
 }
 
+// A fresh workspace per test: fixtures reuse session ids, so a shared root
+// would let one test's workflow log leak into the next.
+let WORKSPACE = workspaceForTests('file-notes')
+beforeEach(() => { WORKSPACE = workspaceForTests('file-notes') })
+
 describe('semantic file notes', () => {
   it('folds last-write-wins notes and treats newer artifacts as stale', () => {
-    const session = Session.create(SessionId('notes-main'))
+    const session = sessionIn(WORKSPACE, 'notes-main')
     appendWorkflowEvent(session, 'autoreport/delegation', {
       version: AUTOREPORT_SCHEMA_VERSION,
       taskId: 'task-1',
@@ -64,17 +71,17 @@ describe('semantic file notes', () => {
       descriptionUpdatedAt: 30,
       producedBy: 'THEORY',
     })
-    const state = WorkflowState.fromEvents(session.snapshotEvents())
+    const state = workflowState(session)
     expect(state.projection().fileNotes.get('Theory/model.md')?.description).toBe('linearized pendulum')
     expect(staleDescribedPaths(state.projection(), SessionId('child-theory'))).toEqual([])
 
     appendWorkflowEvent(session, 'autoreport/artifact', artifact('Theory/model.md', 40))
-    const later = WorkflowState.fromEvents(session.snapshotEvents())
+    const later = workflowState(session)
     expect(staleDescribedPaths(later.projection(), SessionId('child-theory'))).toEqual(['Theory/model.md'])
   })
 
   it('lists files with no description as stale', () => {
-    const session = Session.create(SessionId('stale-main'))
+    const session = sessionIn(WORKSPACE, 'stale-main')
     appendWorkflowEvent(session, 'autoreport/task', {
       version: AUTOREPORT_SCHEMA_VERSION,
       taskId: 'task-1',
@@ -98,12 +105,12 @@ describe('semantic file notes', () => {
     }
     appendWorkflowEvent(session, 'autoreport/delegation', delegation)
     appendWorkflowEvent(session, 'autoreport/artifact', artifact('Theory/equations.md', 20))
-    const projection = WorkflowState.fromEvents(session.snapshotEvents()).projection()
+    const projection = workflowState(session).projection()
     expect(staleDescribedPathsForDelegation(projection, delegation)).toEqual(['Theory/equations.md'])
   })
 
   it('builds a bounded role handoff from notes and prior tasks', () => {
-    const session = Session.create(SessionId('handoff-main'))
+    const session = sessionIn(WORKSPACE, 'handoff-main')
     appendWorkflowEvent(session, 'autoreport/artifact', artifact('Theory/model.md', 20))
     const note: FileNoteSnapshot = {
       version: AUTOREPORT_SCHEMA_VERSION,
@@ -147,7 +154,7 @@ describe('semantic file notes', () => {
         produced_files: ['Theory/model.md'],
       },
     })
-    const text = roleHandoffText(WorkflowState.fromEvents(session.snapshotEvents()).projection(), 'THEORY')
+    const text = roleHandoffText(workflowState(session).projection(), 'THEORY')
     expect(text).toContain('Role memory for THEORY')
     expect(text).toContain('Theory/model.md: linearized model')
     expect(text).toContain('neglect friction')
