@@ -24,10 +24,30 @@ const CONFIG: Config = {
   delegationWaitTimeoutMs: 600_000,
 }
 
+/** Read the model-facing description of one registered tool in a test scope. */
+function descriptionOf(tools: { name: string }[], name: string): string {
+  const tool = tools.find(entry => entry.name === name) as unknown as { description: string } | undefined
+  if (tool === undefined) throw new Error(`tool ${name} is not registered`)
+  return tool.description
+}
+
+/** Read one parameter description from a registered tool in a test scope. */
+function parameterDescriptionOf(tools: { name: string }[], name: string, parameter: string): string {
+  // `defineTool` stores the compiled JSON Schema, so descriptions live under
+  // `properties` rather than on the declared spec.
+  const tool = tools.find(entry => entry.name === name) as unknown as
+    | { parameters: { properties?: Record<string, { description?: string }> } }
+    | undefined
+  const description = tool?.parameters?.properties?.[parameter]?.description
+  if (description === undefined) throw new Error(`tool ${name} parameter ${parameter} has no description`)
+  return description
+}
+
 function childContext(id = 'child-1', cwd?: string) {
   const tools: { name: string }[] = []
   const skills: { name: string }[] = []
   const sections: { name: string; text: string }[] = []
+  const contexts: { name: string; text: string }[] = []
   const providers: string[] = []
   const sessionId = SessionId(id)
   const session = Session.create(sessionId, undefined, {
@@ -67,6 +87,13 @@ function childContext(id = 'child-1', cwd?: string) {
         sections.push(section)
         return () => {}
       },
+      context: (context: { name: string; text: string }) => {
+        contexts.push(context)
+        return () => {}
+      },
+      // The numbers only have to be finite and distinct for these assertions.
+      getSectionOrder: () => 2900,
+      getContextOrder: () => 120,
     },
     skills: skillsService,
   }
@@ -76,6 +103,7 @@ function childContext(id = 'child-1', cwd?: string) {
     tools,
     skills,
     sections,
+    contexts,
     providers,
     session,
     listeners,
@@ -134,9 +162,23 @@ describe('report router', () => {
     roleRegistry.registerReserved(binding)
     installRoutedReportTool(child.ctx, child.agent as never, host.ctx, routedWorkflow({ roleRegistry }))
     expect(child.tools.map(tool => tool.name)).toEqual(['manifest', 'report_workflow'])
+    // The enum meaning and the notes-patch format are owned by the tool schemas:
+    // personas must never restate them (see tests/personas.test.ts).
+    expect(descriptionOf(child.tools, 'report_workflow')).toContain('missing_data')
+    expect(descriptionOf(child.tools, 'report_workflow')).toContain('quality')
+    // The patch format is owned by the parameter the model fills, not by the
+    // tool description (codex/harness convention: constraints live on params).
+    expect(parameterDescriptionOf(child.tools, 'manifest', 'notes_patch')).toContain('Line-based patch')
+    expect(parameterDescriptionOf(child.tools, 'manifest', 'notes_patch')).toContain('End of File')
+    expect(parameterDescriptionOf(child.tools, 'manifest', 'notes_patch')).toContain('rejected')
     expect(child.skills).toEqual([])
     expect(child.sections.some(section => section.name === 'tool:report-workflow')).toBe(false)
-    expect(child.sections.some(section => section.name === 'report-environment')).toBe(false)
+    expect(child.sections.some(section => section.name === 'tool:report-environment')).toBe(false)
+    // Every routed specialist reads the tool-owned report protocol; MAIN's own
+    // delegation policy stays in the preset scope and must not leak here.
+    const protocol = child.contexts.find(context => context.name === 'autoreport:report-protocol')
+    expect(protocol?.text).toContain('must finish through `report_workflow`')
+    expect(child.sections.some(section => section.name === 'tool:send_to_agent')).toBe(false)
     expect(child.tools.some(tool => tool.name === 'report')).toBe(false)
     expect(
       child.session.snapshotEvents().filter(event => event.type === 'sandbox/mode').map(event => event.data),
@@ -163,13 +205,13 @@ describe('report router', () => {
       'experiment-report-writer',
       'latex-compile',
     ])
-    const environment = child.sections.find(section => section.name === 'report-environment')
+    const environment = child.sections.find(section => section.name === 'tool:report-environment')
     expect(environment?.text).toContain('language: latex')
     expect(environment?.text).toContain('entry: Report/main.tex')
     expect(environment?.text).toContain('compile skill: latex-compile')
     // The active language's layout rules ride the prompt: they are unconditional
     // guidance, so no child has to load a skill to obtain them.
-    const guidance = child.sections.find(section => section.name === 'report-language-guidance')
+    const guidance = child.sections.find(section => section.name === 'tool:report-language')
     expect(guidance?.text).toContain('# Active report language: LaTeX')
     expect(guidance?.text).toContain('Use `[H]` for every figure and table')
     expect(child.sections.map(section => section.name)).not.toEqual(expect.arrayContaining([
@@ -201,7 +243,12 @@ describe('report router', () => {
           return () => {}
         },
       },
-      systemPrompt: { section: () => () => {} },
+      systemPrompt: {
+        section: () => () => {},
+        context: () => () => {},
+        getSectionOrder: () => 2900,
+        getContextOrder: () => 120,
+      },
       skills: { register: () => () => {} },
       get: () => undefined,
     } as unknown as Context

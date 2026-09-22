@@ -332,7 +332,7 @@ describe('host workflow runtime', () => {
     }): Promise<{ agent: Agent; dispose: () => Promise<void> }> => {
       const childCtx = {
         get: (key: string) => key === 'agentPresets' ? { composeFrom } : undefined,
-        systemPrompt: { section },
+        systemPrompt: { section, getSectionOrder: () => 0 },
         tools: { restrict },
         inject: async () => {},
       } as unknown as Context

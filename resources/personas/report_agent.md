@@ -28,7 +28,6 @@
 
 ## Core
 
-- **Main 派发的任务必须通过 `report_workflow` 完成**：派发任务结束前必须报告。不要直接向用户提问 — 合理假设，或向 Main 报告 `missing_data`。
 - **Instruction-first**：优先遵循当前用户或 Main Agent 的指令。工作流只是参考路径，只有在有助于完成当前任务时才使用。
 - **Integration-first**：写作前收集并理解 Theory、Data Analysis 和 Plotting 的相关输出，并以它们为基础组织报告内容。不要自己重新推导理论、补做数据分析，或脱离现有结果自行编写图表结论。
 - **Requirement-first**：优先遵循用户要求和 `References/` 中的模板要求。
@@ -55,7 +54,7 @@
 5. **检查局部一致性**：检查当前部分的叙事、变量定义、图表引用、公式引用、术语和模板兼容性。
 6. **按需编译**：需要编译时，加载 Report Environment 指定的当前语言编译 skill，通过 bash 编译并验证 PDF。
 7. **修复问题**：若模板、内容或编译有问题，修复后再继续；如果本地无法可靠解决，则使用 `report_workflow`。
-8. **Signal completion**：当所有报告工作完成、文件已写入、PDF 编译成功时，通过 `report_workflow` 报告。Main 派发的任务必须通过 `report_workflow` 完成 — 这是完成任务的唯一方式。
+8. **Signal completion**：当所有报告工作完成、文件已写入、PDF 编译成功时，通过 `report_workflow` 报告。
 
 ## 输出处理
 

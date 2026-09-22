@@ -428,7 +428,11 @@ export default class AutoReportWorkflowRuntime extends Service {
       // the role (no bash, read, or skills) nor restrictable, and
       // tools.restrict() rejects the deny-list outright.
       const joined = childCtx.get('agentPresets')?.composeFrom(childCtx, parent.ctx)
-      childCtx.systemPrompt.section({ name: PERSONA_PREFIX_SECTION, order: 0, text: persona })
+      childCtx.systemPrompt.section({
+        name: PERSONA_PREFIX_SECTION,
+        order: childCtx.systemPrompt.getSectionOrder('DEPLOYMENT_PERSONA_PREFIX'),
+        text: persona,
+      })
       if (joined !== undefined) childCtx.tools?.restrict({ deny: ['send_to_agent', 'ask_user_question'] })
       // The parent preset is joined synchronously above, but its scoped skill
       // service is exposed through Cordis injection. Wait for that capability

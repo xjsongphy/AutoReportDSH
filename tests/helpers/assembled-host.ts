@@ -45,12 +45,41 @@ export interface RecordedSection {
   readonly text: string
 }
 
+/**
+ * Placement numbers the fakes resolve. Mirrors `SECTION_ORDERS` /
+ * `CONTEXT_ORDERS` in `@deepseek-ai/dsh-system-prompt`; an unknown name throws
+ * so a typo in a plugin's order name fails the test instead of sorting as
+ * `undefined`.
+ */
+const FAKE_SECTION_ORDERS: Readonly<Record<string, number>> = {
+  DEPLOYMENT_PERSONA_PREFIX: 0,
+  TOOL_SUBAGENT: 2800,
+  TOOL_REPORT: 2900,
+}
+
+const FAKE_CONTEXT_ORDERS: Readonly<Record<string, number>> = {
+  SUBAGENT_DELEGATION: 120,
+}
+
+function fakeSectionOrder(name: string): number {
+  const order = FAKE_SECTION_ORDERS[name]
+  if (order === undefined) throw new Error(`unknown prompt section order "${name}"`)
+  return order
+}
+
+function fakeContextOrder(name: string): number {
+  const order = FAKE_CONTEXT_ORDERS[name]
+  if (order === undefined) throw new Error(`unknown prompt context order "${name}"`)
+  return order
+}
+
 export interface ChildRecorder {
   readonly agent: Agent
   readonly ctx: Parameters<typeof reportRouterModule.installRoutedReportTool>[0]
   readonly toolNames: string[]
   readonly skillNames: string[]
   readonly sections: RecordedSection[]
+  readonly contexts: RecordedSection[]
 }
 
 export function makeChildRecorder(
@@ -61,6 +90,7 @@ export function makeChildRecorder(
   const toolNames: string[] = []
   const skillNames: string[] = []
   const sections: RecordedSection[] = []
+  const contexts: RecordedSection[] = []
   const skillsService = {
     register: (skill: { name: string }) => {
       skillNames.push(skill.name)
@@ -94,6 +124,12 @@ export function makeChildRecorder(
         sections.push(section)
         return () => {}
       },
+      context: (context: { name: string; text: string }) => {
+        contexts.push(context)
+        return () => {}
+      },
+      getSectionOrder: fakeSectionOrder,
+      getContextOrder: fakeContextOrder,
     },
     skills: skillsService,
     inject: (names: readonly string[], handler: (scope: unknown) => void) => {
@@ -104,7 +140,7 @@ export function makeChildRecorder(
     autoreportWorkflow: workflow,
   }
   ;(agent as { ctx?: unknown }).ctx = ctx
-  return { agent, ctx: ctx as ChildRecorder['ctx'], toolNames, skillNames, sections }
+  return { agent, ctx: ctx as ChildRecorder['ctx'], toolNames, skillNames, sections, contexts }
 }
 
 export interface Assembled {
@@ -215,6 +251,9 @@ export async function assemble(options: AssembleOptions = {}): Promise<Assembled
   ctx.provide('systemPrompt', {
     tools: () => () => {},
     section: () => () => {},
+    context: () => () => {},
+    getSectionOrder: fakeSectionOrder,
+    getContextOrder: fakeContextOrder,
   } as never)
   ctx.provide('skills', {
     register: (registration: { name: string }) => {

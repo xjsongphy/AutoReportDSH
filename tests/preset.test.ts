@@ -7,6 +7,7 @@ describe('autoreport preset contribution', () => {
   it('registers only the current fixed-workflow MAIN tools', () => {
     const tools: string[] = []
     const skills: string[] = []
+    const sections: { name: string; text: string }[] = []
     let referencesProvider = 0
     const skillsService = {
       register: (registration: { name: string }) => {
@@ -27,7 +28,13 @@ describe('autoreport preset contribution', () => {
         },
       },
       skills: skillsService,
-      systemPrompt: { section: () => () => {} },
+      systemPrompt: {
+        section: (section: { name: string; text: string }) => {
+          sections.push(section)
+          return () => {}
+        },
+        getSectionOrder: () => 2900,
+      },
       subagents: {},
       autoreportWorkflow: {
         config: {
@@ -45,5 +52,11 @@ describe('autoreport preset contribution', () => {
     expect(tools.sort()).toEqual(['manifest', 'send_to_agent', 'workflow_task'])
     expect(skills).toEqual(['pdf-reference-reader'])
     expect(referencesProvider).toBe(1)
+    // Tool-owned policy ships with the tools (master dsh convention): the two
+    // sections carry the dispatch and task-board rules, not the persona.
+    expect(sections.map(section => section.name)).toEqual(['tool:send_to_agent', 'tool:workflow_task'])
+    expect(sections[0]?.text).toContain('Use `send_to_agent` for all subagent delegation')
+    expect(sections[0]?.text).toContain('Do not include:')
+    expect(sections[1]?.text).toContain('do not use generic todo tools')
   })
 })

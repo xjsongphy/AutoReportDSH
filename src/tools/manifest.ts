@@ -9,6 +9,9 @@ import type { WorkflowProjection } from '../workflow/service.js'
 import { delegationKey, normalizeProducedPath } from '../workflow/protocol.js'
 import { MAX_FILE_DESCRIPTION, MAX_FILE_NOTES } from '../workflow/file-notes.js'
 
+/** Upper bound for one manifest call's per-file description updates. */
+const MAX_FILE_ENTRIES = 64
+
 const MANIFEST_AGENT_TYPES: Readonly<Record<string, AutoReportRole>> = {
   main: 'MAIN',
   theory: 'THEORY',
@@ -158,7 +161,7 @@ function manifestValue(manifest: ReturnType<typeof projectManifest>) {
 function fileRecords(raw: unknown): ReadonlyArray<Readonly<Record<string, unknown>>> {
   if (raw === undefined) return []
   if (!Array.isArray(raw)) throw new Error('files must be an array')
-  if (raw.length > 64) throw new Error('files exceeds 64 entries')
+  if (raw.length > MAX_FILE_ENTRIES) throw new Error(`files exceeds ${MAX_FILE_ENTRIES} entries`)
   return raw.map((entry, index) => {
     if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) {
       throw new Error(`files[${index}] must be an object`)
@@ -189,23 +192,29 @@ export function installManifestTool(ctx: Context, hostCtx: Context, role: AutoRe
   try {
     disposeTool = ctx.tools.register(defineTool({
       name: 'manifest',
-      description: 'AutoReport semantic manifest for file discovery and cross-agent handoff. The runtime maintains the file list and update times; agents maintain semantic file descriptions and role-level notes. Read any role manifest; update only your own. Changed files require fresh descriptions before successful workflow completion. Role notes are durable handoff context across tasks and session rebinds.',
+      description: [
+        'AutoReport semantic manifest for file discovery and cross-agent handoff: the runtime maintains the tracked file list and update times, agents maintain semantic file descriptions and role-level notes.',
+        'Read any role manifest; update only your own — action="update" defaults to the caller\u2019s own role, and agent is only for reading another role. A path must already be tracked for your role to accept a description; unknown paths are reported back in not_found and nothing is written for them.',
+        'Descriptions are the handoff contract: report_workflow(success) is rejected while any file you changed still has a stale description.',
+        'Role notes are durable handoff context that survives across tasks and session rebinds. The reply reports what was applied (description_changes, notes_diff) and what was rejected (not_found, description_mismatches), plus the refreshed manifest.',
+      ].join(' '),
       parameters: {
-        action: { type: 'string', enum: ['read', 'update'], default: 'read' },
-        agent: { type: 'string', enum: ['main', 'theory', 'data_analysis', 'plotting', 'report'] },
+        action: { type: 'string', enum: ['read', 'update'], default: 'read', description: 'read returns the manifest (default); update writes file descriptions and role notes for your own role.' },
+        agent: { type: 'string', enum: ['main', 'theory', 'data_analysis', 'plotting', 'report'], description: 'Role whose manifest to act on; defaults to your own role. update may only target your own role.' },
         files: {
           type: 'array',
+          description: `File description updates for files you wrote, at most ${MAX_FILE_ENTRIES} entries.`,
           items: {
             type: 'object',
             additionalProperties: false,
             properties: {
-              path: { type: 'string', required: true },
-              description_old: { type: 'string' },
-              description_new: { type: 'string' },
+              path: { type: 'string', required: true, description: 'Workspace-relative path of a file already tracked for your role.' },
+              description_old: { type: 'string', description: 'Expected current description. A value that does not match the current description skips this path and reports it in description_mismatches instead of writing; omit it to overwrite unconditionally.' },
+              description_new: { type: 'string', required: true, description: `New semantic description of the file: what it contains and what downstream agents need from it, up to ${MAX_FILE_DESCRIPTION} chars.` },
             },
           },
         },
-        notes_patch: { type: 'string' },
+        notes_patch: { type: 'string', description: `Line-based patch applied to your own role notes, not a replacement document, up to ${MAX_FILE_NOTES} chars: unchanged context lines start with a space, additions with "+", removals with "-", hunks are separated by a line containing "@@" (optionally "@@ <anchor>"), and "*** End of File" anchors a hunk to the end of the notes. Context lines must match the current notes or the whole patch is rejected.` },
       },
       output: {
         schema: { type: 'object', additionalProperties: true, properties: {} },

@@ -2,6 +2,11 @@ import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { loadMainPersona, loadSpecialistPersona } from '../src/personas.js'
+import {
+  CHILD_REPORT_PROTOCOL_CONTEXT,
+  SEND_TO_AGENT_SYSTEM_PROMPT,
+  WORKFLOW_TASK_SYSTEM_PROMPT,
+} from '../src/tools/prompt.js'
 import { allSpecialistRoles } from '../src/roles.js'
 
 const CLI_AGENTS = join(import.meta.dirname, '../../autoreportcli/templates/agents')
@@ -69,6 +74,7 @@ const FORBIDDEN_PERSONA_PATTERNS: readonly { pattern: RegExp; reason: string }[]
   { pattern: /automatically validated/iu, reason: 'runtime auto-validation claims must be true' },
   { pattern: /do the work yourself/iu, reason: 'contradicts MAIN coordinate-do-not-execute' },
   { pattern: /status="success"/u, reason: 'outcome status tutorials belong to tool descriptions' },
+  { pattern: /Issue reporting/u, reason: 'block_type enum meaning lives in the report_workflow tool description, not personas' },
 ]
 
 function assertNoForbiddenPatterns(text: string, label: string): void {
@@ -84,22 +90,49 @@ describe('persona slimming', () => {
     expect(text).not.toContain('report_task')
     expect(text).toContain('pdf-reference-reader')
     expect(text).toContain('bash')
-    expect(text).toContain('Selective workflow tasks')
-    expect(text).toContain('workflow_task')
     expect(text).toContain('No tables by default')
     expect(text).not.toContain('subagent_fork')
     expect(text).not.toContain('`respond`')
     assertNoForbiddenPatterns(text, 'MAIN persona')
+    // Dispatch-payload and task-board policy is tool-owned (the
+    // `tool:send_to_agent` / `tool:workflow_task` sections), not persona prose.
+    expect(text).not.toContain('Selective workflow tasks')
+    expect(text).not.toContain('## Dispatch Protocol')
+    expect(text).not.toContain('Minimal dispatch')
+    const dispatch = SEND_TO_AGENT_SYSTEM_PROMPT
+    expect(dispatch).toContain('Use `send_to_agent` for all subagent delegation')
+    expect(dispatch).toContain('No micromanagement')
+    expect(dispatch).toContain('No technical relay')
+    expect(dispatch).toContain('No hidden context dumping')
+    expect(dispatch).toContain('No prompt expansion')
+    expect(dispatch).toContain('Default to under-specifying')
+    expect(dispatch).toContain('Do not include:')
+    expect(dispatch).toContain('Route follow-up work according to the `send_to_agent` result')
+    expect(dispatch).toContain('If a user constraint conflicts with a subagent role')
+    const board = WORKFLOW_TASK_SYSTEM_PROMPT
+    expect(board).toContain('do not use generic todo tools')
+    expect(board).toContain('Track only nontrivial coordination work')
   })
 
   it('prefixes every specialist with the shared collaboration rules and keeps role boundaries', () => {
     const common = readFileSync(join(REPO_PERSONAS, 'Common.md'), 'utf8')
-    expect(common).toContain('## Workflow boundary')
+    // The report protocol is a runtime context on every child, not persona prose.
+    expect(common).not.toContain('## Workflow boundary')
+    expect(common).not.toContain('## Workflow task policy')
+    const protocol = CHILD_REPORT_PROTOCOL_CONTEXT
+    expect(protocol).toContain('must finish through `report_workflow`')
+    expect(protocol).toContain('there is no other way to finish a dispatched')
+    expect(protocol).toContain('ordinary conversation')
+    expect(protocol).toContain('mutate AutoReport task state')
+    expect(protocol).toContain('mutate the task board directly')
+    expect(protocol).toContain('Do not restate task IDs')
     for (const role of allSpecialistRoles()) {
       const text = loadSpecialistPersona(role)
       const roleFile = readFileSync(join(REPO_PERSONAS, ROLE_PERSONA_FILES[role] ?? ''), 'utf8')
       expect(text.startsWith(common)).toBe(true)
       expect(text).toContain('report_workflow')
+      // The finish-through-report rule lives in the child context once.
+      expect(roleFile).not.toContain('Main-dispatched tasks must finish through `report_workflow`')
       for (const boundary of ROLE_BOUNDARIES[role] ?? []) {
         expect(roleFile).toContain(boundary)
       }

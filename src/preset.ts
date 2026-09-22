@@ -12,22 +12,28 @@ import type { Context } from '@deepseek-ai/cordis'
 import { registerMainSkills } from './skills-preset.js'
 import { installReferencesSkills } from './skills-references.js'
 import { installManifestTool } from './tools/manifest.js'
-import { createSendToAgentTool } from './tools/send-to-agent.js'
+import { createSendToAgentTool, installSendToAgentGuidance } from './tools/send-to-agent.js'
 import { installWorkflowTaskTool } from './tools/workflow-task.js'
 import type {} from './runtime.js'
 
 export const name = 'autoreportdsh-preset'
-export const inject = ['tools', 'skills', 'subagents', 'autoreportWorkflow'] as const
+export const inject = ['tools', 'skills', 'subagents', 'autoreportWorkflow', 'systemPrompt'] as const
 
 /**
  * Register AutoReport's current MAIN tools.
- * Domain skills are registered only in role-bound specialist child scopes by
- * the continuable router.
+ *
+ * Each tool module owns its own usage-policy section (master dsh convention),
+ * so the preset only composes them: `installSendToAgentGuidance` and
+ * `installWorkflowTaskTool` mount the `tool:send_to_agent` and
+ * `tool:workflow_task` sections beside the tools they describe. Domain skills
+ * are registered only in role-bound specialist child scopes by the continuable
+ * router.
  * @param ctx - The `autoreport` preset scope.
  */
 export function apply(ctx: Context): void {
   installReferencesSkills(ctx)
   registerMainSkills(ctx)
+  installSendToAgentGuidance(ctx)
   installManifestTool(ctx, ctx, 'MAIN')
   installWorkflowTaskTool(ctx, ctx)
   ctx.tools.register(createSendToAgentTool({

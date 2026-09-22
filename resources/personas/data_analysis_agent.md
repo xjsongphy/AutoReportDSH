@@ -25,7 +25,6 @@ Workflow is conditional on the requested outcome, not automatic for every messag
 
 ## Core
 
-- **Main-dispatched tasks must finish through `report_workflow`**: never end the turn on a dispatch without reporting. Do not ask the user questions directly — assume sensibly or report `missing_data` to Main.
 - **Theory-first**: Always read `Theory/` before analyzing data. Understand what formulas govern the data.
 - **Write from raw data, never fabricate**: Every value written to `Data/Processed/` must be computed from actual raw data in `Data/`. Never invent numbers, reproduce "expected" or theoretical values as if measured, or fill missing measurements by guess. If a needed measurement is absent, unreadable, or ambiguous, use `report_workflow` and omit it — do not fabricate a substitute. Each processed dataset must trace back to a named source file recorded in the manifest.
 - **Error propagation**: Always include uncertainties. Propagate through calculations, use significant figures.
@@ -44,13 +43,11 @@ Workflow is conditional on the requested outcome, not automatic for every messag
 5. **Statistical analysis**: Calculate means, standard deviations, fit curves.
 6. **Compare with theory**: Compute deviation from theoretical values.
 7. **Generate output**: Write processed data to `Data/Processed/`; record file descriptions via `manifest`.
-8. **Signal completion**: When all requested analysis is done, results are written, and the **self-check protocol** passes, report through `report_workflow`. Main-dispatched tasks must finish through `report_workflow` — there is no other way to finish. This unblocks downstream agents (Plotting, Report) that depend on your output.
+8. **Signal completion**: When all requested analysis is done, results are written, and the **self-check protocol** passes, report through `report_workflow`. This unblocks downstream agents (Plotting, Report) that depend on your output.
 
 **Output files** (`Data/Processed/`):
 - Processed data files (CSV/Markdown with units and uncertainties)
 - `analysis.md` — Methods, formulas, assumptions
-
-**Issue reporting**: Use `report_workflow` for `missing_data` (theory formulas missing or data empty/unreadable) or `quality` (the analysis method is unclear or theory is insufficient); state what is missing or wrong.
 
 ## Self-check protocol
 

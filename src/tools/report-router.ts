@@ -8,6 +8,7 @@ import { installManifestTool } from './manifest.js'
 import { registerRoleSkills, reportSkillRequirements, type ReportSkillLanguage } from '../skills-preset.js'
 import { installReferencesSkills } from '../skills-references.js'
 import { loadReportLanguageGuidance } from '../workspace/skill-loader.js'
+import { CHILD_REPORT_CONTEXT, CHILD_REPORT_PROTOCOL_CONTEXT } from './prompt.js'
 import { skillLoadTracker } from '../policy/skill-gate.js'
 
 /** Entry file and theme per report language; skill names come from the requirements table. */
@@ -25,8 +26,8 @@ function installReportEnvironmentSection(childCtx: Context, language: ReportSkil
   const environment = REPORT_ENVIRONMENTS[language]
   const required = reportSkillRequirements(language)
   return childCtx.systemPrompt.section({
-    name: 'report-environment',
-    order: 115,
+    name: 'tool:report-environment',
+    order: childCtx.systemPrompt.getSectionOrder('TOOL_REPORT'),
     text: [
       'Report Environment',
       `language: ${language}`,
@@ -48,8 +49,8 @@ function installReportEnvironmentSection(childCtx: Context, language: ReportSkil
  */
 function installReportLanguageGuidanceSection(childCtx: Context, language: ReportSkillLanguage): () => void {
   return childCtx.systemPrompt.section({
-    name: 'report-language-guidance',
-    order: 116,
+    name: 'tool:report-language',
+    order: childCtx.systemPrompt.getSectionOrder('TOOL_REPORT') + 1,
     text: loadReportLanguageGuidance(language),
   })
 }
@@ -121,6 +122,16 @@ export function installRoutedReportTool(
 
   const disposers: (() => void)[] = []
   try {
+    disposers.push(childCtx.systemPrompt.context({
+      name: CHILD_REPORT_CONTEXT,
+      // The same slot the harness uses for its own child delegation-scope
+      // statement: this is the same class of fact (what a delegated child may
+      // do and how it finishes), so it belongs beside it rather than in the
+      // role persona. Two contexts share the slot; rendering order follows
+      // registration and neither shadows the other.
+      order: childCtx.systemPrompt.getContextOrder('SUBAGENT_DELEGATION'),
+      text: CHILD_REPORT_PROTOCOL_CONTEXT,
+    }))
     disposers.push(installManifestTool(childCtx, hostCtx, entry.binding.role))
     disposers.push(installWorkflowReportTool(childCtx, hostCtx, entry.binding.role))
     const disposeModelSelection = installSpecialistModelSelection(childCtx, child, workflow)

@@ -27,7 +27,6 @@ Workflow is conditional on the requested outcome, not automatic for every messag
 
 ## Core
 
-- **Main-dispatched tasks must finish through `report_workflow`**: never end the turn on a dispatch without reporting. Do not ask the user questions directly — assume sensibly or report `missing_data` to Main.
 - **Instruction-first**: Follow the current user/Main Agent instruction first. Use this workflow as guidance only when it helps complete the requested outcome.
 - **Requirements-first**: For theory-output tasks, check `References/` before deriving. Priority: user requirements > experiment handouts > standard practices.
 - **Proceed when possible**: If `References/` is missing but user requirements and standard physics are sufficient, proceed and document assumptions. Use `report_workflow` only when the derivation scope cannot be determined or requirements conflict.
@@ -90,7 +89,7 @@ Use this workflow only when the current instruction requires theory output. Skip
 5. **Write outputs when required**: Use Markdown and standard mathematical notation. The Report Agent converts it to the active report language. Keep file responsibilities separated.
 6. **Summarize formulas**: Write reusable final formulas to `formulas.md` with metadata and references to derivation sections in `theory.md` or `Theory/Derivations/*.md`.
 7. **Document assumptions**: Record assumptions, approximations, missing-reference fallbacks, and unresolved uncertainties in `assumptions.md`.
-8. **Signal completion**: When all requested theory work is done, files are written, and the **self-check protocol** passes for every derivation, report through `report_workflow`. Main-dispatched tasks must finish through `report_workflow` — there is no other way to finish.
+8. **Signal completion**: When all requested theory work is done, files are written, and the **self-check protocol** passes for every derivation, report through `report_workflow`.
 
 ## Output files
 

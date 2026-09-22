@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { ContentBlock } from '@deepseek-ai/dsh-llm'
 import { SessionId, type Session } from '@deepseek-ai/dsh-session'
@@ -20,6 +21,7 @@ import type { WorkflowSettingsSnapshot } from '../settings.js'
 import { roleHandoffText } from '../workflow/file-notes.js'
 import { delegationKey } from '../workflow/protocol.js'
 import type { WaiterOutcome } from '../workflow/waiters.js'
+import { SEND_TO_AGENT_SECTION, SEND_TO_AGENT_SYSTEM_PROMPT } from './prompt.js'
 
 const MAX_PROMPT = 16_384
 const MAX_CONTEXT = 8_192
@@ -28,6 +30,9 @@ const MAX_STEPS = 64
 const MAX_STEP_LENGTH = 512
 const MIN_TIMEOUT_MS = 1
 const MAX_TIMEOUT_MS = 900_000
+/** Fallbacks used only when composition supplies no wait budgets. */
+const DEFAULT_HARD_TIMEOUT_MS = 600_000
+const DEFAULT_IDLE_TIMEOUT_MS = 60_000
 
 /** Workflow surface `send_to_agent` actually calls. */
 export type SendToAgentWorkflow = Pick<AutoReportWorkflowRuntime, 'roleRegistry' | 'forSession' | 'commit'>
@@ -222,25 +227,32 @@ export function createSendToAgentTool(deps: SendToAgentDependencies): ToolDefini
   const now = deps.now ?? Date.now
   const mintChild = deps.childId ?? (() => SessionId(randomUUID()))
   const persona = deps.persona ?? loadSpecialistPersona
+  // Wait budgets the deployment actually applies, so the schema states the
+  // configured numbers instead of a copy that drifts from `Config`. A
+  // session's frozen settings snapshot can override them per workflow.
+  const defaultHardTimeoutMs = deps.config.delegationWaitTimeoutMs ?? DEFAULT_HARD_TIMEOUT_MS
+  const defaultIdleTimeoutMs = deps.config.delegationIdleTimeoutMs ?? DEFAULT_IDLE_TIMEOUT_MS
 
   return defineTool({
     name: 'send_to_agent',
     description: [
       'Dispatch one durable AutoReport task to its fixed subagent role; creates a task when task_id is omitted. The subagent finishes only by calling report_workflow, which becomes your result.',
-      'With wait=true (default) the call blocks until the subagent reports and returns status: "success" (done — response holds results and produced file paths), "blocked" (subagent cannot proceed — block_type is "missing_data" or "quality"; response states what is needed), or "timeout" (the child stayed idle too long or reached the absolute wait limit).',
-      'wait=false returns "delegated" immediately; the report arrives later.',
-      'To redispatch a blocked or timed-out task, call again with the same task_id — this starts a new delegation revision. Supply missing inputs or corrected constraints in prompt/context rather than repeating the failed prompt verbatim.',
+      'With wait=true (default) the call blocks until the subagent reports and returns status: "success" (done — response holds results and produced file paths), "blocked" (subagent cannot proceed — block_type is "missing_data" or "quality"; response states what is needed), "failed" (the delegation itself broke; response carries the reason), "cancelled" (the task was cancelled with workflow_task while waiting), or "timeout" (the child stayed idle too long or reached the absolute wait limit; nothing was reported and the task stays open for redispatch).',
+      'wait=false returns "delegated" immediately and the report later arrives as a role \u2192 MAIN message in this conversation; do not poll for it.',
+      `The wait budget is timeout_ms, default ${defaultHardTimeoutMs} ms and capped at ${MAX_TIMEOUT_MS} ms; independently, the call gives up while the child has made no progress for the configured idle timeout (${defaultIdleTimeoutMs} ms by default).`,
+      'task_id must name an existing task of the requested role: completed or cancelled tasks, unknown task ids, and unfinished dependencies are rejected instead of dispatched. A rejected call changes nothing.',
+      'To redispatch a blocked, failed, or timed-out task, call again with the same task_id — this starts a new delegation revision. Supply missing inputs or corrected constraints in prompt/context rather than repeating the failed prompt verbatim.',
     ].join(' '),
     parameters: {
-      role: { type: 'string', required: true, enum: ['THEORY', 'DATA_ANALYSIS', 'PLOTTING', 'REPORT'] },
+      role: { type: 'string', required: true, enum: ['THEORY', 'DATA_ANALYSIS', 'PLOTTING', 'REPORT'], description: 'Fixed subagent role that owns the work; an existing task_id must belong to this role.' },
       prompt: { type: 'string', required: true, description: 'Task goal; include only the goal, relevant input locations, dependencies, and explicit user constraints.' },
-      subject: { type: 'string', description: 'Short task subject when auto-creating a task.' },
-      dependencies: { type: 'array', items: { type: 'string' }, description: 'Task ids that must complete first.' },
-      steps: { type: 'array', items: { type: 'object', additionalProperties: false, properties: { description: { type: 'string', required: true }, done: { type: 'boolean' } } }, description: 'Initial durable checklist when auto-creating a task.' },
-      task_id: { type: 'string', description: 'Existing task id for redispatch or follow-up.' },
+      subject: { type: 'string', description: 'Short task subject when auto-creating a task. Defaults to the first line of prompt.' },
+      dependencies: { type: 'array', items: { type: 'string' }, description: 'Task ids that must already be completed when auto-creating a task.' },
+      steps: { type: 'array', items: { type: 'object', additionalProperties: false, properties: { description: { type: 'string', required: true }, done: { type: 'boolean' } } }, description: 'Initial durable checklist when auto-creating a task; ignored for an existing task_id.' },
+      task_id: { type: 'string', description: 'Existing task id to redispatch or follow up; must belong to role. Omit to create a new task.' },
       context: { type: 'string', description: 'Explicit user constraints the subagent must preserve.' },
-      wait: { type: 'boolean', description: 'Wait for the workflow report; default true.' },
-      timeout_ms: { type: 'number', description: 'Absolute wait limit in milliseconds; child activity only pauses the separate idle timeout.' },
+      wait: { type: 'boolean', description: 'Wait for the workflow report; default true. false returns immediately and the report arrives later as a message.' },
+      timeout_ms: { type: 'number', description: `Absolute wait limit in milliseconds: an integer from ${MIN_TIMEOUT_MS} through ${MAX_TIMEOUT_MS}, default ${defaultHardTimeoutMs}. Child activity only pauses the separate ${defaultIdleTimeoutMs} ms idle timeout.` },
     },
     output: {
       schema: {
@@ -489,8 +501,28 @@ export function createSendToAgentTool(deps: SendToAgentDependencies): ToolDefini
 export const name = 'autoreportdsh-send-to-agent'
 export const inject = ['tools', 'subagents', 'autoreportWorkflow']
 
+/**
+ * Register the `send_to_agent` usage policy.
+ *
+ * The master dsh convention keeps tool guidance beside the tool instead of in
+ * the deployment persona, so this section ships with the tool module that owns
+ * the dispatch contract. Registering it in the preset scope is this plugin's
+ * equivalent of the harness's render-time visibility gate: the section and the
+ * tool are mounted by the same scope, so neither can appear without the other.
+ * @param ctx - The `autoreport` preset scope.
+ * @returns the exact Cordis effect disposer.
+ */
+export function installSendToAgentGuidance(ctx: Context): () => void {
+  return ctx.systemPrompt.section({
+    name: SEND_TO_AGENT_SECTION,
+    order: ctx.systemPrompt.getSectionOrder('TOOL_SUBAGENT'),
+    text: SEND_TO_AGENT_SYSTEM_PROMPT,
+  })
+}
+
 /** Register `send_to_agent` in the AutoReport Main preset scope. */
-export function apply(ctx: import('@deepseek-ai/cordis').Context): void {
+export function apply(ctx: Context): void {
+  installSendToAgentGuidance(ctx)
   ctx.tools.register(createSendToAgentTool({
     subagents: ctx.subagents,
     resident: {

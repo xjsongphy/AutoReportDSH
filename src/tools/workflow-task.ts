@@ -4,6 +4,7 @@ import { defineTool } from '@deepseek-ai/dsh-tools'
 import type AutoReportWorkflowRuntime from '../runtime.js'
 import type { TaskSnapshot } from '../workflow/events.js'
 import { delegationKey } from '../workflow/protocol.js'
+import { WORKFLOW_TASK_SECTION, WORKFLOW_TASK_SYSTEM_PROMPT } from './prompt.js'
 
 const MAX_STEPS = 64
 const MAX_STEP_LENGTH = 512
@@ -48,15 +49,33 @@ function value(task: TaskSnapshot) {
   }
 }
 
+/**
+ * Register the `workflow_task` usage policy.
+ *
+ * Tool guidance ships with the tool (master dsh convention), and the preset
+ * scope is this plugin's equivalent of the harness's render-time visibility
+ * gate: the section and the tool are mounted together.
+ * @param ctx - The `autoreport` preset scope.
+ * @returns the exact Cordis effect disposer.
+ */
+export function installWorkflowTaskGuidance(ctx: Context): () => void {
+  return ctx.systemPrompt.section({
+    name: WORKFLOW_TASK_SECTION,
+    order: ctx.systemPrompt.getSectionOrder('TOOL_REPORT'),
+    text: WORKFLOW_TASK_SYSTEM_PROMPT,
+  })
+}
+
 /** Install the MAIN-only durable AutoReport task-board tool. */
 export function installWorkflowTaskTool(ctx: Context, hostCtx: Context): () => void {
+  installWorkflowTaskGuidance(ctx)
   return ctx.tools.register(defineTool({
     name: 'workflow_task',
-    description: 'Read or maintain AutoReport’s durable report task board. Use update to replace a task checklist, cancel to stop a nonterminal task, and reopen to make a blocked, failed, or cancelled task dispatchable again. This is the report workflow task board, not generic todo_write.',
+    description: 'Read or maintain AutoReport’s durable report task board. Tasks are created only by send_to_agent, never here. Use read to inspect one task or the whole board, update to replace a task checklist, cancel to stop a nonterminal task (also cancelling its in-flight delegation), and reopen to make a blocked, failed, or cancelled task dispatchable again — reopening does not redispatch it; call send_to_agent with the same task_id. Rejected calls change nothing: an unknown task_id, an invalid transition, or a malformed checklist leaves the board untouched. This is the report workflow task board, not generic todo_write.',
     parameters: {
-      action: { type: 'string', required: true, enum: ['read', 'update', 'cancel', 'reopen'] },
-      task_id: { type: 'string', description: 'Required for update, cancel, and reopen; optional for read.' },
-      steps: { type: 'array', items: { type: 'object', additionalProperties: false, properties: { description: { type: 'string', required: true }, done: { type: 'boolean' } } }, description: 'Replacement checklist; required for update.' },
+      action: { type: 'string', required: true, enum: ['read', 'update', 'cancel', 'reopen'], description: 'read inspects one task or the whole board; update, cancel, and reopen mutate the named task and bump its revision.' },
+      task_id: { type: 'string', description: 'Required for update, cancel, and reopen; optional for read — without it, read returns every task.' },
+      steps: { type: 'array', items: { type: 'object', additionalProperties: false, properties: { description: { type: 'string', required: true }, done: { type: 'boolean' } } }, description: 'Replacement checklist for update only (the whole checklist, not a patch); up to 64 steps of 512 chars each.' },
     },
     output: { schema: { type: 'object', additionalProperties: true, properties: {} }, render: (_args, result) => [{ type: 'text', text: JSON.stringify(result) }] },
     async execute(args, exec) {

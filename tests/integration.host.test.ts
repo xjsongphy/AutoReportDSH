@@ -82,6 +82,9 @@ describe('integration: assembled host (real context)', () => {
     expect(theory.skillNames).toEqual([])
     expect(theory.toolNames).not.toContain('report')
     expect(theory.sections.some(section => section.name === 'tool:report-workflow')).toBe(false)
+    // The report protocol is a runtime context on every routed child, so the
+    // prompt stays uniform across parents and children.
+    expect(theory.contexts.some(context => context.name === 'autoreport:report-protocol')).toBe(true)
 
     const reportBinding: RoleBindingSnapshot = { ...binding, role: 'REPORT', childSessionId: SessionId('it-report') }
     assembled.runtime.roleRegistry.registerReserved(reportBinding)

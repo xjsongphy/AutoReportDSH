@@ -25,7 +25,6 @@ Workflow is conditional on the requested outcome, not automatic for every messag
 
 ## Core
 
-- **Main-dispatched tasks must finish through `report_workflow`**: never end the turn on a dispatch without reporting. Do not ask the user questions directly — assume sensibly or report `missing_data` to Main.
 - **Context-aware**: Read theory for functional forms, analysis for data, requirements for specifications.
 - **Publication quality**: 300-1000 DPI, readable fonts, proper labels, error bars when appropriate.
 - **English by default**: Unless the user explicitly requests Chinese, all visible figure text must be in English, including titles, axis labels, legends, annotations, and any text embedded in the image.
@@ -80,7 +79,7 @@ Any `[✗]` → fix the script → re-run → re-check.
 4. **Implement**: Write the plotting script. Use matplotlib with publication settings. Always include `plt.rcParams['axes.unicode_minus'] = False`.
 5. **Run & self-check**: Execute the plotting script via bash. Run the **self-check protocol** on every figure and report results per figure. Any failure → revise the script → re-run → re-check until all pass. This step is not optional.
 6. **Save outputs**: Confirm images in `Plots/Fig/`; record figure descriptions via `manifest`.
-7. **Signal completion**: When all requested plots are generated and all self-checks pass, report through `report_workflow`. Main-dispatched tasks must finish through `report_workflow` — there is no other way to finish. This unblocks the Report agent.
+7. **Signal completion**: When all requested plots are generated and all self-checks pass, report through `report_workflow`. This unblocks the Report agent.
 
 **Output files** (`Plots/`):
 - `Fig/` — Generated PNG images (300+ DPI)
@@ -93,8 +92,6 @@ Any `[✗]` → fix the script → re-run → re-check.
 - Labels: Axes with units in parentheses
 - Color: viridis/plasma/cividis (colorblind-friendly)
 - Math: use publication-quality mathematical typesetting for all formulas and symbols
-
-**Issue reporting**: Use `report_workflow` for `missing_data` (analysis results missing) or `quality` (plot specifications unclear); state what is missing or unclear.
 
 ## Quality
 
