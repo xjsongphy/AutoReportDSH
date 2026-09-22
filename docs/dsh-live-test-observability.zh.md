@@ -65,7 +65,7 @@ cd ~/Develop/AutoReportDSH
 - **Trajectory 标签页**：逐 turn/step 的事件账本；可检查请求路由、输入/输出、时长、token usage、工具调用和结果。这是检查 agent 工作轨迹的首选页面。
 - **模型选择器**：确认 MAIN 路由为 `openai-codex / gpt-5.6-luna`。已开始的 session 保留其已记录的路由。
 - **子 agent 面包屑/会话**：subagent 是持久的 continuable child sessions；可查看各角色对话。它们保持角色权限，不能获得 MAIN 的任意写入权。
-- **工具卡片**：检查 `bash`、`send_to_agent`、`report_workflow` 的参数与结果。REPORT 通过 bash 按 `latex-compile` / `typst-compile` skill 编译。
+- **工具卡片**：检查 `bash`、`send_to_agent`、`report_workflow` 的参数与结果。REPORT 通过 bash 按 `latex-compile` / `typst-compile` skill 编译。`send_to_agent` 与 `workflow_task` 有专属折叠行（分别显示角色/主题与操作/勾选进度），展开后仍是 IN/OUT；失败的委派在折叠行就显示红色状态点与错误首行，不必展开。`report_workflow` 与 `manifest` 仍走 dsh 通用卡片。
 - **报告任务状态**：`<home>/autoreport/<workspaceId>/workflow/<id>/session.jsonl` 里的 `autoreport/*` 记录与 `send_to_agent` / `report_workflow` 结果给出 task、revision、waiting/completed/blocked/timeout 状态；不要以 UI todo 取代该工作流状态。Trajectory 事件账本不再包含 `autoreport/*`。
 
 ## 5. 持久化日志、产物和最终报告

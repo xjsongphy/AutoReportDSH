@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
 // DSH's published `/client` entry is a window.__ModuleLoader__ bundle; tests
 // load the TypeScript service (the package exports `./src/*` for this).
 import { SlotRegistry } from '@deepseek-ai/dsh-client-ui-renderer/src/client/registry.ts'
-import { apply, inject, AUTOREPORT_SETTINGS_NAMESPACE, SETTINGS_NS } from '../../src/client/index.js'
+import { apply, inject, AUTOREPORT_SETTINGS_NAMESPACE, SETTINGS_NS, TOOL_NS } from '../../src/client/index.js'
 import { stubSettingsScope } from './stub-scope.js'
 import type { AutoReportCardSettings } from '../../src/client/controller.js'
 
@@ -48,10 +48,14 @@ async function bench() {
   return { ctx, slots: ctx.get('slots') as SlotRegistry, locale, host }
 }
 
+/** Stand in for the DSH shell and chat node that own the slots under test. */
 function declareCards(slots: SlotRegistry): () => void {
   return slots.register({
     name: 'root',
-    children: { 'plugins.item': { kind: 'list', scope: 'root' } },
+    children: {
+      'plugins.item': { kind: 'list', scope: 'root' },
+      'tool.call.toolview': { kind: 'keyed', scope: 'session' },
+    },
   } as never, () => null)
 }
 
@@ -93,5 +97,32 @@ describe('autoreport settings card apply', () => {
     await fiber.dispose()
 
     expect(slots.entries('plugins.item')).toHaveLength(0)
+  })
+})
+
+describe('autoreport tool rows', () => {
+  it('claims one keyed tool view per workflow-bearing tool', async () => {
+    const { ctx, slots, locale } = await bench()
+    declareCards(slots)
+
+    await ctx.plugin({ inject: [...inject], apply }).await()
+
+    expect(slots.entries('tool.call.toolview').map(entry => entry.options.key).sort())
+      .toEqual(['send_to_agent', 'workflow_task'])
+    expect(locale.bind(TOOL_NS)('board')).toBe('任务板')
+    locale.setLocale('en')
+    expect(locale.bind(TOOL_NS)('board')).toBe('Board')
+  })
+
+  it('takes the tool views down with the fiber', async () => {
+    const { ctx, slots } = await bench()
+    declareCards(slots)
+    const fiber = ctx.plugin({ inject: [...inject], apply })
+    await fiber.await()
+    expect(slots.entries('tool.call.toolview')).toHaveLength(2)
+
+    await fiber.dispose()
+
+    expect(slots.entries('tool.call.toolview')).toHaveLength(0)
   })
 })

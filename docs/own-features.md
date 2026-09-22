@@ -46,6 +46,13 @@ platform.
   DSH retains ownership of provider credentials and model execution.
 - **Web settings UI:** the plugin contributes only its configuration card and
   does not replace the DSH application UI.
+- **Web tool rows:** `send_to_agent` and `workflow_task` claim their keyed
+  `tool.call.toolview` entry, so a delegation reads as `→ DATA_ANALYSIS · <subject>`
+  and a board operation as `update task-2 · 3/5 勾选` instead of DSH's generic
+  "Tool call" row. This is additive — the shipped chat node keeps owning the
+  slot, and every other tool falls back unchanged. DSH's Web client does not read
+  `ToolDefinition.presentCall`/`presentResult`, so those four declarations only
+  serve other clients; the row is what a Web user sees.
 
 ## Report-skill gates
 

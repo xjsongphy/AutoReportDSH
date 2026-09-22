@@ -1,12 +1,14 @@
 /**
  * Browser half of AutoReportDSH: the settings card for the `autoreport`
- * namespace, registered into DSH's plugin-configuration tab, plus a
- * conversation-window model picker for AutoReport subagents.
+ * namespace, registered into DSH's plugin-configuration tab, a
+ * conversation-window model picker for AutoReport subagents, and the two
+ * dedicated tool rows for the workflow-bearing tools.
  *
  * Host registration of the namespace already lives in `src/runtime.ts`. This
  * file only owns chrome, controls, and copy. Cross-plugin collaboration is
  * type-only: a value import of ui-settings-plugins fails the client
- * bundle-purity gate.
+ * bundle-purity gate. The tool rows additionally require ui-primitives, which
+ * is a shell platform module rather than a plugin bundle.
  */
 
 import type { ClientContext, ISessions, SessionId } from '@deepseek-ai/dsh-client-runtime/client'
@@ -14,16 +16,19 @@ import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings-plugins/client'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
+import type {} from '@deepseek-ai/dsh-client-ui-tool/client'
 import { AutoReportCard } from './AutoReportCard.js'
 import { AUTOREPORT_SETTINGS_NAMESPACE, AutoReportCardController } from './controller.js'
-import { en, zh, type AutoReportLocaleKey } from './locales.js'
+import { en, toolRowEn, toolRowZh, zh, type AutoReportLocaleKey, type ToolRowLocaleKey } from './locales.js'
 import { SubagentModelSelect, type SubagentModelChoice, type SubagentModelInjected } from './SubagentModelSelect.js'
 import { installCardStyles } from './styles.js'
+import { SendToAgentRow, TOOL_NS, WorkflowTaskRow } from './tool-rows.js'
 
 export type { AutoReportCardProps } from './AutoReportCard.js'
 export type { AutoReportCardFace, AutoReportCardSettings, AutoReportCardState } from './controller.js'
 export { AUTOREPORT_SETTINGS_NAMESPACE } from './controller.js'
-export type { AutoReportLocaleKey } from './locales.js'
+export type { AutoReportLocaleKey, ToolRowLocaleKey } from './locales.js'
+export { TOOL_NS } from './tool-rows.js'
 
 /** Dictionary namespace owned by this card. */
 export const SETTINGS_NS = 'settings.autoreport'
@@ -31,10 +36,18 @@ export const SETTINGS_NS = 'settings.autoreport'
 /** Agent preset whose children get the conversation-window model picker. */
 const AUTOREPORT_PRESET = 'autoreport'
 
+/** Wire tool names this plugin renders itself, paired with their row. */
+const TOOL_ROWS = [
+  ['send_to_agent', SendToAgentRow],
+  ['workflow_task', WorkflowTaskRow],
+] as const
+
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap {
     /** The AutoReport settings card's copy. */
     'settings.autoreport': AutoReportLocaleKey
+    /** The AutoReport tool rows' copy. */
+    'autoreport.tools': ToolRowLocaleKey
   }
 }
 
@@ -51,6 +64,7 @@ const CARD_ORDER = 50
 export function apply(ctx: ClientContext): void {
   installCardStyles()
   ctx.effect(() => ctx.locale.register(SETTINGS_NS, { zh, en }), 'AutoReportDSH: settings dictionaries')
+  ctx.effect(() => ctx.locale.register(TOOL_NS, { zh: toolRowZh, en: toolRowEn }), 'AutoReportDSH: tool-row dictionaries')
   const t = ctx.locale.bind(SETTINGS_NS)
   const card = new AutoReportCardController(ctx.settingsScope.bind({ namespace: AUTOREPORT_SETTINGS_NAMESPACE }))
   ctx.slots.inject('plugins.item', () => ctx.slots.register({
@@ -64,6 +78,25 @@ export function apply(ctx: ClientContext): void {
   ctx.inject(['sessions'], (scope: ClientContext) => {
     installSubagentModelSeat(scope)
   })
+  installToolRows(ctx)
+}
+
+/**
+ * Claim the keyed `tool.call.toolview` entry for each AutoReport tool.
+ *
+ * The slot is declared by ui-tool; `slots.inject` waits for that declaration,
+ * so these land whether or not the chat node mounted first. Keys DSH already
+ * ships would be taken over, not shared — neither of these two is shipped.
+ * @param ctx - the browser plugin context.
+ */
+function installToolRows(ctx: ClientContext): void {
+  for (const [key, Row] of TOOL_ROWS) {
+    ctx.slots.inject('tool.call.toolview', () => ctx.slots.register({
+      name: 'tool.call.toolview',
+      key,
+      locale: TOOL_NS,
+    }, Row))
+  }
 }
 
 function installSubagentModelSeat(ctx: ClientContext): void {

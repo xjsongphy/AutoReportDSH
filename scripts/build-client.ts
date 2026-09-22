@@ -8,7 +8,7 @@
  * @module autoreport/build-client
  */
 
-import { mkdirSync } from 'node:fs'
+import { mkdirSync, readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import * as esbuild from 'esbuild'
@@ -25,8 +25,41 @@ const externals = [
   'react-dom/client',
   '@deepseek-ai/cordis',
   '@deepseek-ai/dsh-client-ui-slots',
+  '@deepseek-ai/dsh-client-ui-primitives',
   '@deepseek-ai/dsh-client-runtime/client',
 ]
+
+/**
+ * Specifiers the bundle must reach for at runtime, and those it must not
+ * mention at all. A plugin bundle stays usable for TYPES only: its CSS-module
+ * imports would not survive this pipeline, and requiring one would pull a
+ * second copy of a plugin the shell already loaded.
+ */
+const required = ['@deepseek-ai/dsh-client-ui-primitives']
+const forbidden = [
+  '@deepseek-ai/dsh-client-ui-tool',
+  '@deepseek-ai/dsh-client-ui-settings-plugins',
+  '@deepseek-ai/dsh-client-ui-plugin-manager',
+  '@deepseek-ai/dsh-client-ui-conversation',
+]
+
+/**
+ * Check the emitted bundle against the purity contract.
+ * @param bundle - the built bundle source.
+ * @throws {Error} when a required specifier is missing or a forbidden one appears.
+ */
+function assertPurity(bundle: string): void {
+  for (const specifier of required) {
+    if (!bundle.includes(`require(${JSON.stringify(specifier)})`)) {
+      throw new Error(`client bundle purity: expected a require of ${specifier}`)
+    }
+  }
+  for (const specifier of forbidden) {
+    if (bundle.includes(specifier)) {
+      throw new Error(`client bundle purity: ${specifier} leaked into the bundle (import it with \`import type\`)`)
+    }
+  }
+}
 
 mkdirSync(dirname(outfile), { recursive: true })
 
@@ -49,3 +82,5 @@ await esbuild.build({
     js: 'return module.exports; } });',
   },
 })
+
+assertPurity(readFileSync(outfile, 'utf8'))

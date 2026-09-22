@@ -57,6 +57,14 @@ export const css = {
   subagentModelLabel: 'ar-subagent-model-label',
   chipTrigger: 'ar-chip-trigger',
   chipTriggerLabel: 'ar-chip-trigger-label',
+  toolSummary: 'ar-tool-summary',
+  toolSummaryFailed: 'ar-tool-summary-failed',
+  toolState: 'ar-tool-state',
+  toolIo: 'ar-tool-io',
+  toolIoBlock: 'ar-tool-io-block',
+  toolIoLabel: 'ar-tool-io-label',
+  toolIoBody: 'ar-tool-io-body',
+  toolInspect: 'ar-tool-inspect',
 } as const
 
 const STYLESHEET = `
@@ -476,6 +484,75 @@ const STYLESHEET = `
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* AutoReport tool rows. The collapsed chrome belongs to DSH's DisclosureRow;
+   these rules cover only the summary text and the expanded IN/OUT card. */
+
+.${css.toolSummary} {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--dsw-alias-label-secondary);
+}
+.${css.toolSummaryFailed} {
+  color: var(--dsw-alias-label-error);
+}
+.${css.toolState} {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+.${css.toolIo} {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 4px 0 8px 24px;
+  padding: 8px 10px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-2);
+}
+.${css.toolIoBlock} {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.${css.toolIoLabel} {
+  color: var(--dsw-alias-label-caption);
+  font: var(--dsw-font-xs-13);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.${css.toolIoBody} {
+  margin: 0;
+  max-height: 240px;
+  overflow: auto;
+  color: var(--dsw-alias-label-primary);
+  font: var(--dsw-font-markdown-code-block-small);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.${css.toolInspect} {
+  align-self: flex-start;
+  padding: 2px 8px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  font: var(--dsw-font-xs-13);
+  cursor: pointer;
+}
+.${css.toolInspect}:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
 }
 `
 

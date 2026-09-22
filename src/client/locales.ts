@@ -108,3 +108,55 @@ export const zh: Record<AutoReportLocaleKey, string> = {
   mineruTokenSourceEnvironment: '环境变量',
   mineruTokenSourceConfig: '配置文件',
 }
+
+/**
+ * Locale keys the AutoReport tool rows render. The tool names themselves
+ * (`send_to_agent`, `workflow_task`) and the board's wire status values stay
+ * untranslated: they are what the model and the durable log use, not copy.
+ */
+export type ToolRowLocaleKey =
+  | 'sendToAgentTitle' | 'workflowTaskTitle'
+  | 'running' | 'failed' | 'stopped'
+  | 'board' | 'tasks'
+  | 'read' | 'update' | 'cancel' | 'reopen' | 'resend' | 'checked'
+  | 'in' | 'out' | 'inspect'
+
+/** English copy for the tool rows. */
+export const toolRowEn: Record<ToolRowLocaleKey, string> = {
+  sendToAgentTitle: 'Delegate to subagent',
+  workflowTaskTitle: 'Report task board',
+  running: 'Running',
+  failed: 'Failed',
+  stopped: 'Stopped',
+  board: 'Board',
+  tasks: 'tasks',
+  read: 'Read',
+  update: 'Update',
+  cancel: 'Cancel',
+  reopen: 'Reopen',
+  resend: 'resend',
+  checked: 'done',
+  in: 'IN',
+  out: 'OUT',
+  inspect: 'Inspect',
+}
+
+/** Chinese copy for the tool rows. */
+export const toolRowZh: Record<ToolRowLocaleKey, string> = {
+  sendToAgentTitle: '委派子代理',
+  workflowTaskTitle: '报告任务板',
+  running: '进行中',
+  failed: '失败',
+  stopped: '已中断',
+  board: '任务板',
+  tasks: '个任务',
+  read: '读',
+  update: '更新',
+  cancel: '取消',
+  reopen: '重开',
+  resend: '重派',
+  checked: '勾选',
+  in: '输入',
+  out: '输出',
+  inspect: '查看',
+}

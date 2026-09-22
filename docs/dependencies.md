@@ -140,8 +140,17 @@ use explicit `.ts` specifiers and cross-package internals).
 | `@deepseek-ai/dsh-client-ui-settings` | `../deepseek-harness/packages/client/ui-settings` |
 | `@deepseek-ai/dsh-client-ui-settings-plugins` | `../deepseek-harness/packages/client/ui-settings-plugins` |
 | `@deepseek-ai/dsh-client-ui-slots` | `../deepseek-harness/packages/client/ui-slots` |
+| `@deepseek-ai/dsh-client-ui-primitives` | `../deepseek-harness/packages/client/ui-primitives` |
+| `@deepseek-ai/dsh-client-ui-tool` | `../deepseek-harness/packages/client/ui-tool` |
 | `@deepseek-ai/dsh-client-connection` | `../deepseek-harness/packages/client/connection` |
 | `@deepseek-ai/dsh-api-remotes` | `../deepseek-harness/packages/api/remotes` |
 
 All names verified against each linked package's `package.json`; exports map `. -> ./lib/index.js`
 with types at `./lib/types/index.d.ts`.
+
+Two of these are not test-only in the same sense. `dsh-client-ui-tool` is a TYPE-only import: it
+owns the `tool.call.toolview` slot contract, but its own browser bundle carries CSS-module imports
+this repo's esbuild pipeline cannot process, so no value may be imported from it.
+`dsh-client-ui-primitives` is a web-shell PLATFORM module
+(`packages/client/web/src/platform.ts`), so the two AutoReport tool rows require it at runtime and
+`scripts/build-client.ts` keeps it external and asserts the emitted bundle does exactly that.
