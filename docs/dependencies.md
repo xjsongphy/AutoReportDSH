@@ -61,6 +61,39 @@ The retired `src/session-events.ts` also carried a marker probe and a
 fail-loud activation check; both are gone with the mechanism they guarded. See
 `docs/own-features.md` for the log's layout, naming, and durability bounds.
 
+### Upgrade cost: pre-migration logs are refused
+
+Retiring that registration had a price, and it is worth stating plainly rather
+than discovering on load. Records our earlier builds wrote into the session log
+carry no `ignorable` marker — on the harness then, the option was not writable,
+so in-process registration was the only thing making them readable. With the
+registration gone, a session log holding them cannot be loaded at all:
+
+```text
+session "…" contains event type "autoreport/workflow" (seq 8) unknown to this
+harness and not marked ignorable; refusing to interpret the log
+```
+
+Two of the affected types are ours: `autoreport/*`, and `sandbox/workspace-root`
+from the retired sandbox patch. **`pnpm run repair:sessions`** (dry run by
+default, `--apply` to write) adds the marker to exactly those records, backing
+each file up as `<log>.bak` first. It is the upstream-sanctioned repair —
+`known-event-types.ts` calls the persisted marker "the compatibility mechanism"
+— and it makes the log loadable by **every** harness build, with or without this
+plugin, instead of depending on the plugin being loaded. The script re-encodes
+with DSH's own framing and validates through the reader's own
+`validateStoredEvents` before swapping anything into place, so a file it accepts
+is a file the reader accepts.
+
+It deliberately does **not** touch the third class: logs also blocked by
+**retired harness** event types (`assistant/chunk`, `text-chunks`,
+`reasoning-chunks`, `tool-call-chunks` — the removed delta codec). Those records
+carry conversation content, so marking them `ignorable` could silently
+reconstruct a wrong session, which is precisely what the refusal prevents. Such
+logs are reported and left byte-identical; they need a harness-side migration,
+not this repair. On the maintainer's home this was 38 of 98 logs, against 55 the
+script does repair.
+
 Child-scoped composition rides `agent/created` plus `agent.ctx.inject`; the
 former `ctx.subagents.registerContinuableSetup` seam was removed upstream along
 with the standalone stock report tool, whose role is now played by adjacent-agent
