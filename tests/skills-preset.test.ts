@@ -1,19 +1,17 @@
-import { mkdtempSync, rmSync } from 'node:fs'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'vitest'
+import type { SkillRegistration } from '@deepseek-ai/dsh-skill'
 import { skillNamesForRole, registerMainSkills, registerRoleSkills, MAIN_SKILL_NAMES } from '../src/skills-preset.js'
-import { seedSyncedResourceStubs } from './helpers/synced-resource-stubs.js'
 
-const overlays: string[] = []
-afterEach(() => {
-  for (const dir of overlays.splice(0)) rmSync(dir, { recursive: true, force: true })
-})
-
-function overlay(): string {
-  const root = mkdtempSync(join(tmpdir(), 'autoreport-skills-overlay-'))
-  overlays.push(root)
-  return seedSyncedResourceStubs(root)
+/** Capture one registration; `resourceBase` presence is part of what we assert. */
+function recorder(): { registrations: SkillRegistration[]; register: (registration: SkillRegistration) => () => void } {
+  const registrations: SkillRegistration[] = []
+  return {
+    registrations,
+    register: registration => {
+      registrations.push(registration)
+      return () => {}
+    },
+  }
 }
 
 describe('AutoReport role-scoped domain skills', () => {
@@ -29,40 +27,53 @@ describe('AutoReport role-scoped domain skills', () => {
     expect(skillNamesForRole('REPORT', 'typst')).not.toContain('mineru')
   })
 
-  it('gives REPORT only the active compilation skill plus writing guidance', () => {
+  it('gives REPORT the writer, the active compiler, and that language\'s references', () => {
     expect(skillNamesForRole('REPORT', 'latex')).toEqual([
-      'experiment-report-writer', 'report-language-latex', 'latex-compile',
+      'experiment-report-writer', 'latex-compile',
     ])
     expect(skillNamesForRole('REPORT', 'typst')).toEqual([
-      'experiment-report-writer', 'report-language-typst', 'typst', 'typst-compile',
+      'experiment-report-writer', 'typst', 'typst-compile',
     ])
   })
 
+  it('does not register the active language guidance as a skill', () => {
+    // The report-language files are appended to the REPORT system prompt, so a
+    // load of `report-language-<lang>` is not a step any child must take.
+    const skills = recorder()
+    registerRoleSkills({ skills } as never, 'REPORT', 'latex')
+    expect(skills.registrations.map(skill => skill.name)).not.toContain('report-language-latex')
+    skills.registrations.length = 0
+    registerRoleSkills({ skills } as never, 'REPORT', 'typst')
+    expect(skills.registrations.map(skill => skill.name)).not.toContain('report-language-typst')
+  })
+
   it('registers REPORT runtime skills on the child context', () => {
-    const skills: { name: string; content: string }[] = []
-    const context = {
-      skills: {
-        register: (registration: { name: string; content: string }) => {
-          skills.push(registration)
-          return () => {}
-        },
-      },
-    }
-    registerRoleSkills(context, 'REPORT', 'latex', overlay())
-    expect(skills.map(skill => skill.name)).toEqual([
-      'experiment-report-writer', 'report-language-latex', 'latex-compile',
+    const skills = recorder()
+    registerRoleSkills({ skills } as never, 'REPORT', 'latex')
+    expect(skills.registrations.map(skill => skill.name)).toEqual([
+      'experiment-report-writer', 'latex-compile',
     ])
-    expect(skills.find(skill => skill.name === 'report-language-latex')?.content).toContain(
-      'Use `[H]` for every figure and table unless the user-provided template explicitly requires another placement policy',
-    )
-    skills.length = 0
-    registerRoleSkills(context, 'REPORT', 'typst', overlay())
-    expect(skills.map(skill => skill.name)).toEqual([
-      'experiment-report-writer', 'report-language-typst', 'typst', 'typst-compile',
+    skills.registrations.length = 0
+    registerRoleSkills({ skills } as never, 'REPORT', 'typst')
+    expect(skills.registrations.map(skill => skill.name)).toEqual([
+      'experiment-report-writer', 'typst', 'typst-compile',
     ])
-    expect(skills.find(skill => skill.name === 'report-language-typst')?.content).toContain(
-      'do not use LaTeX commands',
-    )
+  })
+
+  it('anchors the skills that ship sibling documents and only those', () => {
+    const skills = recorder()
+    registerRoleSkills({ skills } as never, 'REPORT', 'typst')
+    const byName = new Map(skills.registrations.map(skill => [skill.name, skill]))
+    const writer = byName.get('experiment-report-writer')?.resourceBase
+    const typst = byName.get('typst')?.resourceBase
+    expect(writer).toMatchObject({ kind: 'directory' })
+    expect(typst).toMatchObject({ kind: 'directory' })
+    expect((writer as { path: string }).path).toContain('experiment-report-writer')
+    expect((typst as { path: string }).path).toContain('typst/skills/typst')
+    // A flat document whose prose names workspace paths must NOT carry a base:
+    // DSH tells the model to resolve those paths against it.
+    expect(byName.get('typst-compile')?.resourceBase).toBeUndefined()
+    expect(byName.get('latex-compile')?.resourceBase).toBeUndefined()
   })
 
   it('fails loud when the child skills service is missing', () => {
@@ -74,13 +85,13 @@ describe('AutoReport role-scoped domain skills', () => {
     const skills: string[] = []
     const context = {
       skills: {
-        register: (registration: { name: string }) => {
+        register: (registration: SkillRegistration) => {
           skills.push(registration.name)
           return () => {}
         },
       },
     }
-    registerMainSkills(context)
+    registerMainSkills(context as never)
     expect(skills).toEqual([...MAIN_SKILL_NAMES])
   })
 
@@ -88,7 +99,7 @@ describe('AutoReport role-scoped domain skills', () => {
     class FakeSkills {
       ctx = { ok: true }
       names: string[] = []
-      register(registration: { name: string }) {
+      register(registration: SkillRegistration) {
         if (this.ctx === undefined) throw new Error('lost this')
         this.names.push(registration.name)
         return () => {}

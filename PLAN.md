@@ -60,9 +60,9 @@ AutoReportDSH owns report semantics and policy.
 - Fixed roles communicate only through DSH’s authenticated parent→child `followup()` and
   child→parent `reportFrom()` paths. AutoReport does not add a broadcast bus or arbitrary
   peer mailbox.
-- Runtime startup never synchronizes resources. An explicit development/release
-  sync command may compare upstream Git blobs and refresh only changed managed files;
-  the shipped runtime uses the last bundled copies.
+- No resource is fetched at any point. Every template, theme, and skill document is
+  committed under `resources/` and read from there; there is no sync command, no
+  overlay, and no remote prompt. Updating an external document is an ordinary commit.
 - DSH `todo_write` is not authoritative report state. AutoReport uses its own durable task
   events and task tool.
 - DSH’s stock sandbox is not treated as a network boundary. AutoReport owns report-execution
@@ -79,8 +79,8 @@ AutoReportDSH owns report semantics and policy.
   workspace files themselves. There is no conversation-history reconstruction and no
   workspace-to-prompt injection at resume. A recreated subagent recovers from: task
   state + workspace state + role ownership + semantic file notes (cold-rebind handoff).
-- MinerU instructions are synchronized explicitly from the managed upstream skill and
-  registered only for THEORY and REPORT. Default network denial remains unchanged, so
+- MinerU instructions are a vendored skill document under `resources/skills/` and are
+  registered only for MAIN. Default network denial remains unchanged, so
   actual `mineru-open-api` API execution still needs a later explicit network-policy change.
 - Semantic file descriptions and role notes are agent-authored through `manifest(action="update")`
   and last-write-wins per path/role. Mechanical create/modify facts stay on
@@ -611,10 +611,15 @@ structured diagnostics and artifact paths. It never widens network policy. Missi
 compiler resources fail loudly.
 
 AutoReport-owned skills are registered in role-bound subagent child scopes rather than
-preset-wide: THEORY gets `mineru`; REPORT gets writing, active-language compilation, and
-`mineru`; DATA_ANALYSIS and PLOTTING get none. Static bundled resources use DSH’s normal
-skill registration. Runtime sessions never fetch remote content; `pnpm sync:resources`
-uses upstream Git blob state to refresh only changed managed resource files before build/release.
+preset-wide: MAIN gets `pdf-reference-reader`; REPORT gets the report writer, the active
+language's compile skill, and (for Typst) the `typst` reference bundle; DATA_ANALYSIS,
+PLOTTING, and THEORY get none. Static bundled resources use DSH's normal skill
+registration and publish `resourceBase` from their own layout — a skill shipped as a
+directory bundle (`skills/<name>/SKILL.md` beside its references) advertises the anchor,
+a flat document does not, so a body that talks about the experiment workspace is never
+told to resolve `Report/main.tex` under `resources/`. Active-language guidance is not a
+skill at all: it is appended to every REPORT prompt. Runtime sessions never fetch remote
+content.
 
 ### 2.13 Model policy
 

@@ -89,7 +89,7 @@ describe('integration: assembled host (real context)', () => {
     assembled.routeChild(reporter)
     expect(reporter.toolNames).toEqual(['manifest', 'report_workflow'])
     expect(reporter.skillNames).toEqual([
-      'experiment-report-writer', 'report-language-latex', 'latex-compile',
+      'experiment-report-writer', 'latex-compile',
     ])
     expect(reporter.sections.map(section => section.name)).not.toEqual(expect.arrayContaining([
       'autoreport:skill:experiment-report-writer',

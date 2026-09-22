@@ -25,7 +25,7 @@ Plotting、Report —— 负责理论推导、数据分析、绘图和 LaTeX/Typ
 - **目录权限隔离** — 每个 Agent 的写入目录由 DSH 的 `workspace-write` 沙箱钉死（见下表）
 - **LaTeX 与 Typst 报告** — 每个项目自选语言，内置模板、主题、参考文献资源与编译 skill；Python 负责数据处理与绘图
 - **使用 DSH 的 Provider** — 模型路由与凭证来自 DSH 自己的配置
-- **资源保持最新** — 模板、主题和 skills 在每次插件启动时从远端刷新；`pnpm run sync:resources` 可手动触发
+- **资源完全内置** — 模板、主题、skills 及其参考文档都提交在 `resources/` 并直接从仓库读取；会话永不联网拉取或用远端内容替换 prompt
 - **开箱即用** — 插件自带 persona、模板和 skills，新项目立即可跑
 
 ### 工作流
@@ -180,7 +180,6 @@ AutoReportDSH/
 | `pnpm test` | 用 Vitest 运行 unit、integration、client、eval 测试套件 |
 | `pnpm run typecheck` | 对 host 与 client 代码做类型检查，不产出文件 |
 | `pnpm run build` | 清理 `dist/`，编译 TypeScript，复制资源，并构建 web client |
-| `pnpm run sync:resources` | 把受管资源刷新到 `$DSH_HOME/autoreport/resources`，无需启动 DSH |
 | `pnpm run install:preset` | 在 DSH home 中物化 `autoreport` user preset 及其 overlay（源码安装器会代为执行） |
 | `pnpm run prepare:npm` | 构建并在 `dist/npm` 组装可发布的 npm 包 |
 
@@ -205,6 +204,46 @@ checkout 运行：应用临时补丁后依次执行 install、无密钥测试、
 
 ## 参考项目
 
+### 本工作流的来源
+
 - [AutoReport](https://github.com/xjsongphy/AutoReport) — 本工作流来源的桌面版
 - [AutoReportCLI](https://github.com/xjsongphy/AutoreportCLI) — 被移植的终端版工作流
 - [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) — 运行时、session 与沙箱模型
+
+### 内置文档的来源
+
+模板、主题、skill 文档与语言指引都提交在 `resources/` 下并直接从仓库读取；运行时
+不拉取、也不替换任何内容。因此署名放在这里，而不是某张同步表里，且每个上游自己的
+许可证文件都随副本一起保存。
+
+| 上游 | 许可证 | 贡献内容 |
+| --- | --- | --- |
+| [lucifer1004/claude-skill-typst](https://github.com/lucifer1004/claude-skill-typst) | MIT | `typst` skill 及其四篇参考文档（`resources/typst/skills/typst/`） |
+| [xjsongphy/pkumpl-typst](https://github.com/xjsongphy/pkumpl-typst) | CC BY-SA 4.0 | Typst 主题、模板与参考文献资源（`resources/typst/`） |
+| [CastleStar14654/PKUMpLtX](https://github.com/CastleStar14654/PKUMpLtX) | CC BY-SA 4.0 | `mpltx.cls`，北大近代物理实验 LaTeX 文档类（基于 `revtex4-2`），Typst 主题即其移植 |
+| [xjsongphy/skills](https://github.com/xjsongphy/skills) | 上游未声明 | `latex-compile` skill，以及 `experiment-report-writer` 投影——其上游 commit 与逐模块 blob 哈希记录在同目录的 `provenance.json` |
+| [citation-style-language/styles](https://github.com/citation-style-language/styles) | CC BY-SA 3.0 | `american-physics-society.csl`，作者 Richard Karnesky |
+
+上游提供了许可证文件的，都把该文件与副本放在一起，让声明与其覆盖的内容同处一地。
+`xjsongphy/skills` 未声明许可证，因此它那两份内置文档也不带。
+
+仅在运行时引用、未内置：
+
+- [MinerU](https://github.com/opendatalab/MinerU) — `pdf-reference-reader` 调用的 `mineru-open-api` CLI，把 `References/` 下的 PDF 抽取到 `Outline/.cache/mineru/`
+
+## 许可证
+
+本项目自身的代码——host 装配、工具、策略、工作流运行时与测试——采用
+[MIT](LICENSE)。
+
+内置文档**不**因该授权而改变许可证：每一份都保留自己的许可证，列在
+[参考项目](#参考项目)中；上游提供了许可证文本的，文本就提交在副本旁边：
+
+- `resources/typst/` 的其余部分 — CC BY-SA 4.0（[`LICENSE`](resources/typst/LICENSE)），来自 `pkumpl-typst`
+- `resources/typst/skills/typst/` — MIT（[`LICENSE`](resources/typst/skills/typst/LICENSE)），来自 `claude-skill-typst`
+- `resources/latex/themes/` — CC BY-SA 4.0（[`LICENSE`](resources/latex/themes/LICENSE)），`mpltx.cls` 来自 PKUMpLtX
+- `resources/typst/templates/american-physics-society.csl` — CC BY-SA 3.0，声明在其自身的 `<rights>` 元素里
+- `resources/skills/` — 内置自 `xjsongphy/skills`，该仓库未声明许可证
+
+CC BY-SA 文档带传染性（share-alike）：本仓库再分发它们，且它们在本地的改动
+（重定向的交叉引用、删除的死链、精简过的索引）与原文保持同一许可证。

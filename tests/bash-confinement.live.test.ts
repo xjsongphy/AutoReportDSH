@@ -1,9 +1,9 @@
 import { spawnSync } from 'node:child_process'
 import { createServer } from 'node:http'
-import { existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { homedir, tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import { ToolCallId } from '@deepseek-ai/dsh-llm'
@@ -210,13 +210,18 @@ describe('bash role write confinement (live)', () => {
     },
   )
 
-  // Local machines without a sandbox skip the probes. CI must not: the
+  // Local machines without a usable sandbox skip the probes. CI must not: the
   // availability test above fails instead of silently skipping.
-  // DSH disables bash-sandbox / tool-bash on win32 (pwsh + ACL is the
-  // Windows shell). Role-root bash probes run on Linux/macOS only. Windows
-  // CI still asserts ACL runner availability via SANDBOX_USABLE; that is
-  // not an AutoReport role-writable-root end-to-end case.
-  describe.skipIf(!SANDBOX_USABLE || process.platform === 'win32')('role writable roots', () => {
+  //
+  // The gate is the sandbox, not the platform. On win32 `sandboxUsable()`
+  // already requires BOTH a working `bash -lc` and the windows-acl runner
+  // probe, and `dsh-bash-sandbox` carries no platform gate of its own: it hands
+  // the resolved policy to `ctx.sandbox`, whose win32 rung is the windows-acl
+  // restricted-token runner. So these same probes do exercise the Windows
+  // executor, and a blanket win32 skip hid precisely the case this suite exists
+  // for — Windows CI proved the ACL runner was available without ever resolving
+  // one role writable root through it.
+  describe.skipIf(!SANDBOX_USABLE)('role writable roots', () => {
   it('DATA_ANALYSIS writes inside Data/Processed and denies Report', async () => {
     const experimentRoot = experimentWorkspace()
     const harness = await setupHarness(experimentRoot)
@@ -296,6 +301,38 @@ describe('bash role write confinement (live)', () => {
     } finally {
       await new Promise<void>((resolve, reject) => server.close(err => (err ? reject(err) : resolve())))
     }
+  }, 30_000)
+
+  it('every role reads shared workspace inputs while writes stay confined', async () => {
+    const experimentRoot = experimentWorkspace()
+    // Inputs another role produced. A role must be able to read these without
+    // being able to write them: that pair IS the declared policy, and until now
+    // only the write half had a probe.
+    const shared = ['Theory/theory.md', 'Data/Processed/out.csv', 'Plots/Fig/fig1.png', 'Outline/cache.txt']
+    for (const relative of shared) {
+      mkdirSync(dirname(join(experimentRoot, relative)), { recursive: true })
+      writeFileSync(join(experimentRoot, relative), `shared:${relative}\n`)
+    }
+
+    const harness = await setupHarness(experimentRoot)
+    const agent = registerAgent(harness, sessionForRole(experimentRoot, 'REPORT', 'report-read'))
+
+    for (const relative of shared) {
+      const read = await callBash(harness, `cat ${relative}`, agent)
+      expect(read.isError, text(read)).toBe(false)
+      expect(text(read)).not.toMatch(SANDBOX_DENIAL)
+      expect(text(read)).toContain(`shared:${relative}`)
+    }
+
+    // Same session, same policy: the write half stays confined to Report/.
+    const allowed = await callBash(harness, 'echo ok > Report/read-probe.txt', agent)
+    expect(allowed.isError, text(allowed)).toBe(false)
+    expect(text(allowed)).not.toMatch(SANDBOX_DENIAL)
+    expect(existsSync(join(experimentRoot, 'Report/read-probe.txt'))).toBe(true)
+
+    const denied = await callBash(harness, 'echo blocked > Theory/read-probe.txt', agent)
+    expectsSandboxDenial(text(denied))
+    expect(existsSync(join(experimentRoot, 'Theory/read-probe.txt'))).toBe(false)
   }, 30_000)
   })
 })

@@ -56,6 +56,27 @@ changes the conclusion; do not narrate every cell. Place detailed raw data,
 derivations, or exhaustive result grids in an appendix when the reader needs
 the main argument first.
 
+### Define before formula (restored from the legacy experiment-report skill)
+
+**EVERY variable and unit must be defined in narrative before it appears in a
+formula.** Never introduce variables inside parentheses after a formula.
+
+**Bad** (undefined variables):
+
+```latex
+根据公式 $F = kx$，其中...
+```
+
+**Good** (define first, then formula):
+
+```latex
+对于弹簧系统，胡克定律指出恢复力 $F$ 与位移 $x$ 成正比：
+\begin{equation}
+  F = kx
+\end{equation}
+其中 $k$ 为弹簧劲度系数。
+```
+
 ## Physics and engineering experiment add-on (upstream `type-addons/report-experiment.md`)
 
 *Frozen from upstream heading: Experiment report.*
@@ -76,6 +97,47 @@ Discuss systematic and random uncertainty only to the extent the data or method
 supports it. Compare theory with measurement where the design permits it, and
 state which conclusions are limited by measurement scope, data coverage, or
 uncontrolled conditions.
+
+### Narrative → element → explanation (restored from the legacy experiment-report skill)
+
+**NEVER** start a section directly with a list, table, formula, or figure.
+**ALWAYS** include explanatory text first, using the
+**narrative → element → explanation** structure: after presenting data,
+formulas, tables, or figures, add explanatory text that unpacks meaning,
+connects to previous findings, and discusses implications.
+
+**Bad** (abrupt start):
+
+```latex
+\section{结果}
+
+\begin{table}
+...
+\end{table}
+
+\begin{equation}
+...
+\end{equation}
+```
+
+**Good** (narrative leads into content):
+
+```latex
+\section{结果}
+
+表~\ref{tab:measurements}展示了在不同条件下测得的实验数据。实验中控制变量为X，
+记录的响应变量Y呈现以下规律。
+
+\begin{table}
+...
+\end{table}
+
+对于质量为 $m$、所受合力为 $F$ 的物体，牛顿第二定律为
+\begin{equation}
+  F = ma .
+\end{equation}
+其中，$a$ 表示物体加速度。
+```
 
 Keep narrative ahead of raw elements. A results section that opens directly on
 a data table and a chain of formulas leaves the reader without a claim to
@@ -298,10 +360,12 @@ definitions into one:
   excerpts must follow the active object policy and include a path/line or other
   precise location when available.
 
-**Bad:** paste a long function and expect comments to explain the algorithm.
+**Bad:** paste the full 200-line instrument-control script and expect the
+inline comments to explain the measurement procedure.
 
-**Good:** show the few behavior-determining lines, identify their source
-location, and explain the input, branch, state change, and output around them.
+**Good:** show the few behavior-determining lines — the range switch and the
+wait for trigger — identify their location in the script, and explain the
+input, state change, and recorded output around them.
 
 ## Representation choice
 
@@ -319,11 +383,12 @@ interpret it locally. For formulas that form part of a sentence, use punctuation
 that completes the surrounding sentence. This is a prose rule, not a LaTeX-only
 syntax rule.
 
-**Bad:** place three figures together and explain them in a later “Figure
-discussion” paragraph.
+**Bad:** place the three I–V curves for different bias settings together at
+the top of Results and explain them in a later “Curve discussion” paragraph.
 
-**Good:** state why each selected visual is needed, place it near the relevant
-argument, and give its decisive reading immediately afterward.
+**Good:** state why each curve is needed, place it near the argument it
+supports, and give its decisive reading — the threshold voltage shift —
+immediately afterward.
 
 ## Progressive technical depth
 

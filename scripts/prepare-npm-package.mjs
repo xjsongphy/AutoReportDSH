@@ -34,6 +34,8 @@ const manifest = {
   main: './dist/src/index.js',
   exports: source.exports,
   files: [
+    'LICENSE',
+    'README.md',
     'dist/client.js',
     'dist/src/**/*.js',
     'dist/resources/**',
@@ -49,7 +51,7 @@ const manifest = {
     type: 'git',
     url: 'git+https://github.com/xjsongphy/AutoReportDSH.git',
   },
-  license: 'MIT',
+  license: source.license ?? 'MIT',
   publishConfig: { access: 'public' },
   dsh: source.dsh,
   dependencies: packageDependencies,
@@ -62,6 +64,11 @@ cpSync(join(root, 'dist', 'resources'), join(output, 'dist', 'resources'), { rec
 cpSync(join(root, 'dist', 'scripts', 'install-user-preset.js'), join(output, 'dist', 'scripts', 'install-user-preset.js'))
 cpSync(join(root, 'dist', 'scripts', 'install-package-preset.js'), join(output, 'dist', 'scripts', 'install-package-preset.js'))
 cpSync(join(root, 'cordis.patch.yml'), join(output, 'cordis.patch.yml'))
+// The published root needs its own license and README: npm reads them from the
+// package root, and `dist/resources/**` carries CC BY-SA documents whose notices
+// must ship with the tarball rather than only in the source repository.
+cpSync(join(root, 'LICENSE'), join(output, 'LICENSE'))
+cpSync(join(root, 'README.md'), join(output, 'README.md'))
 cpSync(join(root, 'presets', 'autoreport'), join(output, 'presets', 'autoreport'), { recursive: true })
 
 if (!existsSync(join(output, 'dist', 'src', 'index.js'))) {

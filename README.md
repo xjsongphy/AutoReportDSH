@@ -27,7 +27,7 @@ The workflow ports the report pipeline of
 - **Directory permission isolation** — every role is pinned to its own writable root by DSH's `workspace-write` sandbox (table below)
 - **LaTeX and Typst reports** — per-project language with bundled templates, themes, bibliography assets, and compile skills; Python for data processing and plotting
 - **Your DSH providers** — model routes and credentials come from DSH's own configuration
-- **Deterministic bundled resources** — templates, themes, and skills ship with the plugin; `pnpm run sync:resources` is an explicit maintenance action, never a startup download
+- **Deterministic bundled resources** — templates, themes, skills, and their reference documents are committed in `resources/` and read from there; a session never fetches or replaces a prompt over the network
 - **Everything bundled** — personas, templates, and skills ship with the plugin, so a fresh workspace runs immediately
 
 ### Workflow
@@ -156,7 +156,6 @@ $DSH_HOME/
 ├── .agent-presets/autoreport/     installed user preset
 ├── profiles/node_modules/autoreportdsh
 └── autoreport/
-    ├── resources/                 synced templates, themes, skills
     ├── venv/                      AutoReport-managed Python (optional)
     └── <workspaceId>/
         ├── project.json           language, python, subagent route
@@ -180,7 +179,7 @@ AutoReportDSH/
 ├── patches/               source-only Harness API test shim
 ├── presets/autoreport/    user preset (id = directory name)
 ├── resources/             bundled personas, skills, LaTeX templates
-├── scripts/               preset install, resource sync, client build
+├── scripts/               preset install, resource copy, client build
 ├── src/
 │   ├── host.ts · preset.ts · runtime.ts · client/
 │   ├── workflow/ · tools/ · policy/ · workspace/ · artifacts/
@@ -193,7 +192,6 @@ AutoReportDSH/
 | `pnpm test` | runs the unit, integration, client, and eval suites with Vitest |
 | `pnpm run typecheck` | typechecks the host and client code without emitting files |
 | `pnpm run build` | cleans `dist/`, compiles TypeScript, copies resources, and builds the web client |
-| `pnpm run sync:resources` | refreshes managed resources into `$DSH_HOME/autoreport/resources` without starting DSH |
 | `pnpm run install:preset` | materializes the `autoreport` user preset and its overlay in the DSH home (the source installer runs it for you) |
 | `pnpm run prepare:npm` | builds and assembles the publishable npm bundle under `dist/npm` |
 
@@ -222,6 +220,50 @@ Design and implementation notes: **[PLAN.md](PLAN.md)**. Product boundary and no
 
 ## Credits
 
+### Projects this workflow derives from
+
 - [AutoReport](https://github.com/xjsongphy/AutoReport) — the desktop app this workflow derives from
 - [AutoReportCLI](https://github.com/xjsongphy/AutoreportCLI) — the terminal workflow ported here
 - [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) — runtime, sessions, and sandbox
+
+### Vendored documents
+
+Templates, themes, skill documents, and language guidance are committed under
+`resources/` and read from there; nothing is fetched or replaced at runtime. So
+the attribution lives here rather than in a sync table, and each upstream's own
+license file travels with its copy.
+
+| Upstream | License | Contributes |
+| --- | --- | --- |
+| [lucifer1004/claude-skill-typst](https://github.com/lucifer1004/claude-skill-typst) | MIT | the `typst` skill and its four reference documents (`resources/typst/skills/typst/`) |
+| [xjsongphy/pkumpl-typst](https://github.com/xjsongphy/pkumpl-typst) | CC BY-SA 4.0 | the Typst theme, template, and bibliography assets (`resources/typst/`) |
+| [CastleStar14654/PKUMpLtX](https://github.com/CastleStar14654/PKUMpLtX) | CC BY-SA 4.0 | `mpltx.cls`, the PKU Modern Physics Laboratory LaTeX class built on `revtex4-2`, which the Typst theme ports |
+| [xjsongphy/skills](https://github.com/xjsongphy/skills) | none declared | the `latex-compile` skill, and the `experiment-report-writer` projection whose upstream commit and per-module blob hashes are recorded in its `provenance.json` |
+| [citation-style-language/styles](https://github.com/citation-style-language/styles) | CC BY-SA 3.0 | `american-physics-society.csl`, authored by Richard Karnesky |
+
+Where a license file exists upstream, it is committed beside the copy, so the
+notice is co-located with the thing it covers. `xjsongphy/skills` declares no
+license, so its two vendored documents carry none.
+
+Referenced at runtime rather than vendored:
+
+- [MinerU](https://github.com/opendatalab/MinerU) — the `mineru-open-api` CLI that `pdf-reference-reader` drives to extract `References/` PDFs into `Outline/.cache/mineru/`
+
+## License
+
+[MIT](LICENSE) for this project's own code — the host wiring, tools, policies,
+workflow runtime, and tests.
+
+Vendored documents are **not** relicensed by that grant; each keeps its own
+license, named in [Credits](#credits) and, where upstream provides one, text
+committed beside the copy:
+
+- the rest of `resources/typst/` — CC BY-SA 4.0 ([`LICENSE`](resources/typst/LICENSE)), from `pkumpl-typst`
+- `resources/typst/skills/typst/` — MIT ([`LICENSE`](resources/typst/skills/typst/LICENSE)), from `claude-skill-typst`
+- `resources/latex/themes/` — CC BY-SA 4.0 ([`LICENSE`](resources/latex/themes/LICENSE)), `mpltx.cls` from PKUMpLtX
+- `resources/typst/templates/american-physics-society.csl` — CC BY-SA 3.0, stated in its own `<rights>` element
+- `resources/skills/` — vendored from `xjsongphy/skills`, which declares no license
+
+The CC BY-SA documents are share-alike: this repository redistributes them, and
+the local edits they carry (retargeted cross-references, removed dead links, a
+trimmed index) remain under the same license as the originals.
