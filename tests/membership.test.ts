@@ -21,11 +21,12 @@ describe('AutoReport session membership', () => {
     expect(isAutoReportMainSession(rootSession('other', 'some-other-preset'))).toBe(false)
   })
 
-  it('still admits roots saved under the retired autoreport-main id', () => {
-    expect(isAutoReportMainSession(rootSession('legacy', 'autoreport-main'))).toBe(true)
-    const upgraded = rootSession('legacy-selected', undefined)
-    upgraded.append('agent-preset/selected', { agentPreset: 'autoreport-main' })
-    expect(isAutoReportMainSession(upgraded)).toBe(true)
+  it('rejects a preset id from an earlier build', () => {
+    // Current format only: an old session header is not AutoReport membership.
+    expect(isAutoReportMainSession(rootSession('legacy', 'autoreport-main'))).toBe(false)
+    const stale = rootSession('legacy-selected', undefined)
+    stale.append('agent-preset/selected', { agentPreset: 'autoreport-main' })
+    expect(isAutoReportMainSession(stale)).toBe(false)
   })
 
   it('never admits continuable children through the preset alone', () => {

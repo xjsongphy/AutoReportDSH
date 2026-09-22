@@ -9,10 +9,9 @@
  * select AutoReport.
  *
  * Root membership therefore follows the agent preset a session actually runs:
- * only sessions composed from {@link AUTOREPORT_MAIN_PRESET} (or the retired
- * {@link AUTOREPORT_LEGACY_PRESET} id) are AutoReport MAIN roots. Continuable
- * children are NOT covered by the preset; their membership is the
- * synchronous RoleRegistry binding that `send_to_agent` reserves BEFORE
+ * only sessions composed from {@link AUTOREPORT_MAIN_PRESET} are AutoReport MAIN
+ * roots. Continuable children are NOT covered by the preset; their membership is
+ * the synchronous RoleRegistry binding that `send_to_agent` reserves BEFORE
  * publishing the child.
  *
  * Preset resolution mirrors DSH's canonical `resolveSessionPreset`
@@ -29,14 +28,15 @@ import type { Session } from '@deepseek-ai/dsh-session'
 export const AUTOREPORT_MAIN_PRESET = 'autoreport'
 
 /**
- * Preset id used before the rename to {@link AUTOREPORT_MAIN_PRESET}. Saved
- * sessions still carry this string in the header or a selection event.
+ * Whether a preset id composes the AutoReport MAIN agent.
+ *
+ * Exactly one id qualifies. A preset id from an earlier build is not recognized
+ * as AutoReport, so such a session runs as a plain DSH session — this plugin
+ * reads its own current format only, and that includes session headers.
+ * @param preset - effective preset id, or undefined when none was recorded.
  */
-export const AUTOREPORT_LEGACY_PRESET = 'autoreport-main'
-
-/** Whether a preset id is AutoReport (current or retired). */
 export function isAutoReportPreset(preset: string | undefined): boolean {
-  return preset === AUTOREPORT_MAIN_PRESET || preset === AUTOREPORT_LEGACY_PRESET
+  return preset === AUTOREPORT_MAIN_PRESET
 }
 
 declare module '@deepseek-ai/dsh-session/types' {
@@ -66,8 +66,7 @@ export function resolveAgentPreset(session: Session): string | undefined {
 
 /**
  * Whether one session is an AutoReport MAIN root: top-level AND running the
- * `autoreport` preset (or the retired `autoreport-main` id) via header value
- * or a later logged selection.
+ * `autoreport` preset via header value or a later logged selection.
  * @param session - candidate root session.
  */
 export function isAutoReportMainSession(session: Session): boolean {
