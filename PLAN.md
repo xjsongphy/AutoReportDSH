@@ -1,8 +1,13 @@
-# AutoReportDSH — Design Plan (rev 5, amended rev 8)
+# AutoReportDSH — Design Plan (rev 5, amended rev 9)
 
 Migrate the AutoReportCLI physics-report workflow into a DeepSeek Harness (`dsh`) plugin.
 The scope contract is `../autoreportcli/docs/own-features.md`: preserve AutoReport-owned
 domain semantics while reusing DSH infrastructure wherever its contract is equivalent.
+
+**Rev 9 amendment.** Per-workspace report language gets one storage location, one display
+surface, and one switch action, and the settings card moves to the slot the Plugins page
+documents for a bundle (PLAN §2.18). §2.14 keeps the precedence chain but loses project-scoped
+language authority to the user settings namespace; §2.17 row 9 records the slot change.
 
 **Rev 8 execution-layer amendment.** Role writable roots are independent DSH sandbox
 workspace roots (cwd stays the experiment root). All five roles use DSH-native `bash`
@@ -665,7 +670,9 @@ changes never mutate an in-flight report. Project-scoped language selection is
 preserved: `/init [--language latex|typst]` updates project settings and
 materializes missing resources for that language without deleting the other
 backend's files; both `Report/main.tex` and `Report/main.typ` may coexist with
-`project.reportLanguage` authoritative.
+`project.reportLanguage` authoritative. **Rev 9 supersedes that storage**: the
+authoritative per-workspace language moves into the user settings namespace, and
+`project.reportLanguage` stays readable for one version (PLAN §2.18).
 
 Fixed authorization stays non-configurable (no allowNetwork/disableRoleIsolation
 surface); AutoReport policy may only narrow DSH capabilities. Subagent model
@@ -732,7 +739,7 @@ and where it lives in the codebase:
 | 6 | `/init --language latex\|typst` | **Implemented** — updates project settings + materializes missing resources only; other backend files never deleted |
 | 7 | Non-configurable authorization/execution policy | **By design** — fixed role table + immutable `network:'deny'`, no broadening knobs exposed |
 | 8 | Reuse DSH provider infrastructure | **Implemented** — subagents inherit Main by default; one optional shared route override is applied through DSH agent-scoped model selection, including `reasoningEffort` |
-| 9 | Web settings card via plugin settings seam | **Implemented** — `src/client/` registers `settings.plugin.item` keyed on namespace `autoreport`; Host half remains `installSettingsSection` |
+| 9 | Web settings card via plugin settings seam | **Implemented** — `src/client/` registers the `autoreport` namespace card; Host half is `installSettingsSection`. Rev 9 moved the registration from `plugins.item` (which the Plugins page reserves for host-plane official plugins) to `plugins.bundle.config`, keyed by the bundle's package name (PLAN §2.18) |
 | 10 | Continuable children for four subagents | **Implemented** — one durable child per role, reserve→start→markActive protocol |
 | 11 | Direct human conversations with subagents | **Supported** — stock DSH subagent surfaces; no parallel transport |
 | 12 | Conversation ≠ delegation invariant | **Documented** — PLAN §2.15; enforced by observer correlation on `(task_id, revision)` context |
@@ -740,6 +747,100 @@ and where it lives in the codebase:
 | 14 | Role permissions unchanged by human turns | **Enforced** — guard keys on child session identity regardless of message source |
 | 15 | Parent-owned continuation semantics | **Reused** — DSH continuation contract untouched; no independent subagent lifecycle |
 | 16 | Strictly scoped compatibility hooks | **Implemented** — the router installs nothing for non-AutoReport children (stock messaging comes from the base bundle) and routes bound roles through `agent/created` + child-scope injection; verified by keyless router tests |
+
+### 2.18 Per-workspace report language and the plugin settings page (rev 9)
+
+Rev 8 exposed a per-workspace language only through `/init --language`, which writes the
+external `project.json`, while the Web settings card offered one user-level default with no
+workspace dimension at all. The two surfaces could therefore disagree, and a user who set the
+card had no way to learn that `project.reportLanguage` outranked it. This revision gives the
+workspace dimension one storage location, one display surface, and one switch action.
+
+**Storage and precedence.** Per-workspace language lives in the `autoreport` user settings
+namespace; `project.json` keeps its other fields and its `reportLanguage` remains readable for
+one version:
+
+```text
+explicit workflow override (internal only)
+        ↓
+workspaceLanguages[workspaceRoot] (namespace 'autoreport' — authoritative)
+        ↓
+project.reportLanguage            (legacy, read-only compatibility)
+        ↓
+user defaultReportLanguage
+        ↓
+Cordis composition Config
+        ↓
+schema defaults
+```
+
+The key is the workspace's absolute root path. `workspaceIdForRoot` remains the key for
+AutoReport's own directories, but it cannot key a browser write: deriving it in the card would
+mean reimplementing the hash. Both sides read the same session record's `cwd`, and the host
+resolves the path before reading the map, so no path is re-derived and no fragment is guessed.
+`/init [--language latex|typst]` now writes `workspaceLanguages[root]` through the settings
+service instead of the file; it still materializes missing resources and still deletes nothing.
+
+**The project list needs no scan.** The card already holds every session in the Client's session
+store, whose rows carry `cwd`, `displayTitle`, `blank`, and the preset projection the
+conversation-window model picker already reads. A project is a row with the `autoreport` preset,
+no parent, a `cwd`, and a non-blank log — precisely the event that created its `REQUIRED_DIRS`.
+Grouping those rows by `cwd` yields the list live, with no wire payload, no host publication, and
+no filesystem read; a workspace with no AutoReport conversation never appears, which is the
+membership rule this revision wants. A workspace with no `workspaceLanguages` entry resolves to
+the current default and so appears in that language's list, which is what makes a newly started
+project join the selected language.
+
+The host needs no index of its own: it reads a moved workspace's root straight from the key it
+just read, and its own records stay keyed by `workspaceIdForRoot`. A registry under
+`<dshHome>/autoreport/` would be a cache with no reader in this revision, so none is added. If a
+later host feature must enumerate workspaces, the rule this design commits to is: record one
+piece of evidence per workspace when it is initialized — the `workflow/<session>/session.jsonl`
+the creating turn already writes — confirm each entry with a single `existsSync` on read, stop at
+the first hit instead of walking a workspace's history, and re-scan only the entry whose evidence
+has disappeared.
+
+**The settings page.** The configuration registers into `plugins.bundle.config` keyed by
+`autoreportdsh` — the slot the Plugins page documents for a bundle's own configuration.
+`plugins.item`, which rev 8 used, is documented as occupied by the host-plane configuration
+pages the harness ships; registering there is why the page listed AutoReport both as a card in
+the Official group and as an installed bundle. The bundle slot renders `view: 'page'` only and
+draws the title, icon, and crumb itself, so the disclosure header (title, description,
+chevron) is removed rather than duplicated. The card also loses its own border, radius, and
+hover chrome, its between-field dividers, and the rule above the save row: the official page
+style is section headings, left-label/right-control rows, and one save control.
+
+Under the report-language row the page shows two lists, LaTeX and Typst. Each row is the
+project name, its root path, and a `−` that moves the project to the other list, which is the
+write of `workspaceLanguages[root] = other`.
+
+**The template switch.** Only the host can touch a workspace, so the settings section's
+`onChange` hook — a no-op until now — diffs `workspaceLanguages` against its previous
+snapshot and calls `switchReportLanguage(root, from, to)` for each moved workspace. The two
+rules apply independently:
+
+```text
+for each file of the FROM resource set:
+    target exists and is byte-identical to the bundled resource  → delete
+    otherwise                                                    → keep
+
+for each file of the TO resource set:
+    copy only when the target does not exist (never overwrite)
+```
+
+Byte-identity with the bundled resource is the definition of "unmodified", so a template
+carried over from an older plugin build counts as the user's and is kept. Files outside the
+two known resource sets are never touched: the switch operates on known names and never scans
+the workspace. Repeated runs are no-ops.
+
+**Boundaries.** A missing or renamed workspace directory skips the file work, records the
+language, and shows the entry's path as unavailable. An in-flight workflow keeps its frozen
+snapshot, so a move affects later sessions only. `−` is a two-language toggle; this revision
+offers no "follow the default again" affordance. The bundle row keeps the title
+`autoreportdsh`, because the Plugins page derives a bundle's title as `shortName(pkg.name)`
+and assigns a mixed-case display name only to three packages hardcoded in the harness;
+renaming the npm package or asking upstream for a bundle-declared display name are separate
+options, deliberately outside this plan.
 
 ## 3. Testing and acceptance
 
@@ -756,6 +857,9 @@ and where it lives in the codebase:
 - Artifact filtering, bounded traversal, symlink handling, and AutoReport manifest projection.
 - Create-missing-only materialization, including `Data/Processed/` and the full
   `REQUIRED_DIRS` set, model-route resolution, and config validation.
+- Template switching (PLAN §2.18) in all four combinations of "from-template modified or not"
+  against "to-template present or not", plus non-template files left untouched and a second run
+  changing nothing.
 - Cold load of a session log containing `autoreport/*` events, with and without the plugin;
   plugin-present folding recovers task/role/artifact state and stock DSH skips unknown
   ignorable records safely. Assembled evals assert control-flow facts on the raw session
