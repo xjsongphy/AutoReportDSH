@@ -45,6 +45,12 @@ async function bench() {
   ctx.provide('connection', { isLoopback: true, api: {} })
   ctx.provide('remote', { $on: () => () => {} })
   ctx.provide('settingsScope', { bind: () => host.scope })
+  // The card lists projects from the session store, so the card registration
+  // itself waits for this service.
+  ctx.provide('sessions', {
+    subagentAddress: () => undefined,
+    list: { getSnapshot: () => ({ byId: {} }), subscribe: () => () => {} },
+  })
   return { ctx, slots: ctx.get('slots') as SlotRegistry, locale, host }
 }
 

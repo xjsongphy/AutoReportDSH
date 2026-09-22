@@ -70,14 +70,20 @@ export function apply(ctx: ClientContext): void {
   installCardStyles()
   ctx.effect(() => ctx.locale.register(SETTINGS_NS, { zh, en }), 'AutoReportDSH: settings dictionaries')
   ctx.effect(() => ctx.locale.register(TOOL_NS, { zh: toolRowZh, en: toolRowEn }), 'AutoReportDSH: tool-row dictionaries')
-  const card = new AutoReportCardController(ctx.settingsScope.bind({ namespace: AUTOREPORT_SETTINGS_NAMESPACE }))
-  ctx.slots.inject('plugins.bundle.config', () => ctx.slots.register({
-    name: 'plugins.bundle.config',
-    key: BUNDLE_ID,
-    locale: SETTINGS_NS,
-    inject: () => card.inject(),
-  }, AutoReportCard))
+  // The card lists projects from the session store, so both it and the
+  // conversation-window model picker wait for the `sessions` service.
   ctx.inject(['sessions'], (scope: ClientContext) => {
+    const sessions = scope.get('sessions') as ISessions
+    const card = new AutoReportCardController(
+      ctx.settingsScope.bind({ namespace: AUTOREPORT_SETTINGS_NAMESPACE }),
+      sessions.list,
+    )
+    scope.slots.inject('plugins.bundle.config', () => scope.slots.register({
+      name: 'plugins.bundle.config',
+      key: BUNDLE_ID,
+      locale: SETTINGS_NS,
+      inject: () => card.inject(),
+    }, AutoReportCard))
     installSubagentModelSeat(scope)
   })
   installToolRows(ctx)

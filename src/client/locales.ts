@@ -8,6 +8,7 @@ export type AutoReportLocaleKey =
   | 'save' | 'saving' | 'discard' | 'unsaved' | 'saveFailed'
   | 'invalidChoice' | 'invalidNumber' | 'invalidPython'
   | 'reportLanguage' | 'reportLanguageHint'
+  | 'projectsTitle' | 'projectsEmpty' | 'moveToOther'
   | 'idleTimeoutMs' | 'idleTimeoutMsHint' | 'timeoutMs' | 'timeoutMsHint'
   | 'python' | 'pythonHint'
   | 'pythonPick' | 'pythonManaged' | 'pythonCustom'
@@ -37,6 +38,9 @@ export const en: Record<AutoReportLocaleKey, string> = {
   invalidPython: 'Pick the AutoReport-managed venv, a detected local environment, or type an absolute interpreter path.',
   reportLanguage: 'Report language',
   reportLanguageHint: 'Language for workspaces that have not chosen their own.',
+  projectsTitle: 'Projects',
+  projectsEmpty: 'No project in this language yet.',
+  moveToOther: 'Switch to',
   idleTimeoutMs: 'Delegation idle timeout (ms)',
   idleTimeoutMsHint: 'Main ends the synchronous wait after the subagent has been inactive for this duration. Model generation and tool execution are excluded.',
   timeoutMs: 'Delegation maximum wait (ms)',
@@ -84,6 +88,9 @@ export const zh: Record<AutoReportLocaleKey, string> = {
   invalidPython: '请选择 AutoReport 托管环境、本机已检测的环境，或输入解释器的绝对路径。',
   reportLanguage: '报告语言',
   reportLanguageHint: '未单独选择语言的工作区使用这个语言。',
+  projectsTitle: '项目',
+  projectsEmpty: '这个语言下还没有项目。',
+  moveToOther: '切换到',
   idleTimeoutMs: '委派空闲超时（毫秒）',
   idleTimeoutMsHint: 'Subagent 无可观测活动持续达到此时长后，MAIN 将结束同步等待；模型生成与工具执行期间不计入。',
   timeoutMs: '委派绝对等待上限（毫秒）',

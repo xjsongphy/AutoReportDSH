@@ -11,6 +11,17 @@ export const css = {
   section: 'ar-section',
   sectionTitle: 'ar-section-title',
   actions: 'ar-actions',
+  projects: 'ar-projects',
+  projectsTitle: 'ar-projects-title',
+  listGroup: 'ar-list-group',
+  listTitle: 'ar-list-title',
+  list: 'ar-list',
+  listItem: 'ar-list-item',
+  listText: 'ar-list-text',
+  listName: 'ar-list-name',
+  listPath: 'ar-list-path',
+  listEmpty: 'ar-list-empty',
+  minus: 'ar-minus',
   readOnly: 'ar-readonly',
   failed: 'ar-failed',
   discard: 'ar-discard',
@@ -84,6 +95,105 @@ const STYLESHEET = `
   align-items: center;
   justify-content: flex-end;
   gap: 8px;
+}
+.${css.projects} {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 10px 0;
+}
+.${css.projectsTitle} {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 22px;
+  color: var(--dsw-alias-label-primary);
+}
+.${css.listGroup} {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.${css.listTitle} {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 18px;
+  letter-spacing: .02em;
+  color: var(--dsw-alias-label-tertiary);
+}
+.${css.list} {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.${css.listItem} {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 40px;
+}
+.${css.listText} {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.${css.listName} {
+  flex: none;
+  max-width: 50%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  line-height: 22px;
+  color: var(--dsw-alias-label-primary);
+}
+.${css.listPath} {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-label-tertiary);
+}
+.${css.listEmpty} {
+  margin: 0;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-label-tertiary);
+}
+.${css.minus} {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 14px;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+.${css.minus}:hover:not(:disabled) {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+.${css.minus}:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--dsw-alias-border-l3);
+}
+.${css.minus}:disabled {
+  color: var(--dsw-alias-label-tertiary);
+  cursor: default;
 }
 .${css.readOnly} {
   margin: 0;

@@ -135,9 +135,17 @@ describe('CardForm', () => {
 })
 
 describe('AutoReportCardController', () => {
+  /** The session listing the project lists derive from; empty unless a spec publishes rows. */
+  function stubSessions(rows: Record<string, Record<string, unknown>> = {}) {
+    return {
+      getSnapshot: () => ({ byId: rows }),
+      subscribe: () => () => {},
+    }
+  }
+
   it('keys the injected snapshot on the autoreport namespace fields', () => {
     const host = stubSettingsScope<AutoReportCardSettings>()
-    const subject = new AutoReportCardController(host.scope)
+    const subject = new AutoReportCardController(host.scope, stubSessions())
     host.publish({
       status: 'ready',
       writable: true,
@@ -164,7 +172,7 @@ describe('AutoReportCardController', () => {
 
   it('treats a typed relative Python path as invalid and a detected path as valid', () => {
     const host = stubSettingsScope<AutoReportCardSettings>()
-    const subject = new AutoReportCardController(host.scope)
+    const subject = new AutoReportCardController(host.scope, stubSessions())
     host.publish({
       status: 'ready',
       writable: true,

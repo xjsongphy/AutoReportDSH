@@ -8,6 +8,7 @@
 import type { SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { SettingsScope } from '@deepseek-ai/dsh-client-ui-settings/client'
 import type { MineruStatus } from './mineru-status-types.js'
+import { projectsByLanguage, type ProjectLanguage, type ProjectSessionRow, type ProjectLists } from './project-lists.js'
 import {
   CardForm, enumField, numberField, textField,
   type CardActions, type CardFieldState, type CardShell,
@@ -27,7 +28,9 @@ export interface PythonEnvironmentOption {
 /** The AutoReport fields this card edits. */
 export interface AutoReportCardSettings {
   /** Default report source language. */
-  defaultReportLanguage?: 'latex' | 'typst'
+  defaultReportLanguage?: ProjectLanguage
+  /** Per-workspace language keyed by workspace root; authoritative when present. */
+  workspaceLanguages?: Readonly<Record<string, ProjectLanguage>>
   /** Bounded wait for `send_to_agent({ wait: true })`. */
   delegationIdleTimeoutMs?: number
   /** Absolute bound for `send_to_agent({ wait: true })`. */
@@ -54,6 +57,8 @@ export interface AutoReportCardState extends CardShell {
   pythonEnvironments: readonly PythonEnvironmentOption[]
   /** Detected MinerU CLI/auth state from the Host composition layer. */
   mineruStatus: MineruStatus
+  /** Projects an AutoReport session has conversed in, split by report language. */
+  projects: ProjectLists
 }
 
 /** The registration-side face the AutoReport card's slot entry injects. */
@@ -62,6 +67,18 @@ export interface AutoReportCardFace extends CardActions {
     /** Card snapshot bound by the renderer as useAutoreportCard. */
     autoreportCard: SnapshotStore<AutoReportCardState>
   }
+  /**
+   * Move one project to the other report language. Recorded immediately rather
+   * than staged: it acts on the workspace, and the host switches the
+   * workspace's templates from the record.
+   */
+  moveProject: (root: string) => void
+}
+
+/** The session listing the project lists are derived from. */
+export interface ProjectSessionSource {
+  getSnapshot(): { byId: Record<string, ProjectSessionRow> }
+  subscribe(listener: () => void): () => void
 }
 
 const LANGUAGE_VALUES = ['latex', 'typst'] as const
@@ -80,12 +97,18 @@ function isAbsolutePath(path: string): boolean {
 
 /** Bridges the `autoreport` scope onto the card's staged form. */
 export class AutoReportCardController {
-  private readonly scope: SettingsScope<AutoReportCardSettings>
   private readonly form: CardForm<AutoReportCardSettings>
   private readonly store: SnapshotStore<AutoReportCardState>
 
-  /** @param scope - the bound settings scope for the `autoreport` namespace. */
-  constructor(scope: SettingsScope<AutoReportCardSettings>) {
+  /**
+   * @param scope - the bound settings scope for the `autoreport` namespace.
+   * @param sessions - the Client's session listing, from which the project lists
+   *   are derived; project membership follows what actually conversed.
+   */
+  constructor(
+    private readonly scope: SettingsScope<AutoReportCardSettings>,
+    private readonly sessions: ProjectSessionSource,
+  ) {
     this.scope = scope
     this.form = new CardForm(scope, [
       enumField('defaultReportLanguage', LANGUAGE_VALUES),
@@ -94,6 +117,9 @@ export class AutoReportCardController {
       textField('pythonExecutable'),
     ])
     this.store = this.form.bind(() => this.projection())
+    // A new project appears the moment its first turn commits, without any
+    // re-read: the session store already carries the row, and this republishes.
+    this.sessions.subscribe(() => { this.store.set(this.projection()) })
   }
 
   private environments(): readonly PythonEnvironmentOption[] {
@@ -141,14 +167,44 @@ export class AutoReportCardController {
       pythonExecutable: { ...python, invalid: pythonInvalid },
       pythonEnvironments: environments,
       mineruStatus,
+      projects: this.projects(),
     }
+  }
+
+  /** The two language lists, derived from the live session rows. */
+  private projects(): ProjectLists {
+    const value = this.scope.getSnapshot().value
+    return projectsByLanguage(
+      this.sessions.getSnapshot().byId,
+      value?.workspaceLanguages,
+      value?.defaultReportLanguage ?? 'latex',
+    )
+  }
+
+  /**
+   * Move one project to the other report language.
+   *
+   * The map is written through a path op so the browser never restates the
+   * settings document it did not read in full. The host turns that record into
+   * the workspace's template switch.
+   * @param root - absolute workspace root, which is the map's key.
+   */
+  private moveProject(root: string): void {
+    const value = this.scope.getSnapshot().value
+    const current = value?.workspaceLanguages?.[root] ?? value?.defaultReportLanguage ?? 'latex'
+    const next: ProjectLanguage = current === 'latex' ? 'typst' : 'latex'
+    void this.scope.mutate([{ op: 'set', path: ['workspaceLanguages', root], value: next }])
   }
 
   /**
    * Build the face the card's slot registration injects.
-   * @returns the card's snapshot and its form actions.
+   * @returns the card's snapshot, its form actions, and the project control.
    */
   inject(): AutoReportCardFace {
-    return { hooks: { autoreportCard: this.store }, ...this.form.actions() }
+    return {
+      hooks: { autoreportCard: this.store },
+      ...this.form.actions(),
+      moveProject: root => { this.moveProject(root) },
+    }
   }
 }

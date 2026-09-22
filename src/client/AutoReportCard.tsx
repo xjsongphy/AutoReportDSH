@@ -11,6 +11,7 @@
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { AutoReportCardFace } from './controller.js'
 import { MineruStatusField, SelectField, ValueField, PythonField } from './fields.js'
+import { ProjectLists } from './ProjectLists.js'
 import { css } from './styles.js'
 // Type-only: the Plugins page's SlotMap merge (the 'plugins.bundle.config' entry).
 import type {} from '@deepseek-ai/dsh-client-ui-plugin-manager/client'
@@ -55,6 +56,12 @@ export function AutoReportCard(props: AutoReportCardProps) {
           {...state.defaultReportLanguage}
           onEdit={(text) => { props.edit('defaultReportLanguage', text) }}
           onReset={() => { props.resetField('defaultReportLanguage') }}
+        />
+        <ProjectLists
+          t={t}
+          projects={state.projects}
+          disabled={!state.writable}
+          onMove={props.moveProject}
         />
       </section>
 

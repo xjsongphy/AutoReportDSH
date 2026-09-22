@@ -14,13 +14,20 @@ declare module '@deepseek-ai/dsh-client-runtime/client' {
   /** Branded session identifier as surfaced to client slots. */
   export type SessionId = string
 
-  /** Session listing face used to decide AutoReport subagent membership. */
+  /** Session listing face: subagent membership plus the project-list rows. */
   export interface ISessions {
     subagentAddress(sessionId: SessionId): { parentSessionId: SessionId } | undefined
     list: {
       getSnapshot(): {
-        byId: Record<string, { agentPreset?: string } & Record<string, unknown>>
+        byId: Record<string, {
+          agentPreset?: string
+          cwd?: string
+          parentId?: string
+          blank?: boolean
+          displayTitle?: string
+        } & Record<string, unknown>>
       }
+      subscribe(listener: () => void): () => void
     }
   }
 

@@ -51,9 +51,10 @@ function renderCard(state: Partial<AutoReportCardState> = {}) {
     pythonExecutable: field(''),
     pythonEnvironments: [],
     mineruStatus: { installed: true, tokenConfigured: true, tokenSource: 'config' },
+    projects: { latex: [], typst: [] },
     ...state,
   })
-  const actions = { edit: vi.fn(), resetField: vi.fn(), save: vi.fn(), discard: vi.fn() }
+  const actions = { edit: vi.fn(), resetField: vi.fn(), save: vi.fn(), discard: vi.fn(), moveProject: vi.fn() }
   const props = {
     ...actions,
     t,
@@ -132,6 +133,25 @@ describe('AutoReportCard', () => {
     fireEvent.click(screen.getByRole('menuitem', { name: en.pythonManaged }))
     expect(actions.edit).toHaveBeenCalledWith('pythonExecutable', '__managed__')
     expect(actions.save).not.toHaveBeenCalled()
+  })
+
+  it('moves a project to the other language from its row', () => {
+    const actions = renderCard({
+      projects: { latex: [{ root: '/exp/a', name: 'Alpha', language: 'latex' }], typst: [] },
+    })
+
+    expect(screen.getByText('Alpha')).toBeTruthy()
+    expect(screen.getByText('/exp/a')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: `${en.moveToOther} ${en.languageTypst}` }))
+
+    expect(actions.moveProject).toHaveBeenCalledWith('/exp/a')
+    expect(actions.save).not.toHaveBeenCalled()
+  })
+
+  it('says so when a language has no project yet', () => {
+    renderCard()
+
+    expect(screen.getAllByText(en.projectsEmpty)).toHaveLength(2)
   })
 
   it('blocks save while a draft is invalid', () => {
