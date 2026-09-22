@@ -265,7 +265,7 @@ export interface AutoReportRecordMap {
 /** One record type the AutoReport log can hold. */
 export type AutoReportRecordType = keyof AutoReportRecordMap
 
-/** Every AutoReport record type, for validation and migration. */
+/** Every AutoReport record type, for validation. */
 export const AUTOREPORT_RECORD_TYPES: readonly AutoReportRecordType[] = [
   'autoreport/workflow',
   'autoreport/role-binding',
@@ -276,13 +276,3 @@ export const AUTOREPORT_RECORD_TYPES: readonly AutoReportRecordType[] = [
   'autoreport/role-note',
 ]
 
-const RECORD_TYPE_SET: ReadonlySet<string> = new Set(AUTOREPORT_RECORD_TYPES)
-
-/**
- * Whether a raw type name is one this build's workflow log understands.
- * @param type - candidate record type from a log line or a legacy host event.
- * @returns whether {@link AutoReportRecordMap} describes it.
- */
-export function isAutoReportRecordType(type: string): type is AutoReportRecordType {
-  return RECORD_TYPE_SET.has(type)
-}

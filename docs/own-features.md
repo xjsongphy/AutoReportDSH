@@ -294,9 +294,9 @@ Properties this buys and costs:
 - We own durability: synchronous append-only writes, no session write lease and
   no compaction integration. A torn final line is skipped rather than fatal, and
   a missing log is an empty workflow, not an error.
-- A session created before the log existed is migrated once: its `autoreport/*`
-  records are read out of the host log, written to the new file, and never
-  consulted there again.
+- Only this format is read. A session whose workflow facts were written into the
+  host log by an earlier build is not migrated: the host log is never consulted
+  for AutoReport state, so such a session starts as a new workflow.
 
 Likewise, the durable AutoReport task state is that log, not DSH's generic
 `todo_write`. MAIN creates and redispatches workflow tasks through

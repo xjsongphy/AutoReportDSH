@@ -485,45 +485,6 @@ describe('host workflow runtime', () => {
     expect(runtime.forSession(session).state.projection().meta?.initialized).toBe(true)
   })
 
-  it('migrates a pre-sidecar session out of the host log exactly once', () => {
-    const root = mkdtempSync(join(tmpdir(), 'autoreport-migrate-'))
-    tempDirs.push(root)
-    const ctx = new Context()
-    const runtime = createRuntime(ctx, { ...CONFIG, workspaceRoot: root })
-
-    // A session written before the plugin kept its own log: its workflow facts
-    // are `autoreport/*` events in the HOST log, which is precisely what the
-    // plugin no longer produces. Appending them by cast reproduces that shape.
-    const session = rootSession('main-legacy', AUTOREPORT_MAIN_PRESET, root)
-    // `.call(session, …)` keeps the receiver: extracting the method would lose it.
-    const legacy = session.append as unknown as (
-      this: Session,
-      type: string,
-      data: unknown,
-    ) => unknown
-    legacy.call(session, 'autoreport/task', {
-      version: AUTOREPORT_SCHEMA_VERSION,
-      taskId: 'task-7',
-      subject: 'Analyze',
-      role: 'DATA_ANALYSIS',
-      dependencies: [],
-      status: 'running',
-      revision: 1,
-      steps: [],
-      scopes: ['Data/Processed'],
-      latestDelegationRevision: 1,
-    })
-
-    // Admission folds, migrates, and returns the same state the old log held.
-    expect(runtime.forSession(session).state.getTask('task-7')?.status).toBe('running')
-    // The facts are durable in the plugin's own log now...
-    const migrated = workflowRecords(session)
-    expect(migrated.map(record => record.type)).toEqual(['autoreport/task'])
-    // ...and a cold runtime rebuilds from that file, not from the host log.
-    const cold = createRuntime(new Context(), { ...CONFIG, workspaceRoot: root })
-    expect(cold.forSession(session).state.getTask('task-7')?.status).toBe('running')
-  })
-
   it('replays a durable child report that landed before the observer committed', () => {
     const ctx = new Context()
     const runtime = createRuntime(ctx, CONFIG)

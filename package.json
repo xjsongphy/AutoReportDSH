@@ -45,8 +45,7 @@
     "install:preset": "tsx scripts/install-user-preset.ts",
     "install:source": "node scripts/install-source.mjs",
     "start:source": "node scripts/start-source.mjs",
-    "prepare:npm": "pnpm run build && node scripts/prepare-npm-package.mjs",
-    "repair:sessions": "tsx scripts/repair-legacy-session-logs.ts"
+    "prepare:npm": "pnpm run build && node scripts/prepare-npm-package.mjs"
   },
   "dependencies": {
     "@deepseek-ai/cordis": "link:../deepseek-harness/vendor/cordis",

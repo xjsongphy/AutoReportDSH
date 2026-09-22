@@ -13,7 +13,6 @@ import { AUTOREPORT_MAIN_PRESET, isAutoReportMainSession } from './membership.js
 import { emptyArtifactFoldState, foldArtifact, type ArtifactCaller, type ArtifactFoldState } from './artifacts/observer.js'
 import {
   AUTOREPORT_SCHEMA_VERSION,
-  isAutoReportRecordType,
   type AutoReportRecordMap,
   type AutoReportRecordType,
   type WorkflowMetaSnapshot,
@@ -60,29 +59,6 @@ declare module '@deepseek-ai/cordis' {
 
 const DEFAULT_WAIT_MS = 600_000
 const DEFAULT_IDLE_TIMEOUT_MS = 60_000
-
-/**
- * AutoReport records a pre-sidecar session left in its host log.
- *
- * `autoreport/*` is no longer part of DSH's event vocabulary, so the host type
- * cannot describe these entries; the cast narrows a raw event to what
- * {@link isAutoReportRecordType} is about to verify. Migration is the only
- * reader of the host log for our state, and it runs at most once per session.
- */
-function legacyWorkflowRecords(session: Session): Array<WorkflowRecord> {
-  const entries: Array<WorkflowRecord> = []
-  const events = session.snapshotEvents() as ReadonlyArray<{ type: string; seq: number; time: number; data: unknown }>
-  for (const event of events) {
-    if (!isAutoReportRecordType(event.type)) continue
-    entries.push({
-      type: event.type,
-      seq: event.seq,
-      time: event.time,
-      data: event.data,
-    } as WorkflowRecord)
-  }
-  return entries
-}
 
 const DEFAULT_CONFIG: Config = {
   defaultReportLanguage: 'latex',
@@ -726,13 +702,12 @@ export default class AutoReportWorkflowRuntime extends Service {
   }
 
   /**
-   * Rebuild one MAIN session's workflow state from the plugin's own log,
-   * migrating a session created before that log existed.
+   * Rebuild one MAIN session's workflow state from the plugin's own log.
    *
-   * Migration reads `autoreport/*` records out of the host session log exactly
-   * once, writes them to our file, and returns them folded. After that the host
-   * log is never consulted for AutoReport state again — which is what lets the
-   * session log stay within DSH's own vocabulary.
+   * The host session log is never consulted for AutoReport state: a session
+   * with no log is a new workflow, which is also what a session from a build
+   * that wrote records into the host log becomes. Those records are not read
+   * back — this plugin supports its own current format only.
    * @param session - the MAIN session being admitted.
    * @returns the folded workflow state.
    */
@@ -741,14 +716,9 @@ export default class AutoReportWorkflowRuntime extends Service {
     if (location === undefined) return WorkflowState.empty()
     const path = workflowLogPath(location.settingsHome, location.workspaceRoot ?? '', String(session.id))
     const records = readWorkflowLog(path)
-    if (records.length > 0) {
-      seedWorkflowLog(path, records)
-      return WorkflowState.fromRecords(records)
-    }
-    const legacy = legacyWorkflowRecords(session)
-    if (legacy.length === 0) return WorkflowState.empty()
-    const migrated = legacy.map(entry => appendWorkflowEvent(session, entry.type, entry.data, location))
-    return WorkflowState.fromRecords(migrated)
+    if (records.length === 0) return WorkflowState.empty()
+    seedWorkflowLog(path, records)
+    return WorkflowState.fromRecords(records)
   }
 
   /**
