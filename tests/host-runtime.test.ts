@@ -530,6 +530,9 @@ describe('per-workspace language switching', () => {
     const session = rootSession('main-adopt', AUTOREPORT_MAIN_PRESET)
     runtime.maybeInitialize(session)
     expect(runtime.forSession(session).state.projection().meta?.settings?.reportLanguage).toBe('typst')
+    // Adopting the legacy value is not a move: no template is deleted or added.
+    expect(existsSync(join(root, 'Report/main.typ'))).toBe(true)
+    expect(existsSync(join(root, 'Report/main.tex'))).toBe(false)
     // The first initialization adopts the legacy value into the authoritative map.
     await vi.waitFor(() => {
       expect(ctx.settings.describe().find(entry => entry.ns === 'autoreport')?.user)

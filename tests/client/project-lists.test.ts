@@ -10,13 +10,18 @@ const rows: Record<string, ProjectSessionRow> = {
   child: { cwd: '/exp/a', agentPreset: 'autoreport', blank: false, parentId: 'a' },
   stock: { cwd: '/exp/d', agentPreset: 'standard', blank: false },
   untitled: { cwd: '/exp/deep/workspace', agentPreset: 'autoreport', blank: false },
+  projected: { cwd: '/exp/e', blank: false, projectionValues: { agentPreset: 'autoreport' } },
 }
 
 describe('projectsByLanguage', () => {
   it('keeps AutoReport main sessions that have conversed, one entry per workspace', () => {
     const lists = projectsByLanguage(rows, undefined, 'latex')
-    expect(lists.latex.map(entry => entry.root)).toEqual(['/exp/a', '/exp/b', '/exp/deep/workspace'])
+    expect(lists.latex.map(entry => entry.root)).toEqual(['/exp/a', '/exp/b', '/exp/e', '/exp/deep/workspace'])
     expect(lists.typst).toEqual([])
+  })
+
+  it('reads the preset from the projection face when the row carries none', () => {
+    expect(projectsByLanguage({ only: rows.projected }, undefined, 'latex').latex).toHaveLength(1)
   })
 
   it('omits a session whose log is still empty', () => {
@@ -25,11 +30,11 @@ describe('projectsByLanguage', () => {
 
   it('files each project by its recorded language and names it from the session title', () => {
     const lists = projectsByLanguage(rows, { '/exp/b': 'typst' }, 'latex')
-    expect(lists.latex.map(entry => entry.name)).toEqual(['Alpha', 'workspace'])
+    expect(lists.latex.map(entry => entry.name)).toEqual(['Alpha', 'e', 'workspace'])
     expect(lists.typst.map(entry => [entry.root, entry.name])).toEqual([['/exp/b', 'Beta']])
   })
 
   it('falls back to the default language when nothing is recorded', () => {
-    expect(projectsByLanguage(rows, undefined, 'typst').typst).toHaveLength(3)
+    expect(projectsByLanguage(rows, undefined, 'typst').typst).toHaveLength(4)
   })
 })

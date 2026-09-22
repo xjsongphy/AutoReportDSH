@@ -25,6 +25,7 @@ declare module '@deepseek-ai/dsh-client-runtime/client' {
           parentId?: string
           blank?: boolean
           displayTitle?: string
+          projectionValues?: { agentPreset?: string | null }
         } & Record<string, unknown>>
       }
       subscribe(listener: () => void): () => void

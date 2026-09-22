@@ -24,6 +24,18 @@ export interface ProjectSessionRow {
   readonly displayTitle?: string
   /** Composing agent preset; only `autoreport` rows are projects. */
   readonly agentPreset?: string
+  /**
+   * Host-computed projection values. The preset arrives here on the wire the
+   * Client builds rows from, so it is read as a fallback for the row-level
+   * field the conversation-window picker already uses.
+   */
+  readonly projectionValues?: { readonly agentPreset?: string | null }
+}
+
+/** Agent preset of one row, from whichever face carries it. */
+function presetOf(row: ProjectSessionRow): string | undefined {
+  const projected = row.projectionValues?.agentPreset
+  return row.agentPreset ?? (typeof projected === 'string' ? projected : undefined)
 }
 
 /** One project as a list row. */
@@ -73,7 +85,7 @@ export function projectsByLanguage(
 ): ProjectLists {
   const seen = new Map<string, ProjectEntry>()
   for (const row of Object.values(rows)) {
-    if (row.agentPreset !== AUTOREPORT_PRESET) continue
+    if (presetOf(row) !== AUTOREPORT_PRESET) continue
     if (row.parentId !== undefined) continue
     if (row.blank !== false) continue
     const root = row.cwd
