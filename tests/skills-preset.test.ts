@@ -69,7 +69,9 @@ describe('AutoReport role-scoped domain skills', () => {
     expect(writer).toMatchObject({ kind: 'directory' })
     expect(typst).toMatchObject({ kind: 'directory' })
     expect((writer as { path: string }).path).toContain('experiment-report-writer')
-    expect((typst as { path: string }).path).toContain('typst/skills/typst')
+    // Split on segments: the path is native to the platform running the test.
+    const typstPath = (typst as { path: string }).path
+    expect(typstPath.split(/[\\/]+/u)).toEqual(expect.arrayContaining(['typst', 'skills', 'typst']))
     // A flat document whose prose names workspace paths must NOT carry a base:
     // DSH tells the model to resolve those paths against it.
     expect(byName.get('typst-compile')?.resourceBase).toBeUndefined()
