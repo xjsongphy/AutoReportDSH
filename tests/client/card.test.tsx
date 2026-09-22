@@ -135,6 +135,23 @@ describe('AutoReportCard', () => {
     expect(actions.save).not.toHaveBeenCalled()
   })
 
+  it('contributes no card chrome and no divider between fields', () => {
+    renderCard()
+
+    // The official pages are borderless: nothing here may reintroduce a card.
+    expect(document.querySelector('.ar-card')).toBeNull()
+    expect(document.querySelector('.ar-card-body')).toBeNull()
+  })
+
+  it('pairs the two delegation waits in one row', () => {
+    renderCard()
+
+    const idle = screen.getByRole('textbox', { name: en.idleTimeoutMs })
+    const wait = screen.getByRole('textbox', { name: en.timeoutMs })
+    expect(idle.closest('.ar-grid')).not.toBeNull()
+    expect(wait.closest('.ar-grid')).toBe(idle.closest('.ar-grid'))
+  })
+
   it('moves a project to the other language from its row', () => {
     const actions = renderCard({
       projects: { latex: [{ root: '/exp/a', name: 'Alpha', language: 'latex' }], typst: [] },

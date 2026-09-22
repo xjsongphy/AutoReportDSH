@@ -27,6 +27,7 @@ export const css = {
   discard: 'ar-discard',
   save: 'ar-save',
   field: 'ar-field',
+  grid: 'ar-grid',
   fieldSplit: 'ar-field-split',
   fieldText: 'ar-field-text',
   fieldHead: 'ar-field-head',
@@ -251,9 +252,13 @@ const STYLESHEET = `
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 16px 0;
+  padding: 10px 0;
 }
-.${css.field} + .${css.field} { border-top: 1px solid var(--dsw-alias-border-l2); }
+.${css.grid} {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 24px;
+}
 .${css.fieldSplit} {
   display: flex;
   align-items: center;

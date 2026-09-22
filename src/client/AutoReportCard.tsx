@@ -67,28 +67,30 @@ export function AutoReportCard(props: AutoReportCardProps) {
 
       <section className={css.section}>
         <h3 className={css.sectionTitle}>{t('sectionDelegation')}</h3>
-        <ValueField
-          id="plugin-config-autoreport-idle-timeout"
-          label={t('idleTimeoutMs')}
-          hint={t('idleTimeoutMsHint')}
-          invalidLabel={t('invalidNumber')}
-          numeric
-          {...shared}
-          {...state.delegationIdleTimeoutMs}
-          onEdit={(text) => { props.edit('delegationIdleTimeoutMs', text) }}
-          onReset={() => { props.resetField('delegationIdleTimeoutMs') }}
-        />
-        <ValueField
-          id="plugin-config-autoreport-timeout"
-          label={t('timeoutMs')}
-          hint={t('timeoutMsHint')}
-          invalidLabel={t('invalidNumber')}
-          numeric
-          {...shared}
-          {...state.delegationWaitTimeoutMs}
-          onEdit={(text) => { props.edit('delegationWaitTimeoutMs', text) }}
-          onReset={() => { props.resetField('delegationWaitTimeoutMs') }}
-        />
+        <div className={css.grid}>
+          <ValueField
+            id="plugin-config-autoreport-idle-timeout"
+            label={t('idleTimeoutMs')}
+            hint={t('idleTimeoutMsHint')}
+            invalidLabel={t('invalidNumber')}
+            numeric
+            {...shared}
+            {...state.delegationIdleTimeoutMs}
+            onEdit={(text) => { props.edit('delegationIdleTimeoutMs', text) }}
+            onReset={() => { props.resetField('delegationIdleTimeoutMs') }}
+          />
+          <ValueField
+            id="plugin-config-autoreport-timeout"
+            label={t('timeoutMs')}
+            hint={t('timeoutMsHint')}
+            invalidLabel={t('invalidNumber')}
+            numeric
+            {...shared}
+            {...state.delegationWaitTimeoutMs}
+            onEdit={(text) => { props.edit('delegationWaitTimeoutMs', text) }}
+            onReset={() => { props.resetField('delegationWaitTimeoutMs') }}
+          />
+        </div>
       </section>
 
       <section className={css.section}>
