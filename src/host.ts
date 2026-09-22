@@ -17,6 +17,7 @@ import { createSkillGateGuard, skillLoadTracker } from './policy/skill-gate.js'
 import { installAutoReportPythonEnv } from './python-env.js'
 import AutoReportWorkflowRuntime, { type RuntimeOptions } from './runtime.js'
 import { createReportInitCommand } from './workspace/command.js'
+import { createReportResetCommand } from './workspace/reset.js'
 import { loadProjectSettings, workspaceIdForRoot } from './settings.js'
 import { describeDshVersionSupport, readRunningDshVersion } from './dsh-version.js'
 import { installTurnGuards } from './workflow/turn-guard.js'
@@ -163,6 +164,43 @@ export async function apply(ctx: Context, config: Partial<Config> = {}, options:
           }
         }
         const result = await definition.handler(invocation)
+        if (result.kind === 'success') runtime.maybeInitialize(invocation.agent.session)
+        return result
+      },
+    })
+    const resetDefinition = createReportResetCommand({
+      reportLanguage: resolved.defaultReportLanguage,
+      currentDefaultReportLanguage: () => runtime.currentUserSettings().defaultReportLanguage,
+      ...(resolved.workspaceRoot === undefined ? {} : { workspaceRoot: resolved.workspaceRoot }),
+      // Read-only here: a reset never chooses a language, it re-materializes
+      // the templates of the workspace's recorded one.
+      languageStore: {
+        read: root => runtime.languageStore?.read(root),
+        write: () => {},
+      },
+      legacyProject: root => ({
+        load: () => loadProjectSettings(options.settingsHome, workspaceIdForRoot(root)),
+      }),
+      // Clearing the board belongs to the session that typed the command, and
+      // only when the directory it named is that session's own workspace.
+      workflow: {
+        root: session => runtime.workflowRootFor(session),
+        reset: async session => { await runtime.resetWorkflow(session) },
+      },
+    })
+    commands.register({
+      ...resetDefinition,
+      async handler(invocation) {
+        if (!isAutoReportMainSession(invocation.agent.session)) {
+          return {
+            kind: 'error',
+            text: "reset is available only in an 'autoreport' session.",
+          }
+        }
+        const result = await resetDefinition.handler(invocation)
+        // The reset dropped this session's workflow with its files; admit the
+        // fresh one now so the board, the workspace root, and the settings
+        // snapshot are consistent before the next turn reads them.
         if (result.kind === 'success') runtime.maybeInitialize(invocation.agent.session)
         return result
       },

@@ -133,6 +133,37 @@ export const AUTO_REPORT_USER_SETTINGS_SCHEMA: z<AutoReportUserSettings> = z.obj
   mineruStatus: MINERU_STATUS_SCHEMA,
 }) as unknown as z<AutoReportUserSettings>
 
+/**
+ * Resolve the child `agentOptions` from the durable settings snapshot,
+ * falling back to composition defaults ONLY when no snapshot is on the
+ * workflow event. `{ inheritMain: true }` passes no route so DSH gives the
+ * child the Main selection. DSH's `AgentOptions` surface carries provider and
+ * model only, which seeds the child descriptor; the global AutoReport child
+ * setup router applies the complete snapshot selection (including reasoning
+ * effort) through DSH's scoped `installModelSelection()` seam before the child
+ * is published.
+ *
+ * Both child-creation paths resolve their route HERE. The resident path once
+ * read the live user settings instead, and the section schema materializes an
+ * absent `specialistModel` as `{}`: that empty object is truthy, so it went on
+ * as `{ provider: undefined, model: undefined }`, and DSH spreads a requested
+ * route AFTER the inherited one — the explicit undefineds wiped Main's route
+ * and every resident child died on its first step with `has no provider/model`.
+ * @param snapshot - frozen workflow settings, or undefined before one exists.
+ * @param fallbackRoute - composition default route.
+ * @returns the route to request, or undefined to inherit Main.
+ */
+export function childAgentOptions(
+  snapshot: WorkflowSettingsSnapshot | undefined,
+  fallbackRoute: Config['specialistModel'],
+): { provider: string; model: string } | undefined {
+  const selection = snapshot?.specialistModel
+  if (selection !== undefined) {
+    return selection.inheritMain ? undefined : { provider: selection.provider, model: selection.model }
+  }
+  return fallbackRoute === undefined ? undefined : { provider: fallbackRoute.provider, model: fallbackRoute.model }
+}
+
 /** Convert composition defaults into the base layer for DSH user settings. */
 export function autoReportUserSettingsBase(
   config: Config,

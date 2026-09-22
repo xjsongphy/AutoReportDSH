@@ -1,9 +1,10 @@
 import { randomUUID } from 'node:crypto'
-import { resolve } from 'node:path'
+import { rmSync } from 'node:fs'
+import { dirname, resolve } from 'node:path'
 import { Service, type Context } from '@deepseek-ai/cordis'
 import type { Agent, AgentHandle } from '@deepseek-ai/dsh-agent'
 import { PERSONA_PREFIX_SECTION } from '@deepseek-ai/dsh-system-prompt'
-import { createUserMessage, ReasoningEffortId } from '@deepseek-ai/dsh-llm'
+import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { ContentBlock } from '@deepseek-ai/dsh-llm'
 import { SessionId, type Session, type SessionEvent } from '@deepseek-ai/dsh-session'
 import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
@@ -55,6 +56,7 @@ import {
   AUTO_REPORT_USER_SETTINGS_SCHEMA,
   AUTOREPORT_SETTINGS_NAMESPACE,
   autoReportUserSettingsBase,
+  childAgentOptions,
   loadProjectSettings,
   resolveWorkflowSettings,
   validatePythonExecutableSetting,
@@ -405,22 +407,19 @@ export default class AutoReportWorkflowRuntime extends Service {
 
     signal.throwIfAborted()
     // DSH resolves a delegation's route from the delegating session's LATEST
-    // REQUEST HEADER first and only falls back to the parent's creation
-    // options (child-agent.ts `parentAgentOptionsForDelegation`): a Main whose
-    // model was chosen at request time carries no route in `options` at all.
-    // Reading `parent.options` here instead produced children that died on
-    // their first step with `has no provider/model`.
-    const route = this.currentUserSettings().specialistModel ?? this.config.specialistModel
+    // The route comes from the same authority the delegation path reads: the
+    // FROZEN workflow snapshot. It is resolved through `routeField`, so it can
+    // never carry the phantom `{}` the live user layer materializes, and a
+    // workflow keeps the route it started under. DSH then resolves the child's
+    // actual call config from the delegating session's latest REQUEST HEADER
+    // first and only falls back to creation options
+    // (`parentAgentOptionsForDelegation`), so a Main whose model was chosen at
+    // request time still hands its route down. Reading `parent.options` here
+    // instead produced children that died on their first step with
+    // `has no provider/model`.
+    const route = childAgentOptions(live.state.projection().meta?.settings, this.config.specialistModel)
     const childDepth = resolveChildDepth(parent, 1)
-    const agentOptions: Agent['options'] = resolveChildAgentOptions(parent, route === undefined
-      ? undefined
-      : {
-          provider: route.provider,
-          model: route.model,
-          ...(route.reasoningEffort === undefined
-            ? {}
-            : { reasoningEffort: ReasoningEffortId(route.reasoningEffort) }),
-        }, childDepth)
+    const agentOptions: Agent['options'] = resolveChildAgentOptions(parent, route, childDepth)
     const persona = loadSpecialistPersona(role)
     const setup = async (childCtx: Context, child: Agent): Promise<void> => {
       if (child === undefined) throw new Error(`resident ${role} setup has no child agent`)
@@ -728,12 +727,65 @@ export default class AutoReportWorkflowRuntime extends Service {
    *   session header supplies a workspace root.
    */
   private workflowLocation(session: Session): WorkflowLogLocation | undefined {
-    const workspaceRoot = this.config.workspaceRoot ?? session.header.cwd
-    if (workspaceRoot === undefined || workspaceRoot.length === 0) return undefined
+    const workspaceRoot = this.workflowRootFor(session)
+    if (workspaceRoot === undefined) return undefined
     return {
       workspaceRoot,
       ...(this.settingsHome === undefined ? {} : { settingsHome: this.settingsHome }),
     }
+  }
+
+  /**
+   * Workspace root one session's workflow is keyed by: the configured root
+   * when the deployment pins one, otherwise the session's own cwd.
+   * @param session - the MAIN session being observed.
+   * @returns the root, or undefined when neither source supplies one.
+   */
+  workflowRootFor(session: Session): string | undefined {
+    const root = this.config.workspaceRoot ?? session.header.cwd
+    return root === undefined || root.length === 0 ? undefined : root
+  }
+
+  /**
+   * Reset one MAIN session's workflow: release its resident children, revoke
+   * their role bindings, delete the durable log, and drop the cached state, so
+   * the next admission folds a fresh, empty workflow.
+   *
+   * The workspace's files are the caller's business — `/reset` clears them
+   * first — and this session-side half is deliberately not recoverable: a
+   * reset means the task board, the delegation history, and the role bindings
+   * are gone. Role bindings are dropped with it because a binding that
+   * outlived its files would hand the next dispatch a child whose work
+   * referenced deleted inputs.
+   * @param session - owning MAIN session.
+   * @returns the child session ids that lost their binding, in revocation order.
+   * @throws when the session is not an admitted AutoReport MAIN session.
+   */
+  async resetWorkflow(session: Session): Promise<string[]> {
+    if (!isAutoReportMainSession(session)) {
+      throw new Error(
+        `AutoReport workflow reset requires the '${AUTOREPORT_MAIN_PRESET}' preset; refused ${session.id}`,
+      )
+    }
+    const key = String(session.id)
+    const released: string[] = []
+    const live = this.parents.get(key)
+    if (live !== undefined) {
+      for (const binding of live.state.projection().bindingsByRole.values()) {
+        if (this.roleRegistry.revoke(binding.childSessionId)) released.push(String(binding.childSessionId))
+      }
+    }
+    this.parents.delete(key)
+    this.artifactFolds.delete(key)
+    this.residentProvisioning.delete(key)
+    this.pendingPostCommitInitialization.delete(key)
+    await this.disposeResidentFor(session.id)
+    const location = this.workflowLocation(session)
+    if (location !== undefined) {
+      const path = workflowLogPath(location.settingsHome, location.workspaceRoot ?? '', key)
+      rmSync(dirname(path), { recursive: true, force: true })
+    }
+    return released
   }
 
   /**

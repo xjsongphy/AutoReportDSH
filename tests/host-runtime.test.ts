@@ -408,6 +408,107 @@ describe('host workflow runtime', () => {
     })
   })
 
+  it('keeps the parent route when the mounted settings carry no specialist route', async () => {
+    // Regression: the sibling case above passes without a settings provider,
+    // where `currentUserSettings().specialistModel` is simply undefined. In
+    // production the section schema MATERIALIZES an absent route as `{}`, and
+    // that empty object is truthy: the runtime passed it on as
+    // `{ provider: undefined, model: undefined }`, and DSH's
+    // `resolveChildAgentOptions` spreads a requested route AFTER the inherited
+    // one, so the explicit undefineds wiped Main's route and the child died on
+    // its first step with `has no provider/model` (session 7a2af08e → children
+    // 4a72da38, 3c4bbd9c, neither of which got a classified descriptor).
+    const root = mkdtempSync(join(tmpdir(), 'autoreport-runtime-'))
+    tempDirs.push(root)
+    const ctx = new Context()
+    await ctx.plugin(MemorySettings, { doc: { autoreport: {} } })
+    const runtime = createRuntime(ctx, { ...CONFIG, workspaceRoot: root })
+    // The section's inject is asynchronous, and the RUNTIME is what installs it:
+    // production reads a settled source, so the phantom route is in force
+    // before the child is provisioned.
+    await vi.waitFor(() => {
+      expect(ctx.settings.describe().some(entry => entry.ns === 'autoreport')).toBe(true)
+    })
+    const session = rootSession('resident-phantom-route-main', AUTOREPORT_MAIN_PRESET, root)
+    const mainAgent = { id: session.id, session, options: {}, ctx: { get: () => undefined } } as unknown as Agent
+    session.append('turn/start', { turn: 1 })
+    session.append('request/header', {
+      header: { config: { provider: 'deepseek-official', model: 'deepseek-flash', reasoningEffort: 'low' } },
+      reason: 'initial',
+    })
+    const created: Array<{ agentOptions?: Record<string, unknown> }> = []
+    const createChild = async (options: { sessionId: SessionId, agentOptions?: Record<string, unknown> }): Promise<{ agent: Agent, dispose: () => Promise<void> }> => {
+      created.push(options)
+      const child = Session.create(options.sessionId, undefined, {
+        version: SESSION_FORMAT_VERSION,
+        isSeeded: false,
+        id: options.sessionId,
+        createdAt: Date.now(),
+        parentSession: session.id,
+      })
+      return { agent: { id: child.id, session: child } as Agent, dispose: async () => {} }
+    }
+    ctx.provide('agents', {
+      list: () => [mainAgent],
+      get: (id: SessionId) => id === mainAgent.id ? mainAgent : undefined,
+      create: createChild,
+      resume: createChild,
+    } as never)
+    await runtime.ensureResidentRole(mainAgent, 'THEORY')
+
+    expect(runtime.currentUserSettings().specialistModel).toEqual({})
+    expect(created[0]?.agentOptions).toMatchObject({
+      provider: 'deepseek-official',
+      model: 'deepseek-flash',
+    })
+  })
+
+  it('resets one session workflow: residents released, bindings revoked, log gone', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'autoreport-runtime-'))
+    const home = mkdtempSync(join(tmpdir(), 'autoreport-home-'))
+    tempDirs.push(root, home)
+    const ctx = new Context()
+    const session = rootSession('reset-main', AUTOREPORT_MAIN_PRESET, root)
+    const mainAgent = { id: session.id, session, options: {}, ctx: { get: () => undefined } } as unknown as Agent
+    const disposed: string[] = []
+    const createChild = async (options: { sessionId: SessionId }): Promise<{ agent: Agent, dispose: () => Promise<void> }> => {
+      const child = Session.create(options.sessionId, undefined, {
+        version: SESSION_FORMAT_VERSION,
+        isSeeded: false,
+        id: options.sessionId,
+        createdAt: Date.now(),
+        parentSession: session.id,
+      })
+      return {
+        agent: { id: child.id, session: child } as Agent,
+        dispose: async () => { disposed.push(String(options.sessionId)) },
+      }
+    }
+    ctx.provide('agents', {
+      list: () => [mainAgent],
+      get: (id: SessionId) => id === mainAgent.id ? mainAgent : undefined,
+      create: createChild,
+      resume: createChild,
+    } as never)
+    const runtime = createRuntime(ctx, { ...CONFIG, workspaceRoot: root }, { settingsHome: home })
+    runtime.maybeInitialize(session)
+    await runtime.ensureResidentRole(mainAgent, 'THEORY')
+    const binding = runtime.forSession(session).state.projection().bindingsByRole.get('THEORY')
+    const childId = String(binding?.childSessionId)
+    expect(runtime.roleRegistry.lookup(childId)).toBeDefined()
+    expect(workflowRecords(session, home).length).toBeGreaterThan(0)
+
+    expect(await runtime.resetWorkflow(session)).toEqual([childId])
+
+    expect(disposed).toEqual([childId])
+    expect(runtime.roleRegistry.lookup(childId)).toBeUndefined()
+    expect(workflowRecords(session, home)).toEqual([])
+    // The next admission folds a fresh, empty workflow: no task board, no meta.
+    const fresh = runtime.forSession(session).state.projection()
+    expect(fresh.meta).toBeUndefined()
+    expect(fresh.bindingsByRole.size).toBe(0)
+  })
+
   it('gates a REPORT write until the running dsh observes the skill load', async () => {
     const root = mkdtempSync(join(tmpdir(), 'autoreport-runtime-'))
     tempDirs.push(root)

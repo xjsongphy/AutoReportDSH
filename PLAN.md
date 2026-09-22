@@ -1,8 +1,13 @@
-# AutoReportDSH — Design Plan (rev 5, amended rev 9)
+# AutoReportDSH — Design Plan (rev 5, amended rev 10)
 
 Migrate the AutoReportCLI physics-report workflow into a DeepSeek Harness (`dsh`) plugin.
 The scope contract is `../autoreportcli/docs/own-features.md`: preserve AutoReport-owned
 domain semantics while reusing DSH infrastructure wherever its contract is equivalent.
+
+**Rev 10 amendment.** A workspace can be reset: `/reset` clears the generated work, keeps the
+user's inputs, and clears the invoking session's workflow with it (PLAN §2.19). The command
+carries no confirmation, because a slash command runs outside any turn and the approval panel is
+turn-enclosed.
 
 **Rev 9 amendment.** Per-workspace report language gets one storage location, one display
 surface, and one switch action, and the settings card moves to the slot the Plugins page
@@ -111,7 +116,7 @@ AutoReportDSH/
 ├── scripts/
 │   └── install-user-preset.ts         # materializes the preset under $DSH_HOME/.agent-presets
 ├── src/
-│   ├── host.ts                        # host-plane runtime, guard, /init
+│   ├── host.ts                        # host-plane runtime, guard, /init + /reset
 │   ├── preset.ts                      # autoreport preset-plane contribution
 │   ├── client/                        # web settings card (separate tsconfig)
 │   ├── runtime.ts                     # workflow state, artifacts, settings snapshot
@@ -119,7 +124,7 @@ AutoReportDSH/
 │   ├── roles.ts                       # fixed role table and policy metadata
 │   ├── workflow/                      # tasks, delegations, bindings, turn/report observers
 │   ├── tools/                         # manifest, send_to_agent, report_workflow, router
-│   ├── workspace/                     # init, /init, bundled skill loader
+│   ├── workspace/                     # init, /init, /reset, bundled skill loader
 │   ├── policy/                        # role guard and per-role sandbox roots
 │   ├── artifacts/                     # automatic filesystem observation and filtering
 │   ├── python-detect.ts               # local / managed / custom interpreter discovery
@@ -130,7 +135,7 @@ AutoReportDSH/
 └── tests/                             # unit, integration, client/, eval/, e2e/
 ```
 
-The plugin host plane registers the workflow service, durable projections, `/init`,
+The plugin host plane registers the workflow service, durable projections, `/init` and `/reset`,
 role policy guard, report-execution capability, and lifecycle observers. Model-facing tools
 are mounted through the `autoreport` agent-plane composition rather than globally.
 
@@ -847,6 +852,43 @@ in the harness. The literal `AutoReportDSH` therefore rides the package descript
 same row prints under its title, and the page's own copy. A bundle-declared display name would
 need an upstream change; that is the only path to the mixed-case title and it is deliberately
 not a dependency of this plan.
+
+### 2.19 `/reset` (rev 10)
+
+`/reset [workspace-directory]` returns one experiment workspace to a freshly initialized state
+without touching what the user supplied. The root resolves exactly as `/init`'s does (explicit
+argument, then the invoking session's cwd, then the configured `workspaceRoot`), and the command
+takes no other option: an option-looking token is a usage error rather than something silently
+ignored, because a reset is not recoverable.
+
+```text
+clear (contents only, then recreate in the init pass)
+    Outline/   Theory/   Plots/   Report/   Data/Processed/
+never touched
+    References/            (the user's papers and handouts)
+    Data/                  (raw measurements; the one exception is Data/Processed)
+```
+
+`Plots/` is cleared whole rather than its `Fig`/`Scripts` children because it is the PLOTTING
+role's writable root and figures may sit at any depth under it. Targets that hold nothing are
+left alone, so the report names real removals. `Report/` comes back through the same
+create-missing-only materialization `/init` uses, under the language the workspace's record
+names — a reset never chooses a language.
+
+**No confirmation.** DSH runs a command OUTSIDE any turn (`commands/execute` logs
+`command/run`/`command/done` as "direct log-only appends — no turn wraps them"), and the approval
+panel is only reachable from `approval.request()`, which refuses to run outside an open turn.
+A slash command therefore cannot pop a confirmation dialog; the command reports what it cleared,
+restored, and kept instead.
+
+**The session half.** Resetting the files alone would leave MAIN holding a task board, delegation
+history, and role bindings for work whose inputs no longer exist, so `/reset` also clears the
+INVOKING session's workflow: role bindings are revoked, resident children are released, the
+durable log directory is deleted, and the cached fold is dropped. The host then re-admits a fresh
+workflow, so the board is empty and the metadata is current before the next turn reads it. This
+happens only when the reset root is the workspace that session's workflow is keyed by
+(`config.workspaceRoot ?? session.header.cwd`); a directory named on the command line that
+belongs to someone else leaves the board alone and the result says so.
 
 ## 3. Testing and acceptance
 

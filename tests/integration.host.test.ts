@@ -13,7 +13,7 @@
  * @module tests/integration.host
  */
 
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -314,6 +314,71 @@ describe('integration: assembled host (real context)', () => {
     // The durable snapshot NEVER adopts a later change (PLAN §2.14).
     const after = assembled.runtime.forSession(assembled.mainSession).state.projection().meta?.settings
     expect(after).toEqual(before)
+  })
+
+  it('/reset clears the generated work through the host, inputs and gating intact', async () => {
+    const assembled = await boot()
+    const command = assembled.reportResetCommand
+    if (command === undefined) throw new Error('/reset was not registered by the host plugin')
+    const root = assembled.workspaceRoot
+
+    // A stock session may not reset anything, exactly like /init.
+    const stockCwd = mkdtempSync(join(tmpdir(), 'autoreport-reset-stock-'))
+    const stockSession = Session.create(SessionId('it-reset-stock'), undefined, {
+      version: SESSION_FORMAT_VERSION,
+      isSeeded: false,
+      id: SessionId('it-reset-stock'),
+      createdAt: Date.now(),
+      cwd: stockCwd,
+    })
+    const rejected = await command.handler({ rawInput: '', agent: { session: stockSession } })
+    expect(rejected.kind).toBe('error')
+    expect(rejected.text).toContain("only in an 'autoreport' session")
+    expect(existsSync(join(stockCwd, 'Outline'))).toBe(false)
+
+    admitFirstTurn(assembled)
+    // Generated work from every reset target, plus the two input trees.
+    mkdirSync(join(root, 'Outline', '.cache'), { recursive: true })
+    writeFileSync(join(root, 'Outline', 'report_outline.md'), 'outline')
+    writeFileSync(join(root, 'Theory', 'theory.md'), 'theory')
+    writeFileSync(join(root, 'Data', 'raw.txt'), 'raw')
+    mkdirSync(join(root, 'Data', 'Processed'), { recursive: true })
+    writeFileSync(join(root, 'Data', 'Processed', 'clean.csv'), 'processed')
+    mkdirSync(join(root, 'References'), { recursive: true })
+    writeFileSync(join(root, 'References', 'handout.pdf'), 'paper')
+    assembled.runtime.commit(assembled.mainSession, 'autoreport/task', {
+      version: AUTOREPORT_SCHEMA_VERSION,
+      taskId: 'task-1',
+      subject: 'analysis',
+      role: 'DATA_ANALYSIS',
+      dependencies: [],
+      status: 'pending',
+      revision: 1,
+      steps: [],
+      scopes: ['Data/Processed'],
+    })
+    expect(assembled.runtime.forSession(assembled.mainSession).state.projection().tasks.size).toBe(1)
+
+    const result = await command.handler({ rawInput: '', agent: { session: assembled.mainSession } })
+    expect(result.kind).toBe('success')
+    expect(result.text).toContain('cleared: Outline, Theory')
+    expect(result.text).toContain('task board: this session workflow cleared')
+
+    expect(existsSync(join(root, 'Outline', 'report_outline.md'))).toBe(false)
+    expect(existsSync(join(root, 'Outline', '.cache'))).toBe(false)
+    expect(existsSync(join(root, 'Theory', 'theory.md'))).toBe(false)
+    expect(existsSync(join(root, 'Data', 'Processed', 'clean.csv'))).toBe(false)
+    // Inputs and the re-materialized skeleton survive.
+    expect(readFileSync(join(root, 'Data', 'raw.txt'), 'utf8')).toBe('raw')
+    expect(readFileSync(join(root, 'References', 'handout.pdf'), 'utf8')).toBe('paper')
+    expect(existsSync(join(root, 'Report', 'main.tex'))).toBe(true)
+    expect(existsSync(join(root, 'Outline'))).toBe(true)
+    // The host re-admitted a FRESH workflow: metadata is back, the board is not.
+    const after = assembled.runtime.forSession(assembled.mainSession).state.projection()
+    expect(after.meta?.workspaceRoot).toBe(root)
+    expect(after.tasks.size).toBe(0)
+
+    await assembled.ctx.fiber?.dispose()
   })
 
   it('releases Main guard restrictions when an admitted root switches away from autoreport', async () => {

@@ -41,13 +41,14 @@ export interface WorkspaceLanguageStore {
   write(root: string, language: ReportLanguage): void
 }
 
-/** Inputs the factory needs that normally come from plugin configuration. */
-export interface ReportInitCommandOptions {
-  /**
-   * Workspace root used when the invocation carries no explicit directory
-   * argument and the invoking agent supplies no usable cwd.
-   */
-  readonly workspaceRoot?: string
+/**
+ * Where one workspace's report language comes from, in precedence order: the
+ * authoritative per-workspace record, the legacy external project document,
+ * the DSH user default, then the composition default. `/init` and `/reset`
+ * both resolve through this chain, so a workspace can never be re-initialized
+ * under a language its record does not name.
+ */
+export interface ReportLanguageSources {
   /**
    * Resolved fallback language used when neither the invocation flag, the
    * recorded map, nor the legacy project settings choose one.
@@ -65,6 +66,34 @@ export interface ReportInitCommandOptions {
    * from recording anything, so it only materializes resources.
    */
   readonly languageStore?: WorkspaceLanguageStore
+}
+
+/** Inputs the factory needs that normally come from plugin configuration. */
+export interface ReportInitCommandOptions extends ReportLanguageSources {
+  /**
+   * Workspace root used when the invocation carries no explicit directory
+   * argument and the invoking agent supplies no usable cwd.
+   */
+  readonly workspaceRoot?: string
+}
+
+/**
+ * Resolve one workspace's report language through the shared precedence chain.
+ *
+ * Filesystem inference is never consulted: a workspace whose language was
+ * never recorded keeps materializing the composition default until someone
+ * chooses.
+ * @param root - absolute workspace root.
+ * @param sources - the seam options carrying the chain's inputs.
+ * @returns the language this workspace resolves to right now.
+ * @throws when the legacy project document is present but unreadable.
+ */
+export function resolveReportLanguage(root: string, sources: ReportLanguageSources): ReportLanguage {
+  const legacy: AutoReportProjectSettings = sources.legacyProject?.(root).load() ?? {}
+  return sources.languageStore?.read(root)
+    ?? legacy.reportLanguage
+    ?? sources.currentDefaultReportLanguage?.()
+    ?? sources.reportLanguage
 }
 
 /** One-line summary of one initialization pass, rendered by the command. */
@@ -144,10 +173,10 @@ export function parseReportInitInput(rawInput: string): ParsedReportInitInput | 
  * @param options - factory options supplying the fallback root and language.
  * @returns absolute workspace root to initialize.
  */
-function resolveWorkspaceRoot(
+export function resolveWorkspaceRoot(
   directory: string,
   invocation: CommandInvocation,
-  options: ReportInitCommandOptions,
+  options: { readonly workspaceRoot?: string },
 ): string | undefined {
   const candidate = directory.length > 0
     ? directory
@@ -185,12 +214,10 @@ export function createReportInitCommand(options: ReportInitCommandOptions): Comm
         }
       }
       try {
-        const legacy: AutoReportProjectSettings = options.legacyProject?.(root).load() ?? {}
-        const language = parsed.language
-          ?? options.languageStore?.read(root)
-          ?? legacy.reportLanguage
-          ?? options.currentDefaultReportLanguage?.()
-          ?? options.reportLanguage
+        // Read the chain even when the flag wins: a corrupt legacy document is
+        // a workspace-level failure the user has to know about either way.
+        const recorded = resolveReportLanguage(root, options)
+        const language = parsed.language ?? recorded
         let saved = ''
         if (parsed.language !== undefined && options.languageStore !== undefined) {
           // Record the explicit choice BEFORE materializing so a crash between

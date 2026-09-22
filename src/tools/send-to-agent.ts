@@ -199,6 +199,11 @@ function resultFromOutcome(
 }
 
 /**
+ * Create the fixed-role `send_to_agent` tool over DSH continuable messaging.
+ * @param deps - DSH transport, workflow runtime, and plugin config.
+ * @returns model-facing tool definition.
+ */
+/**
  * Resolve the child `agentOptions` from the durable settings snapshot,
  * falling back to composition defaults ONLY when no snapshot is on the
  * workflow event. `{ inheritMain: true }` passes no route so DSH gives the
@@ -219,11 +224,6 @@ function childAgentOptions(
   return fallbackRoute === undefined ? undefined : { provider: fallbackRoute.provider, model: fallbackRoute.model }
 }
 
-/**
- * Create the fixed-role `send_to_agent` tool over DSH continuable messaging.
- * @param deps - DSH transport, workflow runtime, and plugin config.
- * @returns model-facing tool definition.
- */
 export function createSendToAgentTool(deps: SendToAgentDependencies): ToolDefinition {
   const now = deps.now ?? Date.now
   const mintChild = deps.childId ?? (() => SessionId(randomUUID()))

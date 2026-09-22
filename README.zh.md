@@ -30,6 +30,7 @@ Plotting、Report —— 负责理论推导、数据分析、绘图和 LaTeX/Typ
 
 ### 工作流
 - **工作区自动初始化** — Main 首个回合只初始化一次；`/init` 用于手动修复或选择报告语言
+- **可重置工作区** — `/reset` 清掉生成物（`Outline/`、`Theory/`、`Plots/`、`Report/`、`Data/Processed/`），保留 `References/` 与原始 `Data/`，重建骨架，并把本会话的任务板清空
 - **任务与产物追踪** — Main 通过 `send_to_agent` 委派任务；specialist 在共享的 `manifest` 里描述自己的产出，下一个角色无需被告知即可找到；每个任务以声明完成收尾
 - **specialist 可续写** — 每个 specialist 在后续任务中保留角色上下文；直接与它对话仍是普通对话
 - **其余是原样 DSH** — 未选择 `autoreport` preset 的 session 与没有本插件的 DSH 行为一致
@@ -98,6 +99,8 @@ AUTOREPORT_DSH_COMMAND="/path/to/dsh" pnpm run start:source
    **插件 → 已安装 → dsh-autoreport** 里选，那里按语言列出项目，一个控件即可
    把项目换到另一种语言。
 3. 把测量数据和参考资料放进目录，让 Main 写报告；编译好的 PDF 会出现在 `Report/`。
+4. 想重来就运行 `/reset`：清掉各阶段的生成物、重建骨架、清空本会话任务板。
+   `References/` 和原始 `Data/` 绝不改动；没有二次确认——删用户输入正是重置不该做的事。
 
 ## 配置
 

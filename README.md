@@ -32,6 +32,7 @@ The workflow ports the report pipeline of
 
 ### Workflow
 - **Auto-initialized workspace** — Main's first turn initializes the workspace once; `/init` is available for explicit repair or language selection
+- **Resettable workspace** — `/reset` clears the generated work (`Outline/`, `Theory/`, `Plots/`, `Report/`, `Data/Processed/`), keeps `References/` and raw `Data/`, restores the skeleton, and empties this session's task board
 - **Task and artifact tracking** — Main delegates through `send_to_agent` and maintains durable checklist/status state with `workflow_task`; specialists describe outputs in a shared `manifest`, so the next role finds them without being told
 - **Continuable specialists** — every specialist keeps its role context across follow-up tasks; chatting with one directly stays an ordinary conversation
 - **Stock DSH elsewhere** — a session started without the `autoreport` preset behaves exactly like DSH without this plugin
@@ -108,6 +109,10 @@ AUTOREPORT_DSH_COMMAND="/path/to/dsh" pnpm run start:source
    between them.
 3. Add measured data and reference material to the folder, then ask Main to
    write the report; the compiled PDF lands in `Report/`.
+4. Run `/reset` to start over: it clears the generated work of every stage,
+   restores the skeleton, and clears this session's task board. `References/`
+   and raw `Data/` are never touched, and there is no confirmation step —
+   deleting the inputs is exactly what a reset must not do.
 
 ## Configuration
 

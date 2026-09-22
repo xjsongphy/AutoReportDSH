@@ -156,6 +156,8 @@ export interface Assembled {
   recorderFor: (sessionId: SessionId) => ChildRecorder | undefined
   startedSpecs: { childId: unknown; label: string; prompt: string }[]
   reportInitCommand: { handler: (invocation: unknown) => Promise<{ kind: string; text?: string }> } | undefined
+  /** The `/reset` command the host registered, when it did. */
+  reportResetCommand: { handler: (invocation: unknown) => Promise<{ kind: string; text?: string }> } | undefined
   presetSkillNames: string[]
   skillProviders: string[]
   pythonResolve: (execution: { agent?: { session: Session } }) => Record<string, string>
@@ -243,9 +245,13 @@ export async function assemble(options: AssembleOptions = {}): Promise<Assembled
     },
   } as never)
   let reportInitCommand: Assembled['reportInitCommand']
+  let reportResetCommand: Assembled['reportResetCommand']
   ctx.provide('commands', {
-    register: (definition: Assembled['reportInitCommand']) => {
-      reportInitCommand = definition
+    // Keyed by name like the real service: a host that registers more than
+    // one command must not have the last one shadow the rest.
+    register: (definition: Assembled['reportInitCommand'] & { name?: string }) => {
+      if (definition.name === 'reset') reportResetCommand = definition
+      else reportInitCommand = definition
       return () => {}
     },
   } as never)
@@ -358,6 +364,7 @@ export async function assemble(options: AssembleOptions = {}): Promise<Assembled
     recorderFor: (sessionId: SessionId) => recorders.get(String(sessionId)),
     startedSpecs,
     reportInitCommand,
+    reportResetCommand,
     presetSkillNames,
     skillProviders,
     pythonResolve: execution => pythonResolver(execution),
