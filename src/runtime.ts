@@ -4,14 +4,20 @@ import type { Agent, AgentHandle } from '@deepseek-ai/dsh-agent'
 import { PERSONA_PREFIX_SECTION } from '@deepseek-ai/dsh-system-prompt'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { ContentBlock } from '@deepseek-ai/dsh-llm'
-import { SessionId, type Session, type SessionEvent, type SessionEventMap, type SessionEventType } from '@deepseek-ai/dsh-session'
+import { SessionId, type Session, type SessionEvent } from '@deepseek-ai/dsh-session'
 import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
 import { deliverSubagentPrompt, type HostPromptDeliverer } from '@deepseek-ai/dsh-subagent/internal'
 import type { Config } from './config.js'
 import type { CoordinatorMessageSource, SubagentReportMessageSource } from './messages.js'
 import { AUTOREPORT_MAIN_PRESET, isAutoReportMainSession } from './membership.js'
 import { emptyArtifactFoldState, foldArtifact, type ArtifactCaller, type ArtifactFoldState } from './artifacts/observer.js'
-import { AUTOREPORT_SCHEMA_VERSION, type WorkflowMetaSnapshot } from './workflow/events.js'
+import {
+  AUTOREPORT_SCHEMA_VERSION,
+  isAutoReportRecordType,
+  type AutoReportRecordMap,
+  type AutoReportRecordType,
+  type WorkflowMetaSnapshot,
+} from './workflow/events.js'
 import { delegationKey } from './workflow/protocol.js'
 import { installRoutedReportTool } from './tools/report-router.js'
 import { allSpecialistRoles, type AutoReportRole, type SpecialistRole } from './roles.js'
@@ -19,12 +25,19 @@ import { loadSpecialistPersona } from './personas.js'
 import { WorkflowState, type WorkflowProjection } from './workflow/service.js'
 import { RoleRegistry } from './workflow/role-registry.js'
 import { WaiterRegistry } from './workflow/waiters.js'
-import { appendWorkflowEvent } from './workflow/store.js'
+import {
+  appendWorkflowEvent,
+  readWorkflowLog,
+  seedWorkflowLog,
+  workflowLogPath,
+  type WorkflowLogLocation,
+  type WorkflowRecord,
+} from './workflow/store.js'
 import { observeWorkflowMessage, recoverWorkflowReports } from './workflow/report-observer.js'
 import { applyRoleSandbox } from './policy/sandbox-roots.js'
+import type { ReportSkillLanguage } from './skills-preset.js'
 import { ensureInitialized } from './workspace/init.js'
 import { detectPythonEnvironments, missingAnalysisPackages, type PythonDetectOptions } from './python-detect.js'
-import { syncedResourcesRoot } from './workspace/resource-sync.js'
 import { detectMineruStatus } from './mineru-status.js'
 import {
   AUTO_REPORT_USER_SETTINGS_SCHEMA,
@@ -48,6 +61,29 @@ declare module '@deepseek-ai/cordis' {
 const DEFAULT_WAIT_MS = 600_000
 const DEFAULT_IDLE_TIMEOUT_MS = 60_000
 
+/**
+ * AutoReport records a pre-sidecar session left in its host log.
+ *
+ * `autoreport/*` is no longer part of DSH's event vocabulary, so the host type
+ * cannot describe these entries; the cast narrows a raw event to what
+ * {@link isAutoReportRecordType} is about to verify. Migration is the only
+ * reader of the host log for our state, and it runs at most once per session.
+ */
+function legacyWorkflowRecords(session: Session): Array<WorkflowRecord> {
+  const entries: Array<WorkflowRecord> = []
+  const events = session.snapshotEvents() as ReadonlyArray<{ type: string; seq: number; time: number; data: unknown }>
+  for (const event of events) {
+    if (!isAutoReportRecordType(event.type)) continue
+    entries.push({
+      type: event.type,
+      seq: event.seq,
+      time: event.time,
+      data: event.data,
+    } as WorkflowRecord)
+  }
+  return entries
+}
+
 const DEFAULT_CONFIG: Config = {
   defaultReportLanguage: 'latex',
   workspaceRoot: undefined,
@@ -66,12 +102,8 @@ export interface ParentWorkflowRuntime {
 export interface RuntimeOptions {
   /** Harness home override for external project settings; absent resolves the DSH home. */
   readonly settingsHome?: string
-  /** Legacy option retained for tests; resource sync is explicit and never runs during host startup. */
-  readonly skipResourceSync?: boolean
   /** Interpreter discovery overlay; tests disable conda/PATH scans. */
   readonly pythonDetect?: PythonDetectOptions
-  /** Session-event marker probe override; tests model a DSH without the append option. */
-  readonly sessionEventProbe?: () => boolean
   /** Running dsh version override; absent reads the launcher anchor (tests pin it). */
   readonly runningDshVersion?: string
 }
@@ -88,8 +120,6 @@ export default class AutoReportWorkflowRuntime extends Service {
   readonly config: Config
   /** Harness home override for external project settings; absent resolves the DSH home. */
   readonly settingsHome: string | undefined
-  /** Global overlay for synced remotes (`$dshHome/autoreport/resources`). */
-  readonly overlayRoot: string
   private readonly parents = new Map<string, ParentWorkflowRuntime>()
   // Retain admitted parent sessions for workflow/artifact ownership, but do
   // not use historical admission as current Main authorization: the effective
@@ -118,7 +148,6 @@ export default class AutoReportWorkflowRuntime extends Service {
     this.config = config
     this.settingsHome = options.settingsHome
     const dshHome = options.settingsHome ?? resolveDshHome()
-    this.overlayRoot = syncedResourcesRoot(dshHome)
     // Keep this as composition state: the settings card can show readiness,
     // while the token value itself never enters the browser-facing snapshot.
     const mineruStatus = detectMineruStatus()
@@ -161,8 +190,10 @@ export default class AutoReportWorkflowRuntime extends Service {
       this.foldArtifacts(session, event)
       // Continuable children have a parent; AutoReport workflow facts live only on Main.
       if (session.header.parentSession !== undefined) return
+      // The workflow state is NOT folded from this stream: AutoReport records
+      // live in its own log (`src/workflow/store.ts`), and `commit()` is what
+      // applies one. Nothing here may read `autoreport/*` out of the session.
       const live = this.forSession(session)
-      live.state.apply(event)
       if (event.type === 'turn/start' && this.isInitialTurnStart(session)) {
         this.initializeAfterAppend(session)
       }
@@ -589,7 +620,7 @@ export default class AutoReportWorkflowRuntime extends Service {
     }
     const existing = this.parents.get(session.id)
     if (existing !== undefined) return existing
-    const created = { state: WorkflowState.fromSession(session), waiters: new WaiterRegistry() }
+    const created = { state: this.loadWorkflowState(session), waiters: new WaiterRegistry() }
     this.parents.set(session.id, created)
     this.mainSessions.set(String(session.id), session)
     recoverWorkflowReports(session, {
@@ -661,14 +692,59 @@ export default class AutoReportWorkflowRuntime extends Service {
    * @param data - whole snapshot payload.
    * @returns the committed event.
    */
-  commit<T extends keyof SessionEventMap & `autoreport/${string}`>(
+  commit<T extends AutoReportRecordType>(
     session: Session,
     type: T,
-    data: SessionEventMap[T],
-  ): SessionEvent<T> {
-    const event = appendWorkflowEvent(session, type, data)
-    this.forSession(session).state.apply(event as SessionEvent<SessionEventType>)
-    return event
+    data: AutoReportRecordMap[T],
+  ): WorkflowRecord<T> {
+    // One step, two effects: the record becomes durable in the plugin's own log
+    // and updates the live projection. Nothing observes the session stream for
+    // this, so a record can never be applied twice.
+    const record = appendWorkflowEvent(session, type, data, this.workflowLocation(session))
+    this.forSession(session).state.apply(record)
+    return record
+  }
+
+  /**
+   * Where one session's workflow log lives: the harness home keyed by the
+   * experiment workspace that owns it.
+   * @param session - the MAIN session being observed.
+   * @returns the location, or undefined when neither the composition nor the
+   *   session header supplies a workspace root.
+   */
+  private workflowLocation(session: Session): WorkflowLogLocation | undefined {
+    const workspaceRoot = this.config.workspaceRoot ?? session.header.cwd
+    if (workspaceRoot === undefined || workspaceRoot.length === 0) return undefined
+    return {
+      workspaceRoot,
+      ...(this.settingsHome === undefined ? {} : { settingsHome: this.settingsHome }),
+    }
+  }
+
+  /**
+   * Rebuild one MAIN session's workflow state from the plugin's own log,
+   * migrating a session created before that log existed.
+   *
+   * Migration reads `autoreport/*` records out of the host session log exactly
+   * once, writes them to our file, and returns them folded. After that the host
+   * log is never consulted for AutoReport state again — which is what lets the
+   * session log stay within DSH's own vocabulary.
+   * @param session - the MAIN session being admitted.
+   * @returns the folded workflow state.
+   */
+  private loadWorkflowState(session: Session): WorkflowState {
+    const location = this.workflowLocation(session)
+    if (location === undefined) return WorkflowState.empty()
+    const path = workflowLogPath(location.settingsHome, location.workspaceRoot ?? '', String(session.id))
+    const records = readWorkflowLog(path)
+    if (records.length > 0) {
+      seedWorkflowLog(path, records)
+      return WorkflowState.fromRecords(records)
+    }
+    const legacy = legacyWorkflowRecords(session)
+    if (legacy.length === 0) return WorkflowState.empty()
+    const migrated = legacy.map(entry => appendWorkflowEvent(session, entry.type, entry.data, location))
+    return WorkflowState.fromRecords(migrated)
   }
 
   /**
@@ -697,6 +773,20 @@ export default class AutoReportWorkflowRuntime extends Service {
     const main = this.mainSessions.get(sessionId)
     if (main === undefined) return undefined
     return this.forSession(main).state.projection()
+  }
+
+  /**
+   * The report language whose skills one bound specialist child received.
+   *
+   * Registration ({@link installRoutedReportTool}) and enforcement (the
+   * report-skill gate) must resolve the language identically, or a gate could
+   * require a skill the child was never given. Both call this.
+   * @param childId - specialist child Session id.
+   * @returns the frozen workflow language, else the configured plugin default.
+   */
+  reportLanguageForChild(childId: SessionId): ReportSkillLanguage {
+    return this.workflowForChild(childId)?.runtime.state.projection().meta?.settings?.reportLanguage
+      ?? this.config.defaultReportLanguage
   }
 
   /**
@@ -741,7 +831,7 @@ export default class AutoReportWorkflowRuntime extends Service {
         composition: this.config,
         dshHome: this.settingsHome ?? resolveDshHome(),
       })
-      ensureInitialized(root, settings.reportLanguage, this.overlayRoot)
+      ensureInitialized(root, settings.reportLanguage)
     } catch (error: unknown) {
       // A broken external settings document must not wedge the first turn;
       // the explicit /init path surfaces the same failure loudly for repair.
@@ -768,7 +858,7 @@ export default class AutoReportWorkflowRuntime extends Service {
   createWorkflow(
     session: Session,
     resolvedSettings: WorkflowSettingsSnapshot,
-  ): SessionEvent<'autoreport/workflow'> | undefined {
+  ): WorkflowRecord<'autoreport/workflow'> | undefined {
     const previous: WorkflowMetaSnapshot | undefined = this.forSession(session).state.projection().meta
     if (previous?.initialized === true) return undefined
     const root = this.config.workspaceRoot ?? session.header.cwd

@@ -25,9 +25,10 @@ import { TURN_GUARD_PLUGIN } from '../../src/workflow/display.js'
 import * as presetModule from '../../src/preset.js'
 import * as reportRouterModule from '../../src/tools/report-router.js'
 import type { SpecialistRole } from '../../src/roles.js'
-import { syncedResourcesRoot } from '../../src/workspace/resource-sync.js'
-import { seedSyncedResourceStubs } from './synced-resource-stubs.js'
 import { ISOLATED_PYTHON_DETECT } from './managed-python-stub.js'
+import { loadBundledSkills } from '../../src/workspace/skill-loader.js'
+import { renderSkillContent } from '@deepseek-ai/dsh-skill'
+import { reportSkillRequirements } from '../../src/skills-preset.js'
 
 export const ASSEMBLED_CONFIG: Config = {
   defaultReportLanguage: 'latex',
@@ -52,7 +53,11 @@ export interface ChildRecorder {
   readonly sections: RecordedSection[]
 }
 
-export function makeChildRecorder(id: string, workflow?: AutoReportWorkflowRuntime): ChildRecorder {
+export function makeChildRecorder(
+  id: string,
+  workflow?: AutoReportWorkflowRuntime,
+  cwd?: string,
+): ChildRecorder {
   const toolNames: string[] = []
   const skillNames: string[] = []
   const sections: RecordedSection[] = []
@@ -63,7 +68,18 @@ export function makeChildRecorder(id: string, workflow?: AutoReportWorkflowRunti
     },
     registerProvider: () => () => {},
   }
-  const agent = { id: SessionId(`${id}`) } as Agent
+  // A real child always carries a session; the router applies the role sandbox
+  // to it and the skill gate resolves its identity from it.
+  const sessionId = SessionId(`${id}`)
+  const session = Session.create(sessionId, undefined, {
+    version: SESSION_FORMAT_VERSION,
+    isSeeded: false,
+    id: sessionId,
+    createdAt: Date.now(),
+    cwd: cwd ?? tmpdir(),
+    parentSession: SessionId('main'),
+  })
+  const agent = { id: sessionId, session } as Agent
   const ctx = {
     get: (name: string) => name === 'skills' ? skillsService : undefined,
     tools: {
@@ -99,6 +115,8 @@ export interface Assembled {
   mainAgent: Agent
   mainSession: Session
   routeChild: (recorder: ChildRecorder) => void
+  /** The routed recorder owning one child session, when a test routed it. */
+  recorderFor: (sessionId: SessionId) => ChildRecorder | undefined
   startedSpecs: { childId: unknown; label: string; prompt: string }[]
   reportInitCommand: { handler: (invocation: unknown) => Promise<{ kind: string; text?: string }> } | undefined
   presetSkillNames: string[]
@@ -133,7 +151,6 @@ export async function assemble(options: AssembleOptions = {}): Promise<Assembled
     ownedDirs.push(dir)
     return dir
   })()
-  seedSyncedResourceStubs(syncedResourcesRoot(home))
 
   const startedSpecs: Assembled['startedSpecs'] = []
   const presetSkillNames: string[] = []
@@ -237,7 +254,6 @@ export async function assemble(options: AssembleOptions = {}): Promise<Assembled
 
   await applyHost(ctx, { ...ASSEMBLED_CONFIG, workspaceRoot }, {
     settingsHome: home,
-    skipResourceSync: true,
     pythonDetect: ISOLATED_PYTHON_DETECT,
   })
   reportRouterModule.apply(ctx)
@@ -282,6 +298,8 @@ export async function assemble(options: AssembleOptions = {}): Promise<Assembled
     systemPrompt: ctx.systemPrompt,
   } as never, ctx, 'THEORY')
 
+  const recorders = new Map<string, ChildRecorder>()
+
   return {
     ctx,
     runtime: ctx.autoreportWorkflow,
@@ -290,8 +308,10 @@ export async function assemble(options: AssembleOptions = {}): Promise<Assembled
     mainAgent,
     mainSession,
     routeChild: (recorder: ChildRecorder) => {
+      recorders.set(String(recorder.agent.id), recorder)
       ctx.emit('agent/created', { agent: recorder.agent, source: 'fresh' } as never)
     },
+    recorderFor: (sessionId: SessionId) => recorders.get(String(sessionId)),
     startedSpecs,
     reportInitCommand,
     presetSkillNames,
@@ -454,11 +474,66 @@ export function stopTurn(assembled: Assembled, agent: Agent, turn = 1): void {
 }
 
 export function specialistSkills(assembled: Assembled, childId: string): ChildRecorder {
-  const recorder = makeChildRecorder(childId, assembled.runtime)
+  const recorder = makeChildRecorder(childId, assembled.runtime, assembled.workspaceRoot)
   assembled.routeChild(recorder)
   return recorder
 }
 
+/** Marker in the skill gate's refusal, used to tell it apart from a real failure. */
+export const SKILL_GATE_REFUSAL = 'AutoReport refused this'
+
+/**
+ * Record one `skill` tool call the way dsh's own tool produces it: a closed
+ * step carrying a `tool/call` paired with a `tool/result` that returns the
+ * rendered body. The skill gate reads exactly this, so this is the honest
+ * stand-in for the model loading a skill itself.
+ */
+export function loadSkill(assembled: Assembled, child: { childSession: Session }, name: string): void {
+  const skill = loadBundledSkills().find(entry => entry.name === name)
+  if (skill === undefined) throw new Error(`no bundled skill named ${name}`)
+  const session = child.childSession
+  const callId = `skill-${name}`
+  const turn = session.snapshotEvents().filter(event => event.type === 'turn/end').length + 1
+  const step = 1
+  publish(assembled.ctx, session, 'turn/start', { turn })
+  publish(assembled.ctx, session, 'step/start', { turn, step })
+  publish(assembled.ctx, session, 'tool/call', {
+    turn,
+    step,
+    callId,
+    name: 'skill',
+    arguments: JSON.stringify({ name }),
+  })
+  publish(assembled.ctx, session, 'tool/result', {
+    turn,
+    step,
+    message: {
+      role: 'user',
+      id: `m-${callId}`,
+      content: [{
+        type: 'tool-result',
+        toolCallId: callId,
+        content: [{
+          type: 'text',
+          text: renderSkillContent({ name: skill.name, provider: 'runtime', content: skill.content }),
+        }],
+        isError: false,
+      }],
+      source: { kind: 'tool', callId },
+    },
+  }, { surfaceOp: 'append' })
+  publish(assembled.ctx, session, 'step/end', { turn, step })
+  publish(assembled.ctx, session, 'turn/end', { turn })
+}
+
+/**
+ * Write one workspace file as a specialist does.
+ *
+ * A REPORT child's first write is refused by the skill gate. The gate injects
+ * nothing, so the live loop answers by having the child load the governing
+ * skills itself and retry. Reproducing that here keeps every eval trace on the
+ * real gate instead of sidestepping it.
+ */
 export async function specialistWrite(
   assembled: Assembled,
   child: { childAgent: Agent; childSession: Session },
@@ -467,8 +542,14 @@ export async function specialistWrite(
 ): Promise<void> {
   const file_path = join(assembled.workspaceRoot, relativePath)
   mkdirSync(dirname(file_path), { recursive: true })
-  const written = await execute(assembled.ctx, 'write', { file_path, content }, child.childAgent, child.childSession)
-  expect(written.isError).toBe(false)
+  const args = { file_path, content }
+  const first = await execute(assembled.ctx, 'write', args, child.childAgent, child.childSession)
+  if (!first.isError) return
+  if (!first.text.includes(SKILL_GATE_REFUSAL)) throw new Error(first.text)
+  const required = reportSkillRequirements(assembled.runtime.reportLanguageForChild(child.childSession.id))
+  for (const name of [...required.writing, required.compile]) loadSkill(assembled, child, name)
+  const retry = await execute(assembled.ctx, 'write', args, child.childAgent, child.childSession)
+  expect(retry.isError).toBe(false)
 }
 
 export function eventTypes(session: Session): string[] {

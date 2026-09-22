@@ -12,12 +12,10 @@ import { AUTOREPORT_MAIN_PRESET, isAutoReportMainSession } from '../src/membersh
 import { REQUIRED_DIRS } from '../src/workspace/init.js'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import { resolveWorkflowSettings, saveProjectSettings, workspaceIdForRoot } from '../src/settings.js'
-import { syncedResourcesRoot } from '../src/workspace/resource-sync.js'
-import { seedSyncedResourceStubs } from './helpers/synced-resource-stubs.js'
 import { ISOLATED_PYTHON_DETECT } from './helpers/managed-python-stub.js'
 import { AUTOREPORT_SCHEMA_VERSION } from '../src/workflow/events.js'
-import { AUTOREPORT_SESSION_EVENT_TYPES } from '../src/session-events.js'
 import { appendWorkflowEvent } from '../src/workflow/store.js'
+import { workflowRecords } from './helpers/workflow-log.js'
 
 const tempDirs: string[] = []
 afterEach(() => {
@@ -102,7 +100,6 @@ describe('host workflow runtime', () => {
     const root = mkdtempSync(join(tmpdir(), 'autoreport-runtime-'))
     const home = mkdtempSync(join(tmpdir(), 'autoreport-home-'))
     tempDirs.push(root, home)
-    seedSyncedResourceStubs(syncedResourcesRoot(home))
     const ctx = new Context()
     await ctx.plugin(MemorySettings, {
       doc: {
@@ -133,7 +130,6 @@ describe('host workflow runtime', () => {
     const home = mkdtempSync(join(tmpdir(), 'autoreport-home-'))
     tempDirs.push(root, home)
     saveProjectSettings(home, workspaceIdForRoot(root), { reportLanguage: 'typst' })
-    seedSyncedResourceStubs(syncedResourcesRoot(home))
     const ctx = new Context()
     const runtime = createRuntime(ctx, { ...CONFIG, workspaceRoot: root }, { settingsHome: home })
     const session = rootSession('main', AUTOREPORT_MAIN_PRESET)
@@ -283,39 +279,7 @@ describe('host workflow runtime', () => {
     expect(runtime.roleFor('no-such-session')).toBeUndefined()
   })
 
-  it('registers the AutoReport session vocabulary before any session loads', async () => {
-    const root = mkdtempSync(join(tmpdir(), 'autoreport-runtime-'))
-    tempDirs.push(root)
-    const ctx = new Context()
-    ctx.provide('tools', { guard: () => () => {} } as never)
-    const { apply: applyHost } = await import('../src/host.js')
-    await applyHost(ctx, { ...CONFIG, workspaceRoot: root }, {
-      pythonDetect: ISOLATED_PYTHON_DETECT,
-      skipResourceSync: true,
-    })
 
-    for (const type of AUTOREPORT_SESSION_EVENT_TYPES) {
-      expect(KNOWN_SESSION_EVENT_TYPES.has(type)).toBe(true)
-    }
-  })
-
-  it('warns when the running dsh cannot persist the ignorable marker', async () => {
-    const root = mkdtempSync(join(tmpdir(), 'autoreport-runtime-'))
-    tempDirs.push(root)
-    const ctx = new Context()
-    ctx.provide('tools', { guard: () => () => {} } as never)
-    const warnings: unknown[][] = []
-    const logger = ctx.logger as unknown as { warn: (...args: unknown[]) => void }
-    logger.warn = (...args: unknown[]) => { warnings.push(args) }
-    const { apply: applyHost } = await import('../src/host.js')
-    await applyHost(ctx, { ...CONFIG, workspaceRoot: root }, {
-      pythonDetect: ISOLATED_PYTHON_DETECT,
-      skipResourceSync: true,
-      sessionEventProbe: () => false,
-    })
-
-    expect(warnings.flat().join(' ')).toMatch(/ignorable|portable|loadable/i)
-  })
 
   it('wraps a mounted sandbox policy so an owned MAIN session resolves its role root', async () => {
     const root = mkdtempSync(join(tmpdir(), 'autoreport-runtime-'))
@@ -332,7 +296,6 @@ describe('host workflow runtime', () => {
     const { apply: applyHost } = await import('../src/host.js')
     await applyHost(ctx, { ...CONFIG, workspaceRoot: root }, {
       pythonDetect: ISOLATED_PYTHON_DETECT,
-      skipResourceSync: true,
     })
 
     const session = rootSession('wrap-main', AUTOREPORT_MAIN_PRESET, root)
@@ -408,6 +371,67 @@ describe('host workflow runtime', () => {
     expect(restrict).not.toHaveBeenCalled()
   })
 
+  it('gates a REPORT write until the running dsh observes the skill load', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'autoreport-runtime-'))
+    tempDirs.push(root)
+    const ctx = new Context()
+    const guards: ((exec: unknown) => string | undefined)[] = []
+    ctx.provide('tools', {
+      guard: (guard: (exec: unknown) => string | undefined) => {
+        guards.push(guard)
+        return () => {}
+      },
+    } as never)
+    const { apply: applyHost } = await import('../src/host.js')
+    await applyHost(ctx, { ...CONFIG, workspaceRoot: root }, {
+      pythonDetect: ISOLATED_PYTHON_DETECT,
+    })
+
+    const runtime = (ctx as unknown as { autoreportWorkflow: AutoReportWorkflowRuntime }).autoreportWorkflow
+    runtime.roleRegistry.registerReserved({
+      version: AUTOREPORT_SCHEMA_VERSION,
+      role: 'REPORT',
+      childSessionId: SessionId('gate-report'),
+      parentSessionId: SessionId('gate-main'),
+      workflowId: 'wf-gate',
+      provisioning: 'reserved',
+    })
+    const child = rootSession('gate-report', undefined, root)
+
+    const decision = (name: string, args: unknown): string | undefined =>
+      guards.map(guard => guard({ name, arguments: args, agent: { session: child } })).find(reason => reason !== undefined)
+
+    const write = { file_path: join(root, 'Report', 'main.tex'), content: 'x' }
+    expect(decision('write', write)).toMatch(/experiment-report-writer/)
+    // A shell command that only mentions a compiler is not a compilation.
+    expect(decision('bash', { command: 'rg latexmk Report/build.log' })).toBeUndefined()
+    expect(decision('bash', { command: 'latexmk -xelatex main.tex' })).toMatch(/latex-compile/)
+
+    // The model loads one writing skill through dsh's own `skill` tool. The
+    // gate reads the durable stream, so the load must be observed there.
+    ctx.emit('session/event', child, {
+      type: 'tool/call', seq: 1, time: 1,
+      data: { turn: 1, step: 1, callId: 'c1', name: 'skill', arguments: JSON.stringify({ name: 'experiment-report-writer' }) },
+    } as never)
+    const marker = '<skill_content name="experiment-report-writer">\n<skill_instructions>\nbody\n</skill_instructions>\n</skill_content>'
+    ctx.emit('session/event', child, {
+      type: 'tool/result', seq: 2, time: 2,
+      data: {
+        turn: 1, step: 1,
+        message: {
+          role: 'user',
+          id: 'm1',
+          content: [{ type: 'tool-result', toolCallId: 'c1', content: [{ type: 'text', text: marker }] }],
+          source: { kind: 'tool', callId: 'c1' },
+        },
+      },
+    } as never)
+
+    // The writing gate is satisfied; the language rules arrived with the prompt,
+    // so there is no second skill for the model to load.
+    expect(decision('write', write)).toBeUndefined()
+  })
+
   it('does not create resident children just because MAIN received its first message', async () => {
     const root = mkdtempSync(join(tmpdir(), 'autoreport-runtime-'))
     tempDirs.push(root)
@@ -461,10 +485,51 @@ describe('host workflow runtime', () => {
     expect(runtime.forSession(session).state.projection().meta?.initialized).toBe(true)
   })
 
+  it('migrates a pre-sidecar session out of the host log exactly once', () => {
+    const root = mkdtempSync(join(tmpdir(), 'autoreport-migrate-'))
+    tempDirs.push(root)
+    const ctx = new Context()
+    const runtime = createRuntime(ctx, { ...CONFIG, workspaceRoot: root })
+
+    // A session written before the plugin kept its own log: its workflow facts
+    // are `autoreport/*` events in the HOST log, which is precisely what the
+    // plugin no longer produces. Appending them by cast reproduces that shape.
+    const session = rootSession('main-legacy', AUTOREPORT_MAIN_PRESET, root)
+    // `.call(session, …)` keeps the receiver: extracting the method would lose it.
+    const legacy = session.append as unknown as (
+      this: Session,
+      type: string,
+      data: unknown,
+    ) => unknown
+    legacy.call(session, 'autoreport/task', {
+      version: AUTOREPORT_SCHEMA_VERSION,
+      taskId: 'task-7',
+      subject: 'Analyze',
+      role: 'DATA_ANALYSIS',
+      dependencies: [],
+      status: 'running',
+      revision: 1,
+      steps: [],
+      scopes: ['Data/Processed'],
+      latestDelegationRevision: 1,
+    })
+
+    // Admission folds, migrates, and returns the same state the old log held.
+    expect(runtime.forSession(session).state.getTask('task-7')?.status).toBe('running')
+    // The facts are durable in the plugin's own log now...
+    const migrated = workflowRecords(session)
+    expect(migrated.map(record => record.type)).toEqual(['autoreport/task'])
+    // ...and a cold runtime rebuilds from that file, not from the host log.
+    const cold = createRuntime(new Context(), { ...CONFIG, workspaceRoot: root })
+    expect(cold.forSession(session).state.getTask('task-7')?.status).toBe('running')
+  })
+
   it('replays a durable child report that landed before the observer committed', () => {
     const ctx = new Context()
     const runtime = createRuntime(ctx, CONFIG)
-    const session = rootSession('main-recover', AUTOREPORT_MAIN_PRESET)
+    const root = mkdtempSync(join(tmpdir(), 'autoreport-recover-'))
+    tempDirs.push(root)
+    const session = rootSession('main-recover', AUTOREPORT_MAIN_PRESET, root)
     appendWorkflowEvent(session, 'autoreport/task', {
       version: AUTOREPORT_SCHEMA_VERSION,
       taskId: 'task-7',

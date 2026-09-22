@@ -16,6 +16,7 @@ import type { Agent } from '@deepseek-ai/dsh-agent'
 import { SESSION_FORMAT_VERSION, Session, SessionId } from '@deepseek-ai/dsh-session'
 import {
 } from '@deepseek-ai/dsh-sandbox-policy/src/session-mode.ts'
+import { validateStoredEvents } from '@deepseek-ai/dsh-session-persistence/src/storage-contract.ts'
 import { REQUIRED_DIRS } from '../../src/workspace/init.js'
 import { saveProjectSettings, workspaceIdForRoot } from '../../src/settings.js'
 import { resetAcknowledgedBlockedKeys } from '../../src/workflow/turn-guard.js'
@@ -38,12 +39,14 @@ import {
   messageText,
   publish,
   reportWorkflow,
+  loadSkill,
   specialistSkills,
   specialistWrite,
   stopTurn,
   turnGuardSteers,
   userTurn,
 } from '../helpers/assembled-host.js'
+import { workflowRecords } from '../helpers/workflow-log.js'
 
 const live: Assembled[] = []
 afterEach(async () => {
@@ -120,7 +123,6 @@ describe('workflow eval', () => {
     const report = await dispatch(assembled, { role: 'REPORT', prompt: 'write and compile latex' })
     expect(specialistSkills(assembled, report.childId).skillNames).toEqual([
       'experiment-report-writer',
-      'report-language-latex',
       'latex-compile',
     ])
     await specialistWrite(assembled, report, 'Report/main.tex', '\\documentclass{article}\\begin{document}ok\\end{document}\n')
@@ -143,8 +145,17 @@ describe('workflow eval', () => {
     ])
     expect(fold.artifacts.some(item => item.path === 'Report/main.pdf' && item.status === 'created')).toBe(true)
     expect(existsSync(join(assembled.workspaceRoot, 'Report', 'main.pdf'))).toBe(true)
-    const logged = eventTypes(assembled.mainSession)
-    expect(logged).toEqual(expect.arrayContaining([
+    // The whole point of the sidecar log: AutoReport's records are NOT in the
+    // session log, so the session log is a plain DSH log that needs no
+    // vocabulary registration and no per-record marker to be read.
+    expect(eventTypes(assembled.mainSession).some(type => type.startsWith('autoreport/'))).toBe(false)
+    expect(() => validateStoredEvents(
+      assembled.mainSession.header,
+      [...assembled.mainSession.snapshotEvents()],
+    )).not.toThrow()
+
+    const folded = workflowRecords(assembled.mainSession, assembled.home).map(record => record.type)
+    expect(folded).toEqual(expect.arrayContaining([
       'autoreport/workflow',
       'autoreport/task',
       'autoreport/delegation',
@@ -167,7 +178,6 @@ describe('workflow eval', () => {
     const report = await dispatch(assembled, { role: 'REPORT', prompt: 'write and compile typst' })
     expect(specialistSkills(assembled, report.childId).skillNames).toEqual([
       'experiment-report-writer',
-      'report-language-typst',
       'typst',
       'typst-compile',
     ])
@@ -370,13 +380,33 @@ describe('workflow eval', () => {
     }))
 
     const report = await dispatch(assembled, { role: 'REPORT', prompt: 'edit existing report' })
+    specialistSkills(assembled, report.childId)
     const existing = join(assembled.workspaceRoot, 'Report', 'main.tex')
     expect(existsSync(existing)).toBe(true)
-    const edited = await execute(assembled.ctx, 'edit', {
-      file_path: existing,
-      content: '\\documentclass{article}\n',
-    }, report.childAgent, report.childSession)
+
+    // The skill gate refuses the edit while the writing skill is unloaded and
+    // names it. The harness injects nothing: the agent must load it itself,
+    // which is what leaves a real `skill` tool call in the transcript.
+    const edit = { file_path: existing, content: '\\documentclass{article}\n' }
+    const refused = await execute(assembled.ctx, 'edit', edit, report.childAgent, report.childSession)
+    expect(refused.isError).toBe(true)
+    expect(refused.text).toContain('`experiment-report-writer`')
+    expect(refused.text).toContain('`skill`')
+    expect(eventTypes(report.childSession)).not.toContain('user/message')
+
+    loadSkill(assembled, report, 'experiment-report-writer')
+    const edited = await execute(assembled.ctx, 'edit', edit, report.childAgent, report.childSession)
     expect(edited.isError).toBe(false)
+
+    // The transcript carries the agent's own skill load, and the harness
+    // injected nothing on its behalf — no fabricated call, no injected body.
+    const skillCalls = report.childSession.snapshotEvents()
+      .filter(event => event.type === 'tool/call')
+      .filter(event => (event.data as { name: string }).name === 'skill')
+    expect(skillCalls).toHaveLength(1)
+    expect(report.childSession.snapshotEvents().some(event => (
+      event.type === 'user/message' && event.data.source.kind === 'skill-invocation'
+    ))).toBe(false)
 
     const shelled = await execute(assembled.ctx, 'bash', {
       command: 'echo extra >> Report/main.tex',

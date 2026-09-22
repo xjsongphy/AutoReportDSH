@@ -7,16 +7,17 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
+import type { SessionId } from '@deepseek-ai/dsh-session'
 import type { Config } from './config.js'
 import { isAutoReportMainSession } from './membership.js'
 import { installSandboxOverride } from './policy/sandbox-override.js'
 import { roleWritableRoot } from './policy/sandbox-roots.js'
 import { createRoleToolGuard } from './policy/tool-guard.js'
+import { createSkillGateGuard, skillLoadTracker } from './policy/skill-gate.js'
 import { installAutoReportPythonEnv } from './python-env.js'
 import AutoReportWorkflowRuntime, { type RuntimeOptions } from './runtime.js'
 import { createReportInitCommand } from './workspace/command.js'
 import { loadProjectSettings, saveProjectSettings, workspaceIdForRoot } from './settings.js'
-import { registerAutoReportSessionEvents } from './session-events.js'
 import { describeDshVersionSupport, readRunningDshVersion } from './dsh-version.js'
 import { installTurnGuards } from './workflow/turn-guard.js'
 
@@ -66,27 +67,17 @@ export function resolveHostConfig(raw: Partial<Config> = {}): Config {
  *   the DSH home itself.
  */
 export async function apply(ctx: Context, config: Partial<Config> = {}, options: RuntimeOptions = {}): Promise<void> {
-  // This must run before any AutoReport session is created or resumed: DSH
-  // validates the persisted event vocabulary at the session boundary, outside
-  // the agent loop. Registration makes the `autoreport/*` records loadable in
-  // this process; failing when neither loadability mechanism exists keeps the
-  // plugin from silently writing logs that no reader can open.
-  const compatibility = await registerAutoReportSessionEvents({
-    ...(options.sessionEventProbe === undefined ? {} : { markerProbe: options.sessionEventProbe }),
-  })
   // Version transparency, never a gate: the pin in docs/dependencies.md means
   // "verified", not "exclusive". An unverified pair usually works — say so
   // once, so a mid-session breakage can be attributed in one glance.
+  //
+  // No session-vocabulary registration happens here, and none is needed: the
+  // plugin keeps its own records in its own log (`src/workflow/store.ts`), so a
+  // session log it produced stays inside DSH's own event vocabulary and every
+  // harness build reads it unmodified.
   const support = describeDshVersionSupport(options.runningDshVersion ?? readRunningDshVersion())
   if (support.verified) ctx.logger.info(support.message)
   else ctx.logger.warn(support.message)
-  if (!compatibility.markerPersisted) {
-    ctx.logger.warn(
-      'autoreportdsh: this DSH cannot persist the ignorable session-event marker; '
-      + `${'autoreport/*'} records are loadable only in processes that load this plugin, `
-      + 'not by a plain dsh or a future build. Upgrade DSH to make the logs portable.',
-    )
-  }
   // Role isolation resolves each AutoReport session's writable root through
   // the host sandbox policy at enforcement time. Bare unit-test contexts may
   // omit the service; a real deployment must accept the override — install
@@ -107,14 +98,22 @@ export async function apply(ctx: Context, config: Partial<Config> = {}, options:
       probeRoot: roleWritableRoot(resolved.workspaceRoot ?? process.cwd(), 'MAIN'),
     })
   }
-  // Resource refresh is deliberately explicit (`pnpm run sync:resources`),
-  // never a startup side effect. Bundled resources keep a fresh/offline
-  // install deterministic and prevent a mutable remote prompt from being
-  // loaded merely by opening DSH.
   ctx.tools.guard(createRoleToolGuard({
     registry: runtime.roleRegistry,
     isMainSession: sessionId => runtime.isMainSession(sessionId),
     ...(resolved.workspaceRoot === undefined ? {} : { workspaceRoot: resolved.workspaceRoot }),
+  }))
+  // Report-skill gate: a REPORT child may not edit report files or run its
+  // compiler before it has loaded the skill governing that action. The refusal
+  // names the skill and the model loads it with DSH's own `skill` tool, so the
+  // transcript records a real agent tool call and the harness fabricates
+  // nothing. Loads are read from the durable stream for the same reason.
+  ctx.on('session/event', (session, event) => {
+    skillLoadTracker.observe(session, event)
+  })
+  ctx.tools.guard(createSkillGateGuard({
+    roleOf: sessionId => runtime.roleFor(sessionId),
+    languageOf: sessionId => runtime.reportLanguageForChild(sessionId as SessionId),
   }))
   installTurnGuards(ctx, {
     roleRegistry: runtime.roleRegistry,
@@ -139,7 +138,6 @@ export async function apply(ctx: Context, config: Partial<Config> = {}, options:
         load: () => loadProjectSettings(options.settingsHome, workspaceIdForRoot(root)),
         save: next => saveProjectSettings(options.settingsHome, workspaceIdForRoot(root), next),
       }),
-      overlayRoot: runtime.overlayRoot,
     })
     commands.register({
       ...definition,

@@ -8,18 +8,73 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
-import type {} from '@deepseek-ai/dsh-skill'
+import type { SkillRegistration } from '@deepseek-ai/dsh-skill'
 import type { SpecialistRole } from './roles.js'
 import { loadBundledSkills, type BundledSkill } from './workspace/skill-loader.js'
+import type { ReportLanguage } from './workspace/init.js'
 
 export const name = 'autoreportdsh-skills'
 export const inject = ['skills' as const]
 
-/** Language-specific report guidance selected for a REPORT child. */
-export type ReportSkillLanguage = 'latex' | 'typst'
+/**
+ * Report language whose skill set one REPORT child receives. An alias of the
+ * workspace language rather than a second union, so the language that selects
+ * the asset set, the guidance prose, the skills, and the gates cannot drift.
+ */
+export type ReportSkillLanguage = ReportLanguage
 
 /** MAIN-only bundled skills registered in the preset scope. */
 export const MAIN_SKILL_NAMES: readonly string[] = ['pdf-reference-reader']
+
+/** The language-neutral report-authoring skill every REPORT child receives. */
+export const REPORT_WRITER_SKILL = 'experiment-report-writer'
+
+/**
+ * Bundled skills a REPORT child must hold before it may act, split by the
+ * action each governs.
+ *
+ * Registering a skill only publishes a catalog line; its body arrives when the
+ * model loads it. Two actions therefore gate on a body that must already be
+ * present: authoring report content (`writing`) and running the compiler
+ * (`compile`). `references` are consulted on demand and gate nothing.
+ *
+ * The active language's own layout rules are NOT here. They ship as fixed
+ * prompt prose (`resources/report-languages/<language>.md`, appended by the
+ * report router), so they are present before the child's first step and there
+ * is nothing left to gate on.
+ */
+export interface ReportSkillRequirements {
+  /** Required before a mutation in the report workspace. */
+  readonly writing: readonly string[]
+  /** Required before the active language's compiler runs under bash/pwsh. */
+  readonly compile: string
+  /** Registered for the role but never a precondition for acting. */
+  readonly references: readonly string[]
+}
+
+interface ReportSkillVariants {
+  readonly compile: string
+  readonly references: readonly string[]
+}
+
+const REPORT_SKILL_VARIANTS: Readonly<Record<ReportSkillLanguage, ReportSkillVariants>> = {
+  latex: { compile: 'latex-compile', references: [] },
+  typst: { compile: 'typst-compile', references: ['typst'] },
+}
+
+/**
+ * The skills a REPORT child must load before writing or compiling.
+ * @param language - frozen workflow report language.
+ * @returns the gated and reference-only skill names.
+ */
+export function reportSkillRequirements(language: ReportSkillLanguage): ReportSkillRequirements {
+  const variant = REPORT_SKILL_VARIANTS[language]
+  return {
+    writing: [REPORT_WRITER_SKILL],
+    compile: variant.compile,
+    references: variant.references,
+  }
+}
 
 /** Return the AutoReport-owned instruction names permitted to one specialist. */
 export function skillNamesForRole(role: SpecialistRole, language: ReportSkillLanguage): readonly string[] {
@@ -28,31 +83,42 @@ export function skillNamesForRole(role: SpecialistRole, language: ReportSkillLan
     case 'DATA_ANALYSIS':
     case 'PLOTTING':
       return []
-    case 'REPORT':
-      return language === 'latex'
-        ? ['experiment-report-writer', 'report-language-latex', 'latex-compile']
-        : ['experiment-report-writer', 'report-language-typst', 'typst', 'typst-compile']
+    case 'REPORT': {
+      const required = reportSkillRequirements(language)
+      return [...required.writing, ...required.references, required.compile]
+    }
   }
 }
 
+/**
+ * Register one bundled skill, carrying the resource anchor only when the skill
+ * actually has sibling resources.
+ *
+ * `resourceBase` is the whole point: DSH renders a `skill` body as
+ * `<skill_instructions>` with the base as a sibling `<skill_resources>` line,
+ * and that line is the only in-band statement of what the body's relative paths
+ * resolve against. A runtime registration without it renders "Resources for
+ * this skill are managed by provider \"runtime\"." — which is correct for a
+ * flat document whose prose talks about the experiment workspace, and wrong for
+ * a bundle whose body says `[basics.md](basics.md)`.
+ */
 function registerBundledSkill(
   skill: BundledSkill,
-  registerSkill: (registration: { name: string; description: string; source: string; content: string }) => () => void,
+  registerSkill: (registration: SkillRegistration) => () => void,
 ): () => void {
   return registerSkill({
     name: skill.name,
     description: skill.description,
     source: 'runtime',
     content: skill.content,
+    path: skill.path,
+    ...skill.directory === undefined
+      ? {}
+      : { resourceBase: { kind: 'directory' as const, path: skill.directory } },
   })
 }
 
-function requireSkillRegister(ctx: Context, owner: string): (registration: {
-  name: string
-  description: string
-  source: string
-  content: string
-}) => () => void {
+function requireSkillRegister(ctx: Context, owner: string): (registration: SkillRegistration) => () => void {
   const skills = ctx.skills
   if (skills?.register === undefined) {
     throw new Error(`AutoReport ${owner} skills require ctx.skills.register`)
@@ -68,8 +134,8 @@ function requireSkillRegister(ctx: Context, owner: string): (registration: {
  * @param ctx - `autoreport` preset context.
  * @returns composite disposer for registered skills.
  */
-export function registerMainSkills(ctx: Context, overlayRoot?: string): () => void {
-  const available = new Map(loadBundledSkills(overlayRoot).map(skill => [skill.name, skill]))
+export function registerMainSkills(ctx: Context): () => void {
+  const available = new Map(loadBundledSkills().map(skill => [skill.name, skill]))
   const disposers: (() => void)[] = []
   const registerSkill = requireSkillRegister(ctx, 'MAIN')
 
@@ -110,9 +176,8 @@ export function registerRoleSkills(
   ctx: Context,
   role: SpecialistRole,
   language: ReportSkillLanguage,
-  overlayRoot?: string,
 ): () => void {
-  const available = new Map(loadBundledSkills(overlayRoot).map(skill => [skill.name, skill]))
+  const available = new Map(loadBundledSkills().map(skill => [skill.name, skill]))
   const disposers: (() => void)[] = []
   const registerSkill = requireSkillRegister(ctx, role)
   try {

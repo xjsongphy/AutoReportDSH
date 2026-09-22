@@ -1,22 +1,20 @@
-import { mkdtempSync, rmSync } from 'node:fs'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
-import { afterAll, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type { Context } from '@deepseek-ai/cordis'
 import { SESSION_FORMAT_VERSION, Session, SessionId } from '@deepseek-ai/dsh-session'
 import { RoleRegistry } from '../src/workflow/role-registry.js'
 import type { Config } from '../src/config.js'
 import { AUTOREPORT_SCHEMA_VERSION, type RoleBindingSnapshot } from '../src/workflow/events.js'
-import { installRoutedReportTool } from '../src/tools/report-router.js'
+import { installRoutedReportTool, type RoutedWorkflow } from '../src/tools/report-router.js'
+import type { AutoReportRecordType } from '../src/workflow/events.js'
+import { sessionIn, workspaceForTests, workflowState } from './helpers/workflow-log.js'
 import { installManifestTool } from '../src/tools/manifest.js'
 import { installWorkflowReportTool } from '../src/tools/report-workflow.js'
-import { seedSyncedResourceStubs } from './helpers/synced-resource-stubs.js'
 import { appendWorkflowEvent } from '../src/workflow/store.js'
 import { WorkflowState } from '../src/workflow/service.js'
 import { WaiterRegistry } from '../src/workflow/waiters.js'
+import { workflowState } from './helpers/workflow-log.js'
 
-const overlayRoot = seedSyncedResourceStubs(mkdtempSync(join(tmpdir(), 'autoreport-router-overlay-')))
-afterAll(() => rmSync(overlayRoot, { recursive: true, force: true }))
+const WORKSPACE = workspaceForTests('report-router')
 
 const CONFIG: Config = {
   defaultReportLanguage: 'latex',
@@ -50,9 +48,14 @@ function childContext(id = 'child-1', cwd?: string) {
       return () => {}
     },
   }
+  const listeners = new Map<string, unknown>()
   const ctx = {
     agent: { id: sessionId, session },
     get: (name: string) => name === 'skills' ? skillsService : undefined,
+    on: (event: string, listener: unknown) => {
+      listeners.set(event, listener)
+      return () => { listeners.delete(event) }
+    },
     tools: {
       register: (tool: { name: string }) => {
         tools.push(tool)
@@ -67,7 +70,30 @@ function childContext(id = 'child-1', cwd?: string) {
     },
     skills: skillsService,
   }
-  return { ctx: ctx as unknown as Context, agent: { id: sessionId, session }, tools, skills, sections, providers, session }
+  return {
+    ctx: ctx as unknown as Context,
+    agent: { id: sessionId, session },
+    tools,
+    skills,
+    sections,
+    providers,
+    session,
+    listeners,
+  }
+}
+
+/**
+ * Router inputs mirroring the live runtime's language resolution, so a test
+ * never has to restate the contract {@link installRoutedReportTool} depends on.
+ */
+function routedWorkflow(overrides: Partial<RoutedWorkflow> = {}): RoutedWorkflow {
+  return {
+    roleRegistry: new RoleRegistry(),
+    config: CONFIG,
+    workflowForChild: () => undefined,
+    reportLanguageForChild: () => CONFIG.defaultReportLanguage,
+    ...overrides,
+  }
 }
 
 function hostContext() {
@@ -87,7 +113,7 @@ describe('report router', () => {
     // messaging, so the router contributes nothing for them.
     const child = childContext()
     const host = hostContext()
-    installRoutedReportTool(child.ctx, child.agent as never, host.ctx, { roleRegistry: new RoleRegistry(), config: CONFIG, workflowForChild: () => undefined, overlayRoot })
+    installRoutedReportTool(child.ctx, child.agent as never, host.ctx, routedWorkflow())
     expect(child.tools.map(tool => tool.name)).toEqual([])
     expect(child.providers).toEqual([])
   })
@@ -106,7 +132,7 @@ describe('report router', () => {
       provisioning: 'reserved',
     }
     roleRegistry.registerReserved(binding)
-    installRoutedReportTool(child.ctx, child.agent as never, host.ctx, { roleRegistry, config: CONFIG, workflowForChild: () => undefined, overlayRoot })
+    installRoutedReportTool(child.ctx, child.agent as never, host.ctx, routedWorkflow({ roleRegistry }))
     expect(child.tools.map(tool => tool.name)).toEqual(['manifest', 'report_workflow'])
     expect(child.skills).toEqual([])
     expect(child.sections.some(section => section.name === 'tool:report-workflow')).toBe(false)
@@ -131,18 +157,21 @@ describe('report router', () => {
       workflowId: 'wf',
       provisioning: 'reserved',
     })
-    installRoutedReportTool(child.ctx, child.agent as never, host.ctx, { roleRegistry, config: CONFIG, workflowForChild: () => undefined, overlayRoot })
+    installRoutedReportTool(child.ctx, child.agent as never, host.ctx, routedWorkflow({ roleRegistry }))
     expect(child.tools.map(tool => tool.name)).toEqual(['manifest', 'report_workflow'])
     expect(child.skills.map(skill => skill.name)).toEqual([
       'experiment-report-writer',
-      'report-language-latex',
       'latex-compile',
     ])
     const environment = child.sections.find(section => section.name === 'report-environment')
     expect(environment?.text).toContain('language: latex')
     expect(environment?.text).toContain('entry: Report/main.tex')
-    expect(environment?.text).toContain('language skill: report-language-latex')
     expect(environment?.text).toContain('compile skill: latex-compile')
+    // The active language's layout rules ride the prompt: they are unconditional
+    // guidance, so no child has to load a skill to obtain them.
+    const guidance = child.sections.find(section => section.name === 'report-language-guidance')
+    expect(guidance?.text).toContain('# Active report language: LaTeX')
+    expect(guidance?.text).toContain('Use `[H]` for every figure and table')
     expect(child.sections.map(section => section.name)).not.toEqual(expect.arrayContaining([
       'autoreport:skill:experiment-report-writer',
       'autoreport:skill:latex-compile',
@@ -176,7 +205,7 @@ describe('report router', () => {
       skills: { register: () => () => {} },
       get: () => undefined,
     } as unknown as Context
-    installRoutedReportTool(ctx, { id: SessionId('child-stock'), session: undefined } as never, hostContext().ctx, { roleRegistry, config: CONFIG, workflowForChild: () => undefined, overlayRoot })
+    installRoutedReportTool(ctx, { id: SessionId('child-stock'), session: undefined } as never, hostContext().ctx, routedWorkflow({ roleRegistry }))
     expect(tools.map(tool => tool.name)).toEqual(['manifest', 'report_workflow'])
   })
 })
@@ -230,10 +259,10 @@ describe('report_workflow', () => {
   })
 
   function hostWithDirtyTheory() {
-    const session = Session.create(SessionId('main'))
-    const state = WorkflowState.fromSession(session)
+    const session = sessionIn(WORKSPACE, 'main')
+    const state = workflowState(session)
     const waiters = new WaiterRegistry()
-    const commit = <T extends keyof import('@deepseek-ai/dsh-session').SessionEventMap & string>(
+    const commit = <T extends AutoReportRecordType>(
       type: T,
       data: import('@deepseek-ai/dsh-session').SessionEventMap[T],
     ): void => {

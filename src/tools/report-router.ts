@@ -5,23 +5,25 @@ import type AutoReportWorkflowRuntime from '../runtime.js'
 import { applyRoleSandbox } from '../policy/sandbox-roots.js'
 import { installWorkflowReportTool } from './report-workflow.js'
 import { installManifestTool } from './manifest.js'
-import { registerRoleSkills, type ReportSkillLanguage } from '../skills-preset.js'
+import { registerRoleSkills, reportSkillRequirements, type ReportSkillLanguage } from '../skills-preset.js'
 import { installReferencesSkills } from '../skills-references.js'
+import { loadReportLanguageGuidance } from '../workspace/skill-loader.js'
+import { skillLoadTracker } from '../policy/skill-gate.js'
 
-/** Entry file, theme, language guidance, and compile skill per report language. */
-const REPORT_ENVIRONMENTS: Readonly<Record<ReportSkillLanguage, { entry: string; theme: string; languageSkill: string; compileSkill: string }>> = {
-  latex: { entry: 'Report/main.tex', theme: 'Report/mpltx.cls', languageSkill: 'report-language-latex', compileSkill: 'latex-compile' },
-  typst: { entry: 'Report/main.typ', theme: 'Report/mplts.typ', languageSkill: 'report-language-typst', compileSkill: 'typst-compile' },
+/** Entry file and theme per report language; skill names come from the requirements table. */
+const REPORT_ENVIRONMENTS: Readonly<Record<ReportSkillLanguage, { entry: string; theme: string }>> = {
+  latex: { entry: 'Report/main.tex', theme: 'Report/mpltx.cls' },
+  typst: { entry: 'Report/main.typ', theme: 'Report/mplts.typ' },
 }
 
 /**
  * Inject the session-specific Report Environment facts the REPORT persona
- * references: active language, entry file, theme, language guidance, and
- * compile skill names.
+ * references: active language, entry file, theme, and compile skill name.
  * Dynamic facts live here, not in the immutable persona text.
  */
 function installReportEnvironmentSection(childCtx: Context, language: ReportSkillLanguage): () => void {
   const environment = REPORT_ENVIRONMENTS[language]
+  const required = reportSkillRequirements(language)
   return childCtx.systemPrompt.section({
     name: 'report-environment',
     order: 115,
@@ -30,9 +32,25 @@ function installReportEnvironmentSection(childCtx: Context, language: ReportSkil
       `language: ${language}`,
       `entry: ${environment.entry}`,
       `theme: ${environment.theme}`,
-      `language skill: ${environment.languageSkill}`,
-      `compile skill: ${environment.compileSkill}`,
+      `compile skill: ${required.compile}`,
     ].join('\n'),
+  })
+}
+
+/**
+ * Append the active language's layout rules to the REPORT prompt.
+ *
+ * These rules were once a `report-language-<language>` skill, which meant a
+ * REPORT child could only obtain them by loading a skill — and the writing gate
+ * had to demand that load. They are unconditional guidance, not a decision the
+ * model makes, so they belong in the prompt: every REPORT child now has them
+ * before its first step, and no gate depends on them.
+ */
+function installReportLanguageGuidanceSection(childCtx: Context, language: ReportSkillLanguage): () => void {
+  return childCtx.systemPrompt.section({
+    name: 'report-language-guidance',
+    order: 116,
+    text: loadReportLanguageGuidance(language),
   })
 }
 
@@ -40,7 +58,10 @@ export const name = 'autoreportdsh-report-router'
 export const inject = ['subagents', 'tools', 'systemPrompt', 'skills', 'autoreportWorkflow']
 
 /** Router inputs shared by every specialist branch. */
-type RoutedWorkflow = Pick<AutoReportWorkflowRuntime, 'roleRegistry' | 'config' | 'workflowForChild' | 'overlayRoot'>
+export type RoutedWorkflow = Pick<
+  AutoReportWorkflowRuntime,
+  'roleRegistry' | 'config' | 'workflowForChild' | 'reportLanguageForChild'
+>
 
 /**
  * Seed DSH's agent-scoped selection from the frozen workflow snapshot, then
@@ -104,12 +125,15 @@ export function installRoutedReportTool(
     disposers.push(installWorkflowReportTool(childCtx, hostCtx, entry.binding.role))
     const disposeModelSelection = installSpecialistModelSelection(childCtx, child, workflow)
     if (disposeModelSelection !== undefined) disposers.push(disposeModelSelection)
-    const language = workflow.workflowForChild(child.id)?.runtime.state.projection().meta?.settings?.reportLanguage
-      ?? workflow.config.defaultReportLanguage
+    const language = workflow.reportLanguageForChild(child.id)
     if (entry.binding.role === 'REPORT') {
       disposers.push(installReportEnvironmentSection(childCtx, language))
+      disposers.push(installReportLanguageGuidanceSection(childCtx, language))
+      // Release the gate's per-session state with the scope it belonged to. A
+      // surviving session self-heals: the next guard call re-seeds from the log.
+      disposers.push(() => { skillLoadTracker.forget(String(child.id)) })
     }
-    disposers.push(registerRoleSkills(childCtx, entry.binding.role, language, workflow.overlayRoot))
+    disposers.push(registerRoleSkills(childCtx, entry.binding.role, language))
     disposers.push(installReferencesSkills(childCtx))
     const session = child.session
     if (session !== undefined) {
