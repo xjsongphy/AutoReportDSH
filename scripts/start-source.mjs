@@ -11,7 +11,7 @@ const child = spawn(dshCommand, ['web', ...process.argv.slice(2)], {
 })
 
 child.once('error', error => {
-  console.error(`autoreportdsh: failed to start ${dshCommand}: ${String(error)}`)
+  console.error(`AutoReportDSH: failed to start ${dshCommand}: ${String(error)}`)
   process.exitCode = 1
 })
 child.once('exit', (code, signal) => {

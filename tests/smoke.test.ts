@@ -5,7 +5,7 @@ import * as plugin from '../src/index.js'
 
 describe('scaffold smoke', () => {
   it('exposes a loadable cordis plugin module', () => {
-    expect(plugin.name).toBe('autoreportdsh')
+    expect(plugin.name).toBe('autoreport')
     expect(typeof plugin.apply).toBe('function')
   })
 

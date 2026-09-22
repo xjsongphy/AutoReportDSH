@@ -8,7 +8,7 @@
  * owning module registers the contribution, so the policy cannot drift away
  * from the tool it describes.
  *
- * @module autoreportdsh-tools-prompt
+ * @module autoreport-tools-prompt
  */
 
 /**

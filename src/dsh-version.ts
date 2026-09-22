@@ -11,7 +11,7 @@
  * one-line hint. The plugin deliberately does not refuse to load: the pin
  * means "verified", not "exclusive".
  *
- * @module autoreportdsh/dsh-version
+ * @module autoreport/dsh-version
  */
 
 import { existsSync, readFileSync } from 'node:fs'
@@ -60,15 +60,15 @@ export function describeDshVersionSupport(running: string | undefined): { verifi
   if (running === undefined) {
     return {
       verified: false,
-      message: `autoreportdsh: this dsh build does not expose its version; the plugin is verified against dsh ${VERIFIED_DSH_VERSION}`,
+      message: `AutoReportDSH: this dsh build does not expose its version; the plugin is verified against dsh ${VERIFIED_DSH_VERSION}`,
     }
   }
   if (running === VERIFIED_DSH_VERSION) {
-    return { verified: true, message: `autoreportdsh: verified against dsh ${running}` }
+    return { verified: true, message: `AutoReportDSH: verified against dsh ${running}` }
   }
   return {
     verified: false,
-    message: `autoreportdsh: running dsh ${running}, but this plugin is verified against dsh ${VERIFIED_DSH_VERSION}`
+    message: `AutoReportDSH: running dsh ${running}, but this plugin is verified against dsh ${VERIFIED_DSH_VERSION}`
       + ' — other builds usually work; if a tool misbehaves, align the CLI with docs/dependencies.md',
   }
 }

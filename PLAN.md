@@ -169,7 +169,7 @@ shipped `standard` and user `autoreport` resolve. The plugin does not change the
 deployment default preset; users select `autoreport`.
 
 If package installation cannot run the materializer, the documented explicit command is
-`autoreportdsh install-preset`; runtime boot must not silently create a preset after the
+`dsh-autoreport install-preset`; runtime boot must not silently create a preset after the
 roster has already been discovered. This uses DSH’s existing user-root discovery contract
 rather than introducing a new preset-root contribution seam.
 
@@ -389,7 +389,7 @@ DSH’s `SessionEventMap` and model-visible-is-logged rules.
 parallel structured logger or debug transcript. Tests and live diagnosis read the
 raw session file. Critical control flow must appear there with a stable source:
 
-- turn-stopping resumes are `user/message` with `source.plugin = autoreportdsh/turn-guard`
+- turn-stopping resumes are `user/message` with `source.plugin = autoreport/turn-guard`
   and a user-facing `source.summary` (`AutoReport resumed subagent to refresh file
   descriptions`, `AutoReport resumed subagent to report results`, `AutoReport resumed
   MAIN because a subagent is blocked`);
@@ -801,7 +801,7 @@ the first hit instead of walking a workspace's history, and re-scan only the ent
 has disappeared.
 
 **The settings page.** The configuration registers into `plugins.bundle.config` keyed by
-`autoreportdsh` — the slot the Plugins page documents for a bundle's own configuration.
+`dsh-autoreport` — the slot the Plugins page documents for a bundle's own configuration.
 `plugins.item`, which rev 8 used, is documented as occupied by the host-plane configuration
 pages the harness ships; registering there is why the page listed AutoReport both as a card in
 the Official group and as an installed bundle. The bundle slot renders `view: 'page'` only and
@@ -836,11 +836,13 @@ the workspace. Repeated runs are no-ops.
 **Boundaries.** A missing or renamed workspace directory skips the file work, records the
 language, and shows the entry's path as unavailable. An in-flight workflow keeps its frozen
 snapshot, so a move affects later sessions only. `−` is a two-language toggle; this revision
-offers no "follow the default again" affordance. The bundle row keeps the title
-`autoreportdsh`, because the Plugins page derives a bundle's title as `shortName(pkg.name)`
-and assigns a mixed-case display name only to three packages hardcoded in the harness;
-renaming the npm package or asking upstream for a bundle-declared display name are separate
-options, deliberately outside this plan.
+offers no "follow the default again" affordance. The bundle row shows the harness-derived title
+`autoreport`: the Plugins page titles a bundle as `shortName(pkg.name)`, which strips the
+package's `dsh-` prefix, and a mixed-case display name exists only for three packages hardcoded
+in the harness. The literal `AutoReportDSH` therefore rides the package description, which the
+same row prints under its title, and the page's own copy. A bundle-declared display name would
+need an upstream change; that is the only path to the mixed-case title and it is deliberately
+not a dependency of this plan.
 
 ## 3. Testing and acceptance
 

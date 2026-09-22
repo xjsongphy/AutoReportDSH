@@ -75,7 +75,7 @@ DSH session 是追加事件日志。每条 MAIN/child session 都记录：
 - `request/header` 与 `request/context`：实际 provider/model 和请求工具集合；
 - `assistant/message`：对话内容和可用 token usage；
 - `tool/call` / `tool/result`：工具参数、结果及错误；
-- `user/message`：用户输入、subagent `report_workflow`（`source.kind = subagent-report`）、以及 turn-stopping 二次启动（`source.plugin = autoreportdsh/turn-guard`，`summary` 为用户可读的 AutoReport resumed 文案）。
+- `user/message`：用户输入、subagent `report_workflow`（`source.kind = subagent-report`）、以及 turn-stopping 二次启动（`source.plugin = autoreport/turn-guard`，`summary` 为用户可读的 AutoReport resumed 文案）。
 
 **AutoReport 的 durable 状态不在 session log 里。** 它写在插件自己的日志中，位于 harness home 下、按工作区归档：
 

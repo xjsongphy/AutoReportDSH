@@ -5,7 +5,7 @@
 # subagents; ordinary children keep the stock adjacent-agent messaging the
 # base bundle mounts (the standalone stock report tool was removed upstream).
 - insert:
-    - id: autoreportdsh-host
-      name: autoreportdsh
-    - id: autoreportdsh-report-router
-      name: autoreportdsh/tools/report-router
+    - id: autoreport-host
+      name: dsh-autoreport
+    - id: autoreport-report-router
+      name: dsh-autoreport/tools/report-router

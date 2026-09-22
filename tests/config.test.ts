@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { Config } from '../src/config.js'
 
-describe('autoreportdsh Config', () => {
+describe('autoreport Config', () => {
   it('fills deployment defaults', () => {
     const config = Config({}) as unknown as {
       defaultReportLanguage: string

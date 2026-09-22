@@ -5,7 +5,7 @@
  * retain their stock skill catalog and do not see AutoReport model tools.
  * Internal modules stay separate so domain behavior remains independently
  * testable; this composition entry deliberately exposes one product boundary.
- * @module autoreportdsh-preset
+ * @module autoreport-preset
  */
 
 import type { Context } from '@deepseek-ai/cordis'
@@ -16,7 +16,7 @@ import { createSendToAgentTool, installSendToAgentGuidance } from './tools/send-
 import { installWorkflowTaskTool } from './tools/workflow-task.js'
 import type {} from './runtime.js'
 
-export const name = 'autoreportdsh-preset'
+export const name = 'autoreport-preset'
 export const inject = ['tools', 'skills', 'subagents', 'autoreportWorkflow', 'systemPrompt'] as const
 
 /**

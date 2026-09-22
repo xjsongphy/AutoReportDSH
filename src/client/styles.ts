@@ -3,7 +3,7 @@
  * out-of-tree bundle does not share DSH's CSS-modules hasher.
  */
 
-const STYLE_ID = 'autoreportdsh-settings-card'
+const STYLE_ID = 'autoreport-settings-card'
 
 /** Class names consumed by the card chrome and field controls. */
 export const css = {
@@ -486,7 +486,7 @@ export function installCardStyles(): void {
   if (typeof document === 'undefined') return
   if (document.querySelector(`style[data-plugin-css=${JSON.stringify(STYLE_ID)}]`)) return
   const tag = document.createElement('style')
-  tag.dataset.plugin = 'autoreportdsh'
+  tag.dataset.plugin = 'autoreport'
   tag.dataset.pluginCss = STYLE_ID
   tag.textContent = STYLESHEET
   document.head.appendChild(tag)

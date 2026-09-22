@@ -50,7 +50,7 @@ const CARD_ORDER = 50
  */
 export function apply(ctx: ClientContext): void {
   installCardStyles()
-  ctx.effect(() => ctx.locale.register(SETTINGS_NS, { zh, en }), 'autoreportdsh: settings dictionaries')
+  ctx.effect(() => ctx.locale.register(SETTINGS_NS, { zh, en }), 'AutoReportDSH: settings dictionaries')
   const t = ctx.locale.bind(SETTINGS_NS)
   const card = new AutoReportCardController(ctx.settingsScope.bind({ namespace: AUTOREPORT_SETTINGS_NAMESPACE }))
   ctx.slots.inject('plugins.item', () => ctx.slots.register({

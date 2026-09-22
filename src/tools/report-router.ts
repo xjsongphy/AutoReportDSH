@@ -55,7 +55,7 @@ function installReportLanguageGuidanceSection(childCtx: Context, language: Repor
   })
 }
 
-export const name = 'autoreportdsh-report-router'
+export const name = 'autoreport-report-router'
 export const inject = ['subagents', 'tools', 'systemPrompt', 'skills', 'autoreportWorkflow']
 
 /** Router inputs shared by every specialist branch. */

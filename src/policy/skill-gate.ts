@@ -27,7 +27,7 @@
  * Only AutoReport-bound REPORT sessions are gated — MAIN, every other role, and
  * every stock DSH session pass through untouched.
  *
- * @module autoreportdsh/skill-gate
+ * @module autoreport/skill-gate
  */
 
 import type { Session, SessionEvent } from '@deepseek-ai/dsh-session'

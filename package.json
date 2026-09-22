@@ -1,10 +1,10 @@
 {
-  "name": "autoreportdsh",
+  "name": "dsh-autoreport",
   "private": true,
   "version": "0.0.1",
   "license": "MIT",
   "type": "module",
-  "description": "AutoReportCLI physics-report workflow as a DeepSeek Harness (dsh) plugin",
+  "description": "AutoReportDSH — AutoReportCLI's physics-report workflow as a DeepSeek Harness (dsh) plugin",
   "engines": {
     "node": ">=22.19.0"
   },

@@ -3,7 +3,7 @@
  * `/init`. Child report routing is a separate overlay row because
  * DSH continuable setups are process-global.
  *
- * @module autoreportdsh-host
+ * @module autoreport-host
  */
 
 import type { Context } from '@deepseek-ai/cordis'
@@ -21,7 +21,7 @@ import { loadProjectSettings, saveProjectSettings, workspaceIdForRoot } from './
 import { describeDshVersionSupport, readRunningDshVersion } from './dsh-version.js'
 import { installTurnGuards } from './workflow/turn-guard.js'
 
-export const name = 'autoreportdsh-host'
+export const name = 'autoreport-host'
 // `apply()` registers the host-wide `/init` command through the commands
 // service.  Keep both services in the activation contract so the lookup below
 // cannot race startup and silently skip command registration.

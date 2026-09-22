@@ -78,6 +78,6 @@ cpSync(join(root, 'README.md'), join(output, 'README.md'))
 cpSync(join(root, 'presets', 'autoreport'), join(output, 'presets', 'autoreport'), { recursive: true })
 
 if (!existsSync(join(output, 'dist', 'src', 'index.js'))) {
-  throw new Error('autoreportdsh: npm package preparation did not produce dist/src/index.js')
+  throw new Error('AutoReportDSH: npm package preparation did not produce dist/src/index.js')
 }
-console.log(`autoreportdsh: prepared npm package at ${output}`)
+console.log(`AutoReportDSH: prepared npm package at ${output}`)

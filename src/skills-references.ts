@@ -4,7 +4,7 @@
  * Discovers DSH-shaped flat markdown and directory bundles under the current
  * workspace's References tree so experiment-local skills remain available to
  * AutoReport without importing project or user agent roots into its catalog.
- * @module autoreportdsh-skills-references
+ * @module autoreport-skills-references
  */
 
 import { lstat, readdir, readFile, realpath } from 'node:fs/promises'

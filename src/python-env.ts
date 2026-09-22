@@ -3,7 +3,7 @@
  * DSH shell-env registry, and prepends that interpreter's bin directory to
  * PATH on owned bash/pwsh calls so `python` / `python3` resolve to the selected
  * environment without requiring the agent to type the `$DSH_*` names.
- * @module autoreportdsh-python-env
+ * @module autoreport-python-env
  */
 
 import type { Context } from '@deepseek-ai/cordis'

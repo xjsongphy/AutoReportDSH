@@ -8,7 +8,7 @@ import { install } from '../scripts/install-user-preset.js'
 const tempDirs: string[] = []
 
 function makeTemp(): string {
-  const dir = mkdtempSync(join(tmpdir(), 'autoreportdsh-install-'))
+  const dir = mkdtempSync(join(tmpdir(), 'autoreport-install-'))
   tempDirs.push(dir)
   return dir
 }
@@ -38,7 +38,7 @@ function ensureBuilt(): void {
     timeout: 180_000,
   })
   if (build.status !== 0 || !existsSync(builtEntry())) {
-    throw new Error(`autoreportdsh test: pnpm run build failed (${build.status}): ${(build.stderr ?? '').slice(-400)}`)
+    throw new Error(`autoreport test: pnpm run build failed (${build.status}): ${(build.stderr ?? '').slice(-400)}`)
   }
 }
 
@@ -72,13 +72,13 @@ describe('install-user-preset', () => {
     expect(metadata).not.toMatch(/^name: autoreport$/m)
 
     const overlay = readFileSync(result.overlayFile, 'utf8')
-    expect(overlay).toContain('name: autoreportdsh')
+    expect(overlay).toContain('name: dsh-autoreport')
     expect(overlay).not.toContain(entry)
     expect(overlay).toContain(join(ROOT, 'dist', 'src', 'tools', 'report-router.js'))
     expect(overlay).not.toContain('tool-subagent-report')
     expect(overlay).not.toContain('__AUTOREPORT_ENTRY__')
     expect(overlay).not.toContain('__AUTOREPORT_REPORT_ROUTER__')
-    expect(result.packageLink).toBe(join(home, 'profiles', 'node_modules', 'autoreportdsh'))
+    expect(result.packageLink).toBe(join(home, 'profiles', 'node_modules', 'dsh-autoreport'))
     expect(existsSync(result.packageLink)).toBe(true)
   })
 

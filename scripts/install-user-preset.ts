@@ -5,9 +5,9 @@
  * user preset root (`<home>/.agent-presets/autoreport`) so the shipped
  * agent-presets roster discovers it through DSH's ordinary `includeUserRoot`
  * discovery, then renders cordis.overlay.generated.yml from
- * cordis.template.yml with the package-name host row (`autoreportdsh`) and
+ * cordis.template.yml with the package-name host row (`dsh-autoreport`) and
  * the absolute built report-router path. Also symlinks this package under
- * `<home>/profiles/node_modules/autoreportdsh` so Node and the client-module
+ * `<home>/profiles/node_modules/dsh-autoreport` so Node and the client-module
  * scan can resolve `exports["./client"]`.
  *
  * A leftover `<home>/.agent-presets/autoreport-main` from the preset-id
@@ -19,7 +19,7 @@
  * existing preset directory are never removed. Run after `pnpm run build` so
  * dist/src/index.js and dist/client.js exist.
  *
- * @module autoreportdsh/install-user-preset
+ * @module autoreport/install-user-preset
  */
 
 import { cpSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
@@ -52,7 +52,7 @@ function indentYamlBlock(value: string, spaces: number): string {
 }
 
 /**
- * Point `$DSH_HOME/profiles/node_modules/autoreportdsh` at this package so
+ * Point `$DSH_HOME/profiles/node_modules/dsh-autoreport` at this package so
  * Loader and the client-module scan resolve it by name.
  * @param home - harness home.
  * @param repoRoot - this package's root.
@@ -61,7 +61,7 @@ function indentYamlBlock(value: string, spaces: number): string {
 function linkPackage(home: string, repoRoot: string): string {
   const modules = join(home, 'profiles', 'node_modules')
   mkdirSync(modules, { recursive: true })
-  const link = join(modules, 'autoreportdsh')
+  const link = join(modules, 'dsh-autoreport')
   const target = resolve(repoRoot)
   let existing: ReturnType<typeof lstatSync> | undefined
   try {
@@ -71,7 +71,7 @@ function linkPackage(home: string, repoRoot: string): string {
   }
   if (existing !== undefined) {
     if (!existing.isSymbolicLink()) {
-      throw new Error(`autoreportdsh: ${link} exists and is not a symlink`)
+      throw new Error(`AutoReportDSH: ${link} exists and is not a symlink`)
     }
     if (realpathSync(link) === realpathSync(target)) return link
     unlinkSync(link)
@@ -159,15 +159,15 @@ export function install(options: InstallOptions = {}): {
   const clientBundle = join(repoRoot, 'dist', 'client.js')
 
   if (!isAbsolute(entry) || !existsSync(entry)) {
-    throw new Error(`autoreportdsh: built plugin entry not found at ${entry}; run \`pnpm run build\` first`)
+    throw new Error(`AutoReportDSH: built plugin entry not found at ${entry}; run \`pnpm run build\` first`)
   }
   if (options.entry === undefined && !existsSync(clientBundle)) {
-    throw new Error(`autoreportdsh: client bundle not found at ${clientBundle}; run \`pnpm run build\` first`)
+    throw new Error(`AutoReportDSH: client bundle not found at ${clientBundle}; run \`pnpm run build\` first`)
   }
 
   const sourceDir = join(repoRoot, PRESET_SOURCE_DIR)
   if (!existsSync(join(sourceDir, 'agent.cordis.yml'))) {
-    throw new Error(`autoreportdsh: preset composition missing at ${join(sourceDir, 'agent.cordis.yml')}`)
+    throw new Error(`AutoReportDSH: preset composition missing at ${join(sourceDir, 'agent.cordis.yml')}`)
   }
 
   const presetDir = join(home, USER_PRESET_ROOT, PRESET_DIR_NAME)
@@ -183,7 +183,7 @@ export function install(options: InstallOptions = {}): {
       .replaceAll('__AUTOREPORT_PRESET__', options.packageName ?? pluginEntry(repoRoot, 'preset.js'))
     writeFileSync(join(presetDir, 'agent.cordis.yml'), composition)
   } catch (error: unknown) {
-    throw new Error(`autoreportdsh: failed to materialize preset under ${presetDir}: ${String(error)}`)
+    throw new Error(`AutoReportDSH: failed to materialize preset under ${presetDir}: ${String(error)}`)
   }
   const retiredLegacyPresetDir = retireLegacyPreset(home, presetDir)
 
@@ -194,12 +194,12 @@ export function install(options: InstallOptions = {}): {
     try {
       template = readFileSync(templatePath, 'utf8')
     } catch (error: unknown) {
-      throw new Error(`autoreportdsh: cannot read overlay template ${templatePath}: ${String(error)}`)
+      throw new Error(`AutoReportDSH: cannot read overlay template ${templatePath}: ${String(error)}`)
     }
     const reportRouter = pluginEntry(repoRoot, 'tools/report-router.js')
     writeFileSync(overlayFile, template.replaceAll('__AUTOREPORT_REPORT_ROUTER__', reportRouter))
   }
-  const packageLink = options.linkPackage === false ? join(home, 'profiles', 'node_modules', 'autoreportdsh') : linkPackage(home, repoRoot)
+  const packageLink = options.linkPackage === false ? join(home, 'profiles', 'node_modules', 'dsh-autoreport') : linkPackage(home, repoRoot)
 
   return {
     presetDir,
@@ -219,26 +219,26 @@ function main(argv: readonly string[]): void {
     if (arg === '--') continue
     if (arg === '--home') {
       const value = argv[++i]
-      if (value === undefined) throw new Error('autoreportdsh: --home requires a value')
+      if (value === undefined) throw new Error('AutoReportDSH: --home requires a value')
       options.home = value
     } else if (arg === '--repo-root') {
       const value = argv[++i]
-      if (value === undefined) throw new Error('autoreportdsh: --repo-root requires a value')
+      if (value === undefined) throw new Error('AutoReportDSH: --repo-root requires a value')
       options.repoRoot = value
     } else if (arg === '--entry') {
       const value = argv[++i]
-      if (value === undefined) throw new Error('autoreportdsh: --entry requires a value')
+      if (value === undefined) throw new Error('AutoReportDSH: --entry requires a value')
       options.entry = value
-    } else throw new Error(`autoreportdsh: unknown argument ${String(arg)}`)
+    } else throw new Error(`AutoReportDSH: unknown argument ${String(arg)}`)
   }
   const result = install(options)
-  console.log(`autoreportdsh: preset installed at ${result.presetDir}`)
+  console.log(`AutoReportDSH: preset installed at ${result.presetDir}`)
   if (result.retiredLegacyPresetDir !== undefined) {
-    console.log(`autoreportdsh: retired leftover preset at ${result.retiredLegacyPresetDir}`)
+    console.log(`AutoReportDSH: retired leftover preset at ${result.retiredLegacyPresetDir}`)
   }
-  console.log(`autoreportdsh: overlay rendered at ${result.overlayFile}`)
-  console.log(`autoreportdsh: package linked at ${result.packageLink}`)
-  console.log('autoreportdsh: source development overlay rendered; installed profiles use the normal `dsh web` command')
+  console.log(`AutoReportDSH: overlay rendered at ${result.overlayFile}`)
+  console.log(`AutoReportDSH: package linked at ${result.packageLink}`)
+  console.log('AutoReportDSH: source development overlay rendered; installed profiles use the normal `dsh web` command')
 }
 
 if (process.argv[1] !== undefined && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

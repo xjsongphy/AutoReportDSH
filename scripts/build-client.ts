@@ -5,7 +5,7 @@
  * reproduces the loader handoff: `window.__ModuleLoader__.load({ id, factory })`
  * with platform modules left external for the web shell's module table.
  *
- * @module autoreportdsh/build-client
+ * @module autoreport/build-client
  */
 
 import { mkdirSync } from 'node:fs'
@@ -15,7 +15,7 @@ import * as esbuild from 'esbuild'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const outfile = resolve(root, 'dist', 'client.js')
-const packageId = 'autoreportdsh'
+const packageId = 'dsh-autoreport'
 
 /** Specifiers the DSH web shell seeds; requiring them from the factory is the point. */
 const externals = [

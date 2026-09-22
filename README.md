@@ -47,7 +47,7 @@ The workflow ports the report pipeline of
 its `autoreport` preset, in DSH's `web` profile:
 
 ```bash
-npx @deepseek-ai/dsh plugin --profile web add autoreportdsh
+npx @deepseek-ai/dsh plugin --profile web add dsh-autoreport
 ```
 
 **Start DSH** — the Web UI opens at `http://127.0.0.1:3080`:
@@ -59,7 +59,7 @@ npx @deepseek-ai/dsh web
 **Upgrade an existing installation:**
 
 ```bash
-npx @deepseek-ai/dsh plugin --profile web update autoreportdsh
+npx @deepseek-ai/dsh plugin --profile web update dsh-autoreport
 ```
 
 ### Install from source
@@ -154,7 +154,7 @@ Program state stays out of the experiment folder (`$DSH_HOME` defaults to `~/.ds
 ```text
 $DSH_HOME/
 ├── .agent-presets/autoreport/     installed user preset
-├── profiles/node_modules/autoreportdsh
+├── profiles/node_modules/dsh-autoreport
 └── autoreport/
     ├── venv/                      AutoReport-managed Python (optional)
     └── <workspaceId>/

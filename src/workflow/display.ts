@@ -10,7 +10,7 @@ import type { SpecialistRole } from '../roles.js'
 import type { WorkflowReportEnvelope } from './events.js'
 
 /** `MessageSource.plugin` for turn-stopping steers in the durable session log. */
-export const TURN_GUARD_PLUGIN = 'autoreportdsh/turn-guard'
+export const TURN_GUARD_PLUGIN = 'autoreport/turn-guard'
 
 /** Collapsed notice: MAIN was resumed because a subagent task is blocked. */
 export const MAIN_STEER_SUMMARY = 'AutoReport resumed MAIN because a subagent is blocked'

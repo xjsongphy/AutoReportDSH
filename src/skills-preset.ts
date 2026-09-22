@@ -4,7 +4,7 @@
  * MAIN registers catalog skills in the preset scope. Specialist children register
  * permitted bundled skills as runtime entries on the child context so bodies are
  * loaded on demand instead of bloating every REPORT system prompt.
- * @module autoreportdsh-skills
+ * @module autoreport-skills
  */
 
 import type { Context } from '@deepseek-ai/cordis'
@@ -13,7 +13,7 @@ import type { SpecialistRole } from './roles.js'
 import { loadBundledSkills, type BundledSkill } from './workspace/skill-loader.js'
 import type { ReportLanguage } from './workspace/init.js'
 
-export const name = 'autoreportdsh-skills'
+export const name = 'autoreport-skills'
 export const inject = ['skills' as const]
 
 /**

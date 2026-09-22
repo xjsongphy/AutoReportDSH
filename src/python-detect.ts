@@ -5,7 +5,7 @@
  * separate check. Picking managed creates `$dshHome/autoreport/venv` with `uv`
  * on save; the directory is not created until then and may be deleted to
  * reclaim space.
- * @module autoreportdsh-python-detect
+ * @module autoreport-python-detect
  */
 
 import { spawnSync, type SpawnSyncReturns } from 'node:child_process'

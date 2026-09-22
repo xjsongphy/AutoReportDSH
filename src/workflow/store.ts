@@ -27,7 +27,7 @@
  * DSH's generation-zero log name, so a future incompatible record format adds
  * `session.v1.jsonl` beside it under the same rule.
  *
- * @module autoreportdsh/workflow-store
+ * @module autoreport/workflow-store
  */
 
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs'

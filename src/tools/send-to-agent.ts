@@ -498,7 +498,7 @@ export function createSendToAgentTool(deps: SendToAgentDependencies): ToolDefini
   })
 }
 
-export const name = 'autoreportdsh-send-to-agent'
+export const name = 'autoreport-send-to-agent'
 export const inject = ['tools', 'subagents', 'autoreportWorkflow']
 
 /**

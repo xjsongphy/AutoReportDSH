@@ -81,13 +81,13 @@ describe.skipIf(skipReason !== undefined)('integration: installer CLI against a 
     // package name so the client-module scan can resolve dsh.client; router
     // stays a path.
     const overlay = readFileSync(OVERLAY_FILE, 'utf8')
-    expect(overlay).toContain('- id: autoreportdsh-host')
-    expect(overlay).toMatch(/name: autoreportdsh\s*$/m)
+    expect(overlay).toContain('- id: autoreport-host')
+    expect(overlay).toMatch(/name: dsh-autoreport\s*$/m)
     expect(overlay).not.toContain(HOST_ENTRY)
-    expect(overlay).toContain('- id: autoreportdsh-report-router')
+    expect(overlay).toContain('- id: autoreport-report-router')
     expect(overlay).toContain(`name: '${ROUTER_ENTRY}'`)
     expect(overlay).not.toMatch(/__AUTOREPORT_/)
-    expect(existsSync(join(home, 'profiles', 'node_modules', 'autoreportdsh'))).toBe(true)
+    expect(existsSync(join(home, 'profiles', 'node_modules', 'dsh-autoreport'))).toBe(true)
 
     // Idempotent rerun stays green (deployment re-runs install freely).
     const rerun = spawnSync(process.execPath, [

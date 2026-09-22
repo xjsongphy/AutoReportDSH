@@ -44,7 +44,7 @@ Plotting、Report —— 负责理论推导、数据分析、绘图和 LaTeX/Typ
 `web` profile：
 
 ```bash
-npx @deepseek-ai/dsh plugin --profile web add autoreportdsh
+npx @deepseek-ai/dsh plugin --profile web add dsh-autoreport
 ```
 
 **启动 DSH** —— Web UI 打开在 `http://127.0.0.1:3080`：
@@ -56,7 +56,7 @@ npx @deepseek-ai/dsh web
 **升级已有安装：**
 
 ```bash
-npx @deepseek-ai/dsh plugin --profile web update autoreportdsh
+npx @deepseek-ai/dsh plugin --profile web update dsh-autoreport
 ```
 
 ### 从源码安装
@@ -141,7 +141,7 @@ schema 默认值
 ```text
 $DSH_HOME/
 ├── .agent-presets/autoreport/     已安装的 user preset
-├── profiles/node_modules/autoreportdsh
+├── profiles/node_modules/dsh-autoreport
 └── autoreport/
     ├── venv/                      AutoReport 托管的 Python（可选）
     └── <workspaceId>/

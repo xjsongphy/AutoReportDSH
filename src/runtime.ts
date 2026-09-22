@@ -202,7 +202,7 @@ export default class AutoReportWorkflowRuntime extends Service {
     }, { global: true })
     ctx.effect(() => () => {
       void this.disposeResidentRoles()
-    }, 'autoreportdsh.residentRoles()')
+    }, 'autoreport.residentRoles()')
     const existingAgents = ctx.get('agents') as { list?: () => Agent[] } | undefined
     for (const agent of existingAgents?.list?.() ?? []) {
       this.liveAgents.set(String(agent.id), agent)
@@ -417,7 +417,7 @@ export default class AutoReportWorkflowRuntime extends Service {
       await childCtx.inject(['skills'], (skillCtx) => {
         skillCtx.effect(
           () => installRoutedReportTool(skillCtx, child, this.ctx, this),
-          `autoreportdsh.resident.${role}()`,
+          `autoreport.resident.${role}()`,
         )
       })
     }
@@ -811,7 +811,7 @@ export default class AutoReportWorkflowRuntime extends Service {
       // the explicit /init path surfaces the same failure loudly for repair.
       const message = error instanceof Error ? error.message : String(error)
       try {
-        this.ctx.logger.warn('autoreportdsh: skipped workflow initialization: %s', message)
+        this.ctx.logger.warn('AutoReportDSH: skipped workflow initialization: %s', message)
       } catch {
         // A bare test Context may lack a working logger; containment already happened.
       }
@@ -837,7 +837,7 @@ export default class AutoReportWorkflowRuntime extends Service {
     if (previous?.initialized === true) return undefined
     const root = this.config.workspaceRoot ?? session.header.cwd
     if (root === undefined || root.length === 0) {
-      throw new Error('autoreportdsh: cannot record the workflow without a workspace root')
+      throw new Error('AutoReportDSH: cannot record the workflow without a workspace root')
     }
     return this.commit(session, 'autoreport/workflow', {
       version: AUTOREPORT_SCHEMA_VERSION,
@@ -861,7 +861,7 @@ export default class AutoReportWorkflowRuntime extends Service {
     if (missing.length === 0) return
     try {
       this.ctx.logger.warn(
-        'autoreportdsh: Python interpreter is missing analysis packages: %s (%s). Data Analysis and Plotting may fail until they are installed.',
+        'AutoReportDSH: Python interpreter is missing analysis packages: %s (%s). Data Analysis and Plotting may fail until they are installed.',
         missing.join(', '),
         pythonExecutable,
       )

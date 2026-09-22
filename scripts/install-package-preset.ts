@@ -3,7 +3,7 @@
 import { install } from './install-user-preset.js'
 
 install({
-  packageName: 'autoreportdsh/preset',
+  packageName: 'dsh-autoreport/preset',
   renderOverlay: false,
   linkPackage: false,
 })

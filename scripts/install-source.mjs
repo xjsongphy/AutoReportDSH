@@ -17,7 +17,7 @@ import { createInterface } from 'node:readline/promises'
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const dshCommand = process.env.AUTOREPORT_DSH_COMMAND ?? 'dsh'
 const profile = 'web'
-const packageName = 'autoreportdsh'
+const packageName = 'dsh-autoreport'
 const force = process.argv.includes('--yes') || process.argv.includes('-y') || process.argv.includes('--force')
 const help = process.argv.includes('--help') || process.argv.includes('-h')
 const interactive = process.stdin.isTTY === true && process.stdout.isTTY === true

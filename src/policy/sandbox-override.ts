@@ -13,14 +13,14 @@
  * wrap cannot influence the resolved root, the plugin fails loud rather than
  * silently running roles on the unconfined workspace root.
  *
- * @module autoreportdsh/policy/sandbox-override
+ * @module autoreport/policy/sandbox-override
  */
 
 /** Synthetic session id used only by the activation self-check. */
-export const SANDBOX_OVERRIDE_PROBE = 'autoreportdsh:sandbox-override-probe'
+export const SANDBOX_OVERRIDE_PROBE = 'autoreport:sandbox-override-probe'
 
 /** Marker identifying an already-wrapped resolve function. */
-const WRAPPED = Symbol.for('autoreportdsh.sandbox-override')
+const WRAPPED = Symbol.for('autoreport.sandbox-override')
 
 /** Structural subset of the host sandbox-policy service the wrap touches. */
 export interface SandboxOverrideService {
@@ -80,7 +80,7 @@ export function installSandboxOverride(policy: SandboxOverrideService, options: 
     policy.resolve = wrapped
   } catch (error: unknown) {
     throw new Error(
-      'autoreportdsh: the host sandbox policy rejected the workspace-root override; install a DSH release that permits in-process policy wrapping',
+      'AutoReportDSH: the host sandbox policy rejected the workspace-root override; install a DSH release that permits in-process policy wrapping',
       { cause: error },
     )
   }
@@ -88,7 +88,7 @@ export function installSandboxOverride(policy: SandboxOverrideService, options: 
   const probe = policy.resolve({ session: { id: SANDBOX_OVERRIDE_PROBE } })
   if (probe.workspaceRoot !== options.probeRoot) {
     throw new Error(
-      `autoreportdsh: sandbox override self-check failed; the host policy resolved ${JSON.stringify(probe.workspaceRoot)} instead of ${JSON.stringify(options.probeRoot)}`,
+      `AutoReportDSH: sandbox override self-check failed; the host policy resolved ${JSON.stringify(probe.workspaceRoot)} instead of ${JSON.stringify(options.probeRoot)}`,
     )
   }
 }
