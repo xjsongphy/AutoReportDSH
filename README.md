@@ -100,8 +100,12 @@ AUTOREPORT_DSH_COMMAND="/path/to/dsh" pnpm run start:source
    preset, and choose your experiment folder.
 2. Run `/init` or describe the experiment in your first message — the first
    turn initializes the standard layout and leaves existing files alone.
-   `/init --language typst` selects Typst; LaTeX and Typst files may
-   coexist, and the project setting decides the active language.
+   `/init typst` (or `--language typst`) selects Typst for that workspace and
+   switches its templates: an unmodified template of the previous language is
+   removed, an edited one is kept, and an existing file is never overwritten.
+   Pick each workspace's language under **Plugins → Installed → dsh-autoreport**,
+   where both languages list their projects and one control moves a project
+   between them.
 3. Add measured data and reference material to the folder, then ask Main to
    write the report; the compiled PDF lands in `Report/`.
 
@@ -112,17 +116,23 @@ its report settings in this order and freezes the result when a workflow starts,
 so later changes leave a running report untouched:
 
 ```text
-project settings     <dshHome>/autoreport/<workspaceId>/project.json
+workspace language   DSH user settings, namespace autoreport,
+                     keyed by workspace root  (authoritative)
         ↓
-DSH user settings    namespace: autoreport
+legacy project settings  <dshHome>/autoreport/<workspaceId>/project.json
+        ↓
+DSH user settings    namespace: autoreport (defaults, waits, Python)
         ↓
 composition defaults
         ↓
 schema defaults
 ```
 
-- **Settings card** — report language, delegation idle timeout, delegation maximum
-  wait, and Python interpreter live under **Settings → Plugins → Plugin configuration**.
+- **Settings page** — report language, delegation idle timeout, delegation maximum
+  wait, and Python interpreter live on the plugin's own page under
+  **Plugins → Installed → dsh-autoreport**. The same page lists each language's
+  projects, with one control that moves a project to the other language and
+  switches its templates.
 - **Subagent model** — new specialists inherit Main's model unless
   `specialistModel` is set in cordis or project settings; switch a running
   specialist's model from the conversation window.
@@ -198,7 +208,7 @@ AutoReportDSH/
 `tests/eval/workflow-eval.test.ts` asserts the assembled workflow traces: the full
 LaTeX and Typst pipelines, recovery from a blocked delegation, a specialist that
 forgets to declare completion, cold rebinding, artifact `modified` events, the
-Python snapshot, and LaTeX/Typst coexistence. The live-provider smoke test runs
+Python snapshot, and both report languages. The live-provider smoke test runs
 against a real DSH installation and is opt-in: set `AUTOREPORT_LIVE_TEST=1`, point
 `AUTOREPORT_E2E_DSH_HOME` at a DSH home that already has providers configured, and
 run

@@ -23,7 +23,9 @@ platform.
   [Tool-owned policy](#tool-owned-policy).
 - **Experiment workspace:** create-missing-only initialization of `Data/`,
   `References/`, `Theory/`, `Plots/`, `Report/`, and `Outline/`; LaTeX/Typst
-  report assets and project-scoped language settings.
+  report assets, and a per-workspace report language recorded in the DSH user
+  settings namespace (a switch deletes the previous language's *unmodified*
+  templates, keeps edited ones, and never overwrites).
 - **Domain instructions:** bundled personas plus scoped report skills; project
   skills may be supplied under `References/skills/` and are discovered only in
   AutoReport session scopes. A REPORT child cannot edit report content or run
@@ -44,8 +46,11 @@ platform.
 - **Settings integration:** report language, wait limits, Python interpreter,
   and specialist-model selection are stored through DSH settings/project state;
   DSH retains ownership of provider credentials and model execution.
-- **Web settings UI:** the plugin contributes only its configuration card and
-  does not replace the DSH application UI.
+- **Web settings UI:** the plugin contributes only its own configuration page,
+  on its bundle's page in the Plugins page, and does not replace the DSH
+  application UI. That page lists each language's projects (derived from the
+  Client's session store — a project is a workspace an AutoReport session has
+  conversed in) with one control that moves a project to the other language.
 - **Web tool rows:** `send_to_agent` and `workflow_task` claim their keyed
   `tool.call.toolview` entry, so a delegation reads as `→ DATA_ANALYSIS · <subject>`
   and a board operation as `update task-2 · 3/5 勾选` instead of DSH's generic
@@ -295,7 +300,9 @@ Properties this buys and costs:
   the workspace path (`workspaceIdForRoot`), so it never leaks a path fragment.
 - Moving the workspace to another machine does **not** carry the workflow state:
   same-workspace-path on a different home is a different log. The experiment
-  `project.json` settings behave the same way.
+  `project.json` settings behave the same way; the per-workspace report
+  language, which lives in the user settings namespace keyed by workspace root,
+  is keyed by that same path.
 - `autoreport/*` no longer appears in the WebUI Trajectory event ledger. Reading
   the workflow means opening the log above, or the manifest tool.
 - We own durability: synchronous append-only writes, no session write lease and

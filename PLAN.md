@@ -568,7 +568,10 @@ It materializes only missing resources for the selected language:
 - LaTeX: `Report/main.tex` and theme `.cls`;
 - Typst: `Report/main.typ`, `mplts.typ`, `.csl`, and seed `bibli.bib`.
 
-Existing files are never overwritten. Assets are copied from
+Existing files are never overwritten. A later language switch (rev 9, PLAN
+§2.18) deletes a previous language's template only when it is still byte-identical
+to the bundled resource, and never overwrites one that is already there. Assets
+are copied from
 `autoreportcli/templates/{latex,typst}` with license headers retained.
 
 ### 2.11 Runtime-generated artifacts and the AutoReport manifest
@@ -666,13 +669,14 @@ inherit-from-Main default, `executionTimeoutMs`), not live workflow inputs. When
 `resolveWorkflowSettings()` resolves the full precedence chain and persists the
 effective values as a `WorkflowSettingsSnapshot` in the durable
 `autoreport/workflow` event; execution reads the snapshot, so later settings
-changes never mutate an in-flight report. Project-scoped language selection is
-preserved: `/init [--language latex|typst]` updates project settings and
-materializes missing resources for that language without deleting the other
-backend's files; both `Report/main.tex` and `Report/main.typ` may coexist with
-`project.reportLanguage` authoritative. **Rev 9 supersedes that storage**: the
-authoritative per-workspace language moves into the user settings namespace, and
-`project.reportLanguage` stays readable for one version (PLAN §2.18).
+changes never mutate an in-flight report. **Rev 9 supersedes project-scoped
+language storage** (PLAN §2.18): the authoritative per-workspace language lives
+in the user settings namespace keyed by workspace root, `/init [latex|typst]`
+records it there, and the host switches that workspace's templates from the
+record. `project.reportLanguage` stays readable for one version and is adopted
+into the map on a workspace's first initialization. Both `Report/main.tex` and
+`Report/main.typ` therefore coexist only while one of them is the user's own
+edit: an unmodified template of the other language is removed by the switch.
 
 Fixed authorization stays non-configurable (no allowNetwork/disableRoleIsolation
 surface); AutoReport policy may only narrow DSH capabilities. Subagent model
@@ -736,7 +740,7 @@ and where it lives in the codebase:
 | 3 | Plugin config = defaults, not live workflow inputs | **Implemented** — `defaultReportLanguage`/`specialistModel`/`executionTimeoutMs` are snapshotted; the unused Python-environment abstraction was removed |
 | 4 | Project-scoped language selection | **Implemented** — external `<dshHome>/autoreport/<workspaceId>/project.json`; concurrent projects supported |
 | 5 | Persist resolved settings in workflow snapshot | **Implemented** — `WorkflowSettingsSnapshot` in `autoreport/workflow` payload (schema version 3); `resolveWorkflowSettings()` precedence chain |
-| 6 | `/init --language latex\|typst` | **Implemented** — updates project settings + materializes missing resources only; other backend files never deleted |
+| 6 | `/init --language latex\|typst` | **Implemented, revised in rev 9** — records the choice in the user settings map (PLAN §2.18) and materializes missing resources; the other language's *unmodified* templates are deleted by the host-side switch, edited ones are kept |
 | 7 | Non-configurable authorization/execution policy | **By design** — fixed role table + immutable `network:'deny'`, no broadening knobs exposed |
 | 8 | Reuse DSH provider infrastructure | **Implemented** — subagents inherit Main by default; one optional shared route override is applied through DSH agent-scoped model selection, including `reasoningEffort` |
 | 9 | Web settings card via plugin settings seam | **Implemented** — `src/client/` registers the `autoreport` namespace card; Host half is `installSettingsSection`. Rev 9 moved the registration from `plugins.item` (which the Plugins page reserves for host-plane official plugins) to `plugins.bundle.config`, keyed by the bundle's package name (PLAN §2.18) |

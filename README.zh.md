@@ -92,8 +92,11 @@ AUTOREPORT_DSH_COMMAND="/path/to/dsh" pnpm run start:source
 1. 打开 `http://127.0.0.1:3080`，选择 **`autoreport`** preset 启动 session，并选定
    实验目录。
 2. 运行 `/init` 或直接在第一条消息里描述实验 —— 首个回合会创建标准目录结构，
-   且不改动已有文件。`/init --language typst` 选择 Typst；LaTeX 与 Typst 文件
-   可以共存，由项目设置决定当前语言。
+   且不改动已有文件。`/init typst`（或 `--language typst`）为该工作区选择
+   Typst 并切换模板：上一种语言里没改过的模板会被删掉，改过的一律保留，
+   已存在的文件绝不覆盖。每个工作区的语言可在
+   **插件 → 已安装 → dsh-autoreport** 里选，那里按语言列出项目，一个控件即可
+   把项目换到另一种语言。
 3. 把测量数据和参考资料放进目录，让 Main 写报告；编译好的 PDF 会出现在 `Report/`。
 
 ## 配置
@@ -102,17 +105,21 @@ Provider、凭证和 Main 模型路由由 DSH 负责。本插件按以下顺序�
 工作流开始时冻结结果，因此之后的修改不会影响正在进行的报告：
 
 ```text
-项目设置            <dshHome>/autoreport/<workspaceId>/project.json
+工作区语言          DSH 用户设置 namespace: autoreport，
+                   按工作区根路径为键（权威）
         ↓
-DSH 用户设置        namespace: autoreport
+legacy 项目设置     <dshHome>/autoreport/<workspaceId>/project.json
+        ↓
+DSH 用户设置        namespace: autoreport（默认值、超时、Python）
         ↓
 composition 默认值
         ↓
 schema 默认值
 ```
 
-- **设置卡片** —— 报告语言、委派空闲超时、委派最长等待和 Python 解释器位于
-  **设置 → 插件 → 插件配置**。
+- **设置页** —— 报告语言、委派空闲超时、委派最长等待和 Python 解释器位于插件自己的
+  页面：**插件 → 已安装 → dsh-autoreport**。同一页按语言列出项目，一个控件即可把
+  项目换到另一种语言并切换它的模板。
 - **specialist 模型** —— 新建的 specialist 默认继承 Main 的模型，除非在 cordis 或
   项目设置中指定 `specialistModel`；运行中的 specialist 可在对话窗口切换模型。
 - **Python** —— 三选一：由插件用 `uv` 在 `$DSH_HOME/autoreport/venv` 创建的托管环境
@@ -184,7 +191,7 @@ AutoReportDSH/
 
 `tests/eval/workflow-eval.test.ts` 断言组装后的工作流路径：LaTeX 与 Typst 全链路、
 blocked 委派的恢复、specialist 忘记声明完成、cold rebind、artifact `modified` 事件、
-Python snapshot，以及 LaTeX/Typst 共存。真实 provider smoke 测试针对真实 DSH 安装
+Python snapshot，以及两种报告语言。真实 provider smoke 测试针对真实 DSH 安装
 运行且为显式 opt-in：设置 `AUTOREPORT_LIVE_TEST=1`，把 `AUTOREPORT_E2E_DSH_HOME`
 指向一个已配置好 provider 的 DSH home，然后运行
 
