@@ -54,24 +54,26 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 /** Required services (cordis fiber inject). */
 export const inject = ['slots', 'locale', 'connection', 'remote', 'settingsScope']
 
-/** Where the card sits in the Plugins page's Official group. */
-const CARD_ORDER = 50
+/** Bundle id the Plugins page keys a bundle's own configuration by. */
+export const BUNDLE_ID = 'dsh-autoreport'
 
 /**
- * Register the AutoReport card into the Plugins page's `plugins.item` slot.
+ * Register the AutoReport configuration page on the bundle's own page.
+ *
+ * `plugins.bundle.config` is the slot the Plugins page documents for a bundle's
+ * own configuration; `plugins.item` is reserved for the host-plane plugins the
+ * harness ships, and registering there is why the page listed AutoReport both
+ * as a card in the Official group and as an installed bundle.
  * @param ctx - the browser plugin context.
  */
 export function apply(ctx: ClientContext): void {
   installCardStyles()
   ctx.effect(() => ctx.locale.register(SETTINGS_NS, { zh, en }), 'AutoReportDSH: settings dictionaries')
   ctx.effect(() => ctx.locale.register(TOOL_NS, { zh: toolRowZh, en: toolRowEn }), 'AutoReportDSH: tool-row dictionaries')
-  const t = ctx.locale.bind(SETTINGS_NS)
   const card = new AutoReportCardController(ctx.settingsScope.bind({ namespace: AUTOREPORT_SETTINGS_NAMESPACE }))
-  ctx.slots.inject('plugins.item', () => ctx.slots.register({
-    name: 'plugins.item',
-    id: AUTOREPORT_SETTINGS_NAMESPACE,
-    order: CARD_ORDER,
-    label: () => t('title'),
+  ctx.slots.inject('plugins.bundle.config', () => ctx.slots.register({
+    name: 'plugins.bundle.config',
+    key: BUNDLE_ID,
     locale: SETTINGS_NS,
     inject: () => card.inject(),
   }, AutoReportCard))

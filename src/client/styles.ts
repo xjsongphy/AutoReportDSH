@@ -7,21 +7,14 @@ const STYLE_ID = 'autoreport-settings-card'
 
 /** Class names consumed by the card chrome and field controls. */
 export const css = {
-  card: 'ar-card',
-  cardOpen: 'ar-card-open',
-  header: 'ar-card-header',
-  headText: 'ar-card-head-text',
-  name: 'ar-card-name',
-  description: 'ar-card-description',
-  pending: 'ar-card-pending',
-  chevron: 'ar-card-chevron',
-  chevronOpen: 'ar-card-chevron-open',
-  body: 'ar-card-body',
-  readOnly: 'ar-card-readonly',
-  footer: 'ar-card-footer',
-  failed: 'ar-card-failed',
-  discard: 'ar-card-discard',
-  save: 'ar-card-save',
+  page: 'ar-page',
+  section: 'ar-section',
+  sectionTitle: 'ar-section-title',
+  actions: 'ar-actions',
+  readOnly: 'ar-readonly',
+  failed: 'ar-failed',
+  discard: 'ar-discard',
+  save: 'ar-save',
   field: 'ar-field',
   fieldSplit: 'ar-field-split',
   fieldText: 'ar-field-text',
@@ -68,90 +61,35 @@ export const css = {
 } as const
 
 const STYLESHEET = `
-.${css.card} {
-  list-style: none;
-  border: 1px solid var(--dsw-alias-border-l2);
-  border-radius: 12px;
-  background: var(--dsw-alias-bg-layer-3);
-  transition: border-color .16s, background .16s;
-}
-.${css.card}:hover { border-color: var(--dsw-alias-label-dimmed); }
-.${css.cardOpen} {
-  background: var(--dsw-alias-bg-layer-2);
-  border-color: var(--dsw-alias-label-dimmed);
-}
-.${css.header} {
-  width: 100%;
-  appearance: none;
-  border: 0;
-  background: none;
-  font: inherit;
-  color: inherit;
-  text-align: left;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 14px 16px;
-  border-radius: 12px;
-}
-.${css.header}:focus-visible {
-  outline: 2px solid var(--dsw-alias-brand-primary);
-  outline-offset: -2px;
-}
-.${css.headText} {
-  flex: 1;
-  min-width: 0;
+.${css.page} {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 24px;
+  max-width: 640px;
 }
-.${css.name} {
-  font-size: 15px;
+.${css.section} {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.${css.sectionTitle} {
+  margin: 0 0 6px;
+  font-size: 14px;
   font-weight: 600;
-  line-height: 1.4;
+  line-height: 22px;
   color: var(--dsw-alias-label-primary);
 }
-.${css.description} {
-  font-size: 13px;
-  line-height: 1.5;
-  color: var(--dsw-alias-label-tertiary);
-}
-.${css.chevron} {
-  flex: none;
-  color: var(--dsw-alias-label-tertiary);
-  transition: transform .16s;
-}
-.${css.chevronOpen} { transform: rotate(180deg); }
-.${css.body} {
-  border-top: 1px solid var(--dsw-alias-border-l2);
-  margin: 0 16px;
-  padding-bottom: 8px;
-}
-.${css.readOnly} {
-  margin: 12px 0 0;
-  font-size: 12px;
-  line-height: 1.5;
-  color: var(--dsw-alias-label-tertiary);
-}
-.${css.pending} {
-  flex: none;
-  border-radius: 999px;
-  padding: 1px 8px;
-  font-size: 11px;
-  line-height: 17px;
-  font-weight: 500;
-  white-space: nowrap;
-  background: var(--dsw-alias-bg-module-platform);
-  color: var(--dsw-alias-label-secondary);
-}
-.${css.footer} {
+.${css.actions} {
   display: flex;
   align-items: center;
   justify-content: flex-end;
   gap: 8px;
-  padding: 12px 0 4px;
-  border-top: 1px solid var(--dsw-alias-border-l2);
+}
+.${css.readOnly} {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--dsw-alias-label-tertiary);
 }
 .${css.failed} {
   flex: 1;

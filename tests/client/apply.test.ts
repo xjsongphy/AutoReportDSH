@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
 // DSH's published `/client` entry is a window.__ModuleLoader__ bundle; tests
 // load the TypeScript service (the package exports `./src/*` for this).
 import { SlotRegistry } from '@deepseek-ai/dsh-client-ui-renderer/src/client/registry.ts'
-import { apply, inject, AUTOREPORT_SETTINGS_NAMESPACE, SETTINGS_NS, TOOL_NS } from '../../src/client/index.js'
+import { apply, inject, BUNDLE_ID, SETTINGS_NS, TOOL_NS } from '../../src/client/index.js'
 import { stubSettingsScope } from './stub-scope.js'
 import type { AutoReportCardSettings } from '../../src/client/controller.js'
 
@@ -53,7 +53,7 @@ function declareCards(slots: SlotRegistry): () => void {
   return slots.register({
     name: 'root',
     children: {
-      'plugins.item': { kind: 'list', scope: 'root' },
+      'plugins.bundle.config': { kind: 'keyed', scope: 'root' },
       'tool.call.toolview': { kind: 'keyed', scope: 'session' },
     },
   } as never, () => null)
@@ -64,14 +64,14 @@ describe('autoreport settings card apply', () => {
     expect(inject).toEqual(['slots', 'locale', 'connection', 'remote', 'settingsScope'])
   })
 
-  it('registers one card keyed on the autoreport namespace', async () => {
+  it('registers one configuration page keyed on the bundle', async () => {
     const { ctx, slots, locale } = await bench()
     declareCards(slots)
 
     await ctx.plugin({ inject: [...inject], apply }).await()
 
-    expect(slots.entries('plugins.item').map(entry => entry.options.id))
-      .toEqual([AUTOREPORT_SETTINGS_NAMESPACE])
+    expect(slots.entries('plugins.bundle.config').map(entry => entry.options.key))
+      .toEqual([BUNDLE_ID])
     expect(locale.bind(SETTINGS_NS)('title')).toBe('AutoReport')
     locale.setLocale('en')
     expect(locale.bind(SETTINGS_NS)('description')).toContain('Defaults for new physics-report workflows')
@@ -84,19 +84,19 @@ describe('autoreport settings card apply', () => {
     declareCards(slots)
 
     await Promise.resolve()
-    expect(slots.entries('plugins.item')).toHaveLength(1)
+    expect(slots.entries('plugins.bundle.config')).toHaveLength(1)
   })
 
-  it('collapses the card on teardown', async () => {
+  it('takes the configuration page down with the fiber', async () => {
     const { ctx, slots } = await bench()
     declareCards(slots)
     const fiber = ctx.plugin({ inject: [...inject], apply })
     await fiber.await()
-    expect(slots.entries('plugins.item')).toHaveLength(1)
+    expect(slots.entries('plugins.bundle.config')).toHaveLength(1)
 
     await fiber.dispose()
 
-    expect(slots.entries('plugins.item')).toHaveLength(0)
+    expect(slots.entries('plugins.bundle.config')).toHaveLength(0)
   })
 })
 

@@ -70,18 +70,25 @@ describe('AutoReportCard', () => {
     expect(screen.queryByText(en.title)).toBeNull()
   })
 
-  it('names the plugin in the collapsed header', () => {
+  it('renders the settings directly, with no disclosure layer', () => {
     renderCard()
 
-    expect(screen.getByText(en.title)).toBeTruthy()
-    expect(screen.getByText(en.description)).toBeTruthy()
-    expect(screen.queryByLabelText(en.reportLanguage)).toBeNull()
+    // The Plugins page owns the title, the icon, and the crumb; the card is the form.
+    expect(screen.queryByText(en.title)).toBeNull()
+    expect(screen.queryByText(en.description)).toBeNull()
+    expect(screen.getByRole('combobox', { name: en.reportLanguage })).toBeTruthy()
   })
 
-  it('discloses the fields and writes only from Save', () => {
-    const actions = renderCard({ dirty: true })
+  it('groups the fields under section headings', () => {
+    renderCard()
 
-    fireEvent.click(screen.getByRole('button', { name: `${en.expand}: ${en.title}` }))
+    expect(screen.getByRole('heading', { name: en.sectionReport })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: en.sectionDelegation })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: en.sectionEnvironment })).toBeTruthy()
+  })
+
+  it('writes only from Save', () => {
+    const actions = renderCard({ dirty: true })
 
     expect(screen.getByRole('combobox', { name: en.reportLanguage }).textContent).toContain(en.languageLatex)
     expect(screen.getByRole('textbox', { name: en.idleTimeoutMs })).toHaveProperty('value', '60000')
@@ -98,7 +105,6 @@ describe('AutoReportCard', () => {
   it('stages a closed-set pick from the DSH menu without writing until Save', () => {
     const actions = renderCard()
 
-    fireEvent.click(screen.getByRole('button', { name: `${en.expand}: ${en.title}` }))
     fireEvent.click(screen.getByRole('combobox', { name: en.reportLanguage }))
     fireEvent.click(screen.getByRole('menuitem', { name: en.languageTypst }))
 
@@ -116,7 +122,6 @@ describe('AutoReportCard', () => {
       }],
     })
 
-    fireEvent.click(screen.getByRole('button', { name: `${en.expand}: ${en.title}` }))
     fireEvent.click(screen.getByRole('combobox', { name: en.python }))
 
     expect(screen.getByRole('menuitem', { name: en.pythonManaged })).toBeTruthy()
@@ -135,8 +140,6 @@ describe('AutoReportCard', () => {
       invalid: true,
       pythonExecutable: field('python3', { invalid: true }),
     })
-
-    fireEvent.click(screen.getByRole('button', { name: `${en.expand}: ${en.title}` }))
 
     expect(screen.getByRole('button', { name: en.save })).toHaveProperty('disabled', true)
   })

@@ -3,8 +3,8 @@
 /** Locale keys this card renders. */
 export type AutoReportLocaleKey =
   | 'title' | 'description'
+  | 'sectionReport' | 'sectionDelegation' | 'sectionEnvironment'
   | 'overridden' | 'reset' | 'readOnly'
-  | 'expand' | 'collapse'
   | 'save' | 'saving' | 'discard' | 'unsaved' | 'saveFailed'
   | 'invalidChoice' | 'invalidNumber' | 'invalidPython'
   | 'reportLanguage' | 'reportLanguageHint'
@@ -21,11 +21,12 @@ export type AutoReportLocaleKey =
 export const en: Record<AutoReportLocaleKey, string> = {
   title: 'AutoReport',
   description: 'Defaults for new physics-report workflows. Changing these does not alter a report that is already running.',
+  sectionReport: 'Report',
+  sectionDelegation: 'Delegation',
+  sectionEnvironment: 'Environment',
   overridden: 'Overridden',
   reset: 'Reset to default',
   readOnly: 'This deployment stores settings read-only.',
-  expand: 'Show settings',
-  collapse: 'Hide settings',
   save: 'Save',
   saving: 'Saving…',
   discard: 'Discard',
@@ -35,7 +36,7 @@ export const en: Record<AutoReportLocaleKey, string> = {
   invalidNumber: 'Enter a positive whole number, or leave blank to use the default.',
   invalidPython: 'Pick the AutoReport-managed venv, a detected local environment, or type an absolute interpreter path.',
   reportLanguage: 'Report language',
-  reportLanguageHint: 'Source language for newly initialized workspaces.',
+  reportLanguageHint: 'Language for workspaces that have not chosen their own.',
   idleTimeoutMs: 'Delegation idle timeout (ms)',
   idleTimeoutMsHint: 'Main ends the synchronous wait after the subagent has been inactive for this duration. Model generation and tool execution are excluded.',
   timeoutMs: 'Delegation maximum wait (ms)',
@@ -67,11 +68,12 @@ export const en: Record<AutoReportLocaleKey, string> = {
 export const zh: Record<AutoReportLocaleKey, string> = {
   title: 'AutoReport',
   description: '新报告工作流的默认值。修改后不会影响已经在跑的报告。',
+  sectionReport: '报告',
+  sectionDelegation: '委派',
+  sectionEnvironment: '环境',
   overridden: '已覆盖',
   reset: '恢复默认',
   readOnly: '本部署的设置为只读。',
-  expand: '展开设置',
-  collapse: '收起设置',
   save: '保存',
   saving: '保存中…',
   discard: '放弃修改',
@@ -81,7 +83,7 @@ export const zh: Record<AutoReportLocaleKey, string> = {
   invalidNumber: '请填正整数；留空表示使用默认值。',
   invalidPython: '请选择 AutoReport 托管环境、本机已检测的环境，或输入解释器的绝对路径。',
   reportLanguage: '报告语言',
-  reportLanguageHint: '新初始化工作区使用的源码语言。',
+  reportLanguageHint: '未单独选择语言的工作区使用这个语言。',
   idleTimeoutMs: '委派空闲超时（毫秒）',
   idleTimeoutMsHint: 'Subagent 无可观测活动持续达到此时长后，MAIN 将结束同步等待；模型生成与工具执行期间不计入。',
   timeoutMs: '委派绝对等待上限（毫秒）',
