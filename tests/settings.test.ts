@@ -178,6 +178,47 @@ describe('resolveWorkflowSettings precedence', () => {
   })
 })
 
+describe('per-workspace language', () => {
+  it('lets a workspace entry beat the legacy project setting and the user default', () => {
+    const resolved = resolveWorkflowSettings({
+      user: { workspaceLanguages: { '/exp/a': 'typst', '/exp/b': 'latex' } },
+      project: { reportLanguage: 'latex' },
+      workspaceRoot: '/exp/a',
+    })
+    expect(resolved.reportLanguage).toBe('typst')
+  })
+
+  it('falls back through the legacy project setting, the user default, and the schema default', () => {
+    expect(resolveWorkflowSettings({
+      user: { workspaceLanguages: { '/exp/b': 'latex' } },
+      project: { reportLanguage: 'typst' },
+      workspaceRoot: '/exp/a',
+    }).reportLanguage).toBe('typst')
+    expect(resolveWorkflowSettings({
+      user: { defaultReportLanguage: 'typst' },
+      workspaceRoot: '/exp/a',
+    }).reportLanguage).toBe('typst')
+    expect(resolveWorkflowSettings({ workspaceRoot: '/exp/a' }).reportLanguage).toBe('latex')
+    expect(resolveWorkflowSettings({
+      user: { workspaceLanguages: { '/exp/a': 'typst' } },
+    }).reportLanguage).toBe('latex')
+  })
+
+  it('keys on the resolved path, so a trailing slash is the same workspace', () => {
+    expect(resolveWorkflowSettings({
+      user: { workspaceLanguages: { '/exp/a': 'typst' } },
+      workspaceRoot: '/exp/a/',
+    }).reportLanguage).toBe('typst')
+  })
+
+  it('defaults the field to an empty map and rejects a foreign language', () => {
+    const user = AUTO_REPORT_USER_SETTINGS_SCHEMA({}) as Record<string, unknown>
+    expect(user['workspaceLanguages']).toEqual({})
+    expect(() => AUTO_REPORT_USER_SETTINGS_SCHEMA({ workspaceLanguages: { '/exp': 'kotlin' } })).toThrow()
+    expect(() => AUTO_REPORT_USER_SETTINGS_SCHEMA({ workspaceLanguages: { '/exp': 3 } })).toThrow()
+  })
+})
+
 describe('specialist model resolution representation', () => {
   it('records explicit Main inheritance only when nothing configures a route', () => {
     expect(resolveWorkflowSettings({}).specialistModel).toEqual({ inheritMain: true })

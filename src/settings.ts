@@ -62,6 +62,14 @@ export const AUTOREPORT_SETTINGS_NAMESPACE = 'autoreport' as SettingsNamespace
 export interface AutoReportUserSettings {
   /** Default report source language (schema default `latex`). */
   defaultReportLanguage: ReportLanguage
+  /**
+   * Per-workspace report language keyed by the absolute workspace root, the
+   * authoritative layer: a workspace present here never consults the legacy
+   * `project.json` value or the user default. Keyed by path rather than by
+   * `workspaceIdForRoot` because the settings card writes this map from the
+   * browser, where the hash cannot be derived.
+   */
+  workspaceLanguages: Readonly<Record<string, ReportLanguage>>
   /** No-progress timeout while a `wait: true` child is idle (schema default one minute). */
   delegationIdleTimeoutMs: number
   /** Absolute `wait: true` cap (schema default ten minutes; legacy key retained for compatibility). */
@@ -116,6 +124,7 @@ const MINERU_STATUS_SCHEMA = z.object({
 /** Schemastery schema resolving the `'autoreport'` user-settings namespace standalone. */
 export const AUTO_REPORT_USER_SETTINGS_SCHEMA: z<AutoReportUserSettings> = z.object({
   defaultReportLanguage: z.union(['latex', 'typst'] as const).default(WORKFLOW_SETTINGS_SCHEMA_DEFAULTS.reportLanguage),
+  workspaceLanguages: z.dict(z.union(['latex', 'typst'] as const)).default({}),
   specialistModel: SPECIALIST_ROUTE_SCHEMA,
   delegationIdleTimeoutMs: z.number().default(WORKFLOW_SETTINGS_SCHEMA_DEFAULTS.delegationIdleTimeoutMs),
   delegationWaitTimeoutMs: z.number().default(WORKFLOW_SETTINGS_SCHEMA_DEFAULTS.delegationWaitTimeoutMs),
@@ -132,6 +141,7 @@ export function autoReportUserSettingsBase(
 ): AutoReportUserSettings {
   return {
     defaultReportLanguage: config.defaultReportLanguage,
+    workspaceLanguages: {},
     delegationIdleTimeoutMs: config.delegationIdleTimeoutMs,
     delegationWaitTimeoutMs: config.delegationWaitTimeoutMs,
     ...(config.specialistModel === undefined ? {} : { specialistModel: config.specialistModel }),
@@ -281,6 +291,8 @@ export interface WorkflowSettingsLayers {
   readonly composition?: Partial<WorkflowCompositionDefaults> | undefined
   /** Explicit workflow inputs; beats everything. */
   readonly override?: Partial<WorkflowSettingsOverride> | undefined
+  /** Absolute workspace root this resolution is for; absent skips the per-workspace layer. */
+  readonly workspaceRoot?: string
   /** DSH home used to materialize `__managed__`; absent uses {@link resolveDshHome}. */
   readonly dshHome?: string
   /** Env overlay for managed-venv creation (tests isolate PATH). */
@@ -370,9 +382,26 @@ function materializePythonExecutable(
  */
 export function resolveWorkflowSettings(layers: WorkflowSettingsLayers): WorkflowSettingsSnapshot {
   const { user, project, composition, override } = layers
+  // The per-workspace layer is skipped when the caller has no root: a
+  // resolution that cannot name its workspace cannot consult the map, and
+  // silently matching a different workspace's entry would be worse than
+  // falling through.
+  const workspaceLanguage = layers.workspaceRoot === undefined
+    ? undefined
+    : enumField(
+        'workspaceLanguage',
+        user?.workspaceLanguages?.[resolve(layers.workspaceRoot)],
+        REPORT_LANGUAGES,
+      )
   const reportLanguage = enumField(
     'reportLanguage',
-    firstDefined(override?.reportLanguage, project?.reportLanguage, user?.defaultReportLanguage, composition?.defaultReportLanguage),
+    firstDefined(
+      override?.reportLanguage,
+      workspaceLanguage,
+      project?.reportLanguage,
+      user?.defaultReportLanguage,
+      composition?.defaultReportLanguage,
+    ),
     REPORT_LANGUAGES,
   ) ?? WORKFLOW_SETTINGS_SCHEMA_DEFAULTS.reportLanguage
   const delegationIdleTimeoutMs = positiveIntegerField(
