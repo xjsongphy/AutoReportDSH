@@ -1,6 +1,6 @@
 # Academic Writing
 
-For page layout, see [styling.md](styling.md). For reusable templates, see [template.md](template.md). For state and counters, see [advanced.md](advanced.md).
+For page layout, see [styling.md](styling.md).
 
 ## Paper Structure
 
@@ -101,9 +101,8 @@ $ x = (-b plus.minus sqrt(b^2 - 4 a c)) / (2 a) $
 ### Silent math-render traps (compile fine, render WRONG)
 
 Four bugs compile without a warning and produce a *wrong-looking* PDF — the most
-common failures in math-heavy notes. Full writeup, greps, and false-alarm
-exclusions are in **[debug.md](debug.md)** ("Common Errors & Symbol Gotchas"); the
-one-line reminders here just flag their existence on the authoring path.
+common failures in math-heavy notes. The one-line reminders below are the
+whole checklist; each trap compiles without a warning, so check for it by eye.
 
 | Trap                                           | Wrong                                   | Right                                          |
 | ---------------------------------------------- | --------------------------------------- | ---------------------------------------------- |

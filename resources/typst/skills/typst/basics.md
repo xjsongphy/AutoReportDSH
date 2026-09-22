@@ -1,6 +1,8 @@
 # Typst Language Fundamentals
 
-For data types, operators, and built-in functions, see [types.md](types.md).
+For data types, operators, and built-in functions, use the language reference
+shipped with your Typst installation (`typst --help`, or the online reference);
+the essentials appear inline below.
 
 ## Modes
 
@@ -55,7 +57,7 @@ Data files follow the same path rules: `image("images/diagram.png")`, `json("dat
 #let (first, ..rest) = (1, 2, 3, 4)
 ```
 
-See [types.md](types.md) for the full type reference. Quick summary: primitives (`int`, `float`, `str`, `bool`, `none`), arrays `(1, 2, 3)`, dictionaries `(key: val)`, content `[Hello *world*]`.
+Quick summary of the types you will actually use: primitives (`int`, `float`, `str`, `bool`, `none`), arrays `(1, 2, 3)`, dictionaries `(key: val)`, content `[Hello *world*]`.
 
 ## Functions
 
@@ -139,4 +141,4 @@ Functions without an explicit return value return `none`:
 
 ## Error Handling
 
-Use `assert(condition, message: "...")` for preconditions and `panic("...")` for unreachable states. For assertion patterns and debug techniques, see [debug.md](debug.md).
+Use `assert(condition, message: "...")` for preconditions and `panic("...")` for unreachable states. Both report their message as a compile error, which is the first thing to read when a build fails.

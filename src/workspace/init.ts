@@ -1,6 +1,6 @@
 /**
  * Experiment workspace initialization: directory scaffold plus
- * create-missing-only materialization of bundled and synced report resources.
+ * create-missing-only materialization of bundled report resources.
  *
  * AutoReportCLI creates this layout on startup and never overwrites existing
  * project files; AutoReportDSH preserves both properties. This module is pure
@@ -46,7 +46,7 @@ export function workspaceIsComplete(root: string): boolean {
 interface ResourceFile {
   /** Workspace-relative destination under `Report/`. */
   readonly destination: string
-  /** Path inside bundled or overlay `resources/` of the source asset. */
+  /** Path inside bundled `resources/` of the source asset. */
   readonly resourcePath: string
 }
 
@@ -56,7 +56,7 @@ const LATEX_FILES: readonly ResourceFile[] = Object.freeze([
   { destination: 'Report/mpltx.cls', resourcePath: 'latex/themes/mpltx.cls' },
 ])
 
-/** Typst assets installed at the `Report/` root (bundled; an explicit overlay may override). */
+/** Typst assets installed at the `Report/` root. */
 const TYPST_FILES: readonly ResourceFile[] = Object.freeze([
   { destination: 'Report/main.typ', resourcePath: 'typst/templates/main.typ' },
   { destination: 'Report/mplts.typ', resourcePath: 'typst/themes/mplts.typ' },
@@ -108,8 +108,9 @@ export function bundledResourcesRoot(): string {
 }
 
 /**
- * Resolve the bundled `resources/` directory. Synced remotes live in the
- * global overlay (`$DSH_HOME/autoreport/resources`), not here.
+ * Resolve the bundled `resources/` directory. It is the single source of truth
+ * for every AutoReport resource: templates, personas, and skill documents all
+ * ship in the repository, so no runtime fetch can change what a session reads.
  * @returns absolute path to the package's `resources/` directory.
  */
 export function resourcesRoot(): string {
@@ -117,33 +118,26 @@ export function resourcesRoot(): string {
 }
 
 /**
- * Resolve one resource file: overlay copy wins when present, otherwise the
- * package-bundled file. Missing from both returns `undefined`.
+ * Resolve one bundled resource file.
  * @param resourcePath - path inside `resources/`.
- * @param overlayRoot - `$dshHome/autoreport/resources`, when configured.
+ * @returns the absolute path, or `undefined` when the package is incomplete.
  */
-export function resolveResourceFile(resourcePath: string, overlayRoot?: string): string | undefined {
-  if (overlayRoot !== undefined) {
-    const overlay = join(overlayRoot, resourcePath)
-    if (existsSync(overlay)) return overlay
-  }
+export function resolveResourceFile(resourcePath: string): string | undefined {
   const bundled = join(bundledResourcesRoot(), resourcePath)
   return existsSync(bundled) ? bundled : undefined
 }
 
 /**
- * Copy every bundled/synced resource for `language` into `root`, skipping
- * files that already exist. Never overwrites: an existing user report file
- * wins over the template, matching AutoReportCLI's create-missing-only rule.
+ * Copy every bundled resource for `language` into `root`, skipping files that
+ * already exist. Never overwrites: an existing user report file wins over the
+ * template, matching AutoReportCLI's create-missing-only rule.
  * @param root - absolute experiment workspace root.
  * @param language - report engine selecting the resource set.
- * @param overlayRoot - optional global overlay for explicitly refreshed resources.
  * @returns result record separating writes from skips.
  */
 export function materializeResources(
   root: string,
   language: ReportLanguage,
-  overlayRoot?: string,
 ): { written: string[], skipped: string[] } {
   const written: string[] = []
   const skipped: string[] = []
@@ -153,12 +147,9 @@ export function materializeResources(
       skipped.push(file.destination)
       continue
     }
-    const source = resolveResourceFile(file.resourcePath, overlayRoot)
+    const source = resolveResourceFile(file.resourcePath)
     if (source === undefined) {
-      throw new Error(
-        `AutoReport resource ${file.resourcePath} is missing`
-        + ` (overlay ${overlayRoot ?? 'unset'}; run plugin sync into $DSH_HOME/autoreport/resources)`,
-      )
+      throw new Error(`AutoReport bundled resource ${file.resourcePath} is missing`)
     }
     mkdirSync(dirname(target), { recursive: true })
     copyFileSync(source, target)
@@ -172,15 +163,13 @@ export function materializeResources(
  * then materialize missing resources for `language`.
  * @param root - absolute experiment workspace root.
  * @param language - report engine selecting the resource set.
- * @param overlayRoot - optional global overlay for explicitly refreshed resources.
  * @returns combined action manifest for callers that surface a summary.
  */
 export function ensureInitialized(
   root: string,
   language: ReportLanguage,
-  overlayRoot?: string,
 ): InitializationResult {
   const createdDirs = workspaceIsComplete(root) ? [] : ensureWorkspaceDirs(root)
-  const { written, skipped } = materializeResources(root, language, overlayRoot)
+  const { written, skipped } = materializeResources(root, language)
   return { createdDirs, writtenFiles: written, skippedFiles: skipped }
 }

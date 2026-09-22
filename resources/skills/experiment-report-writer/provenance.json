@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "kind": "frozen-skill-projection",
-  "target": "resources/skills/experiment-report-writer.md",
+  "target": "resources/skills/experiment-report-writer/SKILL.md",
   "runtimeFetch": false,
   "upstream": {
     "repository": "https://github.com/xjsongphy/skills",

@@ -1,6 +1,6 @@
 # Styling and Layout
 
-For language basics (syntax, functions), see [basics.md](basics.md). For data types and operators, see [types.md](types.md). For reusable template creation, see [template.md](template.md).
+For language basics (syntax, functions), see [basics.md](basics.md).
 
 ## Set Rules
 
@@ -71,7 +71,7 @@ Transform how elements are rendered.
 #context counter(heading).display() // Heading number
 ```
 
-For custom counters and state tracking, see [advanced.md](advanced.md).
+For custom counters, use `#counter` / `#state` with `context` blocks as shown above.
 
 ## Heading Customization
 
@@ -135,7 +135,7 @@ Inline pattern: `#set text(font: "Your Variable Font", weight: 650, variations: 
 #set figure(numbering: "1")
 ```
 
-For per-chapter numbering, see [template.md](template.md).
+For per-chapter numbering, reset the counter in a chapter heading rule as shown above.
 
 ## Labels and References
 
@@ -158,7 +158,7 @@ For per-chapter numbering, see [template.md](template.md).
 #link(label("ref-" + key))[See here]
 ```
 
-To query labels programmatically, see the Query System in [advanced.md](advanced.md).
+To query labels programmatically, use `context` with `query()` over `<label>` targets.
 
 ## Multi-Region Documents
 

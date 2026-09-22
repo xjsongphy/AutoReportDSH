@@ -17,8 +17,6 @@ import {
 } from '../src/settings.js'
 import { managedPythonExecutable } from '../src/python-detect.js'
 import { createReportInitCommand } from '../src/workspace/command.js'
-import { syncedResourcesRoot } from '../src/workspace/resource-sync.js'
-import { seedSyncedResourceStubs } from './helpers/synced-resource-stubs.js'
 import { pathWithBin, writeFakeVenvBootstrap } from './helpers/managed-python-stub.js'
 
 const cleanup: string[] = []
@@ -289,7 +287,6 @@ describe('init --language coexistence', () => {
   function factoryWithHome(home: string) {
     return createReportInitCommand({
       reportLanguage: 'latex',
-      overlayRoot: seedSyncedResourceStubs(syncedResourcesRoot(home)),
       projectStore: root => ({
         load: () => loadProjectSettings(home, workspaceIdForRoot(root)),
         save: next => saveProjectSettings(home, workspaceIdForRoot(root), next),

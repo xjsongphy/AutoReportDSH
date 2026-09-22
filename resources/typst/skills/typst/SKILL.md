@@ -5,15 +5,11 @@ description: 'Typst document creation and package development. Use when: (1) Wor
 
 # Typst
 
-Typst 0.15+ authoring for AutoReport experiment reports. Compile through the
-bundled `typst-compile` skill:
+Typst 0.15+ authoring for AutoReport experiment reports.
 
-```bash
-typst compile Report/main.typ Report/main.pdf --root "$(pwd)"
-```
-
-The workspace already ships `mplts.typ`. This overlay keeps only the
-reference docs used when writing a physics or engineering report.
+The workspace already ships `mplts.typ`. This skill keeps only the
+reference docs used when writing a physics or engineering report, and they sit
+beside this file:
 
 | When you need to... | Read |
 | --- | --- |
@@ -21,3 +17,6 @@ reference docs used when writing a physics or engineering report.
 | Pages, headings, figures, layout | [styling.md](styling.md) |
 | Tables and measured data | [tables.md](tables.md) |
 | Citations, theorems, equations | [academic.md](academic.md) |
+
+Compiling is `typst-compile`'s job; that skill carries the command, the
+workspace entry file, and the diagnostics workflow.

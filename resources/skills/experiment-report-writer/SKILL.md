@@ -11,7 +11,7 @@ This is a **vendored, frozen projection** of the report-relevant modules from
 [`xjsongphy/skills`](https://github.com/xjsongphy/skills) commit
 `38085aededa0` (2026-08-22). It makes **no runtime network request**. The
 selected upstream modules and their blob hashes are recorded in
-[`experiment-report-writer.provenance.json`](experiment-report-writer.provenance.json).
+[`provenance.json`](provenance.json).
 
 Use this skill to draft, revise, or audit the reader-facing body of a physics
 or engineering experiment report. Apply a user-provided course, laboratory,
@@ -77,6 +77,17 @@ supports it. Compare theory with measurement where the design permits it, and
 state which conclusions are limited by measurement scope, data coverage, or
 uncontrolled conditions.
 
+Keep narrative ahead of raw elements. A results section that opens directly on
+a data table and a chain of formulas leaves the reader without a claim to
+attach them to:
+
+**Bad:** the Results section opens on a data table followed by three formulas,
+with no sentence saying what was swept, what was measured, or what the trend
+shows.
+
+**Good:** one sentence first — “表 1 给出不同退火温度下测得的方阻，每片重复
+三次取平均” — then the table, then the reading that changes the conclusion.
+
 ## Shared technical writing rules (upstream `common/writing.md`)
 
 *Frozen from upstream heading: Shared writing rules.*
@@ -138,12 +149,12 @@ by negation; both push the real explanation below the fold. State the input,
 operation, output, and role first; an analogy may follow as intuition, and one
 compact contrast sentence may follow when a term is likely to be misread.
 
-**Bad:** “‘锦标赛选择’可以理解成若干次小组赛：……” opens the paragraph; “这里的
-‘策略性能’不是给自然语言策略单独打分” carries the definition.
+**Bad:** “‘锁相放大’可以理解成一副只听某个音调的耳机：……” opens the paragraph;
+“这里的 R 分量不是信号的几何半径” carries the definition.
 
-**Good:** “锦标赛选择从当前种群中分组比较适应度，胜者进入 parent 集合” states the
-mechanism first; “策略性能由其产生的修订内核经编译与计时后的延迟度量” states what
-the term measures, before any contrast.
+**Good:** “锁相放大器将探测信号与参考振荡器相乘，经低通滤波取出同频分量” states
+the mechanism first; “R 分量由参考通道相位处的振幅读出” states what the term
+measures, before any contrast.
 
 ## Emphasis
 
@@ -153,10 +164,10 @@ not open a paragraph with a bold label and a colon. Do not use italics for
 emphasis; italics remain legitimate for paper titles, mathematical variables,
 and conventional notation.
 
-**Bad:** “**算法思路**：该算法使用动态规划解决问题。” / “该图是本方法的核心。”
+**Bad:** “**实验思路**：本实验采用四探针法测量方阻。” / “该图是本实验的核心结果。”
 
-**Good:** “该算法基于**动态规划**解决问题。” / “该图给出了从候选内核到执行反馈的
-完整数据流。”
+**Good:** “本实验采用**四探针法**测量方阻。” / “该图给出了方阻随退火温度单调
+下降，对应晶粒尺寸的增大。”
 
 ## Clarity before detail
 
@@ -181,43 +192,40 @@ and conventional notation.
 
 ### Good / bad
 
-**Bad:** one paragraph introduces four components, traces their data flow,
-explains a branch, states a lifetime, and interprets an experiment.
+**Bad:** one paragraph introduces the four parts of the vacuum setup, traces
+the optical path, explains a calibration step, states a warm-up time, and
+interprets the measurement.
 
-**Good:** introduce the component roles first, show the data flow as a compact
-diagram or table, explain the branch in a focused paragraph, and interpret the
-experiment where its result is introduced.
+**Good:** introduce each part's role first, show the optical path as a compact
+diagram or table, explain the calibration in a focused paragraph, and
+interpret the measurement where its result is introduced.
 
 Worked example — one dense paragraph carrying eleven coupled points:
 
 **Bad:**
 
-> 图 2 左侧的 Adapt 按箭头形成一个跨任务闭环。首先，`Seed Program` 与
-> `Documentation` 提供已有 PyTorch 示例和可用算子说明，二者经由 `Synthesize`
-> 生成新的 `Training Program`；它是可执行的高层参考任务，而不是最终优化目标。
-> 随后，agent 根据该任务执行 `Generate Kernel`，尝试写出对应的 Triton 内核。
-> `Testing` 将生成内核与参考任务一起运行，`Get Execution Feedback` 返回编译
-> 错误、运行错误或正确性结果。`Extract Failure Patterns` 只从失败候选及其反馈
-> 中提炼重复出现的限制；`Clustering` 将语义相近的限制合并，写入
-> `Update Skill Memory`。最后，更新后的记忆沿 `Injecting` 箭头加入下一轮
-> `Generate Kernel` 的提示词，使后续候选能够避开已知陷阱。图中的环形箭头表示
-> 该过程会在多个合成任务上持续重复，因而记忆是跨任务积累的。
+> 图 2 左侧的 Sweep 控制器按箭头形成一个自动测量闭环。首先，`Set Point` 与
+> `Range Check` 根据预设的起止频率和步长设定当前频点，并确认输出幅度在探测
+> 量程内；它是可执行的控制指令，而不是最终测量结果。随后，`Acquire` 通过锁相
+> 放大器读取同频振幅与相位，`Compute Impedance` 将振幅、相位与取样电阻换算
+> 为复阻抗。`Validity Check` 将读数与噪声基底比较，`Flag Outliers` 只把超出
+> 阈值的数据点标记为可疑；`Re-measure` 将可疑频点退回队列。最后，有效数据经
+> `Log to File` 写入数据文件，`Next Point` 把扫描推进到下一个频点，使整条
+> 曲线在一次运行中完成。图中的环形箭头表示该过程对每个频点重复执行。
 
 **Good:** lead with the loop's arc, then one list item per stage:
 
-> 图 2 左侧的 Adapt 形成一个跨任务学习闭环：从合成任务开始，收集失败模式，
-> 更新记忆，再注入下一轮生成。该闭环包含四个阶段：
+> 图 2 左侧的 Sweep 控制器形成一个逐频点自动测量闭环：设定频点，采集读数，
+> 剔除可疑值，记录后推进到下一频点。该闭环包含四个阶段：
 >
-> - **任务合成**：`Seed Program` 与 `Documentation` 提供现有示例和算子说明，
->   经由 `Synthesize` 生成新的 `Training Program`——高层参考任务，而非最终
->   优化目标。
-> - **内核生成与测试**：agent 依据 `Training Program` 执行 `Generate Kernel`；
->   `Testing` 将生成内核与参考任务一起运行，`Get Execution Feedback` 返回编译
->   错误、运行错误或正确性结果。
-> - **失败模式提取**：`Extract Failure Patterns` 只从失败候选及其反馈中提炼
->   重复出现的限制；`Clustering` 合并语义相近的限制，写入 `Update Skill Memory`。
-> - **记忆注入与循环**：更新后的记忆注入下一轮 `Generate Kernel` 的提示词；
->   环形箭头表示该过程在多个合成任务上持续重复。
+> - **频点设定**：`Set Point` 与 `Range Check` 按预设起止频率和步长设定当前
+>   频点，并确认输出幅度在探测量程内。
+> - **采集与换算**：`Acquire` 从锁相放大器读取同频振幅与相位；`Compute
+>   Impedance` 将其与取样电阻值换算为复阻抗。
+> - **有效性检查**：`Validity Check` 将读数与噪声基底比较；`Flag Outliers`
+>   标记超阈值数据点，`Re-measure` 将可疑频点退回队列。
+> - **记录与推进**：有效数据经 `Log to File` 写入数据文件，`Next Point` 推进
+>   扫描；环形箭头表示该过程对每个频点重复执行。
 
 When the surrounding figure already shows the stages clearly, a two-sentence
 summary may replace the list; choose by how much the reader must retain from
@@ -261,22 +269,23 @@ a required report, experiment, or textbook part.
 - Distinguish a general mechanism from the current project or implementation
   when a survey or explanation moves between them.
 
-**Bad:** “The retriever uses memory” appears before `memory` or the retriever's
-selection operation has been defined.
+**Bad:** “The lock-in amplifier outputs the in-phase component R” appears
+before `R`, the reference channel, or the phase convention has been defined.
 
-**Good:** define the stored representation and selection step first, then state
-how the current implementation uses them and which details remain unspecified.
+**Good:** define the reference channel and the phase convention first, then
+state what `R` measures, how the data reduction uses it, and which details
+remain unspecified.
 
 A parenthesis carries at most one light expansion. Do not pack several
 definitions into one:
 
-**Bad:** “PrimFunc 是 TIR（Tensor IR，TVM 的低层中间表示）层的 IR 单元，包含
-buffer（TIR 中表示一块有形状和数据类型的线性内存区域，通过多维索引访问）访问
-代码。”
+**Bad:** “光电倍增管是 PMT（Photomultiplier Tube，一种利用二次电子发射逐级倍增
+光电流的真空器件）的探测单元，包含分压器（为各倍增极提供逐级升高电压、通过
+电阻链分压的电路）网络。”
 
-**Good:** “PrimFunc 是 TVM 低层中间表示 TIR（Tensor IR）的 IR 单元。它包含完整
-的循环嵌套，循环体内是对 buffer 的读写。buffer 是 TIR 层的数据容器：一个有形状
-和数据类型的内存块，通过多维索引访问其中元素。”
+**Good:** “光电倍增管（PMT）是一种利用二次电子发射逐级倍增光电流的真空探测
+器。管内是逐级升压的倍增结构；分压器是为各倍增极供电的电阻链，其分压比决定
+增益和线性范围。”
 
 ## Selective code and artifact explanation
 

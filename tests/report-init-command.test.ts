@@ -2,9 +2,8 @@ import type { CommandInvocation } from '@deepseek-ai/dsh-commands'
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterAll, afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 import { createReportInitCommand, parseReportInitInput, renderInitialization } from '../src/workspace/command.js'
-import { seedSyncedResourceStubs } from './helpers/synced-resource-stubs.js'
 
 const cleanup: string[] = []
 
@@ -61,9 +60,7 @@ describe('parseReportInitInput', () => {
 })
 
 describe('init command', () => {
-  const overlayRoot = seedSyncedResourceStubs(mkdtempSync(join(tmpdir(), 'autoreport-cmd-overlay-')))
-  afterAll(() => rmSync(overlayRoot, { recursive: true, force: true }))
-  const definition = createReportInitCommand({ reportLanguage: 'latex', overlayRoot })
+  const definition = createReportInitCommand({ reportLanguage: 'latex' })
 
   it('registers under the init name with a hint', () => {
     expect(definition.name).toBe('init')
@@ -125,7 +122,6 @@ describe('init command', () => {
     const saved: unknown[] = []
     const store = createReportInitCommand({
       reportLanguage: 'latex',
-      overlayRoot,
       projectStore: () => ({
         load: () => ({ reportLanguage: 'typst' }),
         save: next => void saved.push(next),

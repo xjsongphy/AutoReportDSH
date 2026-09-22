@@ -1,11 +1,7 @@
----
-name: report-language-latex
-description: Active report language guidance for LaTeX AutoReport workspaces. Load before writing or compiling Report/main.tex.
----
-
 # Active report language: LaTeX
 
-Write the report entry point as `Report/main.tex`. Load `latex-compile` before compiling or diagnosing a PDF.
+Write the report entry point as `Report/main.tex`. Load `latex-compile` before
+compiling or diagnosing a PDF.
 
 ## LaTeX layout rules
 

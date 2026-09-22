@@ -1,6 +1,6 @@
 # Tables and Grids
 
-For page layout and styling, see [styling.md](styling.md). For data types, see [types.md](types.md).
+For page layout and styling, see [styling.md](styling.md).
 
 ## Basic Table
 
