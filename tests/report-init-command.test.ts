@@ -57,6 +57,14 @@ describe('parseReportInitInput', () => {
     expect(parseReportInitInput('--language markdown /x')).toMatchObject({ error: /--language must be latex or typst/ })
     expect(parseReportInitInput('--json /x')).toMatchObject({ error: /unknown option --json/ })
   })
+
+  it('accepts a bare language token anywhere, first one winning', () => {
+    expect(parseReportInitInput('typst /tmp/exp')).toEqual({ language: 'typst', directory: '/tmp/exp' })
+    expect(parseReportInitInput('/tmp/my dir latex')).toEqual({ language: 'latex', directory: '/tmp/my dir' })
+    // Only the first bare token is the language; a second one stays positional,
+    // so a directory literally named `latex` can still be reached as `./latex`.
+    expect(parseReportInitInput('typst latex /x')).toEqual({ language: 'typst', directory: 'latex /x' })
+  })
 })
 
 describe('init command', () => {
@@ -108,41 +116,64 @@ describe('init command', () => {
     expect(second.text).toContain('files already present: 2')
   })
 
-  it('materializes the flagged language without a settings store', async () => {
+  it('materializes the flagged language without a language store', async () => {
     const root = tempRoot()
     const result = await definition.handler(invocation(`--language typst ${root}`))
     if (result.kind !== 'success') throw new Error(`expected success: ${JSON.stringify(result)}`)
     expect(result.text).toContain('+ Report/main.typ')
     expect(result.text).toContain('report language: typst')
+    expect(result.text).not.toContain('(saved')
     expect(existsSync(join(root, 'Report/main.typ'))).toBe(true)
   })
 
-  it('prefers the stored project language over factory defaults when no flag is given', async () => {
+  it('records the explicit language in the settings store', async () => {
     const root = tempRoot()
-    const saved: unknown[] = []
+    const written: Array<[string, string]> = []
     const store = createReportInitCommand({
       reportLanguage: 'latex',
-      projectStore: () => ({
-        load: () => ({ reportLanguage: 'typst' }),
-        save: next => void saved.push(next),
-      }),
+      legacyProject: () => ({ load: () => ({}) }),
+      languageStore: {
+        read: () => undefined,
+        write: (workspaceRoot, language) => { written.push([workspaceRoot, language]) },
+      },
+    })
+    const result = await store.handler(invocation(`typst ${root}`))
+    if (result.kind !== 'success') throw new Error(`expected success: ${JSON.stringify(result)}`)
+    expect(result.text).toContain('report language: typst (saved to settings)')
+    expect(written).toEqual([[root, 'typst']])
+    expect(existsSync(join(root, 'Report/main.typ'))).toBe(true)
+  })
+
+  it('prefers a recorded workspace language over the legacy project setting', async () => {
+    const root = tempRoot()
+    const store = createReportInitCommand({
+      reportLanguage: 'latex',
+      legacyProject: () => ({ load: () => ({ reportLanguage: 'latex' }) }),
+      languageStore: { read: () => 'typst', write: () => undefined },
     })
     const implicit = await store.handler(invocation(root))
     if (implicit.kind !== 'success') throw new Error('expected success')
     expect(implicit.text).toContain('report language: typst')
-    expect(saved).toHaveLength(0)
-
-    const explicit = await store.handler(invocation(`--language latex ${root}`))
-    if (explicit.kind !== 'success') throw new Error('expected success')
-    expect(explicit.text).toContain('report language: latex (saved to project settings)')
-    expect(saved).toEqual([{ reportLanguage: 'latex' }])
+    expect(implicit.text).not.toContain('(saved')
   })
 
-  it('surfaces store failures as command errors without initializing', async () => {
+  it('falls back to the legacy project language when nothing is recorded', async () => {
+    const root = tempRoot()
+    const store = createReportInitCommand({
+      reportLanguage: 'latex',
+      legacyProject: () => ({ load: () => ({ reportLanguage: 'typst' }) }),
+      languageStore: { read: () => undefined, write: () => undefined },
+    })
+    const implicit = await store.handler(invocation(root))
+    if (implicit.kind !== 'success') throw new Error('expected success')
+    expect(implicit.text).toContain('report language: typst')
+  })
+
+  it('surfaces a legacy settings failure as a command error without initializing', async () => {
     const root = tempRoot()
     const failing = createReportInitCommand({
       reportLanguage: 'latex',
-      projectStore: () => ({ load: () => { throw new Error('corrupt document') }, save: () => undefined }),
+      legacyProject: () => ({ load: () => { throw new Error('corrupt document') } }),
     })
     const result = await failing.handler(invocation(root))
     expect(result.kind).toBe('error')

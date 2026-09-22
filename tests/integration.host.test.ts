@@ -13,7 +13,7 @@
  * @module tests/integration.host
  */
 
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -292,20 +292,26 @@ describe('integration: assembled host (real context)', () => {
 
     const typst = await invoke('--language typst')
     expect(typst.kind).toBe('success')
+    expect(typst.text).toContain('report language: typst (saved to settings)')
     expect(existsSync(join(assembled.workspaceRoot, 'Report', 'main.typ'))).toBe(true)
-    expect(readFileSync(join(assembled.home, 'autoreport', workspaceIdForRoot(assembled.workspaceRoot), 'project.json'), 'utf8'))
-      .toContain('"typst"')
+    // The recorded move reaches the workspace through the host, so the
+    // unmodified LaTeX template set is gone rather than coexisting.
+    await waitUntil(() => !existsSync(join(assembled.workspaceRoot, 'Report', 'main.tex')))
+    expect(existsSync(join(assembled.workspaceRoot, 'Report', 'mpltx.cls'))).toBe(false)
 
     const latex = await invoke('--language latex')
     expect(latex.kind).toBe('success')
     expect(existsSync(join(assembled.workspaceRoot, 'Report', 'main.tex'))).toBe(true)
-    // No deletions: Typst resources coexist with the LaTeX set.
-    expect(existsSync(join(assembled.workspaceRoot, 'Report', 'main.typ'))).toBe(true)
-    expect(existsSync(join(assembled.workspaceRoot, 'Report', 'mplts.typ'))).toBe(true)
-    expect(readFileSync(join(assembled.home, 'autoreport', workspaceIdForRoot(assembled.workspaceRoot), 'project.json'), 'utf8'))
-      .toContain('"latex"')
+    await waitUntil(() => !existsSync(join(assembled.workspaceRoot, 'Report', 'main.typ')))
 
-    // The durable snapshot NEVER adopts the later project change (PLAN §2.14).
+    // A template the user edited is the user's: the switch keeps it.
+    writeFileSync(join(assembled.workspaceRoot, 'Report', 'main.tex'), '% mine\n')
+    const backToTypst = await invoke('--language typst')
+    expect(backToTypst.kind).toBe('success')
+    await waitUntil(() => existsSync(join(assembled.workspaceRoot, 'Report', 'main.typ')))
+    expect(readFileSync(join(assembled.workspaceRoot, 'Report', 'main.tex'), 'utf8')).toBe('% mine\n')
+
+    // The durable snapshot NEVER adopts a later change (PLAN §2.14).
     const after = assembled.runtime.forSession(assembled.mainSession).state.projection().meta?.settings
     expect(after).toEqual(before)
   })

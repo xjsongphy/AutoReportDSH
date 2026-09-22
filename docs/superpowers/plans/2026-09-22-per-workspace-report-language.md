@@ -998,10 +998,15 @@ const rows = {
 }
 
 describe('projectsByLanguage', () => {
-  it('keeps conversing AutoReport main sessions, one entry per workspace', () => {
+  it('keeps AutoReport main sessions that have actually conversed, one entry per workspace', () => {
     const lists = projectsByLanguage(rows, undefined, 'latex')
     expect(lists.latex.map(entry => entry.root)).toEqual(['/exp/a', '/exp/b'])
     expect(lists.typst).toEqual([])
+  })
+
+  it('omits a session whose log is still empty', () => {
+    const lists = projectsByLanguage({ only: rows.blank }, undefined, 'latex')
+    expect(lists.latex).toEqual([])
   })
 
   it('files each project by its recorded language and shows the root basename', () => {
@@ -1036,7 +1041,7 @@ Expected: FAIL —— 模块与控件都不存在。
 
 - [ ] **Step 3: 实现**
 
-1) 新建 `src/client/project-lists.ts`：过滤（`agentPreset === 'autoreport' && parentId === undefined && cwd 非空 && blank !== true`）、按 `cwd` 去重、`name` = `displayTitle` 非空则用否则取 `cwd` 末段、`language` = `recorded[root] ?? fallback`，最后按语言分桶（同桶内按 `name` 排序）。
+1) 新建 `src/client/project-lists.ts`：过滤（`agentPreset === 'autoreport' && parentId === undefined && cwd 非空 && blank === false`，即"实际产生过对话"）、按 `cwd` 去重、`name` = `displayTitle` 非空则用否则取 `cwd` 末段、`language` = `recorded[root] ?? fallback`，最后按语言分桶（同桶内按 `name` 排序）。
 
 2) `src/client/dsh-client.d.ts` 的行类型补上 `cwd?: string`、`parentId?: string`、`blank?: boolean`、`displayTitle?: string`。
 

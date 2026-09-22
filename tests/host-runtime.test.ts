@@ -4,7 +4,7 @@ import { join, resolve } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
-import { SettingsProvider, type SettingsNamespace } from '@deepseek-ai/dsh-settings'
+import { MemorySettings } from './helpers/memory-settings.js'
 import { KNOWN_SESSION_EVENT_TYPES, SESSION_FORMAT_VERSION, Session, SessionId } from '@deepseek-ai/dsh-session'
 import type { Config } from '../src/config.js'
 import AutoReportWorkflowRuntime from '../src/runtime.js'
@@ -28,27 +28,6 @@ const CONFIG: Config = {
   specialistModel: undefined,
   delegationIdleTimeoutMs: 60_000,
   delegationWaitTimeoutMs: 600_000,
-}
-
-/** Minimal persistent settings provider proving the out-of-tree namespace seam. */
-class MemorySettings extends SettingsProvider {
-  private readonly doc: Record<string, unknown>
-
-  constructor(ctx: Context, options: { doc?: Record<string, unknown> } = {}) {
-    super(ctx)
-    this.doc = structuredClone(options.doc ?? {})
-  }
-
-  get writable(): boolean { return true }
-
-  protected load(): Promise<Record<string, unknown>> {
-    return Promise.resolve(structuredClone(this.doc))
-  }
-
-  protected persist(namespace: SettingsNamespace, section: Record<string, unknown>): Promise<void> {
-    this.doc[String(namespace)] = structuredClone(section)
-    return Promise.resolve()
-  }
 }
 
 /** A detached root session whose header names its composing agent preset. */

@@ -38,6 +38,7 @@ import { observeWorkflowMessage, recoverWorkflowReports } from './workflow/repor
 import { applyRoleSandbox } from './policy/sandbox-roots.js'
 import type { ReportSkillLanguage } from './skills-preset.js'
 import { ensureInitialized, switchReportLanguage } from './workspace/init.js'
+import type { WorkspaceLanguageStore } from './workspace/command.js'
 import { detectPythonEnvironments, missingAnalysisPackages, type PythonDetectOptions } from './python-detect.js'
 import { detectMineruStatus } from './mineru-status.js'
 import {
@@ -842,6 +843,19 @@ export default class AutoReportWorkflowRuntime extends Service {
    */
   workspaceLanguageFor(root: string): ReportLanguage {
     return this.effectiveLanguageFor(root, this.userSettingsSource())
+  }
+
+  /**
+   * Authoritative per-workspace language seam for the explicit `/init` path.
+   * Absent when no settings provider is mounted, in which case the command
+   * materializes resources without recording anything.
+   */
+  get languageStore(): WorkspaceLanguageStore | undefined {
+    if (this.settingsService === undefined) return undefined
+    return {
+      read: root => this.userSettingsSource().workspaceLanguages?.[resolve(root)],
+      write: (root, language) => { void this.writeWorkspaceLanguage(resolve(root), language) },
+    }
   }
 
   /**

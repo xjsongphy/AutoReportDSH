@@ -17,7 +17,7 @@ import { createSkillGateGuard, skillLoadTracker } from './policy/skill-gate.js'
 import { installAutoReportPythonEnv } from './python-env.js'
 import AutoReportWorkflowRuntime, { type RuntimeOptions } from './runtime.js'
 import { createReportInitCommand } from './workspace/command.js'
-import { loadProjectSettings, saveProjectSettings, workspaceIdForRoot } from './settings.js'
+import { loadProjectSettings, workspaceIdForRoot } from './settings.js'
 import { describeDshVersionSupport, readRunningDshVersion } from './dsh-version.js'
 import { installTurnGuards } from './workflow/turn-guard.js'
 
@@ -131,12 +131,21 @@ export async function apply(ctx: Context, config: Partial<Config> = {}, options:
       reportLanguage: resolved.defaultReportLanguage,
       currentDefaultReportLanguage: () => runtime.currentUserSettings().defaultReportLanguage,
       ...(resolved.workspaceRoot === undefined ? {} : { workspaceRoot: resolved.workspaceRoot }),
-      // External project settings live under the harness home, keyed by the
-      // invoked workspace root — never inside the experiment workspace.
-      // The runtime's settingsHome override (tests/isolated homes) applies.
-      projectStore: root => ({
+      // The authoritative per-workspace language lives in the runtime's
+      // settings section; recording it there is also what makes the host switch
+      // the workspace's templates. The seam reads the runtime lazily: the
+      // settings provider arrives through an inject callback, so it is not
+      // mounted yet when this command is registered.
+      languageStore: {
+        read: root => runtime.languageStore?.read(root),
+        write: (root, language) => { runtime.languageStore?.write(root, language) },
+      },
+      // The external project document is read-only legacy: it lives under the
+      // harness home, keyed by the invoked workspace root — never inside the
+      // experiment workspace. The runtime's settingsHome override (tests or
+      // isolated homes) applies.
+      legacyProject: root => ({
         load: () => loadProjectSettings(options.settingsHome, workspaceIdForRoot(root)),
-        save: next => saveProjectSettings(options.settingsHome, workspaceIdForRoot(root), next),
       }),
     })
     commands.register({

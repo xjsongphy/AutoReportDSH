@@ -314,7 +314,7 @@ describe('project settings persistence', () => {
   })
 })
 
-describe('init --language coexistence', () => {
+describe('init --language recording', () => {
   function invocation(rawInput: string, cwd?: string): CommandInvocation {
     return {
       commandId: 'cmd-1' as CommandInvocation['commandId'],
@@ -325,33 +325,34 @@ describe('init --language coexistence', () => {
     } as unknown as CommandInvocation
   }
 
-  function factoryWithHome(home: string) {
+  /** The recording seam a host provides; touching the workspace is the host's job. */
+  function factoryWithStore(recorded: Map<string, 'latex' | 'typst'>) {
     return createReportInitCommand({
       reportLanguage: 'latex',
-      projectStore: root => ({
-        load: () => loadProjectSettings(home, workspaceIdForRoot(root)),
-        save: next => saveProjectSettings(home, workspaceIdForRoot(root), next),
-      }),
+      legacyProject: () => ({ load: () => ({}) }),
+      languageStore: {
+        read: root => recorded.get(root),
+        write: (root, language) => { recorded.set(root, language) },
+      },
     })
   }
 
-  it('materializes both backends side by side while the project language rules', async () => {
+  it('records the choice, materializes it, and leaves the legacy document alone', async () => {
     const home = tempDir('autoreport-cmdhome-')
-    const definition = factoryWithHome(home)
-    const root = tempDir('autoreport-coexist-')
-
-    const latex = await definition.handler(invocation(`--language latex ${root}`))
-    expect(latex.kind).toBe('success')
-    if (latex.kind === 'success') expect(latex.text).toContain('report language: latex (saved to project settings)')
-    expect(existsSync(join(root, 'Report/main.tex'))).toBe(true)
+    const recorded = new Map<string, 'latex' | 'typst'>()
+    const definition = factoryWithStore(recorded)
+    const root = tempDir('autoreport-record-')
 
     const typst = await definition.handler(invocation(`--language typst ${root}`))
     expect(typst.kind).toBe('success')
-    if (typst.kind === 'success') expect(typst.text).toContain('+ Report/main.typ')
-    expect(existsSync(join(root, 'Report/main.tex'))).toBe(true)
-    expect(existsSync(join(root, 'Report/mpltx.cls'))).toBe(true)
+    if (typst.kind === 'success') {
+      expect(typst.text).toContain('report language: typst (saved to settings)')
+      expect(typst.text).toContain('+ Report/main.typ')
+    }
+    expect(recorded.get(root)).toBe('typst')
     expect(existsSync(join(root, 'Report/main.typ'))).toBe(true)
-    expect(loadProjectSettings(home, workspaceIdForRoot(root))).toEqual({ reportLanguage: 'typst' })
+    // The external project document is legacy read-only now: nothing writes it.
+    expect(loadProjectSettings(home, workspaceIdForRoot(root))).toEqual({})
 
     const implicit = await definition.handler(invocation(root))
     expect(implicit.kind).toBe('success')
@@ -359,33 +360,6 @@ describe('init --language coexistence', () => {
       expect(implicit.text).toContain('files written: 0')
       expect(implicit.text).toContain('report language: typst')
     }
-  })
-
-  it('persists the explicit choice where later workflows resolve it', async () => {
-    const home = tempDir('autoreport-cmdhome-')
-    const definition = factoryWithHome(home)
-    const root = tempDir('autoreport-persist-')
-    await definition.handler(invocation(`--language typst ${root}`))
-    expect(loadProjectSettings(home, workspaceIdForRoot(root))).toEqual({ reportLanguage: 'typst' })
-  })
-
-  it('surfaces store failures loud instead of initializing with a wrong language', async () => {
-    const home = tempDir('autoreport-cmdhome-')
-    const root = tempDir('autoreport-broken-')
-    const brokenHome = join(home, 'missing-parent')
-    const definition = createReportInitCommand({
-      reportLanguage: 'latex',
-      projectStore: workspaceRoot => ({
-        load: () => {
-          throw new Error(`corrupt settings for ${workspaceRoot}`)
-        },
-        save: next => void next,
-      }),
-    })
-    const result = await definition.handler(invocation(`--language typst ${brokenHome}`))
-    expect(result.kind).toBe('error')
-    if (result.kind === 'error') expect(result.text).toContain('corrupt settings')
-    expect(existsSync(join(brokenHome, 'Report/main.tex'))).toBe(false)
   })
 })
 

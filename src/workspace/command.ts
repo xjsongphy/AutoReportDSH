@@ -8,12 +8,13 @@
  * live Cordis context. The command is a recovery/explicit path — normal first
  * turns call `ensureInitialized` directly (see PLAN.md §2.10).
  *
- * `--language latex|typst` (PLAN.md §2.14) updates the EXTERNAL project
- * settings document and materializes missing resources for that language; it
- * never deletes the other backend's files, so `Report/main.tex` and
- * `Report/main.typ` may coexist with the project language authoritative.
- * Without the flag the stored project language wins, then the resolved
- * defaults — never filesystem inference.
+ * `--language latex|typst` (PLAN.md §2.18) records the choice in the
+ * authoritative per-workspace map and materializes missing resources for that
+ * language; the host switches the workspace's templates from that record, so a
+ * template this command never deleted is deleted there instead. A bare
+ * `latex`/`typst` token means the same flag, because the command is typed by
+ * hand. Without a language the recorded map wins, then the legacy project
+ * setting, then the resolved defaults — never filesystem inference.
  * @module workspace/command
  */
 
@@ -21,12 +22,22 @@ import type { CommandDefinition, CommandInvocation, CommandResult } from '@deeps
 import type { AutoReportProjectSettings } from '../settings.js'
 import { ensureInitialized, type InitializationResult, type ReportLanguage } from './init.js'
 
-/** Load/save seam over one workspace's external project-settings document. */
-export interface ProjectSettingsStore {
+/** Read-only seam over one workspace's legacy external project-settings document. */
+export interface LegacyProjectSettingsSource {
   /** Read the current patch (missing file ⇒ `{}`); may throw loud on corruption. */
   load(): AutoReportProjectSettings
-  /** Atomically replace the stored patch. */
-  save(next: AutoReportProjectSettings): void
+}
+
+/**
+ * Authoritative per-workspace language seam over the `autoreport` settings
+ * namespace. Writing records the choice; the host turns that record into the
+ * workspace's template switch, so this command never deletes files itself.
+ */
+export interface WorkspaceLanguageStore {
+  /** Language recorded for one workspace root, or undefined when none is. */
+  read(root: string): ReportLanguage | undefined
+  /** Record the choice (fire-and-forget; the host reports its own failures). */
+  write(root: string, language: ReportLanguage): void
 }
 
 /** Inputs the factory needs that normally come from plugin configuration. */
@@ -37,17 +48,22 @@ export interface ReportInitCommandOptions {
    */
   readonly workspaceRoot?: string
   /**
-   * Resolved fallback language used when neither the invocation flag nor the
-   * project settings choose one.
+   * Resolved fallback language used when neither the invocation flag, the
+   * recorded map, nor the legacy project settings choose one.
    */
   readonly reportLanguage: ReportLanguage
-  /** Current DSH user default; read at invocation time when no project/flag wins. */
+  /** Current DSH user default; read at invocation time when no record/flag wins. */
   readonly currentDefaultReportLanguage?: () => ReportLanguage
   /**
-   * Builds the external settings seam for the invoked workspace root; absent
-   * (factory-only tests) keeps the command persistence-free.
+   * Builds the legacy project-settings reader for the invoked workspace root;
+   * absent (factory-only tests) reads no legacy value.
    */
-  readonly projectStore?: (root: string) => ProjectSettingsStore
+  readonly legacyProject?: (root: string) => LegacyProjectSettingsSource
+  /**
+   * Authoritative language seam; absent (factory-only tests) keeps the command
+   * from recording anything, so it only materializes resources.
+   */
+  readonly languageStore?: WorkspaceLanguageStore
 }
 
 /** One-line summary of one initialization pass, rendered by the command. */
@@ -104,7 +120,15 @@ export function parseReportInitInput(rawInput: string): ParsedReportInitInput | 
       continue
     }
     if (token.startsWith('--')) {
-      return { error: `unknown option ${token}. Supported: --language latex|typst.` }
+      return { error: `unknown option ${token}. Supported: latex|typst, or --language latex|typst.` }
+    }
+    // A bare `latex`/`typst` anywhere is the language, so `/init typst ~/exp`
+    // and `/init ~/exp typst` both work. Only the first one counts: a second
+    // stays positional, which keeps a directory named `latex` reachable as
+    // `./latex`.
+    if (language === undefined && (REPORT_LANGUAGES as readonly string[]).includes(token)) {
+      language = token as ReportLanguage
+      continue
     }
     positional.push(token)
   }
@@ -140,7 +164,7 @@ export function createReportInitCommand(options: ReportInitCommandOptions): Comm
   return {
     name: 'init',
     description: 'initialize or repair the experiment workspace layout and bundled report resources',
-    input: { hint: '[--language latex|typst] [workspace-directory]' },
+    input: { hint: '[--language] latex|typst [workspace-directory]' },
     async handler(invocation: CommandInvocation): Promise<CommandResult> {
       const parsed = parseReportInitInput(invocation.rawInput)
       if ('error' in parsed) return { kind: 'error', text: parsed.error }
@@ -152,15 +176,20 @@ export function createReportInitCommand(options: ReportInitCommandOptions): Comm
         }
       }
       try {
-        const store = options.projectStore?.(root)
-        const project: AutoReportProjectSettings = store?.load() ?? {}
-        const language = parsed.language ?? project.reportLanguage ?? options.currentDefaultReportLanguage?.() ?? options.reportLanguage
+        const legacy: AutoReportProjectSettings = options.legacyProject?.(root).load() ?? {}
+        const language = parsed.language
+          ?? options.languageStore?.read(root)
+          ?? legacy.reportLanguage
+          ?? options.currentDefaultReportLanguage?.()
+          ?? options.reportLanguage
         let saved = ''
-        if (parsed.language !== undefined && store !== undefined) {
+        if (parsed.language !== undefined && options.languageStore !== undefined) {
           // Record the explicit choice BEFORE materializing so a crash between
           // the two steps still leaves the authoritative language persisted.
-          store.save({ ...project, reportLanguage: parsed.language })
-          saved = ' (saved to project settings)'
+          // The write is also what makes the host switch the templates, so this
+          // command never deletes a file itself.
+          options.languageStore.write(root, parsed.language)
+          saved = ' (saved to settings)'
         }
         const initialization = ensureInitialized(root, language)
         return {

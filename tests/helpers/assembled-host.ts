@@ -26,6 +26,7 @@ import * as presetModule from '../../src/preset.js'
 import * as reportRouterModule from '../../src/tools/report-router.js'
 import type { SpecialistRole } from '../../src/roles.js'
 import { ISOLATED_PYTHON_DETECT } from './managed-python-stub.js'
+import { MemorySettings } from './memory-settings.js'
 import { loadBundledSkills } from '../../src/workspace/skill-loader.js'
 import { renderSkillContent } from '@deepseek-ai/dsh-skill'
 import { reportSkillRequirements } from '../../src/skills-preset.js'
@@ -282,6 +283,10 @@ export async function assemble(options: AssembleOptions = {}): Promise<Assembled
   } as never)
 
   await ctx.plugin(ToolRuntime)
+  // A live host always serves the settings namespace; mounting one here keeps
+  // the assembled path honest for `/init` (which records the choice) and for
+  // every settings-driven behavior, without touching a developer's document.
+  await ctx.plugin(MemorySettings, { doc: { autoreport: {} } })
 
   const projectPatch: { reportLanguage?: 'latex' | 'typst'; pythonExecutable?: string } = {
     ...(options.projectLanguage === undefined ? {} : { reportLanguage: options.projectLanguage }),
