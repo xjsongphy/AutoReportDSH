@@ -2,7 +2,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'no
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { ensureInitialized, ensureWorkspaceDirs, REQUIRED_DIRS, resourcesRoot, materializeResources, workspaceIsComplete } from '../src/workspace/init.js'
+import { ensureInitialized, ensureWorkspaceDirs, REQUIRED_DIRS, resourcesRoot, materializeResources, switchReportLanguage, workspaceIsComplete } from '../src/workspace/init.js'
 
 const cleanup: string[] = []
 
@@ -104,6 +104,63 @@ describe('ensureInitialized', () => {
     expect(second.createdDirs).toEqual([])
     expect(second.writtenFiles).toEqual([])
     expect(second.skippedFiles.sort().length).toBeGreaterThan(0)
+  })
+})
+
+describe('switchReportLanguage', () => {
+  function workspaceWith(language: 'latex' | 'typst'): string {
+    const root = tempRoot()
+    ensureInitialized(root, language)
+    return root
+  }
+
+  it('deletes the unmodified source template and installs the target set', () => {
+    const root = workspaceWith('latex')
+    const result = switchReportLanguage(root, 'latex', 'typst')
+    expect(result.deleted).toEqual(['Report/main.tex', 'Report/mpltx.cls'])
+    expect(result.written).toEqual([
+      'Report/main.typ', 'Report/mplts.typ', 'Report/american-physics-society.csl', 'Report/bibli.bib',
+    ])
+    expect(existsSync(join(root, 'Report/main.tex'))).toBe(false)
+    expect(existsSync(join(root, 'Report/main.typ'))).toBe(true)
+  })
+
+  it('keeps a modified source template and still installs the target set', () => {
+    const root = workspaceWith('latex')
+    writeFileSync(join(root, 'Report/main.tex'), '% my own report\n')
+    const result = switchReportLanguage(root, 'latex', 'typst')
+    expect(result.deleted).toEqual(['Report/mpltx.cls'])
+    expect(result.kept).toContain('Report/main.tex')
+    expect(readFileSync(join(root, 'Report/main.tex'), 'utf8')).toBe('% my own report\n')
+    expect(existsSync(join(root, 'Report/main.typ'))).toBe(true)
+  })
+
+  it('never overwrites an existing target template', () => {
+    const root = workspaceWith('latex')
+    switchReportLanguage(root, 'latex', 'typst')
+    writeFileSync(join(root, 'Report/main.typ'), '// mine\n')
+    const back = switchReportLanguage(root, 'typst', 'latex')
+    expect(back.kept).toContain('Report/main.typ')
+    expect(readFileSync(join(root, 'Report/main.typ'), 'utf8')).toBe('// mine\n')
+    expect(existsSync(join(root, 'Report/main.tex'))).toBe(true)
+  })
+
+  it('leaves non-template files alone and writes nothing on a second pass', () => {
+    const root = workspaceWith('latex')
+    writeFileSync(join(root, 'Report/custom.typ'), 'not a template\n')
+    switchReportLanguage(root, 'latex', 'typst')
+    const again = switchReportLanguage(root, 'latex', 'typst')
+    expect(again.deleted).toEqual([])
+    expect(again.written).toEqual([])
+    expect(again.kept).toEqual([
+      'Report/main.typ', 'Report/mplts.typ', 'Report/american-physics-society.csl', 'Report/bibli.bib',
+    ])
+    expect(readFileSync(join(root, 'Report/custom.typ'), 'utf8')).toBe('not a template\n')
+  })
+
+  it('skips a workspace directory that no longer exists', () => {
+    expect(switchReportLanguage('/nonexistent/autoreport-workspace', 'latex', 'typst'))
+      .toEqual({ deleted: [], written: [], kept: [] })
   })
 })
 

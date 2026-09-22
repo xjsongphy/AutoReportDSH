@@ -9,7 +9,7 @@
  * @module workspace/init
  */
 
-import { copyFileSync, existsSync, mkdirSync, statSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, readFileSync, statSync, unlinkSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -172,4 +172,67 @@ export function ensureInitialized(
   const createdDirs = workspaceIsComplete(root) ? [] : ensureWorkspaceDirs(root)
   const { written, skipped } = materializeResources(root, language)
   return { createdDirs, writtenFiles: written, skippedFiles: skipped }
+}
+
+/** Files one language switch removed, installed, and left alone. */
+export interface LanguageSwitchResult {
+  /** Workspace-relative template files removed because they were unmodified. */
+  readonly deleted: string[]
+  /** Workspace-relative template files installed for the new language. */
+  readonly written: string[]
+  /** Files left alone: already present, or modified by the user. */
+  readonly kept: string[]
+}
+
+/**
+ * Move a workspace from one report language to the other.
+ *
+ * Two independent rules, by design: a source template is deleted only when it
+ * is byte-identical to the bundled resource — any difference is the user's and
+ * is kept — and a target template is copied only when the target is absent, so
+ * an existing file is never overwritten. Only the two known resource sets are
+ * touched, which is why the switch never scans the workspace, and a repeated
+ * call writes and deletes nothing. A missing workspace directory skips the file
+ * work entirely: the language is still recorded, the files just cannot follow.
+ * @param root - absolute experiment workspace root.
+ * @param from - language the workspace is leaving.
+ * @param to - language the workspace is entering.
+ * @returns what was deleted, written, and kept.
+ */
+export function switchReportLanguage(
+  root: string,
+  from: ReportLanguage,
+  to: ReportLanguage,
+): LanguageSwitchResult {
+  const deleted: string[] = []
+  const written: string[] = []
+  const kept: string[] = []
+  if (!isDirectory(root)) return { deleted, written, kept }
+  for (const file of from === 'latex' ? LATEX_FILES : TYPST_FILES) {
+    const target = join(root, file.destination)
+    if (!existsSync(target)) continue
+    const source = resolveResourceFile(file.resourcePath)
+    const unmodified = source !== undefined && readFileSync(target).equals(readFileSync(source))
+    if (!unmodified) {
+      kept.push(file.destination)
+      continue
+    }
+    unlinkSync(target)
+    deleted.push(file.destination)
+  }
+  for (const file of to === 'latex' ? LATEX_FILES : TYPST_FILES) {
+    const target = join(root, file.destination)
+    if (existsSync(target)) {
+      kept.push(file.destination)
+      continue
+    }
+    const source = resolveResourceFile(file.resourcePath)
+    if (source === undefined) {
+      throw new Error(`AutoReport bundled resource ${file.resourcePath} is missing`)
+    }
+    mkdirSync(dirname(target), { recursive: true })
+    copyFileSync(source, target)
+    written.push(file.destination)
+  }
+  return { deleted, written, kept }
 }
