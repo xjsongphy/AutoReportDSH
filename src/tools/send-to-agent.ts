@@ -22,6 +22,7 @@ import { roleHandoffText } from '../workflow/file-notes.js'
 import { delegationKey } from '../workflow/protocol.js'
 import type { WaiterOutcome } from '../workflow/waiters.js'
 import { SEND_TO_AGENT_SECTION, SEND_TO_AGENT_SYSTEM_PROMPT } from './prompt.js'
+import { genericCall } from './presentation.js'
 
 const MAX_PROMPT = 16_384
 const MAX_CONTEXT = 8_192
@@ -494,7 +495,7 @@ export function createSendToAgentTool(deps: SendToAgentDependencies): ToolDefini
       }
       return resultFromOutcome(taskId, revision, outcome)
     },
-    presentCall: args => ({ card: 'generic', title: `send_to_agent ${String(args.role)}`, kind: 'other', rawInput: args }),
+    presentCall: args => genericCall(`send_to_agent ${String(args.role)}`, args.subject ?? args.role),
   })
 }
 

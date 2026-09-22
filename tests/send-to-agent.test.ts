@@ -88,7 +88,7 @@ function harness() {
   }
   const call = (args: Record<string, unknown>) =>
     tool.execute(args as never, exec as never) as Promise<Record<string, unknown>>
-  return { session, state, waiters, roleRegistry, workflow, subagents, call }
+  return { session, state, waiters, roleRegistry, workflow, subagents, call, tool }
 }
 
 // A fresh workspace per test: fixtures reuse session ids, so a shared root
@@ -97,6 +97,33 @@ let WORKSPACE = workspaceForTests('send-to-agent')
 beforeEach(() => { WORKSPACE = workspaceForTests('send-to-agent') })
 
 describe('send_to_agent', () => {
+  it('presents the subject, not the whole briefing', () => {
+    const { tool } = harness()
+
+    expect(tool.presentCall?.({
+      role: 'DATA_ANALYSIS',
+      prompt: 'Fit the RLC curve and report the residuals.',
+      subject: 'Fit the RLC curve',
+      timeout_ms: 600_000,
+    })).toEqual({
+      card: 'generic',
+      kind: 'other',
+      title: 'send_to_agent DATA_ANALYSIS',
+      rawInput: 'Fit the RLC curve',
+    })
+  })
+
+  it('presents the role when a redispatch carries no subject', () => {
+    const { tool } = harness()
+
+    expect(tool.presentCall?.({ role: 'REPORT', prompt: 'Write it up.', task_id: 'task-2' })).toEqual({
+      card: 'generic',
+      kind: 'other',
+      title: 'send_to_agent REPORT',
+      rawInput: 'REPORT',
+    })
+  })
+
   it('dispatches without a prior report_task when task_id is omitted', async () => {
     const session = sessionIn(WORKSPACE, 'main')
     const state = workflowState(session)

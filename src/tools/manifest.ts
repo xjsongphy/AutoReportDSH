@@ -8,6 +8,7 @@ import { projectManifest } from '../workflow/manifest.js'
 import type { WorkflowProjection } from '../workflow/service.js'
 import { delegationKey, normalizeProducedPath } from '../workflow/protocol.js'
 import { MAX_FILE_DESCRIPTION, MAX_FILE_NOTES } from '../workflow/file-notes.js'
+import { genericCall } from './presentation.js'
 
 /** Upper bound for one manifest call's per-file description updates. */
 const MAX_FILE_ENTRIES = 64
@@ -308,7 +309,7 @@ export function installManifestTool(ctx: Context, hostCtx: Context, role: AutoRe
           notes_diff: roleNotesDiff,
         }
       },
-      presentCall: args => ({ card: 'generic', title: `manifest ${String(args.action ?? 'read')}`, kind: 'other', rawInput: args }),
+      presentCall: args => genericCall(`manifest ${String(args.action ?? 'read')}`, args.agent),
     }))
   } catch (error: unknown) {
     throw error

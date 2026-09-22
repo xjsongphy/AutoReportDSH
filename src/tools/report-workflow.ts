@@ -8,6 +8,7 @@ import { formatWorkflowRelay } from '../workflow/display.js'
 import { staleDescribedPathsForDelegation } from '../workflow/file-notes.js'
 import { hasAcceptedWorkflowReport } from '../workflow/report-observer.js'
 import { parseWorkflowEnvelope } from '../workflow/protocol.js'
+import { genericCall } from './presentation.js'
 
 function runtimeOf(hostCtx: Context): AutoReportWorkflowRuntime | undefined {
   const getter = (hostCtx as { get?: (name: string) => unknown }).get
@@ -102,7 +103,7 @@ export function installWorkflowReportTool(childCtx: Context, hostCtx: Context, r
         }
         return { messageId }
       },
-      presentCall: args => ({ card: 'generic', title: `report_workflow ${String(args.status)}`, kind: 'other', rawInput: args }),
+      presentCall: args => genericCall(`report_workflow ${String(args.status)}`, args.task_id),
     })))
   } catch (error: unknown) {
     for (const dispose of [...disposers].reverse()) {

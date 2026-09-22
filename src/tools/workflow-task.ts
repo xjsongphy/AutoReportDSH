@@ -5,6 +5,7 @@ import type AutoReportWorkflowRuntime from '../runtime.js'
 import type { TaskSnapshot } from '../workflow/events.js'
 import { delegationKey } from '../workflow/protocol.js'
 import { WORKFLOW_TASK_SECTION, WORKFLOW_TASK_SYSTEM_PROMPT } from './prompt.js'
+import { genericCall } from './presentation.js'
 
 const MAX_STEPS = 64
 const MAX_STEP_LENGTH = 512
@@ -121,6 +122,6 @@ export function installWorkflowTaskTool(ctx: Context, hostCtx: Context): () => v
       }
       throw new Error(`unknown workflow_task action ${String(action)}`)
     },
-    presentCall: args => ({ card: 'generic', title: `workflow_task ${String(args.action)}`, kind: 'other', rawInput: args }),
+    presentCall: args => genericCall(`workflow_task ${String(args.action)}`, args.task_id),
   }))
 }
