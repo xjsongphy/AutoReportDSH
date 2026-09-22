@@ -127,10 +127,10 @@ export function sendToAgentSummary(argsRaw: string, t: ToolRowText): string | un
   const role = args === undefined ? undefined : asString(args.role)
   if (args === undefined || role === undefined) return undefined
   const taskId = asString(args.task_id)
-  if (taskId !== undefined) return `→ ${role} · ${t('resend')} ${taskId}`
+  if (taskId !== undefined) return `${role} · ${t('resend')} ${taskId}`
   const prompt = asString(args.prompt)
   const label = asString(args.subject) ?? (prompt === undefined ? undefined : firstLine(prompt))
-  return label === undefined ? `→ ${role}` : `→ ${role} · ${label}`
+  return label === undefined ? role : `${role} · ${label}`
 }
 
 /** Task count in a settled whole-board read, or undefined when unreadable. */
@@ -186,7 +186,7 @@ export function workflowTaskSummary(
   if (action === 'read') {
     if (taskId === undefined) {
       const size = boardSize(output)
-      return size === undefined ? t('board') : `${t('board')} · ${size} ${t('tasks')}`
+      return size === undefined ? undefined : `${size} ${t('tasks')}`
     }
     const status = taskStatus(output)
     const label = `${t('read')} ${taskId}`

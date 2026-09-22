@@ -33,11 +33,10 @@ export const TOOL_NS = 'autoreport.tools'
 /** Props of a registered row: the slot's owner currency plus this plugin's copy. */
 type RowProps = ToolCallViewProps & PropsLocale<typeof TOOL_NS>
 
-/** Leading slot for one lifecycle. The host's own sweep is ui-tool-internal,
- *  so a running call wears the primitive's ongoing dot instead. */
+/** Leading slot for one finished lifecycle. A running call keeps its idle
+ *  glyph: the fade over the row is the running cue, as it is on host rows. */
 function leadingFor(state: ToolRowState, idle: ReactNode): ReactNode {
   switch (state) {
-    case 'running': return <StateDot state="ongoing" />
     case 'error': return <StateDot state="error" />
     case 'stopped': return <StateDot state="warning" />
     default: return idle
@@ -61,14 +60,14 @@ function prettyArgs(argsRaw: string): string | null {
   return parsed === undefined ? argsRaw : JSON.stringify(parsed, null, 2)
 }
 
-/** One labelled block of the expanded card. */
-function IoBlock({ label, body }: { label: string, body: string | null }) {
+/** One gutter-labelled section of the expanded card. */
+function IoSection({ label, body, error = false }: { label: string, body: string | null, error?: boolean }) {
   if (body === null) return null
   return (
-    <div className={css.toolIoBlock}>
+    <section className={css.toolIoSection}>
       <span className={css.toolIoLabel}>{label}</span>
-      <pre className={css.toolIoBody}>{body}</pre>
-    </div>
+      <pre className={css.toolIoText} data-error={error ? '' : undefined}>{body}</pre>
+    </section>
   )
 }
 
@@ -95,28 +94,44 @@ function RowShell({ title, summary, facts, argsRaw, t, icon, inspect }: RowShell
   const label = facts.errorSummary ?? summary
   const status = statusText(facts.state, t)
   return (
-    <DisclosureRow
-      icon={leadingFor(facts.state, icon)}
-      title={title}
-      open={open}
-      expandable={expandable}
-      expandOnRowClick
-      onToggle={() => { setExpanded(value => !value) }}
-      collapsedContent={label === undefined && status === undefined ? undefined : (
-        <span className={facts.errorSummary === null ? css.toolSummary : `${css.toolSummary} ${css.toolSummaryFailed}`}>
-          {label}
-          {status === undefined ? null : <span className={css.toolState}>{status}</span>}
-        </span>
-      )}
-    >
-      <div className={css.toolIo}>
-        <IoBlock label={t('in')} body={args} />
-        <IoBlock label={t('out')} body={facts.output} />
+    // The state rides the wrapper as well: it is what the running fade keys off,
+    // and the sr-only copy stays a sibling of the row so it never joins the
+    // summary's own text.
+    <div className={css.toolRow} data-ar-state={facts.state}>
+      {status === undefined ? null : <span className={css.toolState}>{status}</span>}
+      <DisclosureRow
+        icon={leadingFor(facts.state, icon)}
+        title={title}
+        open={open}
+        expandable={expandable}
+        expandOnRowClick
+        keepContentWhenOpen
+        onToggle={() => { setExpanded(value => !value) }}
+        collapsedContent={label === undefined ? undefined : (
+          /* The separator is part of the summary, not of the row: a row with
+             nothing to summarise shows its title alone, with no trailing dot. */
+          <>
+            <span className={css.toolSep} aria-hidden />
+            <span className={facts.errorSummary === null ? css.toolSummary : `${css.toolSummary} ${css.toolSummaryFailed}`}>
+              {label}
+            </span>
+          </>
+        )}
+      >
+        <div className={css.toolIo}>
+          <IoSection label={t('in')} body={args} />
+          {facts.output === null ? null : (
+            <>
+              <span className={css.toolIoDivider} />
+              <IoSection label={t('out')} body={facts.output} error={facts.state === 'error'} />
+            </>
+          )}
+        </div>
         {inspect === undefined ? null : (
           <button type="button" className={css.toolInspect} onClick={inspect}>{t('inspect')}</button>
         )}
-      </div>
-    </DisclosureRow>
+      </DisclosureRow>
+    </div>
   )
 }
 

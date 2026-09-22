@@ -115,9 +115,9 @@ describe('autoreport tool rows', () => {
 
     expect(slots.entries('tool.call.toolview').map(entry => entry.options.key).sort())
       .toEqual(['send_to_agent', 'workflow_task'])
-    expect(locale.bind(TOOL_NS)('board')).toBe('任务板')
+    expect(locale.bind(TOOL_NS)('tasks')).toBe('个任务')
     locale.setLocale('en')
-    expect(locale.bind(TOOL_NS)('board')).toBe('Board')
+    expect(locale.bind(TOOL_NS)('tasks')).toBe('tasks')
   })
 
   it('takes the tool views down with the fiber', async () => {

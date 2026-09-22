@@ -5,6 +5,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 import { toolRowEn, toolRowZh, type ToolRowLocaleKey } from '../../src/client/locales.js'
 import { SendToAgentRow, WorkflowTaskRow } from '../../src/client/tool-rows.js'
+import { css } from '../../src/client/styles.js'
 
 afterEach(cleanup)
 
@@ -41,14 +42,14 @@ describe('SendToAgentRow', () => {
     render(<SendToAgentRow {...props(running(args))} />)
 
     expect(screen.getByText('Delegate to subagent')).toBeDefined()
-    expect(screen.getByText('→ DATA_ANALYSIS · fit the RLC curve')).toBeDefined()
+    expect(screen.getByText('DATA_ANALYSIS · fit the RLC curve')).toBeDefined()
   })
 
   it('marks a delegation that continues an existing task', () => {
     const args = { role: 'REPORT', prompt: 'p', subject: 's', task_id: 'task-2' }
     render(<SendToAgentRow {...props(running(args))} />)
 
-    expect(screen.getByText('→ REPORT · resend task-2')).toBeDefined()
+    expect(screen.getByText('REPORT · resend task-2')).toBeDefined()
   })
 
   it('wears the failure state and shows the first output line', () => {
@@ -69,7 +70,7 @@ describe('SendToAgentRow', () => {
   it('keeps the summary, not the icon, as the collapsed content when the call succeeded', () => {
     render(<SendToAgentRow {...props(settled({ role: 'THEORY', prompt: 'derive it' }, [text('updated')]))} />)
 
-    expect(screen.getByText('→ THEORY · derive it')).toBeDefined()
+    expect(screen.getByText('THEORY · derive it')).toBeDefined()
     expect(document.querySelector('[data-state="error"]')).toBeNull()
   })
 
@@ -145,12 +146,54 @@ describe('WorkflowTaskRow', () => {
     const output = JSON.stringify({ tasks: [{ task_id: 'task-1' }, { task_id: 'task-2' }] })
     render(<WorkflowTaskRow {...props(settled({ action: 'read' }, [text(output)]))} />)
 
-    expect(screen.getByText('Board · 2 tasks')).toBeDefined()
+    expect(screen.getByText('2 tasks')).toBeDefined()
   })
 
   it('names the transition for a cancelled task', () => {
     render(<WorkflowTaskRow {...props(running({ action: 'cancel', task_id: 'task-3' }))} />)
 
     expect(screen.getByText('Cancel task-3')).toBeDefined()
+  })
+})
+
+describe('row chrome', () => {
+  it('separates the row label from its summary', () => {
+    render(<SendToAgentRow {...props(running({ role: 'THEORY', prompt: 'derive it' }))} />)
+
+    expect(document.querySelector(`.${css.toolSep}`)).not.toBeNull()
+  })
+
+  it('drops the separator together with a summary it has nothing to say in', () => {
+    render(<WorkflowTaskRow {...props(running({ action: 'read' }))} />)
+
+    expect(screen.getByText('Report task board')).toBeDefined()
+    expect(document.querySelector(`.${css.toolSep}`)).toBeNull()
+  })
+
+  it('keeps the summary visible while expanded', () => {
+    render(<SendToAgentRow {...props(running({ role: 'THEORY', prompt: 'derive it' }))} />)
+
+    fireEvent.click(row())
+
+    expect(screen.getByText('THEORY · derive it')).toBeDefined()
+  })
+
+  it('marks the row running so the running fade can key off it', () => {
+    render(<SendToAgentRow {...props(running({ role: 'THEORY', prompt: 'derive it' }))} />)
+
+    expect(document.querySelector('[data-ar-state="running"]')).not.toBeNull()
+  })
+
+  it('leaves the leading icon alone while running: the fade is the running cue', () => {
+    render(<SendToAgentRow {...props(running({ role: 'THEORY', prompt: 'derive it' }))} />)
+
+    expect(document.querySelector('[data-state]')).toBeNull()
+  })
+
+  it('marks a failed row as an error for the same hook', () => {
+    const error = { name: 'TimeoutError', code: 'timeout' }
+    render(<SendToAgentRow {...props(settled({ role: 'REPORT', prompt: 'p' }, [], { isError: true, error }))} />)
+
+    expect(document.querySelector('[data-ar-state="error"]')).not.toBeNull()
   })
 })

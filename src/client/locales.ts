@@ -126,7 +126,7 @@ export const zh: Record<AutoReportLocaleKey, string> = {
 export type ToolRowLocaleKey =
   | 'sendToAgentTitle' | 'workflowTaskTitle'
   | 'running' | 'failed' | 'stopped'
-  | 'board' | 'tasks'
+  | 'tasks'
   | 'read' | 'update' | 'cancel' | 'reopen' | 'resend' | 'checked'
   | 'in' | 'out' | 'inspect'
 
@@ -137,7 +137,6 @@ export const toolRowEn: Record<ToolRowLocaleKey, string> = {
   running: 'Running',
   failed: 'Failed',
   stopped: 'Stopped',
-  board: 'Board',
   tasks: 'tasks',
   read: 'Read',
   update: 'Update',
@@ -157,7 +156,6 @@ export const toolRowZh: Record<ToolRowLocaleKey, string> = {
   running: '进行中',
   failed: '失败',
   stopped: '已中断',
-  board: '任务板',
   tasks: '个任务',
   read: '读',
   update: '更新',

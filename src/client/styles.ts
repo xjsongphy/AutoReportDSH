@@ -62,13 +62,16 @@ export const css = {
   subagentModelLabel: 'ar-subagent-model-label',
   chipTrigger: 'ar-chip-trigger',
   chipTriggerLabel: 'ar-chip-trigger-label',
+  toolRow: 'ar-tool-row',
+  toolSep: 'ar-tool-sep',
   toolSummary: 'ar-tool-summary',
   toolSummaryFailed: 'ar-tool-summary-failed',
   toolState: 'ar-tool-state',
   toolIo: 'ar-tool-io',
-  toolIoBlock: 'ar-tool-io-block',
+  toolIoSection: 'ar-tool-io-section',
   toolIoLabel: 'ar-tool-io-label',
-  toolIoBody: 'ar-tool-io-body',
+  toolIoDivider: 'ar-tool-io-divider',
+  toolIoText: 'ar-tool-io-text',
   toolInspect: 'ar-tool-inspect',
 } as const
 
@@ -539,70 +542,130 @@ const STYLESHEET = `
   white-space: nowrap;
 }
 
-/* AutoReport tool rows. The collapsed chrome belongs to DSH's DisclosureRow;
-   these rules cover only the summary text and the expanded IN/OUT card. */
+/* AutoReport tool rows. The collapsed chrome — the 24px line, its leading box,
+   the title tier — belongs to DSH's DisclosureRow; everything here mirrors the
+   numbers in ui-tool's own ToolRow.module.css so these rows sit in the same
+   rhythm as the rows beside them rather than reading as a foreign plugin. */
 
+.${css.toolRow} {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-width: 0;
+}
+
+/* Running fade: the same fixed-width glare band the host rows sweep, keyed off
+   this row's own state attribute. The disclosure row already carries the
+   position/overflow anchor the overlay needs. */
+.${css.toolRow}[data-ar-state='running'] [data-disclosure-row]::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 300px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in srgb, var(--dsw-alias-bg-base) 60%, transparent) 55%,
+    transparent 100%
+  );
+  animation: autoreport-tool-row-sweep 2.6s ease-out infinite;
+  pointer-events: none;
+}
+@keyframes autoreport-tool-row-sweep {
+  0% { left: -300px; }
+  90%, 100% { left: 100%; }
+}
+
+/* Separator dot between the title and the summary: 2px, caption-coloured,
+   8px either side. Rendered only when there is a summary to introduce. */
+.${css.toolSep} {
+  flex: none;
+  width: 2px;
+  height: 2px;
+  border-radius: 1px;
+  margin: 0 8px;
+  background: var(--dsw-alias-label-caption);
+}
 .${css.toolSummary} {
+  flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--dsw-alias-label-secondary);
+  font-size: var(--dsh-content-font-size-secondary, 13px);
+  line-height: calc(24px + var(--dsh-content-font-delta, 0px));
+  color: var(--dsw-alias-label-tertiary);
 }
 .${css.toolSummaryFailed} {
-  color: var(--dsw-alias-label-error);
+  color: var(--dsw-alias-state-error-primary);
 }
 .${css.toolState} {
   position: absolute;
   width: 1px;
   height: 1px;
-  padding: 0;
-  margin: -1px;
   overflow: hidden;
-  clip-path: inset(50%);
+  clip: rect(0 0 0 0);
   white-space: nowrap;
-  border: 0;
 }
+
+/* The expanded IN/OUT card: one rounded block under the row's fourth column,
+   with the gutter-labelled sections scrolling independently. */
 .${css.toolIo} {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  margin: 4px 0 8px 24px;
-  padding: 8px 10px;
-  border: 1px solid var(--dsw-alias-border-l2);
-  border-radius: 8px;
-  background: var(--dsw-alias-bg-layer-2);
+  margin: 4px 0 4px 4px;
+  border: 0.5px solid var(--dsw-alias-border-l1);
+  border-radius: 12px;
+  background: var(--dsw-alias-markdown-code-block);
+  font: var(--dsw-font-markdown-code-block-small);
 }
-.${css.toolIoBlock} {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  min-width: 0;
+.${css.toolIoSection} {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  column-gap: 14px;
+  align-items: baseline;
+  padding: 12px 16px;
+  max-height: 150px;
+  overflow-y: auto;
 }
 .${css.toolIoLabel} {
+  position: sticky;
+  top: 0;
+  align-self: start;
   color: var(--dsw-alias-label-caption);
-  font: var(--dsw-font-xs-13);
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
 }
-.${css.toolIoBody} {
+.${css.toolIoDivider} {
+  flex: none;
+  height: 0.5px;
+  background: var(--dsw-alias-border-l2);
+}
+.${css.toolIoText} {
+  min-width: 0;
   margin: 0;
-  max-height: 240px;
-  overflow: auto;
-  color: var(--dsw-alias-label-primary);
-  font: var(--dsw-font-markdown-code-block-small);
   white-space: pre-wrap;
-  overflow-wrap: anywhere;
+  word-break: break-word;
+  color: var(--dsw-alias-label-secondary);
+}
+.${css.toolIoText}[data-error] {
+  color: var(--dsw-alias-state-error-primary);
 }
 .${css.toolInspect} {
   align-self: flex-start;
+  margin: 4px 0 4px 4px;
   padding: 2px 8px;
   border: 1px solid var(--dsw-alias-border-l2);
-  border-radius: 6px;
+  border-radius: 999px;
   background: transparent;
   color: var(--dsw-alias-label-secondary);
   font: var(--dsw-font-xs-13);
   cursor: pointer;
+  opacity: 0;
+}
+.${css.toolRow}:hover .${css.toolInspect},
+.${css.toolInspect}:focus-visible {
+  opacity: 1;
 }
 .${css.toolInspect}:hover {
   background: var(--dsw-alias-interactive-bg-hover);

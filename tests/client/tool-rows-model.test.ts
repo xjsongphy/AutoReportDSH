@@ -108,21 +108,21 @@ describe('flattenResult', () => {
 describe('sendToAgentSummary', () => {
   it('names the role and the subject', () => {
     expect(sendToAgentSummary(JSON.stringify({ role: 'DATA_ANALYSIS', prompt: 'whatever', subject: 'fit the RLC curve' }), en))
-      .toBe('→ DATA_ANALYSIS · fit the RLC curve')
+      .toBe('DATA_ANALYSIS · fit the RLC curve')
   })
 
   it('falls back to the prompt first line when no subject was given', () => {
     expect(sendToAgentSummary(JSON.stringify({ role: 'THEORY', prompt: 'derive the transfer function\nsecond line' }), en))
-      .toBe('→ THEORY · derive the transfer function')
+      .toBe('THEORY · derive the transfer function')
   })
 
   it('names the task instead of the subject when redispatching', () => {
     expect(sendToAgentSummary(JSON.stringify({ role: 'REPORT', prompt: 'p', subject: 's', task_id: 'task-2' }), en))
-      .toBe('→ REPORT · resend task-2')
+      .toBe('REPORT · resend task-2')
   })
 
-  it('omits the trailing label when neither subject nor prompt is usable', () => {
-    expect(sendToAgentSummary(JSON.stringify({ role: 'PLOTTING' }), en)).toBe('→ PLOTTING')
+  it('is the bare role when neither subject nor prompt is usable', () => {
+    expect(sendToAgentSummary(JSON.stringify({ role: 'PLOTTING' }), en)).toBe('PLOTTING')
   })
 
   it('is empty for arguments it cannot read', () => {
@@ -134,13 +134,13 @@ describe('sendToAgentSummary', () => {
 describe('workflowTaskSummary', () => {
   it('counts the whole board once the read settles', () => {
     const output = JSON.stringify({ tasks: [{ task_id: 'task-1' }, { task_id: 'task-2' }, { task_id: 'task-3' }] })
-    expect(workflowTaskSummary(JSON.stringify({ action: 'read' }), output, en)).toBe('Board · 3 tasks')
+    expect(workflowTaskSummary(JSON.stringify({ action: 'read' }), output, en)).toBe('3 tasks')
   })
 
-  it('keeps the label bare before the read settles or when the board is unreadable', () => {
-    expect(workflowTaskSummary(JSON.stringify({ action: 'read' }), null, en)).toBe('Board')
-    expect(workflowTaskSummary(JSON.stringify({ action: 'read' }), 'not json', en)).toBe('Board')
-    expect(workflowTaskSummary(JSON.stringify({ action: 'read' }), JSON.stringify({ tasks: 'nope' }), en)).toBe('Board')
+  it('has no summary at all before the read settles or when the board is unreadable', () => {
+    expect(workflowTaskSummary(JSON.stringify({ action: 'read' }), null, en)).toBeUndefined()
+    expect(workflowTaskSummary(JSON.stringify({ action: 'read' }), 'not json', en)).toBeUndefined()
+    expect(workflowTaskSummary(JSON.stringify({ action: 'read' }), JSON.stringify({ tasks: 'nope' }), en)).toBeUndefined()
   })
 
   it('names the task and its status for a single-task read', () => {
@@ -176,6 +176,6 @@ describe('workflowTaskSummary', () => {
     const steps = [{ description: 'a', done: true }, { description: 'b', done: true }, { description: 'c' }]
     expect(workflowTaskSummary(JSON.stringify({ action: 'update', task_id: 'task-2', steps }), null, zh))
       .toBe('更新 task-2 · 2/3 勾选')
-    expect(workflowTaskSummary(JSON.stringify({ action: 'read' }), JSON.stringify({ tasks: [] }), zh)).toBe('任务板 · 0 个任务')
+    expect(workflowTaskSummary(JSON.stringify({ action: 'read' }), JSON.stringify({ tasks: [] }), zh)).toBe('0 个任务')
   })
 })
