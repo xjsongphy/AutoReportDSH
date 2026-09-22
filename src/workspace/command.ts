@@ -19,6 +19,7 @@
  */
 
 import type { CommandDefinition, CommandInvocation, CommandResult } from '@deepseek-ai/dsh-commands'
+import { isAbsolute, resolve } from 'node:path'
 import type { AutoReportProjectSettings } from '../settings.js'
 import { ensureInitialized, type InitializationResult, type ReportLanguage } from './init.js'
 
@@ -148,10 +149,18 @@ function resolveWorkspaceRoot(
   invocation: CommandInvocation,
   options: ReportInitCommandOptions,
 ): string | undefined {
-  if (directory.length > 0) return directory
-  const cwd = invocation.agent.session.header.cwd
-  if (cwd !== undefined && cwd.length > 0) return cwd
-  return options.workspaceRoot
+  const candidate = directory.length > 0
+    ? directory
+    : (() => {
+        const cwd = invocation.agent.session.header.cwd
+        if (cwd !== undefined && cwd.length > 0) return cwd
+        return options.workspaceRoot
+      })()
+  if (candidate === undefined) return undefined
+  // Resolved here rather than at each use: this exact string keys the
+  // per-workspace language, so a relative argument must name the same
+  // workspace the files land in — otherwise the record and the tree disagree.
+  return isAbsolute(candidate) ? candidate : resolve(candidate)
 }
 
 /**

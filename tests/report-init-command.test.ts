@@ -1,7 +1,7 @@
 import type { CommandInvocation } from '@deepseek-ai/dsh-commands'
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, relative } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { createReportInitCommand, parseReportInitInput, renderInitialization } from '../src/workspace/command.js'
 
@@ -167,6 +167,21 @@ describe('init command', () => {
     const implicit = await store.handler(invocation(root))
     if (implicit.kind !== 'success') throw new Error('expected success')
     expect(implicit.text).toContain('report language: typst')
+  })
+
+  it('resolves a relative directory so the record and the files name one workspace', async () => {
+    const root = tempRoot()
+    const written: Array<[string, string]> = []
+    const definition = createReportInitCommand({
+      reportLanguage: 'latex',
+      languageStore: { read: () => undefined, write: (workspaceRoot, language) => { written.push([workspaceRoot, language]) } },
+    })
+    // Relative to the process cwd, so the resolved key must be absolute while
+    // the tree still lands in the same directory the key names.
+    const result = await definition.handler(invocation(`typst ${relative(process.cwd(), root)}`))
+    expect(result.kind).toBe('success')
+    expect(written).toEqual([[root, 'typst']])
+    expect(existsSync(join(root, 'Report/main.typ'))).toBe(true)
   })
 
   it('surfaces a legacy settings failure as a command error without initializing', async () => {
