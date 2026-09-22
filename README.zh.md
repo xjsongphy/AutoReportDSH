@@ -143,10 +143,10 @@ $DSH_HOME/
 ├── .agent-presets/autoreport/     已安装的 user preset
 ├── profiles/node_modules/autoreportdsh
 └── autoreport/
-    ├── resources/                 同步的模板、主题、skills
     ├── venv/                      AutoReport 托管的 Python（可选）
     └── <workspaceId>/
         ├── project.json           语言、Python、subagent 路由
+        └── workflow/<session id>/ session.jsonl — 工作流状态记录
 ```
 
 ### 角色权限
@@ -164,7 +164,6 @@ $DSH_HOME/
 ```text
 AutoReportDSH/
 ├── cordis.template.yml    host + report-router overlay
-├── patches/               仅供源码测试的 Harness API shim
 ├── presets/autoreport/    user preset（id = 目录名）
 ├── resources/             捆绑的 persona、skills、LaTeX 模板
 ├── scripts/               preset 安装、资源同步、client 构建
@@ -196,11 +195,14 @@ pnpm vitest run tests/e2e/configured-route.e2e.test.ts
 该测试从那个 DSH home 读取 provider，自身不声明任何 provider。详见
 [docs/live-provider-testing.md](docs/live-provider-testing.md)。
 
-CI（`.github/workflows/ci.yml`）在 Linux、macOS、Windows 上针对固定的 DSH 兼容
-checkout 运行：应用临时补丁后依次执行 install、无密钥测试、typecheck 和 build。
-依赖 pin 见 [docs/dependencies.md](docs/dependencies.md)。
+CI（`.github/workflows/ci.yml`）在 Linux、macOS、Windows 上针对固定的 DSH 发布版
+运行，依次执行 install、无密钥测试、typecheck 和 build。CI 与安装过程都不再给 DSH
+打补丁：插件改为在进程内接管沙箱策略。依赖 pin 与兼容性接缝见
+[docs/dependencies.md](docs/dependencies.md)。
 
-设计与实现记录见 **[PLAN.md](PLAN.md)**。
+设计记录（含被否决的方案与风险清单）见 **[PLAN.md](PLAN.md)**——rev 5、改 rev 8，
+它自己也标注了哪些段落已属历史。**当前**行为、当前发布闸门与刻意留空的部分见
+**[docs/own-features.md](docs/own-features.md)**。
 
 ## 参考项目
 

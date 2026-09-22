@@ -12,8 +12,15 @@ platform.
   Report have fixed personas, responsibilities, and writable roots.
 - **Durable report coordination:** `send_to_agent`, `report_workflow`, role
   bindings, task/delegation snapshots, artifact observations, and manifest
-  notes are persisted in the owning Main session. A specialist can be
-  re-bound without reconstructing its work from chat history.
+  notes are persisted in AutoReport's own append-only record log — not in the
+  DSH session log, for the reason in
+  [Durable state lives in the plugin's own log](#durable-state-lives-in-the-plugins-own-log).
+  A specialist can be re-bound without reconstructing its work from chat
+  history.
+- **Tool-owned policy:** usage policy for `send_to_agent`, `workflow_task`, and
+  the child report protocol ships with the tool that owns it, as prompt sections
+  and a runtime context, rather than as deployment-persona prose — see
+  [Tool-owned policy](#tool-owned-policy).
 - **Experiment workspace:** create-missing-only initialization of `Data/`,
   `References/`, `Theory/`, `Plots/`, `Report/`, and `Outline/`; LaTeX/Typst
   report assets and project-scoped language settings.
@@ -147,6 +154,39 @@ Because the copy is now the artifact, attribution moved with it: the upstream of
 every vendored document, and the license that travels beside it, is listed under
 [Credits](../README.md#credits) in the README.
 
+## Tool-owned policy
+
+The master DSH convention ships a tool's usage policy with the tool, not with the
+deployment persona. AutoReport follows it: the policy that used to sit in
+`resources/personas/main_agent.md` and `Common.md` now lives as module constants
+in `src/tools/prompt.ts` — the same shape DSH's own `tool-cordis` and
+`tool-agent-team` use — and each contribution registers with the thing it
+governs.
+
+| Constant | Registered as | Scope |
+| --- | --- | --- |
+| `SEND_TO_AGENT_SYSTEM_PROMPT` | prompt section `tool:send_to_agent` | preset — MAIN's dispatch payload and result handling |
+| `WORKFLOW_TASK_SYSTEM_PROMPT` | prompt section `tool:workflow_task` | preset — when the durable board is worth writing to |
+| `CHILD_REPORT_PROTOCOL_CONTEXT` | runtime context `autoreport:report-protocol` | every routed specialist |
+
+The two prompt sections take their `order` from DSH's own TOOL section orders, so
+they land beside the guidance DSH itself publishes. Preset-scoped registration is
+what keeps them MAIN-only: a routed specialist joins the preset for its tool
+plane but reads the report-protocol context instead.
+
+Text rather than a resource file is a deliberate choice, not an accident of
+implementation: these strings are part of the tool's interface, so they version
+with the code that enforces them instead of loading through a path that can drift
+or be replaced at runtime. `resources/` stays the home of documents the *report*
+owns — personas, templates, skills — while policy a tool owns ships next to it.
+
+The point is not tidiness. Persona prose cannot be scoped to the tool that needs
+it, so policy written there either reaches roles it does not apply to or has to be
+duplicated per role; and a persona edit is invisible to whoever changes the tool.
+Splitting them puts each statement next to the parameters it constrains.
+`tests/personas.test.ts` pins the boundary — the personas must not re-acquire the
+policy these constants now own.
+
 ## Explicit non-goals
 
 AutoReportDSH does not add arbitrary agent definitions or graphs, MCP,
@@ -165,7 +205,7 @@ it needs an explicit product-scope decision.
 | Concern | AutoReportCLI | AutoReportDSH |
 | --- | --- | --- |
 | Runtime/session host | native Rust runtime and local rollout files | DSH agents, sessions, compaction, and subagent transport |
-| Taskboard persistence | project-state `taskboard.json` | append-only `autoreport/task` and `autoreport/delegation` events on Main |
+| Taskboard persistence | project-state `taskboard.json` | the plugin's own append-only `autoreport/task` and `autoreport/delegation` record log |
 | Agent team | fixed five roles | fixed five roles |
 | Write isolation | AutoReport execution policy | DSH `workspace-write` plus AutoReport guard/root override |
 | Providers and credentials | CLI configuration/auth flow | DSH profile configuration; not duplicated here |
@@ -178,9 +218,34 @@ restart/rebind tests prove it; in-memory event-fold tests alone are insufficient
 ## Current release gates
 
 Role write isolation no longer depends on a DSH-side API: the host plugin wraps
-the in-process sandbox-policy singleton, so stock DSH confines each role to its
-own directory and the `patches/` source shim is retired (see
-`docs/dependencies.md`).
+the in-process sandbox-policy singleton (`src/policy/sandbox-override.ts`), so
+stock DSH confines each role to its own directory and the `patches/` source shim
+is retired. Activation self-checks the wrap and fails loud rather than silently
+running a role on the unconfined root.
+
+The plugin is verified against one upstream DSH release rather than bound to it:
+the pin means "verified", not "exclusive", and other builds warn instead of
+refusing. The wiring, the retired seams, and the nightly upstream canary are in
+[`docs/dependencies.md`](dependencies.md).
+
+Open, and deliberately not claimed as done:
+
+- **Restart/rebind acceptance.** `tests/store.test.ts` covers record-log
+  read/write and torn-line tolerance; `tests/workflow-fold.test.ts` compares
+  batch against stepwise replay *in memory*. Neither proves that unfinished
+  task/delegation/manifest state survives a process restart and drives the same
+  next action. Until one does, the AutoReportCLI comparison above claims no
+  recovery equivalence.
+- **Windows role isolation end-to-end.** `tests/bash-confinement.live.test.ts`
+  no longer skips win32 wholesale: it gates on sandbox usability, which on win32
+  already requires both a working `bash -lc` and the windows-acl runner probe.
+  What is missing is evidence, not code — one green Windows CI run that resolves
+  a real role writable root through the ACL runner.
+- **`workflow_task` transition coverage.** The board has no test file of its own,
+  and redispatch-after-reopen is named by no case.
+- **Live provider smoke.** `tests/e2e/configured-route.e2e.test.ts` is opt-in
+  against a maintained DSH home; it has to be run on purpose after a
+  compatibility change.
 
 ### Durable state lives in the plugin's own log
 
@@ -234,6 +299,9 @@ Properties this buys and costs:
   consulted there again.
 
 Likewise, the durable AutoReport task state is that log, not DSH's generic
-`todo_write`. The current Main-facing API creates and redispatches workflow
-tasks through `send_to_agent`; it is not a full interactive task-board editor or
-a generic DSH todo replacement.
+`todo_write`. MAIN creates and redispatches workflow tasks through
+`send_to_agent`, and maintains the board itself through `workflow_task`
+(`read`, `update`, `cancel`, `reopen`); the tool states in its own description
+that it is the report task board and not a generic todo replacement. It is not a
+free-form board editor: transitions stay on the durable task/delegation model,
+so a cancelled or blocked task is reopened rather than rewritten.

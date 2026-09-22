@@ -159,6 +159,7 @@ $DSH_HOME/
     ├── venv/                      AutoReport-managed Python (optional)
     └── <workspaceId>/
         ├── project.json           language, python, subagent route
+        └── workflow/<session id>/ session.jsonl — the durable workflow log
 ```
 
 ### Role permissions
@@ -176,9 +177,8 @@ $DSH_HOME/
 ```text
 AutoReportDSH/
 ├── cordis.template.yml    host + report-router overlay
-├── patches/               source-only Harness API test shim
 ├── presets/autoreport/    user preset (id = directory name)
-├── resources/             bundled personas, skills, LaTeX templates
+├── resources/             bundled personas, guidance, skills, templates
 ├── scripts/               preset install, resource copy, client build
 ├── src/
 │   ├── host.ts · preset.ts · runtime.ts · client/
@@ -211,12 +211,16 @@ The test reads the providers from that DSH home and declares none of its own. Se
 [docs/live-provider-testing.md](docs/live-provider-testing.md).
 
 CI (`.github/workflows/ci.yml`) runs on Linux, macOS, and Windows against the
-pinned DSH compatibility checkout. It applies one source-only sandbox test shim,
-then runs install, keyless tests, typecheck, and build. The user-facing plugin
-install does not patch DSH. See
-[docs/dependencies.md](docs/dependencies.md) for the dependency pin.
+pinned DSH release, then runs install, keyless tests, typecheck, and build. No
+DSH source patch is applied, in CI or at install: the plugin wraps the running
+sandbox policy in process instead. See
+[docs/dependencies.md](docs/dependencies.md) for the pin and the compatibility
+seams.
 
-Design and implementation notes: **[PLAN.md](PLAN.md)**. Product boundary and non-goals: **[docs/own-features.md](docs/own-features.md)**.
+Design record, including the rejected alternatives and the risk list:
+**[PLAN.md](PLAN.md)** — rev 5, amended rev 8, and it says itself which sections
+are historical. For what the plugin does **now**, plus the current gates and what
+is deliberately still open: **[docs/own-features.md](docs/own-features.md)**.
 
 ## Credits
 
