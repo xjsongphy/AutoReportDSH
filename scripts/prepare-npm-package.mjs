@@ -4,11 +4,17 @@
 
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
+import { pathToFileURL } from 'node:url'
 
 const root = resolve(new URL('.', import.meta.url).pathname, '..')
 const output = join(root, 'dist', 'npm')
 const source = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'))
-const dshVersion = '0.1.1-rc.2'
+// Read the verified dsh version from the built plugin module instead of keeping
+// a literal here. The publishable manifest's dependency range and the runtime's
+// "verified against" warning must name the same build, and a second copy of this
+// value drifted to the retired rc base once already. `prepare:npm` builds first,
+// so `dist/src/dsh-version.js` is always present by this point.
+const { VERIFIED_DSH_VERSION } = await import(pathToFileURL(join(root, 'dist', 'src', 'dsh-version.js')).href)
 
 rmSync(output, { recursive: true, force: true })
 mkdirSync(output, { recursive: true })
@@ -21,7 +27,7 @@ for (const dependencies of [source.dependencies ?? {}, source.devDependencies ??
       ? '^4.0.1'
       : name === '@deepseek-ai/schemastery'
         ? '^3.18.1'
-        : `^${dshVersion}`
+        : `^${VERIFIED_DSH_VERSION}`
     void version
   }
 }
