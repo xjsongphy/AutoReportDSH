@@ -50,7 +50,7 @@ function boxTop(title, colorName) {
   return paint(colorName, `╭${prefix}${'─'.repeat(Math.max(0, BOX_WIDTH - 2 - prefix.length))}╮`)
 }
 
-function boxBody(parts) {
+function boxBody(parts, colorName) {
   let remaining = BOX_CONTENT_WIDTH
   const rendered = []
   for (const part of parts) {
@@ -59,7 +59,11 @@ function boxBody(parts) {
     rendered.push(part.color === undefined ? text : paint(part.color, text))
     remaining -= text.length
   }
-  return `│ ${rendered.join('')}${' '.repeat(Math.max(0, remaining))} │`
+  // Both edges carry the box color: an inner part resets its own color, so the
+  // padding and the right bar are painted separately rather than by wrapping
+  // the whole line.
+  const padding = ' '.repeat(Math.max(0, remaining))
+  return `${paint(colorName, '│')} ${rendered.join('')}${paint(colorName, `${padding} │`)}`
 }
 
 function boxBottom(colorName) {
@@ -133,7 +137,7 @@ function printHeader() {
   console.log(boxBody([
     { text: 'Install into the existing DSH ' },
     { text: `${dshCommand} · ${profile} profile`, color: 'cyan' },
-  ]))
+  ], 'bold'))
   console.log(boxBottom('bold'))
   console.log('')
 }
@@ -234,15 +238,15 @@ try {
     { text: version },
     { text: '    profile: ', color: 'cyan' },
     { text: profile },
-  ]))
+  ], 'green'))
   console.log(boxBody([
     { text: 'Start: ', color: 'cyan' },
     { text: `${dshCommand} web` },
-  ]))
+  ], 'green'))
   console.log(boxBody([
     { text: 'Web UI: ', color: 'cyan' },
     { text: 'http://127.0.0.1:3080' },
-  ]))
+  ], 'green'))
   console.log(boxBottom('green'))
 } catch (error) {
   console.error(`\n${STATUS_INDENT}${paint('red', '✗')} ${paint('bold', 'Installation failed')}`)
