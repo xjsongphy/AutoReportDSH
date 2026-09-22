@@ -3,12 +3,22 @@ import { resolve } from 'node:path'
 import { Service, type Context } from '@deepseek-ai/cordis'
 import type { Agent, AgentHandle } from '@deepseek-ai/dsh-agent'
 import { PERSONA_PREFIX_SECTION } from '@deepseek-ai/dsh-system-prompt'
-import { createUserMessage } from '@deepseek-ai/dsh-llm'
+import { createUserMessage, ReasoningEffortId } from '@deepseek-ai/dsh-llm'
 import type { ContentBlock } from '@deepseek-ai/dsh-llm'
 import { SessionId, type Session, type SessionEvent } from '@deepseek-ai/dsh-session'
 import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
 import type { SettingsProvider } from '@deepseek-ai/dsh-settings'
+import {
+  childSessionMeta,
+  resolveChildAgentOptions,
+  resolveChildDepth,
+} from '@deepseek-ai/dsh-subagent'
 import { deliverSubagentPrompt, type HostPromptDeliverer } from '@deepseek-ai/dsh-subagent/internal'
+import {
+  ensureSubagentDescriptor,
+  residentDescriptor,
+  RESIDENT_TOOL_FILTER,
+} from './subagent-descriptor.js'
 import type { Config, ReportLanguage } from './config.js'
 import type { CoordinatorMessageSource, SubagentReportMessageSource } from './messages.js'
 import { AUTOREPORT_MAIN_PRESET, isAutoReportMainSession } from './membership.js'
@@ -394,13 +404,23 @@ export default class AutoReportWorkflowRuntime extends Service {
     }
 
     signal.throwIfAborted()
+    // DSH resolves a delegation's route from the delegating session's LATEST
+    // REQUEST HEADER first and only falls back to the parent's creation
+    // options (child-agent.ts `parentAgentOptionsForDelegation`): a Main whose
+    // model was chosen at request time carries no route in `options` at all.
+    // Reading `parent.options` here instead produced children that died on
+    // their first step with `has no provider/model`.
     const route = this.currentUserSettings().specialistModel ?? this.config.specialistModel
-    const agentOptions: Agent['options'] = {
-      ...(parent.options.provider === undefined ? {} : { provider: parent.options.provider }),
-      ...(parent.options.model === undefined ? {} : { model: parent.options.model }),
-      ...(parent.options.maxTokens === undefined ? {} : { maxTokens: parent.options.maxTokens }),
-      ...(route === undefined ? {} : { provider: route.provider, model: route.model }),
-    }
+    const childDepth = resolveChildDepth(parent, 1)
+    const agentOptions: Agent['options'] = resolveChildAgentOptions(parent, route === undefined
+      ? undefined
+      : {
+          provider: route.provider,
+          model: route.model,
+          ...(route.reasoningEffort === undefined
+            ? {}
+            : { reasoningEffort: ReasoningEffortId(route.reasoningEffort) }),
+        }, childDepth)
     const persona = loadSpecialistPersona(role)
     const setup = async (childCtx: Context, child: Agent): Promise<void> => {
       if (child === undefined) throw new Error(`resident ${role} setup has no child agent`)
@@ -419,7 +439,7 @@ export default class AutoReportWorkflowRuntime extends Service {
         order: childCtx.systemPrompt.getSectionOrder('DEPLOYMENT_PERSONA_PREFIX'),
         text: persona,
       })
-      if (joined !== undefined) childCtx.tools?.restrict({ deny: ['send_to_agent', 'ask_user_question'] })
+      if (joined !== undefined) childCtx.tools?.restrict(RESIDENT_TOOL_FILTER)
       // The parent preset is joined synchronously above, but its scoped skill
       // service is exposed through Cordis injection. Wait for that capability
       // before publishing the child so REPORT skills and the role report tool
@@ -446,12 +466,10 @@ export default class AutoReportWorkflowRuntime extends Service {
         ? agents.resume!({ resumeSessionId: binding.childSessionId, agentOptions, setup })
         : agents.create!({
             sessionId: binding.childSessionId,
-            meta: {
-              ...(parent.session.header.cwd === undefined ? {} : { cwd: parent.session.header.cwd }),
-              parentSession: parent.id,
-              origin: 'subagent',
-              delegationDepth: 1,
-            },
+            // The same metadata DSH's own driver stamps on a delegated child:
+            // the parent's workspace, its live composition, and the durable
+            // recursion budget a cold read resumes under.
+            meta: childSessionMeta(parent, childDepth, false),
             agentOptions,
             setup,
           } as never)
@@ -460,6 +478,13 @@ export default class AutoReportWorkflowRuntime extends Service {
         : agents.withInitiator(parent, createOrResume))
       this.storeResident(parent, role, handle)
       this.markResidentActive(parentSession, binding, role, handle.agent)
+      // Direct creation skips the provider that would have classified this
+      // child, so the runtime writes the identity itself; a child that already
+      // carries one keeps it.
+      ensureSubagentDescriptor(
+        handle.agent.session,
+        residentDescriptor({ role, route: agentOptions, persona }),
+      )
       return handle.agent
     } catch (error: unknown) {
       if (createdReservation && this.roleRegistry.lookup(binding.childSessionId) !== undefined) {

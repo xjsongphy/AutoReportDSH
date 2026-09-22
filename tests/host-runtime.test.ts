@@ -350,6 +350,64 @@ describe('host workflow runtime', () => {
     expect(restrict).not.toHaveBeenCalled()
   })
 
+  it('starts a resident child on the parent request route and gives it a durable identity', async () => {
+    // Regression: residents created directly by this runtime read their route
+    // off `parent.options` alone. DSH resolves a delegation's route from the
+    // latest request header first (`parentAgentOptionsForDelegation` in
+    // @deepseek-ai/dsh-subagent/child-agent), so a Main whose creation options
+    // carry no route produced children that died on their first step with
+    // `has no provider/model` (session 70e9fb99 → children 877b9437, 6e57e8d7).
+    // Those same children lacked the `subagent/descriptor` every provider
+    // appends, so DSH's catalog could never classify them and the session
+    // header showed disabled placeholder rows instead of the two subagents.
+    const root = mkdtempSync(join(tmpdir(), 'autoreport-runtime-'))
+    tempDirs.push(root)
+    const ctx = new Context()
+    const session = rootSession('resident-route-main', AUTOREPORT_MAIN_PRESET, root)
+    const mainAgent = { id: session.id, session, options: {}, ctx: { get: () => undefined } } as unknown as Agent
+    // The route lives on the session's own request header, not on the agent.
+    session.append('turn/start', { turn: 1 })
+    session.append('request/header', {
+      header: { config: { provider: 'deepseek-official', model: 'deepseek-flash', reasoningEffort: 'low' } },
+      reason: 'initial',
+    })
+    const created: Array<{ agentOptions?: Record<string, unknown> }> = []
+    let child: Session | undefined
+    const createChild = async (options: { sessionId: SessionId, agentOptions?: Record<string, unknown> }): Promise<{ agent: Agent, dispose: () => Promise<void> }> => {
+      created.push(options)
+      child = Session.create(options.sessionId, undefined, {
+        version: SESSION_FORMAT_VERSION,
+        isSeeded: false,
+        id: options.sessionId,
+        createdAt: Date.now(),
+        parentSession: session.id,
+      })
+      return { agent: { id: child.id, session: child } as Agent, dispose: async () => {} }
+    }
+    ctx.provide('agents', {
+      list: () => [mainAgent],
+      get: (id: SessionId) => id === mainAgent.id ? mainAgent : undefined,
+      create: createChild,
+      resume: createChild,
+    } as never)
+    const runtime = createRuntime(ctx, { ...CONFIG, workspaceRoot: root })
+    await runtime.ensureResidentRole(mainAgent, 'THEORY')
+
+    expect(created[0]?.agentOptions).toMatchObject({
+      provider: 'deepseek-official',
+      model: 'deepseek-flash',
+      reasoningEffort: 'low',
+    })
+    expect(child?.snapshotEvents().find(event => event.type === 'subagent/descriptor')?.data).toMatchObject({
+      mode: 'continuable',
+      provider: 'spawn',
+      label: 'AutoReport THEORY',
+      agentProvider: 'deepseek-official',
+      agentModel: 'deepseek-flash',
+      toolFilter: { deny: ['send_to_agent', 'ask_user_question'] },
+    })
+  })
+
   it('gates a REPORT write until the running dsh observes the skill load', async () => {
     const root = mkdtempSync(join(tmpdir(), 'autoreport-runtime-'))
     tempDirs.push(root)
