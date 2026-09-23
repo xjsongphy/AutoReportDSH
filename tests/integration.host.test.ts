@@ -24,6 +24,7 @@ import { SESSION_FORMAT_VERSION, Session, SessionId } from '@deepseek-ai/dsh-ses
 import { REQUIRED_DIRS } from '../src/workspace/init.js'
 import { resolveWorkflowSettings, workspaceIdForRoot } from '../src/settings.js'
 import { AUTOREPORT_SCHEMA_VERSION, type RoleBindingSnapshot } from '../src/workflow/events.js'
+import { ARTIFACT_SCHEMA_VERSION } from '../src/artifacts/refresh.js'
 import {
   ASSEMBLED_CONFIG as CONFIG,
   admitFirstTurn,
@@ -154,6 +155,23 @@ describe('integration: assembled host (real context)', () => {
   it('runs the whole delegation round trip: reserve -> authorized first call -> denial -> report -> artifacts -> manifest', async () => {
     const assembled = await boot()
     admitFirstTurn(assembled)
+    // Fixture process tool with a REAL executor: the observer's process path
+    // (before/after writable-root snapshots) keys on the tool NAME 'bash', so
+    // the child-bash regression below needs an actual command to run.
+    assembled.ctx.tools.register(defineTool({
+      name: 'bash',
+      description: 'fixture process execution',
+      parameters: { command: { type: 'string', required: true } },
+      output: {
+        schema: { type: 'object', additionalProperties: true, properties: {} },
+        render: () => [{ type: 'text', text: 'ran' }],
+      },
+      async execute(args) {
+        const { execFileSync } = await import('node:child_process')
+        execFileSync('/bin/bash', ['-c', String(args.command)], { stdio: 'ignore' })
+        return { command: args.command }
+      },
+    }))
 
     // Auto-create and dispatch with wait:true: resolves ONLY when the child reports.
     const dispatchPromise = execute(assembled.ctx, 'send_to_agent', {
@@ -198,6 +216,27 @@ describe('integration: assembled host (real context)', () => {
     expect(allowed.isError).toBe(false)
     expect(existsSync(join(assembled.workspaceRoot, 'Data', 'Processed', 'out.csv'))).toBe(true)
 
+    // Regression guard for the silent 2026-09-23 field failure: a CHILD's
+    // process-tool write window must also produce an artifact. The DA session
+    // in that run ran 58 potentially-writing bash commands and the fold
+    // produced nothing, leaving the manifest tracker empty for the whole run.
+    const scriptPath = join(assembled.workspaceRoot, 'Data', 'Processed', 'from_bash.csv')
+    const bash = await execute(assembled.ctx, 'bash', {
+      command: `printf 'bash wrote this' > ${JSON.stringify(scriptPath)}`,
+    }, childAgent, childSession)
+    expect(bash.isError, bash.text).toBe(false)
+    expect(existsSync(scriptPath)).toBe(true)
+    const afterBash = assembled.runtime.forSession(assembled.mainSession).state.projection().artifacts
+    const bashArtifact = afterBash.find(a => a.path === 'Data/Processed/from_bash.csv')
+    expect(bashArtifact, 'child bash write must be observed as an artifact').toBeDefined()
+    expect(bashArtifact).toMatchObject({
+      producedBy: 'DATA_ANALYSIS',
+      origin: 'process',
+      status: 'created',
+      taskId: 'task-1',
+      delegationKey: 'task-1#1',
+    })
+
     // Synthetic child->parent workflow report (durable subagent-report fact).
     const envelope = {
       task_id: 'task-1',
@@ -227,9 +266,9 @@ describe('integration: assembled host (real context)', () => {
     const live = assembled.runtime.forSession(assembled.mainSession)
     expect(live.state.delegationAt('task-1', 1)?.phase).toBe('completed')
     const artifacts = live.state.projection().artifacts
-    expect(artifacts).toHaveLength(1)
+    expect(artifacts).toHaveLength(2)
     expect(artifacts[0]).toMatchObject({
-      version: AUTOREPORT_SCHEMA_VERSION,
+      version: ARTIFACT_SCHEMA_VERSION,
       path: 'Data/Processed/out.csv',
       producedBy: 'DATA_ANALYSIS',
       origin: 'fs-tool',
@@ -237,19 +276,19 @@ describe('integration: assembled host (real context)', () => {
       taskId: 'task-1',
       delegationKey: 'task-1#1',
     })
+    // Baseline stamped: the manifest refresh compares size+mtime against this.
+    expect(artifacts[0]?.sizeBytes).toBe('fit results'.length)
 
     const manifestResult = await execute(assembled.ctx, 'manifest', { action: 'read' }, childAgent, childSession)
     expect(manifestResult.isError, manifestResult.text).toBe(false)
-    expect(manifestResult.value).toMatchObject({
-      agent_type: 'data_analysis',
-      files: [{
-        path: 'Data/Processed/out.csv',
-        description: '',
-        description_updated_at: null,
-      }],
-      notes: '',
-      notes_updated_at: null,
+    const manifestFiles = (manifestResult.value as { files: { path: string; description: string; description_updated_at: string | null; file_updated_at: string }[] }).files
+    expect(manifestFiles).toHaveLength(2)
+    expect(manifestFiles.find(f => f.path === 'Data/Processed/out.csv')).toMatchObject({
+      description: '',
+      description_updated_at: null,
     })
+    expect(manifestFiles.find(f => f.path === 'Data/Processed/from_bash.csv')?.file_updated_at)
+      .toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\+00:00$/u)
     expect((manifestResult.value as { files: { file_updated_at: string }[] }).files[0]?.file_updated_at)
       .toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\+00:00$/u)
     expect(existsSync(join(assembled.home, 'autoreport', workspaceIdForRoot(assembled.workspaceRoot), 'manifests'))).toBe(false)
