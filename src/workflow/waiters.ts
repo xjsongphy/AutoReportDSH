@@ -17,7 +17,7 @@ export interface WaiterOutcome {
   /** Validated produced-file list for `completed`. */
   readonly producedFiles?: readonly string[]
   /** Block classification for `blocked`. */
-  readonly blockType?: 'missing_data' | 'quality'
+  readonly blockType?: 'missing_data' | 'quality' | 'missing_dependency'
 }
 
 interface PendingWaiter {

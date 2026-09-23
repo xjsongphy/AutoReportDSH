@@ -124,8 +124,8 @@ export function parseWorkflowEnvelope(raw: unknown): ParseResult<WorkflowReportE
 
   const block_type = record['block_type']
   if (status === 'blocked') {
-    if (block_type !== 'missing_data' && block_type !== 'quality') {
-      return { ok: false, reason: "blocked reports must set block_type 'missing_data'|'quality'" }
+    if (block_type !== 'missing_data' && block_type !== 'quality' && block_type !== 'missing_dependency') {
+      return { ok: false, reason: "blocked reports must set block_type 'missing_data'|'quality'|'missing_dependency'" }
     }
   } else if (block_type !== null && block_type !== undefined) {
     return { ok: false, reason: 'successful reports must carry block_type null' }
@@ -163,7 +163,7 @@ export function parseWorkflowEnvelope(raw: unknown): ParseResult<WorkflowReportE
     delegation_revision: revision,
     status,
     ...(status === 'blocked'
-      ? { block_type: block_type as 'missing_data' | 'quality' }
+      ? { block_type: block_type as 'missing_data' | 'quality' | 'missing_dependency' }
       : { block_type: null }),
     response,
     produced_files,

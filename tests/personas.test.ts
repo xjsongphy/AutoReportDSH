@@ -68,7 +68,7 @@ const FORBIDDEN_PERSONA_PATTERNS: readonly { pattern: RegExp; reason: string }[]
   { pattern: /report_exec/u, reason: 'retired tool; do not tell the model what not to call' },
   { pattern: /compile_report/u, reason: 'retired tool; do not tell the model what not to call' },
   { pattern: /delegation_revision/u, reason: 'delegation mechanics belong to the report_workflow tool description' },
-  { pattern: /block_type/u, reason: 'delegation mechanics belong to the report_workflow tool description' },
+  { pattern: /block_type(?=="|:|\s)/u, reason: 'delegation mechanics belong to the report_workflow tool description; the missing_dependency policy names the blocker itself' },
   { pattern: /mineru-open-api/u, reason: 'MinerU CLI lives in the pdf-reference-reader skill, not personas' },
   { pattern: /apply_patch/u, reason: 'apply_patch is not mounted in DSH; auto-validation claims are false' },
   { pattern: /automatically validated/iu, reason: 'runtime auto-validation claims must be true' },
@@ -109,6 +109,8 @@ describe('persona slimming', () => {
     expect(dispatch).toContain('Do not include:')
     expect(dispatch).toContain('Route follow-up work according to the `send_to_agent` result')
     expect(dispatch).toContain('If a user constraint conflicts with a subagent role')
+    // MAIN owns environment changes; blocked missing_dependency tasks come back to it.
+    expect(dispatch).toContain('missing_dependency')
     const board = WORKFLOW_TASK_SYSTEM_PROMPT
     expect(board).toContain('do not use generic todo tools')
     expect(board).toContain('Track only nontrivial coordination work')
@@ -126,6 +128,8 @@ describe('persona slimming', () => {
     expect(protocol).toContain('mutate AutoReport task state')
     expect(protocol).toContain('mutate the task board directly')
     expect(protocol).toContain('Do not restate task IDs')
+    // Environment ownership: specialists report missing dependencies, MAIN installs.
+    expect(protocol).toContain('missing_dependency')
     for (const role of allSpecialistRoles()) {
       const text = loadSpecialistPersona(role)
       const roleFile = readFileSync(join(REPO_PERSONAS, ROLE_PERSONA_FILES[role] ?? ''), 'utf8')

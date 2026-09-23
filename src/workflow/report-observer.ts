@@ -48,7 +48,7 @@ function settleOutcome(snapshot: DelegationSnapshot): WaiterOutcome {
     return {
       status: 'blocked',
       ...(snapshot.report?.response !== undefined ? { response: snapshot.report.response } : {}),
-      ...(snapshot.report?.block_type === 'missing_data' || snapshot.report?.block_type === 'quality'
+      ...(snapshot.report?.block_type === 'missing_data' || snapshot.report?.block_type === 'quality' || snapshot.report?.block_type === 'missing_dependency'
         ? { blockType: snapshot.report.block_type }
         : {}),
     }

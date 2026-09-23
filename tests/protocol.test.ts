@@ -43,6 +43,9 @@ describe('workflow protocol', () => {
       const parsed = parseWorkflowEnvelope(blocked)
       expect(parsed.ok).toBe(true)
 
+      const dependency = { ...valid, status: 'blocked', block_type: 'missing_dependency' }
+      expect(parseWorkflowEnvelope(dependency).ok).toBe(true)
+
       const missing = { ...valid, status: 'blocked' }
       expect(parseWorkflowEnvelope(missing).ok).toBe(false)
 

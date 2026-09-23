@@ -116,15 +116,21 @@ describe('AutoReport role tool guard', () => {
     expect(guard(execution('write', { file_path: 'Theory/notes.md' }, main))).toContain('Outline')
   })
 
-  it('denies sandbox_permissions escalation on write and bash', () => {
+  it('passes MAIN escalation to the approval flow but denies it for specialists', () => {
     const root = workspace()
+    const registry = new RoleRegistry()
     const main = agent('main', root)
-    const guard = createRoleToolGuard({ registry: new RoleRegistry(), mainSessionId: main.id })
+    const theory = agent('theory', root)
+    registry.registerReserved(binding('THEORY', theory.id))
+    const guard = createRoleToolGuard({ registry, mainSessionId: main.id })
     const escalation = { sandbox_permissions: 'danger-full-access' }
-    expect(guard(execution('write', { file_path: 'Outline/report.md', content: 'x', ...escalation }, main)))
+    // MAIN escalates through to DSH's user-approval flow; the guard steps aside.
+    expect(guard(execution('bash', { command: 'true', ...escalation }, main))).toBeUndefined()
+    // Specialists get the hard denial: they report missing_dependency instead.
+    expect(guard(execution('bash', { command: 'true', ...escalation }, theory)))
       .toContain('sandbox_permissions')
-    expect(guard(execution('bash', { command: 'true', ...escalation }, main)))
-      .toContain('sandbox_permissions')
+    expect(guard(execution('bash', { command: 'true', ...escalation }, theory)))
+      .toContain('MAIN')
   })
 
   it('handles current str_replace_editor schema and strict future delete/patch schemas', () => {

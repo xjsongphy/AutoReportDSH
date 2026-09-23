@@ -26,8 +26,12 @@ export interface WorkflowReportEnvelope {
   readonly delegation_revision: number
   /** Terminal classification of one attempt. */
   readonly status: 'success' | 'blocked'
-  /** Required for `blocked`, null for `success`. */
-  readonly block_type: 'missing_data' | 'quality' | null
+  /**
+   * Required for `blocked`, null for `success`. `missing_dependency` reports
+   * a Python package/tool the selected environment lacks; MAIN owns every
+   * environment change, so specialists never install on their own.
+   */
+  readonly block_type: 'missing_data' | 'quality' | 'missing_dependency' | null
   /** Self-contained result text for MAIN. */
   readonly response: string
   /** Normalized workspace-relative paths of produced files. */

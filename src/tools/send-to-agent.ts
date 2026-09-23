@@ -165,7 +165,7 @@ function terminalOutcome(snapshot: DelegationSnapshot | undefined): WaiterOutcom
     return {
       status: 'blocked',
       ...(snapshot.report?.response === undefined ? {} : { response: snapshot.report.response }),
-      ...(snapshot.report?.block_type === 'missing_data' || snapshot.report?.block_type === 'quality'
+      ...(snapshot.report?.block_type === 'missing_data' || snapshot.report?.block_type === 'quality' || snapshot.report?.block_type === 'missing_dependency'
         ? { blockType: snapshot.report.block_type }
         : {}),
     }
@@ -185,7 +185,7 @@ function resultFromOutcome(
   task_id: string
   delegation_revision: number
   response?: string
-  block_type?: 'missing_data' | 'quality'
+  block_type?: 'missing_data' | 'quality' | 'missing_dependency'
   produced_files?: string[]
 } {
   return {
@@ -238,7 +238,7 @@ export function createSendToAgentTool(deps: SendToAgentDependencies): ToolDefini
     name: 'send_to_agent',
     description: [
       'Dispatch one durable AutoReport task to its fixed subagent role; creates a task when task_id is omitted. The subagent finishes only by calling report_workflow, which becomes your result.',
-      'With wait=true (default) the call blocks until the subagent reports and returns status: "success" (done — response holds results and produced file paths), "blocked" (subagent cannot proceed — block_type is "missing_data" or "quality"; response states what is needed), "failed" (the delegation itself broke; response carries the reason), "cancelled" (the task was cancelled with workflow_task while waiting), or "timeout" (the child stayed idle too long or reached the absolute wait limit; nothing was reported and the task stays open for redispatch).',
+      'With wait=true (default) the call blocks until the subagent reports and returns status: "success" (done — response holds results and produced file paths), "blocked" (subagent cannot proceed — block_type is "missing_data", "quality", or "missing_dependency"; response states what is needed; install reported dependencies yourself, never ask the subagent to), "failed" (the delegation itself broke; response carries the reason), "cancelled" (the task was cancelled with workflow_task while waiting), or "timeout" (the child stayed idle too long or reached the absolute wait limit; nothing was reported and the task stays open for redispatch).',
       'wait=false returns "delegated" immediately and the report later arrives as a role \u2192 MAIN message in this conversation; do not poll for it.',
       `The wait budget is timeout_ms, default ${defaultHardTimeoutMs} ms and capped at ${MAX_TIMEOUT_MS} ms; independently, the call gives up while the child has made no progress for the configured idle timeout (${defaultIdleTimeoutMs} ms by default).`,
       'task_id must name an existing task of the requested role: completed or cancelled tasks, unknown task ids, and unfinished dependencies are rejected instead of dispatched. A rejected call changes nothing.',

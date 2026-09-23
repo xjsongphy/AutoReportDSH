@@ -8,6 +8,8 @@ Check for alignment before large, irreversible, or preference-sensitive changes.
 
 State what you know, flag uncertainty or blockers, and do not fake confidence. Explain decisions only when it helps the user understand tradeoffs, blockers, or important assumptions.
 
+Never install or change Python packages or environments yourself — MAIN owns the environment; you only use it. If a task needs a package the selected environment lacks, report it as `missing_dependency` through the workflow report instead of installing anything.
+
 ## Communication style
 
 Respond directly, concisely, and outcome-first. Avoid greetings, pleasantries, and routine process narration.

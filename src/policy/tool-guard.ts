@@ -228,6 +228,10 @@ function sandboxPermissionsEscalation(exec: Readonly<ToolExecution>): boolean {
 
 /**
  * Create the monotonic role guard registered through `ctx.tools.guard()`.
+ * MAIN may request sandbox escalation — the host approval flow prompts the
+ * user, and an approved call is how MAIN installs packages into the selected
+ * Python environment. Specialists keep the hard denial: they report
+ * `missing_dependency` instead of acting on the environment.
  * @param options - registry and Main/workspace identity inputs.
  * @returns synchronous fail-closed DSH guard.
  */
@@ -243,7 +247,14 @@ export function createRoleToolGuard(options: RoleGuardOptions): ToolGuard {
     if (resolved === undefined) return `AutoReport denied ${exec.name}: calling agent has no valid role binding`
 
     if (sandboxPermissionsEscalation(exec)) {
-      return 'AutoReport denies sandbox_permissions escalation beyond the role writable root'
+      if (resolved.role !== 'MAIN') {
+        return 'AutoReport denies sandbox_permissions escalation for specialist roles; report missing dependencies to MAIN instead'
+      }
+      // MAIN passes through to DSH's approval flow: the user decides on the
+      // prompt, and a denied request never executes. Write-path checks still
+      // apply to the mutation targets of a non-escalated call below.
+      if (call.kind === 'malformed') return `AutoReport denied ${exec.name}: ${call.reason}`
+      return undefined
     }
     if (call.kind === 'malformed') return `AutoReport denied ${exec.name}: ${call.reason}`
     if (call.kind === 'paths') {

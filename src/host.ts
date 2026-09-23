@@ -15,6 +15,7 @@ import { roleWritableRoot } from './policy/sandbox-roots.js'
 import { createRoleToolGuard } from './policy/tool-guard.js'
 import { createSkillGateGuard, skillLoadTracker } from './policy/skill-gate.js'
 import { installAutoReportPythonEnv } from './python-env.js'
+import { installAutoReportPythonContext } from './python-context.js'
 import AutoReportWorkflowRuntime, { type RuntimeOptions } from './runtime.js'
 import { createReportInitCommand } from './workspace/command.js'
 import { createReportResetCommand } from './workspace/reset.js'
@@ -125,6 +126,20 @@ export async function apply(ctx: Context, config: Partial<Config> = {}, options:
     ownsSession: session => runtime.ownsSession(session),
     snapshotPythonExecutable: session =>
       runtime.projectionFor(String(session.id))?.meta?.settings?.pythonExecutable,
+  })
+  // Dynamic Python-environment context on every owned session. The DSH loop
+  // snapshots it per step and appends a user-role message only when the
+  // rendered text changes, so an environment switch mid-conversation reaches
+  // the model without rewriting the cached history prefix.
+  ctx.inject(['systemPrompt'], promptCtx => {
+    promptCtx.effect(
+      () => installAutoReportPythonContext(promptCtx, {
+        ownsSession: session => runtime.ownsSession(session),
+        snapshotPythonExecutable: session =>
+          runtime.projectionFor(String(session.id))?.meta?.settings?.pythonExecutable,
+      }),
+      'autoreport.pythonContext()',
+    )
   })
   const commands = ctx.get('commands')
   if (commands !== undefined) {
