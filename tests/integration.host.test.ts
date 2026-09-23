@@ -168,11 +168,10 @@ describe('integration: assembled host (real context)', () => {
       },
       async execute(args) {
         const { execFileSync } = await import('node:child_process')
-        if (process.platform === 'win32') {
-          execFileSync(process.env.ComSpec ?? 'cmd.exe', ['/d', '/s', '/c', String(args.command)], { stdio: 'ignore' })
-        } else {
-          execFileSync('/bin/bash', ['-c', String(args.command)], { stdio: 'ignore' })
-        }
+        // Bare `bash` on every platform: the Windows runners carry Git for
+        // Windows on PATH (the repo's own confinement probes rely on it), and
+        // an absolute /bin/bash would not resolve there.
+        execFileSync('bash', ['-c', String(args.command)], { stdio: 'ignore' })
         return { command: args.command }
       },
     }))
@@ -225,11 +224,11 @@ describe('integration: assembled host (real context)', () => {
     // in that run ran 58 potentially-writing bash commands and the fold
     // produced nothing, leaving the manifest tracker empty for the whole run.
     const scriptPath = join(assembled.workspaceRoot, 'Data', 'Processed', 'from_bash.csv')
-    // Both redirections are plain shell with no nested quotes; the test never
-    // reads the content back, so echo/printf newline differences don't matter.
-    const writeCommand = process.platform === 'win32'
-      ? `echo bash wrote this> "${scriptPath}"`
-      : `printf 'bash wrote this' > ${JSON.stringify(scriptPath)}`
+    // Absolute path with forward slashes: execFileSync inherits the TEST
+    // process's cwd (the repo root, not the experiment workspace), so a
+    // relative target would miss; forward slashes keep the drive-letter path
+    // portable under Git Bash on Windows without any backslash escaping.
+    const writeCommand = `printf 'bash wrote this' > "${scriptPath.replaceAll('\\', '/')}"`
     const bash = await execute(assembled.ctx, 'bash', {
       command: writeCommand,
     }, childAgent, childSession)
