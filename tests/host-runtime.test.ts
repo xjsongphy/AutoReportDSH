@@ -168,6 +168,87 @@ describe('host workflow runtime', () => {
     }
   })
 
+  it('settles a waiting delegation and steers MAIN when a bound child turn fails', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'autoreport-runtime-'))
+    tempDirs.push(root)
+    const ctx = new Context()
+    const runtime = createRuntime(ctx, { ...CONFIG, workspaceRoot: root })
+    const session = rootSession('main-child-failure', AUTOREPORT_MAIN_PRESET, root)
+    const live = runtime.forSession(session)
+    const childId = SessionId('child-failure')
+    runtime.roleRegistry.registerReserved({
+      version: AUTOREPORT_SCHEMA_VERSION,
+      role: 'THEORY',
+      childSessionId: childId,
+      parentSessionId: session.id,
+      workflowId: 'wf-child-failure',
+      provisioning: 'reserved',
+    })
+    const steered: unknown[] = []
+    // The real driver's steer/followup appends to the session; mirror that so
+    // the parent-message observer sees the settlement notice.
+    const deliver = (message: unknown): void => {
+      steered.push(message)
+      const event = session.append('user/message', message as never, { surfaceOp: 'append' })
+      ctx.emit('session/event', session, event)
+    }
+    const mainAgent = {
+      id: session.id,
+      session,
+      status: 'idle',
+      steer: deliver,
+      followup: deliver,
+    } as unknown as Agent
+    ctx.provide('agents', { get: (id: SessionId) => id === mainAgent.id ? mainAgent : undefined } as never)
+    // Seed the task and delegation the failure must fold onto.
+    runtime.forSession(session).state.apply(
+      appendWorkflowEvent(session, 'autoreport/task', {
+        version: AUTOREPORT_SCHEMA_VERSION,
+        taskId: 'task-1',
+        subject: 'theory',
+        role: 'THEORY',
+        dependencies: [],
+        status: 'running',
+        revision: 1,
+        steps: [],
+        scopes: ['Theory'],
+        latestDelegationRevision: 1,
+      }),
+    )
+    runtime.forSession(session).state.apply(
+      appendWorkflowEvent(session, 'autoreport/delegation', {
+        version: AUTOREPORT_SCHEMA_VERSION,
+        taskId: 'task-1',
+        delegationRevision: 1,
+        role: 'THEORY',
+        childSessionId: childId,
+        phase: 'waiting_for_child',
+        dispatchedAt: Date.now(),
+      }),
+    )
+    const pending = live.waiters.wait('task-1#1', 5_000)
+
+    const child = Session.create(childId, undefined, {
+      version: SESSION_FORMAT_VERSION,
+      isSeeded: false,
+      id: childId,
+      createdAt: Date.now(),
+      parentSession: session.id,
+    })
+    ctx.emit('session/event', child, child.append('turn/end', {
+      turn: 1,
+      reason: { kind: 'error', error: { message: 'malformed prompt variable reference', code: 'UNKNOWN' } },
+    }))
+
+    await expect(pending).resolves.toMatchObject({
+      status: 'failed',
+      response: expect.stringContaining('malformed prompt variable reference'),
+    })
+    expect(runtime.forSession(session).state.currentDelegation('task-1')?.phase).toBe('failed')
+    expect(runtime.forSession(session).state.getTask('task-1')?.status).toBe('failed')
+    expect(steered.length).toBe(1)
+  })
+
   it('leaves stock sessions untouched: no membership, no initialization, no workflow events', () => {
     const root = mkdtempSync(join(tmpdir(), 'autoreport-runtime-'))
     tempDirs.push(root)

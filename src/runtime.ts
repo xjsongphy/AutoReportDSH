@@ -4,8 +4,8 @@ import { dirname, resolve } from 'node:path'
 import { Service, type Context } from '@deepseek-ai/cordis'
 import type { Agent, AgentHandle } from '@deepseek-ai/dsh-agent'
 import { PERSONA_PREFIX_SECTION } from '@deepseek-ai/dsh-system-prompt'
-import { createUserMessage } from '@deepseek-ai/dsh-llm'
-import type { ContentBlock } from '@deepseek-ai/dsh-llm'
+import { boundContextSummary, createUserMessage } from '@deepseek-ai/dsh-llm'
+import type { ContentBlock, LlmFailure } from '@deepseek-ai/dsh-llm'
 import { SessionId, type Session, type SessionEvent } from '@deepseek-ai/dsh-session'
 import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
 import type { SettingsProvider } from '@deepseek-ai/dsh-settings'
@@ -88,6 +88,27 @@ const DEFAULT_CONFIG: Config = {
 export interface ParentWorkflowRuntime {
   readonly state: WorkflowState
   readonly waiters: WaiterRegistry
+}
+
+/**
+ * The runtime-owned notice a failed child turn produces. The `subagent-settled`
+ * source is deliberate: the parent-message observer already folds that kind
+ * into a failed delegation and settles waiters, so the error reaches Main
+ * through one tested path instead of a second fold.
+ * @param childId - the failed child session id.
+ * @param summary - one-line account including the turn error message.
+ * @returns the durable user-message representation.
+ */
+function settlementNotice(childId: SessionId, summary: string): ReturnType<typeof createUserMessage> {
+  return createUserMessage({
+    content: [{ type: 'text', text: summary }],
+    source: {
+      kind: 'subagent-settled',
+      form: 'notice',
+      summary: boundContextSummary(summary),
+      senderSessionId: childId,
+    },
+  })
 }
 
 /** Construction options beyond configuration (host wiring / tests). */
@@ -186,6 +207,17 @@ export default class AutoReportWorkflowRuntime extends Service {
       // specialist children's role-scoped mutations. Fold every owned stream;
       // the caller resolution below decides who is authorized to have produced.
       this.foldArtifacts(session, event)
+      // A specialist child whose turn ended in an error never reaches its
+      // report_workflow call and never settles its continuable activation, so
+      // nothing else folds the failure: the delegation would sit in
+      // `waiting_for_child` until the idle timeout, and a wait=false Main would
+      // never hear about it at all. Deliver a runtime settlement notice onto
+      // the owning parent; the observer's existing `subagent-settled` fold
+      // turns it into a failed delegation, settles waiters, and surfaces the
+      // error to Main in both wait modes.
+      if (event.type === 'turn/end' && event.data.reason?.kind === 'error') {
+        void this.notifyChildTurnError(session, event.data.reason.error)
+      }
       // Continuable children have a parent; AutoReport workflow facts live only on Main.
       if (session.header.parentSession !== undefined) return
       // The workflow state is NOT folded from this stream: AutoReport records
@@ -862,6 +894,40 @@ export default class AutoReportWorkflowRuntime extends Service {
     const session = sessions?.get(entry.binding.parentSessionId)
     if (session === undefined) return undefined
     return { session, runtime: this.forSession(session) }
+  }
+
+  /**
+   * Deliver a settlement notice onto the owning Main session after one bound
+   * child's turn ended in an error.
+   *
+   * The notice reuses the `subagent-settled` source, so the parent-message
+   * observer's existing fold applies it exactly like a runtime settlement:
+   * the current delegation fails with the error as its reason, waiters
+   * resolve, and the task record carries `failedReason`. Delivery is the same
+   * splice the settlement path uses, so the durable log and the live projection
+   * agree whichever way the parent consumes it.
+   * @param child - the failed child session.
+   * @param failure - the structured turn failure from its `turn/end`.
+   */
+  private notifyChildTurnError(child: Session, failure: LlmFailure): void {
+    const owned = this.roleRegistry.lookup(child.id)
+    if (owned === undefined) return
+    const parentSessionId = owned.binding.parentSessionId
+    const agents = this.ctx.get('agents') as { get?: (id: SessionId) => Agent | undefined } | undefined
+    const parent = agents?.get?.(parentSessionId)
+    const summary = `AutoReport subagent ${child.id} turn failed: ${failure.message}`
+    if (parent === undefined) {
+      // Main is not live (crash recovery, closed UI): the notice must still
+      // reach the durable log so a reload folds the failure. Steering onto
+      // the parent session directly keeps the workflow log and session log
+      // consistent without a live driver.
+      const session = this.mainSessions.get(String(parentSessionId))
+      session?.append('user/message', settlementNotice(child.id, summary), { surfaceOp: 'append' })
+      return
+    }
+    const message = settlementNotice(child.id, summary)
+    if (parent.status === 'idle') parent.followup(message)
+    else parent.steer(message)
   }
 
   /** Read the current DSH-resolved user defaults for a future workflow. */
