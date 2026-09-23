@@ -168,7 +168,11 @@ describe('integration: assembled host (real context)', () => {
       },
       async execute(args) {
         const { execFileSync } = await import('node:child_process')
-        execFileSync('/bin/bash', ['-c', String(args.command)], { stdio: 'ignore' })
+        if (process.platform === 'win32') {
+          execFileSync(process.env.ComSpec ?? 'cmd.exe', ['/d', '/s', '/c', String(args.command)], { stdio: 'ignore' })
+        } else {
+          execFileSync('/bin/bash', ['-c', String(args.command)], { stdio: 'ignore' })
+        }
         return { command: args.command }
       },
     }))
@@ -221,8 +225,11 @@ describe('integration: assembled host (real context)', () => {
     // in that run ran 58 potentially-writing bash commands and the fold
     // produced nothing, leaving the manifest tracker empty for the whole run.
     const scriptPath = join(assembled.workspaceRoot, 'Data', 'Processed', 'from_bash.csv')
+    const writeCommand = process.platform === 'win32'
+      ? `node -e "require('fs').writeFileSync(process.argv[1], 'bash wrote this')" "${scriptPath}"`
+      : `printf 'bash wrote this' > ${JSON.stringify(scriptPath)}`
     const bash = await execute(assembled.ctx, 'bash', {
-      command: `printf 'bash wrote this' > ${JSON.stringify(scriptPath)}`,
+      command: writeCommand,
     }, childAgent, childSession)
     expect(bash.isError, bash.text).toBe(false)
     expect(existsSync(scriptPath)).toBe(true)
