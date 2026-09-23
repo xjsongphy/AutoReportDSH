@@ -1,6 +1,6 @@
 import { existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { dirname, join } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
 import type { CommandInvocation } from '@deepseek-ai/dsh-commands'
@@ -180,10 +180,13 @@ describe('resolveWorkflowSettings precedence', () => {
 
 describe('per-workspace language', () => {
   it('lets a workspace entry beat the legacy project setting and the user default', () => {
+    // Keys are resolved paths: build them with `resolve` so the case holds on
+    // Windows, where `resolve('/exp/a')` is a drive-qualified native path.
+    const root = resolve('/exp/a')
     const resolved = resolveWorkflowSettings({
-      user: { workspaceLanguages: { '/exp/a': 'typst', '/exp/b': 'latex' } },
+      user: { workspaceLanguages: { [root]: 'typst', [resolve('/exp/b')]: 'latex' } },
       project: { reportLanguage: 'latex' },
-      workspaceRoot: '/exp/a',
+      workspaceRoot: root,
     })
     expect(resolved.reportLanguage).toBe('typst')
   })
@@ -205,9 +208,10 @@ describe('per-workspace language', () => {
   })
 
   it('keys on the resolved path, so a trailing slash is the same workspace', () => {
+    const root = resolve('/exp/a')
     expect(resolveWorkflowSettings({
-      user: { workspaceLanguages: { '/exp/a': 'typst' } },
-      workspaceRoot: '/exp/a/',
+      user: { workspaceLanguages: { [root]: 'typst' } },
+      workspaceRoot: `${root}/`,
     }).reportLanguage).toBe('typst')
   })
 
