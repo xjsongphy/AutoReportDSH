@@ -3,6 +3,7 @@ import type { Agent } from '@deepseek-ai/dsh-agent'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import type { AutoReportRole } from '../roles.js'
 import type AutoReportWorkflowRuntime from '../runtime.js'
+import { refreshArtifactsFromDisk } from '../artifacts/refresh.js'
 import { AUTOREPORT_SCHEMA_VERSION, type FileNoteSnapshot, type RoleNoteSnapshot } from '../workflow/events.js'
 import { projectManifest } from '../workflow/manifest.js'
 import type { WorkflowProjection } from '../workflow/service.js'
@@ -159,6 +160,68 @@ function manifestValue(manifest: ReturnType<typeof projectManifest>) {
   }
 }
 
+/**
+ * Disk-truth pass before any manifest is served: stat every file tracked for
+ * the target role and commit refreshed `modified` artifacts for files edited
+ * outside the harness since their last artifact. Without this, a manifest
+ * read would report the last agent-write time and stale-detection would miss
+ * external edits entirely — the observer only sees tool events.
+ *
+ * Best-effort: a workflow without a workspace root, or a runtime that does
+ * not expose re-projection (test fakes), skips the refresh silently — the
+ * manifest then serves the last event-sourced facts as before.
+ * @param runtime - host runtime that owns the workflow log.
+ * @param session - owning MAIN session receiving the refreshed records.
+ * @param projection - current fold for that session.
+ * @param role - manifest target role.
+ * @returns the projection to serve from: re-read after refresh when possible,
+ *   otherwise the caller's original.
+ */
+function refreshTrackedFiles(
+  runtime: AutoReportWorkflowRuntime,
+  agent: Agent,
+  session: Parameters<AutoReportWorkflowRuntime['commit']>[0],
+  projection: WorkflowProjection,
+  role: AutoReportRole,
+): WorkflowProjection {
+  const workspaceRoot = projection.meta?.workspaceRoot
+  if (workspaceRoot === undefined) return projection
+  let refreshedSomething = false
+  refreshArtifactsFromDisk(projection, role, workspaceRoot, Date.now(), snapshot => {
+    runtime.commit(session, 'autoreport/artifact', snapshot)
+    refreshedSomething = true
+  })
+  return refreshedSomething ? liveProjection(runtime, session, agent) ?? projection : projection
+}
+
+/**
+ * Re-read the live projection after commits, through the same resolution the
+ * caller used: the owning session when the runtime exposes `forSession`, else
+ * the child-binding owner. Test fakes may expose neither, in which case the
+ * caller's projection stands.
+ */
+function liveProjection(
+  runtime: AutoReportWorkflowRuntime,
+  session: Parameters<AutoReportWorkflowRuntime['commit']>[0],
+  agent: Agent,
+): WorkflowProjection | undefined {
+  if (typeof runtime.forSession === 'function') {
+    try {
+      return runtime.forSession(session).state.projection()
+    } catch {
+      // The session may not be admitted in this runtime; fall through.
+    }
+  }
+  if (typeof runtime.workflowForChild === 'function') {
+    try {
+      return runtime.workflowForChild(agent.id)?.runtime.state.projection()
+    } catch {
+      // Not a bound child in this runtime; nothing left to try.
+    }
+  }
+  return undefined
+}
+
 function fileRecords(raw: unknown): ReadonlyArray<Readonly<Record<string, unknown>>> {
   if (raw === undefined) return []
   if (!Array.isArray(raw)) throw new Error('files must be an array')
@@ -195,6 +258,7 @@ export function installManifestTool(ctx: Context, hostCtx: Context, role: AutoRe
       name: 'manifest',
       description: [
         'AutoReport semantic manifest for file discovery and cross-agent handoff: the runtime maintains the tracked file list and update times, agents maintain semantic file descriptions and role-level notes.',
+        'Every read first re-stats tracked files against their recorded baselines: files edited outside the harness (user editor, re-run scripts) get refreshed update times and read as stale until re-described.',
         'Read any role manifest; update only your own — action="update" defaults to the caller\u2019s own role, and agent is only for reading another role. A path must already be tracked for your role to accept a description; unknown paths are reported back in not_found and nothing is written for them.',
         'Descriptions are the handoff contract: report_workflow(success) is rejected while any file you changed still has a stale description.',
         'Role notes are durable handoff context that survives across tasks and session rebinds. The reply reports what was applied (description_changes, notes_diff) and what was rejected (not_found, description_mismatches), plus the refreshed manifest.',
@@ -235,13 +299,18 @@ export function installManifestTool(ctx: Context, hostCtx: Context, role: AutoRe
           : role
         const current = currentWorkflow(runtime, agent, callerRole)
         const targetRole = roleFromAgentType(args.agent ?? callerRole.toLowerCase())
+        // Refresh from disk BEFORE serving the manifest, for every read AND
+        // every update's pre-image: tracked file mtimes must reflect external
+        // edits the observer cannot see, or stale detection silently passes
+        // files that changed underneath the workflow.
+        const refreshed = refreshTrackedFiles(runtime, agent, current.session, current.projection, targetRole)
         const action = args.action === undefined ? 'read' : args.action
-        if (action === 'read') return manifestValue(projectManifest(current.projection, targetRole))
+        if (action === 'read') return manifestValue(projectManifest(refreshed, targetRole))
         if (action !== 'update') throw new Error(`unknown action '${String(action)}'`)
         if (targetRole !== callerRole) throw new Error(`cannot update other agent's manifest; you can only update ${callerRole.toLowerCase()}`)
 
         const now = Date.now()
-        const before = projectManifest(current.projection, callerRole, () => now)
+        const before = projectManifest(refreshed, callerRole, () => now)
         const changes: { path: string; old: string; new: string }[] = []
         const mismatches: { path: string; expected: string; actual: string }[] = []
         const notFound: string[] = []
@@ -261,14 +330,14 @@ export function installManifestTool(ctx: Context, hostCtx: Context, role: AutoRe
             continue
           }
           if (descriptionNew === entry.description) continue
-          const previous = current.projection.fileNotes.get(path)
+          const previous = refreshed.fileNotes.get(path)
           const note: FileNoteSnapshot = {
             version: AUTOREPORT_SCHEMA_VERSION,
             path,
             description: descriptionNew,
             descriptionUpdatedAt: now,
             producedBy: callerRole,
-            ...(previous?.taskId === undefined ? delegationContext(current.projection, callerRole, path) : {
+            ...(previous?.taskId === undefined ? delegationContext(refreshed, callerRole, path) : {
               taskId: previous.taskId,
               ...(previous.delegationKey === undefined ? {} : { delegationKey: previous.delegationKey }),
             }),
@@ -277,7 +346,7 @@ export function installManifestTool(ctx: Context, hostCtx: Context, role: AutoRe
           changes.push({ path, old: entry.description, new: descriptionNew })
         }
 
-        let roleNote = current.projection.roleNotes.get(callerRole)
+        let roleNote = refreshed.roleNotes.get(callerRole)
         let roleNotesDiff: string | null = null
         const notesPatch = typeof args.notes_patch === 'string' ? args.notes_patch : undefined
         if (notesPatch !== undefined && notesPatch.trim().length > 0) {
@@ -296,10 +365,8 @@ export function installManifestTool(ctx: Context, hostCtx: Context, role: AutoRe
           }
         }
 
-        const refreshedProjection = typeof runtime.forSession === 'function'
-          ? runtime.forSession(current.session).state.projection()
-          : runtime.workflowForChild(agent.id)?.runtime.state.projection() ?? current.projection
-        const after = projectManifest(refreshedProjection, callerRole, () => now)
+        const afterProjection = liveProjection(runtime, current.session, agent) ?? refreshed
+        const after = projectManifest(afterProjection, callerRole, () => now)
         return {
           status: 'ok',
           manifest: manifestValue(after),

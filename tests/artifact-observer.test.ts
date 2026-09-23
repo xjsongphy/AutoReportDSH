@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { AUTOREPORT_SCHEMA_VERSION, type ArtifactSnapshot } from '../src/workflow/events.js'
+import { ARTIFACT_SCHEMA_VERSION } from '../src/artifacts/refresh.js'
 import {
   attachArtifactObserver,
   emptyArtifactFoldState,
@@ -125,7 +126,7 @@ describe('foldArtifact', () => {
     expect(committed).toHaveLength(1)
     expect(artifacts).toEqual(committed)
     expect(committed[0]).toMatchObject({
-      version: AUTOREPORT_SCHEMA_VERSION,
+      version: ARTIFACT_SCHEMA_VERSION,
       path: 'Data/Processed/out.csv',
       producedBy: 'DATA_ANALYSIS',
       origin: 'fs-tool',
@@ -133,6 +134,31 @@ describe('foldArtifact', () => {
       taskId: 'task-3',
       delegationKey: 'task-3#2',
     })
+  })
+
+  it('stamps a disk baseline on committed artifacts for the manifest refresh', () => {
+    const root = mkdtempSync(join(tmpdir(), 'artifact-baseline-'))
+    try {
+      mkdirSync(join(root, 'Data/Processed'), { recursive: true })
+      const target = join(root, 'Data/Processed/baselined.csv')
+      writeFileSync(target, 'baseline content')
+      const state = emptyArtifactFoldState()
+      const committed: ArtifactSnapshot[] = []
+      const deps = {
+        sessionId: 'child-1',
+        currentDelegationKey: undefined,
+        commit: (_s: string, snapshot: ArtifactSnapshot) => committed.push(snapshot),
+      }
+      const call = callEvent('write', { file_path: target })
+      foldArtifact(call, { role: 'DATA_ANALYSIS', workspaceRoot: root }, state, deps)
+      foldArtifact(resultEvent(call.seq as number, false), { role: 'DATA_ANALYSIS', workspaceRoot: root }, state, deps)
+      expect(committed).toHaveLength(1)
+      const stats = statSync(target)
+      expect(committed[0]?.sizeBytes).toBe(stats.size)
+      expect(committed[0]?.mtimeMs).toBe(stats.mtimeMs)
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
   })
 
   it('produces nothing for failed or denied results', () => {

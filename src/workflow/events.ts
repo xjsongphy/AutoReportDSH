@@ -187,6 +187,17 @@ export interface ArtifactSnapshot {
   readonly origin: 'fs-tool' | 'process'
   /** Change classification; `unknown` covers unclassifiable process effects. */
   readonly status: 'created' | 'modified' | 'unknown'
+  /**
+   * Recorded file size in bytes, when the observer could stat the file. The
+   * disk-truth manifest refresh compares this baseline against the current
+   * file; absent on snapshots written before schema 5.
+   */
+  readonly sizeBytes?: number
+  /**
+   * Recorded file mtime in epoch ms, when the observer could stat the file.
+   * Baseline partner of {@link sizeBytes}; absent on older snapshots.
+   */
+  readonly mtimeMs?: number
   /** Owning task when known. */
   readonly taskId?: string
   /** Owning attempt key `taskId#revision` when known. */

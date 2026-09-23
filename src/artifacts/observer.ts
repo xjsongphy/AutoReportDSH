@@ -11,13 +11,13 @@
  * @module
  */
 
-import { existsSync } from 'node:fs'
-import { isAbsolute, relative, resolve } from 'node:path'
+import { existsSync, statSync } from 'node:fs'
+import { isAbsolute, join, relative, resolve } from 'node:path'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
 import { rolePolicy, type AutoReportRole } from '../roles.js'
 import type { ArtifactSnapshot } from '../workflow/events.js'
-import { AUTOREPORT_SCHEMA_VERSION } from '../workflow/events.js'
 import { type DirSnapshot, diffSnapshots, shouldIgnore, snapshotDir } from './artifact-policy.js'
+import { ARTIFACT_SCHEMA_VERSION } from './refresh.js'
 import { MUTATION_TOOL_NAMES } from '../policy/tool-guard.js'
 
 /** Process tools whose workspace writes are observed via before/after snapshots. */
@@ -130,6 +130,22 @@ function filesystemArtifactStatus(prior: boolean | undefined): ArtifactSnapshot[
   if (prior === true) return 'modified'
   if (prior === false) return 'created'
   return 'unknown'
+}
+
+/**
+ * Disk baseline stamped onto a freshly committed artifact: the size and mtime
+ * the file had at commit time, so the manifest refresh can later detect
+ * out-of-band edits by comparison instead of guessing from `recordedAt`.
+ * Best-effort: an unreadable/missing file contributes no baseline fields.
+ */
+function diskBaseline(absolute: string): Pick<ArtifactSnapshot, 'sizeBytes' | 'mtimeMs'> | undefined {
+  try {
+    const stats = statSync(absolute)
+    if (!stats.isFile()) return undefined
+    return { sizeBytes: stats.size, mtimeMs: stats.mtimeMs }
+  } catch {
+    return undefined
+  }
 }
 
 /** Absolute writable root for one caller role (first policy entry). */
@@ -255,12 +271,13 @@ export function foldArtifact(
         ? undefined
         : deps.currentDelegationKey?.(deps.sessionId)
       const snapshot: ArtifactSnapshot = {
-        version: AUTOREPORT_SCHEMA_VERSION,
+        version: ARTIFACT_SCHEMA_VERSION,
         path,
         producedBy: caller.role,
         origin: 'process',
         status: change.kind,
         recordedAt: Date.now(),
+        ...diskBaseline(join(caller.workspaceRoot, path)),
         ...(attempt !== undefined ? { taskId: attempt.taskId, delegationKey: attempt.key } : {}),
       }
       deps.commit(deps.sessionId, snapshot)
@@ -277,12 +294,13 @@ export function foldArtifact(
       ? undefined
       : deps.currentDelegationKey?.(deps.sessionId)
     const snapshot: ArtifactSnapshot = {
-      version: AUTOREPORT_SCHEMA_VERSION,
+      version: ARTIFACT_SCHEMA_VERSION,
       path,
       producedBy: caller.role,
       origin: 'fs-tool',
       status: filesystemArtifactStatus(pending.priorPresence?.[index]),
       recordedAt: Date.now(),
+      ...diskBaseline(absoluteTarget(caller.workspaceRoot, raw)),
       ...(attempt !== undefined ? { taskId: attempt.taskId, delegationKey: attempt.key } : {}),
     }
     deps.commit(deps.sessionId, snapshot)
