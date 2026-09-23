@@ -80,7 +80,7 @@ const STYLESHEET = `
   display: flex;
   flex-direction: column;
   gap: 24px;
-  max-width: 640px;
+  width: 100%;
 }
 .${css.section} {
   display: flex;
@@ -130,14 +130,20 @@ const STYLESHEET = `
   display: flex;
   flex-direction: column;
   margin: 0;
-  padding: 0;
+  padding: 2px 0;
   list-style: none;
+  border: 0.5px solid var(--dsw-alias-border-l1);
+  border-radius: 12px;
 }
 .${css.listItem} {
   display: flex;
   align-items: center;
   gap: 12px;
   min-height: 40px;
+  padding: 0 12px;
+}
+.${css.listItem} + .${css.listItem} {
+  border-top: 0.5px solid var(--dsw-alias-border-l1);
 }
 .${css.listText} {
   flex: 1;
@@ -167,9 +173,12 @@ const STYLESHEET = `
 }
 .${css.listEmpty} {
   margin: 0;
+  padding: 10px 12px;
   font-size: 12px;
   line-height: 18px;
   color: var(--dsw-alias-label-tertiary);
+  border: 0.5px solid var(--dsw-alias-border-l1);
+  border-radius: 12px;
 }
 .${css.minus} {
   flex: none;

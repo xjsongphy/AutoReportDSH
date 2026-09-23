@@ -4,9 +4,9 @@ import { describe, expect, it } from 'vitest'
 import { projectsByLanguage, type ProjectSessionRow } from '../../src/client/project-lists.js'
 
 const rows: Record<string, ProjectSessionRow> = {
-  a: { cwd: '/exp/a', agentPreset: 'autoreport', blank: false, displayTitle: 'Alpha' },
-  b: { cwd: '/exp/b', agentPreset: 'autoreport', blank: false, displayTitle: 'Beta' },
-  empty: { cwd: '/exp/c', agentPreset: 'autoreport', blank: true, displayTitle: 'Gamma' },
+  a: { cwd: '/exp/a', agentPreset: 'autoreport', blank: false },
+  b: { cwd: '/exp/b', agentPreset: 'autoreport', blank: false },
+  empty: { cwd: '/exp/c', agentPreset: 'autoreport', blank: true },
   child: { cwd: '/exp/a', agentPreset: 'autoreport', blank: false, parentId: 'a' },
   stock: { cwd: '/exp/d', agentPreset: 'standard', blank: false },
   untitled: { cwd: '/exp/deep/workspace', agentPreset: 'autoreport', blank: false },
@@ -28,10 +28,10 @@ describe('projectsByLanguage', () => {
     expect(projectsByLanguage({ only: rows.empty }, undefined, 'latex').latex).toEqual([])
   })
 
-  it('files each project by its recorded language and names it from the session title', () => {
+  it('files each project by its recorded language and names it from its directory', () => {
     const lists = projectsByLanguage(rows, { '/exp/b': 'typst' }, 'latex')
-    expect(lists.latex.map(entry => entry.name)).toEqual(['Alpha', 'e', 'workspace'])
-    expect(lists.typst.map(entry => [entry.root, entry.name])).toEqual([['/exp/b', 'Beta']])
+    expect(lists.latex.map(entry => entry.name)).toEqual(['a', 'e', 'workspace'])
+    expect(lists.typst.map(entry => [entry.root, entry.name])).toEqual([['/exp/b', 'b']])
   })
 
   it('falls back to the default language when nothing is recorded', () => {

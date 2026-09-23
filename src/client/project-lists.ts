@@ -20,8 +20,6 @@ export interface ProjectSessionRow {
   readonly parentId?: string
   /** Empty-log bit: false once the session has committed a turn. */
   readonly blank?: boolean
-  /** Human-facing label the session list already computed. */
-  readonly displayTitle?: string
   /** Composing agent preset; only `autoreport` rows are projects. */
   readonly agentPreset?: string
   /**
@@ -57,10 +55,14 @@ export interface ProjectLists {
 /** Agent preset whose sessions make a workspace an AutoReport project. */
 const AUTOREPORT_PRESET = 'autoreport'
 
-/** Display name for one project: the session title, else the root's last segment. */
-function projectName(row: ProjectSessionRow, root: string): string {
-  const title = row.displayTitle?.trim()
-  if (title !== undefined && title.length > 0) return title
+/**
+ * Display name for one project: the workspace directory's own name.
+ *
+ * The workspace is the list's unit, so its row is named by its directory -
+ * not by any one conversation's title. Sessions only decide whether a
+ * workspace qualifies for the list at all.
+ */
+function projectName(root: string): string {
   const segments = root.split('/').filter(segment => segment.length > 0)
   const last = segments[segments.length - 1]
   return last === undefined ? root : last
@@ -91,7 +93,7 @@ export function projectsByLanguage(
     const root = row.cwd
     if (root === undefined || root.length === 0) continue
     if (seen.has(root)) continue
-    seen.set(root, { root, name: projectName(row, root), language: recorded?.[root] ?? fallback })
+    seen.set(root, { root, name: projectName(root), language: recorded?.[root] ?? fallback })
   }
   const entries = [...seen.values()]
   return {
