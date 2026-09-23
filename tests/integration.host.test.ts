@@ -225,8 +225,10 @@ describe('integration: assembled host (real context)', () => {
     // in that run ran 58 potentially-writing bash commands and the fold
     // produced nothing, leaving the manifest tracker empty for the whole run.
     const scriptPath = join(assembled.workspaceRoot, 'Data', 'Processed', 'from_bash.csv')
+    // Both redirections are plain shell with no nested quotes; the test never
+    // reads the content back, so echo/printf newline differences don't matter.
     const writeCommand = process.platform === 'win32'
-      ? `node -e "require('fs').writeFileSync(process.argv[1], 'bash wrote this')" "${scriptPath}"`
+      ? `echo bash wrote this> "${scriptPath}"`
       : `printf 'bash wrote this' > ${JSON.stringify(scriptPath)}`
     const bash = await execute(assembled.ctx, 'bash', {
       command: writeCommand,
