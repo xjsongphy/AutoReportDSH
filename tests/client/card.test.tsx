@@ -50,11 +50,15 @@ function renderCard(state: Partial<AutoReportCardState> = {}) {
     delegationWaitTimeoutMs: field('600000'),
     pythonExecutable: field(''),
     pythonEnvironments: [],
+    specialistModel: field(''),
+    specialistCode: 'inherit',
+    specialistChoices: [],
+    specialistStatus: 'ready',
     mineruStatus: { installed: true, tokenConfigured: true, tokenSource: 'config' },
     projects: { latex: [], typst: [] },
     ...state,
   })
-  const actions = { edit: vi.fn(), resetField: vi.fn(), save: vi.fn(), discard: vi.fn(), moveProject: vi.fn() }
+  const actions = { edit: vi.fn(), resetField: vi.fn(), save: vi.fn(), discard: vi.fn(), moveProject: vi.fn(), pickSpecialist: vi.fn() }
   const props = {
     ...actions,
     t,
@@ -133,6 +137,39 @@ describe('AutoReportCard', () => {
     fireEvent.click(screen.getByRole('menuitem', { name: en.pythonManaged }))
     expect(actions.edit).toHaveBeenCalledWith('pythonExecutable', '__managed__')
     expect(actions.save).not.toHaveBeenCalled()
+  })
+
+  it('lists the inherit entry and catalog routes for the default subagent model', () => {
+    const actions = renderCard({
+      specialistCode: 'inherit',
+      specialistChoices: [
+        { provider: 'deepseek', model: 'v41', label: 'DeepSeek · V41' },
+        { provider: 'deepseek', model: 'v31', label: 'DeepSeek · V31' },
+      ],
+    })
+
+    fireEvent.click(screen.getByRole('combobox', { name: en.specialistModel }))
+
+    expect(screen.getByRole('menuitem', { name: en.specialistInherit })).toBeTruthy()
+    expect(screen.getByRole('menuitem', { name: 'DeepSeek · V41' })).toBeTruthy()
+    expect(screen.getByRole('menuitem', { name: 'DeepSeek · V31' })).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('menuitem', { name: 'DeepSeek · V41' }))
+    expect(actions.pickSpecialist).toHaveBeenCalledWith('deepseek/v41')
+    expect(actions.save).not.toHaveBeenCalled()
+  })
+
+  it('stages inherit from the leading entry', () => {
+    const actions = renderCard({ specialistCode: 'deepseek/v41', specialistChoices: [{ provider: 'deepseek', model: 'v41', label: 'DeepSeek · V41' }] })
+
+    fireEvent.click(screen.getByRole('combobox', { name: en.specialistModel }))
+    fireEvent.click(screen.getByRole('menuitem', { name: en.specialistInherit }))
+    expect(actions.pickSpecialist).toHaveBeenCalledWith('inherit')
+  })
+
+  it('shows the loading state while the catalog is fetched', () => {
+    renderCard({ specialistStatus: 'loading' })
+    expect(screen.getByRole('combobox', { name: en.specialistModel }).textContent).toContain(en.specialistLoading)
   })
 
   it('contributes no card chrome and no divider between fields', () => {

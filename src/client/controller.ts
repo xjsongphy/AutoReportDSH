@@ -25,6 +25,16 @@ export interface PythonEnvironmentOption {
   version: string
 }
 
+/** One model route the default-subagent picker can offer, from the Host catalog. */
+export interface SpecialistChoice {
+  provider: string
+  model: string
+  /** Display label: provider name joined with the model name. */
+  label: string
+  /** The route's default reasoning effort, when the catalog advertises one. */
+  defaultEffort?: string
+}
+
 /** The AutoReport fields this card edits. */
 export interface AutoReportCardSettings {
   /** Default report source language. */
@@ -37,6 +47,8 @@ export interface AutoReportCardSettings {
   delegationWaitTimeoutMs?: number
   /** Optional absolute Python interpreter for subagent bash. */
   pythonExecutable?: string
+  /** Default subagent model route; absent or empty inherits the Main route. */
+  specialistModel?: { provider: string; model: string; reasoningEffort?: string }
   /** Host-detected interpreters; composition-only, never written by the card. */
   pythonEnvironments?: readonly PythonEnvironmentOption[]
   /** Host-detected MinerU CLI/auth state; composition-only, never written by the card. */
@@ -55,6 +67,14 @@ export interface AutoReportCardState extends CardShell {
   pythonExecutable: CardFieldState
   /** Detected interpreters from the Host composition layer. */
   pythonEnvironments: readonly PythonEnvironmentOption[]
+  /** What a save would leave for the default subagent model. */
+  specialistModel: CardFieldState
+  /** The picker value the stored or staged route encodes to. */
+  specialistCode: string
+  /** Catalog-backed options under the leading inherit entry. */
+  specialistChoices: readonly SpecialistChoice[]
+  /** Catalog request state for the options above. */
+  specialistStatus: 'idle' | 'loading' | 'ready' | 'error'
   /** Detected MinerU CLI/auth state from the Host composition layer. */
   mineruStatus: MineruStatus
   /** Projects an AutoReport session has conversed in, split by report language. */
@@ -67,6 +87,8 @@ export interface AutoReportCardFace extends CardActions {
     /** Card snapshot bound by the renderer as useAutoreportCard. */
     autoreportCard: SnapshotStore<AutoReportCardState>
   }
+  /** Stage the inherit entry or one catalog route for the default subagent model. */
+  pickSpecialist: (code: string) => void
   /**
    * Move one project to the other report language. Recorded immediately rather
    * than staged: it acts on the workspace, and the host switches the
@@ -82,6 +104,9 @@ export interface ProjectSessionSource {
 }
 
 const LANGUAGE_VALUES = ['latex', 'typst'] as const
+
+/** Picker value of the leading inherit entry. */
+export const SPECIALIST_INHERIT = 'inherit'
 
 /** Must match Host `MANAGED_PYTHON_SENTINEL` in python-detect.ts. */
 const MANAGED_PYTHON = '__managed__'
@@ -108,6 +133,7 @@ export class AutoReportCardController {
   constructor(
     private readonly scope: SettingsScope<AutoReportCardSettings>,
     private readonly sessions: ProjectSessionSource,
+    private readonly loadSpecialistChoices: () => Promise<readonly SpecialistChoice[]> = async () => [],
   ) {
     this.scope = scope
     this.form = new CardForm(scope, [
@@ -115,11 +141,34 @@ export class AutoReportCardController {
       numberField('delegationIdleTimeoutMs'),
       numberField('delegationWaitTimeoutMs'),
       textField('pythonExecutable'),
+      textField('specialistModel.provider'),
+      textField('specialistModel.model'),
+      textField('specialistModel.reasoningEffort'),
     ])
     this.store = this.form.bind(() => this.projection())
     // A new project appears the moment its first turn commits, without any
     // re-read: the session store already carries the row, and this republishes.
     this.sessions.subscribe(() => { this.store.set(this.projection()) })
+    void this.loadChoices()
+  }
+
+  /** Catalog-backed picker options and their request state. */
+  private choices: readonly SpecialistChoice[] = []
+  private choicesStatus: AutoReportCardState['specialistStatus'] = 'idle'
+
+  /** Fetch the catalog-backed picker options once per card mount. */
+  private async loadChoices(): Promise<void> {
+    this.choicesStatus = 'loading'
+    this.store.set(this.projection())
+    try {
+      this.choices = await this.loadSpecialistChoices()
+      this.choicesStatus = 'ready'
+    } catch (error) {
+      this.choices = []
+      this.choicesStatus = 'error'
+      console.warn('[dsh-autoreport] model catalog load failed', error)
+    }
+    this.store.set(this.projection())
   }
 
   private environments(): readonly PythonEnvironmentOption[] {
@@ -167,6 +216,10 @@ export class AutoReportCardController {
       pythonExecutable: { ...python, invalid: pythonInvalid },
       pythonEnvironments: environments,
       mineruStatus,
+      specialistModel: this.form.field('specialistModel.provider'),
+      specialistCode: this.specialistCode(),
+      specialistChoices: this.choices,
+      specialistStatus: this.choicesStatus,
       projects: this.projects(),
     }
   }
@@ -197,6 +250,40 @@ export class AutoReportCardController {
   }
 
   /**
+   * Encode the stored or staged route as the picker's value: the leading
+   * inherit entry, or one provider/model route from the catalog options.
+   */
+  private specialistCode(): string {
+    const provider = this.form.field('specialistModel.provider').text
+    const model = this.form.field('specialistModel.model').text
+    if (provider.length === 0 || model.length === 0) return SPECIALIST_INHERIT
+    return provider + '/' + model
+  }
+
+  /**
+   * Stage the picker's pick. Inherit clears the whole parent object; a route
+   * stages its provider and model (plus the catalog's default effort) as one
+   * parent write on save.
+   */
+  private pickSpecialist(code: string): void {
+    if (code === SPECIALIST_INHERIT) {
+      // Stage the empty route: planNested collapses an all-empty parent to
+      // unset on save, which the Host reads as "follow the Main model".
+      const actions = this.form.actions()
+      actions.edit('specialistModel.provider', '')
+      actions.edit('specialistModel.model', '')
+      actions.edit('specialistModel.reasoningEffort', '')
+      return
+    }
+    const choice = this.choices.find(item => item.provider + '/' + item.model === code)
+    if (choice === undefined) return
+    const actions = this.form.actions()
+    actions.edit('specialistModel.provider', choice.provider)
+    actions.edit('specialistModel.model', choice.model)
+    actions.edit('specialistModel.reasoningEffort', choice.defaultEffort ?? '')
+  }
+
+  /**
    * Build the face the card's slot registration injects.
    * @returns the card's snapshot, its form actions, and the project control.
    */
@@ -204,6 +291,7 @@ export class AutoReportCardController {
     return {
       hooks: { autoreportCard: this.store },
       ...this.form.actions(),
+      pickSpecialist: code => { this.pickSpecialist(code) },
       moveProject: root => { this.moveProject(root) },
     }
   }

@@ -42,9 +42,22 @@ async function bench() {
     base: { defaultReportLanguage: 'latex', delegationIdleTimeoutMs: 60_000, delegationWaitTimeoutMs: 600_000 },
     user: {},
   })
-  ctx.provide('connection', { isLoopback: true, api: {} })
-  ctx.provide('remote', { $on: () => () => {} })
+  ctx.provide('remote', {
+    $on: () => () => {},
+  })
+  ctx.provide('remote.session', {
+    modelCatalog: async () => ({
+      ok: true as const,
+      value: {
+        default: { provider: 'deepseek', model: 'v41' },
+        routableProviders: ['deepseek'],
+        groups: [{ id: 'deepseek', name: 'DeepSeek', models: [{ id: 'v41', name: 'V41' }] }],
+        failures: [],
+      },
+    }),
+  })
   ctx.provide('settingsScope', { bind: () => host.scope })
+  ctx.provide('modelDirectories', { directoryFor: () => { throw new Error('not exercised in this bench') } })
   // The card lists projects from the session store, so the card registration
   // itself waits for this service.
   ctx.provide('sessions', {
@@ -67,7 +80,7 @@ function declareCards(slots: SlotRegistry): () => void {
 
 describe('autoreport settings card apply', () => {
   it('declares the services it uses', () => {
-    expect(inject).toEqual(['slots', 'locale', 'connection', 'remote', 'settingsScope'])
+    expect(inject).toEqual(['slots', 'locale', 'remote', 'remote.session', 'settingsScope', 'sessions', 'modelDirectories'])
   })
 
   it('registers one configuration page keyed on the bundle', async () => {

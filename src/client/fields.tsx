@@ -6,7 +6,8 @@
 
 import type { ReactNode } from 'react'
 import { useState } from 'react'
-import { SelectMenu } from './SelectMenu.js'
+import { SelectMenu, type SelectMenuOption } from './SelectMenu.js'
+import { SPECIALIST_INHERIT } from './controller.js'
 import { css } from './styles.js'
 
 /** Read-only Host-composed MinerU readiness facts. */
@@ -167,6 +168,54 @@ export function SelectField(props: FieldProps & {
         disabled={props.disabled}
         invalid={props.invalid}
         onChange={props.onEdit}
+      />
+    </FieldChrome>
+  )
+}
+
+/** One catalog route the specialist picker can offer. */
+export interface SpecialistChoiceOption {
+  provider: string
+  model: string
+  /** Display label: provider name joined with the model name. */
+  label: string
+}
+
+/**
+ * The default-subagent-model picker. Options are the leading inherit entry
+ * plus the Host catalog routes; a pick stages the whole route, and Save
+ * writes it with the other staged edits.
+ */
+export function SpecialistModelField(props: Omit<FieldProps, "onEdit"> & {
+  /** True while the catalog request is in flight. */
+  loading?: boolean
+  /** Copy shown on the trigger while the catalog is loading. */
+  loadingLabel?: string
+  /** Copy of the leading inherit entry. */
+  inheritLabel: string
+  /** Catalog-backed routes, in display order. */
+  choices: readonly SpecialistChoiceOption[]
+  /** Stage a pick; the inherit entry clears the whole route. */
+  onPick: (code: string) => void
+}) {
+  const options: SelectMenuOption[] = [
+    { value: SPECIALIST_INHERIT, label: props.inheritLabel },
+    ...props.choices.map(choice => ({
+      value: choice.provider + "/" + choice.model,
+      label: choice.label,
+    })),
+  ]
+  return (
+    <FieldChrome {...props} split onEdit={props.onPick}>
+      <SelectMenu
+        id={props.id}
+        value={props.text}
+        options={props.loading === true && props.choices.length === 0
+          ? [{ value: SPECIALIST_INHERIT, label: props.loadingLabel ?? "" }]
+          : options}
+        disabled={props.disabled || (props.loading === true && props.choices.length === 0)}
+        invalid={props.invalid}
+        onChange={props.onPick}
       />
     </FieldChrome>
   )

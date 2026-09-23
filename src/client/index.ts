@@ -11,14 +11,14 @@
  * is a shell platform module rather than a plugin bundle.
  */
 
-import type { ClientContext, ISessions, SessionId } from '@deepseek-ai/dsh-client-runtime/client'
+import type { ClientContext, ISessions, ModelProviderGroup, SessionId } from '@deepseek-ai/dsh-client-runtime/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings-plugins/client'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {} from '@deepseek-ai/dsh-client-ui-tool/client'
 import { AutoReportCard } from './AutoReportCard.js'
-import { AUTOREPORT_SETTINGS_NAMESPACE, AutoReportCardController } from './controller.js'
+import { AUTOREPORT_SETTINGS_NAMESPACE, AutoReportCardController, type SpecialistChoice } from './controller.js'
 import { en, toolRowEn, toolRowZh, zh, type AutoReportLocaleKey, type ToolRowLocaleKey } from './locales.js'
 import { SubagentModelSelect, type SubagentModelChoice, type SubagentModelInjected } from './SubagentModelSelect.js'
 import { installCardStyles } from './styles.js'
@@ -52,7 +52,7 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 }
 
 /** Required services (cordis fiber inject). */
-export const inject = ['slots', 'locale', 'connection', 'remote', 'settingsScope']
+export const inject = ['slots', 'locale', 'remote', 'remote.session', 'settingsScope', 'sessions', 'modelDirectories']
 
 /** Bundle id the Plugins page keys a bundle's own configuration by. */
 export const BUNDLE_ID = 'dsh-autoreport'
@@ -67,26 +67,30 @@ export const BUNDLE_ID = 'dsh-autoreport'
  * @param ctx - the browser plugin context.
  */
 export function apply(ctx: ClientContext): void {
-  installCardStyles()
-  ctx.effect(() => ctx.locale.register(SETTINGS_NS, { zh, en }), 'AutoReportDSH: settings dictionaries')
-  ctx.effect(() => ctx.locale.register(TOOL_NS, { zh: toolRowZh, en: toolRowEn }), 'AutoReportDSH: tool-row dictionaries')
-  // The card lists projects from the session store, so both it and the
-  // conversation-window model picker wait for the `sessions` service.
-  ctx.inject(['sessions'], (scope: ClientContext) => {
-    const sessions = scope.get('sessions') as ISessions
+  try {
+    installCardStyles()
+    ctx.effect(() => ctx.locale.register(SETTINGS_NS, { zh, en }), 'AutoReportDSH: settings dictionaries')
+    ctx.effect(() => ctx.locale.register(TOOL_NS, { zh: toolRowZh, en: toolRowEn }), 'AutoReportDSH: tool-row dictionaries')
+    // 'sessions' is declared on the plugin's own inject: the dynamic-package
+    // guard only forwards lifecycle verbs and declared services, so a dynamic
+    // bundle reads the service directly instead of calling ctx.inject.
     const card = new AutoReportCardController(
       ctx.settingsScope.bind({ namespace: AUTOREPORT_SETTINGS_NAMESPACE }),
-      sessions.list,
+      ctx.sessions.list,
+      () => loadSpecialistChoices(ctx),
     )
-    scope.slots.inject('plugins.bundle.config', () => scope.slots.register({
+    ctx.slots.inject('plugins.bundle.config', () => ctx.slots.register({
       name: 'plugins.bundle.config',
       key: BUNDLE_ID,
       locale: SETTINGS_NS,
       inject: () => card.inject(),
     }, AutoReportCard))
-    installSubagentModelSeat(scope)
-  })
-  installToolRows(ctx)
+    installSubagentModelSeat(ctx)
+    installToolRows(ctx)
+  } catch (error) {
+    console.error('[dsh-autoreport] apply failed', error)
+    throw error
+  }
 }
 
 /**
@@ -108,9 +112,11 @@ function installToolRows(ctx: ClientContext): void {
 }
 
 function installSubagentModelSeat(ctx: ClientContext): void {
-  const sessions = ctx.get('sessions') as ISessions
-  const connection = ctx.get('connection') as { api: { sessions: SessionModelsApi } }
-  const modelsApi = connection.api.sessions
+  const sessions = ctx.sessions
+  // The shared modelDirectories service (provided by ui-model-selection)
+  // owns per-session catalogs and the selectModel write; reading it through
+  // the declared-inject facade keeps the dynamic guard happy.
+  const models = ctx.modelDirectories
   ctx.slots.inject('conversation.input.right', () => ctx.slots.register({
     name: 'conversation.input.right',
     id: 'autoreport-subagent-model',
@@ -118,10 +124,15 @@ function installSubagentModelSeat(ctx: ClientContext): void {
     locale: SETTINGS_NS,
     inject: (sessionId: SessionId): SubagentModelInjected => {
       const available = isAutoReportSubagent(sessions, sessionId)
+      const directory = models.directoryFor(sessionId)
       return {
         available,
-        load: () => available ? loadDirectory(modelsApi, sessionId) : Promise.resolve(undefined),
-        select: (selection) => available ? selectModel(modelsApi, sessionId, selection) : Promise.resolve(false),
+        load: () => available
+          ? directory.load().then(state => directoryOf(state))
+          : Promise.resolve(undefined),
+        select: (selection) => available
+          ? directory.select(selection).then(result => result.ok)
+          : Promise.resolve(false),
       }
     },
   }, SubagentModelSelect))
@@ -134,41 +145,12 @@ function isAutoReportSubagent(sessions: ISessions, sessionId: SessionId): boolea
   return parent?.agentPreset === AUTOREPORT_PRESET
 }
 
-interface SessionModelsApi {
-  models(payload: { sessionId: SessionId }): Promise<{
-    result: {
-      ok: boolean
-      value?: {
-        current: { provider: string; model: string; reasoningEffort?: string }
-        groups: readonly {
-          id: string
-          name: string
-          models: readonly {
-            id: string
-            name: string
-            reasoning?: { defaultEffort?: string; efforts: readonly { id: string; name: string }[] }
-          }[]
-        }[]
-      }
-      error?: { message: string }
-    }
-  }>
-  selectModel(payload: {
-    sessionId: SessionId
-    provider: string
-    model: string
-    reasoningEffort?: string
-  }): Promise<{ result: { ok: boolean; value?: { selected: { provider: string; model: string; reasoningEffort?: string } } } }>
-}
-
-async function loadDirectory(
-  api: SessionModelsApi,
-  sessionId: SessionId,
-): Promise<{ current: { provider: string; model: string; reasoningEffort?: string } | null; choices: readonly SubagentModelChoice[] } | undefined> {
-  const { result } = await api.models({ sessionId })
-  if (!result.ok || result.value === undefined) return undefined
+function directoryOf(state: {
+  current: { provider: string; model: string; reasoningEffort?: string } | null
+  groups: readonly ModelProviderGroup[]
+}): { current: { provider: string; model: string; reasoningEffort?: string } | null; choices: readonly SubagentModelChoice[] } {
   const choices: SubagentModelChoice[] = []
-  for (const group of result.value.groups) {
+  for (const group of state.groups) {
     for (const model of group.models) {
       choices.push({
         provider: group.id,
@@ -179,19 +161,21 @@ async function loadDirectory(
       })
     }
   }
-  return { current: result.value.current, choices }
+  return { current: state.current, choices }
 }
 
-async function selectModel(
-  api: SessionModelsApi,
-  sessionId: SessionId,
-  selection: { provider: string; model: string; reasoningEffort?: string },
-): Promise<boolean> {
-  const { result } = await api.selectModel({
-    sessionId,
-    provider: selection.provider,
-    model: selection.model,
-    ...selection.reasoningEffort === undefined ? {} : { reasoningEffort: selection.reasoningEffort },
-  })
-  return result.ok
+/**
+ * Load the deployment-wide model catalog for the settings card's default
+ * subagent picker. The settings page has no Session, so this reads the
+ * Host's global catalog RPC rather than a per-session model directory.
+ */
+async function loadSpecialistChoices(ctx: ClientContext): Promise<readonly SpecialistChoice[]> {
+  const response = await ctx.remote.session.modelCatalog()
+  if (!response.ok) throw new Error(response.error.message.length > 0 ? response.error.message : response.error.code)
+  return response.value.groups.flatMap(group => group.models.map(model => ({
+    provider: group.id,
+    model: model.id,
+    label: group.name + ' · ' + model.name,
+    ...(model.reasoning?.defaultEffort === undefined ? {} : { defaultEffort: model.reasoning.defaultEffort }),
+  })))
 }

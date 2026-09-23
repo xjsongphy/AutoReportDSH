@@ -9,8 +9,8 @@
  */
 
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
-import type { AutoReportCardFace } from './controller.js'
-import { MineruStatusField, SelectField, ValueField, PythonField } from './fields.js'
+import { SPECIALIST_INHERIT, type AutoReportCardFace } from './controller.js'
+import { MineruStatusField, SelectField, SpecialistModelField, ValueField, PythonField } from './fields.js'
 import { ProjectLists } from './ProjectLists.js'
 import { css } from './styles.js'
 // Type-only: the Plugins page's SlotMap merge (the 'plugins.bundle.config' entry).
@@ -91,6 +91,24 @@ export function AutoReportCard(props: AutoReportCardProps) {
             onReset={() => { props.resetField('delegationWaitTimeoutMs') }}
           />
         </div>
+        <SpecialistModelField
+          id="plugin-config-autoreport-specialist"
+          label={t('specialistModel')}
+          hint={state.specialistStatus === 'error' ? t('specialistFailed') : t('specialistHint')}
+          text={state.specialistCode}
+          overridden={state.specialistModel.overridden}
+          invalid={state.specialistModel.invalid}
+          overriddenLabel={t('overridden')}
+          resetLabel={t('reset')}
+          invalidLabel={t('invalidChoice')}
+          disabled={!state.writable}
+          loading={state.specialistStatus === 'loading'}
+          loadingLabel={t('specialistLoading')}
+          inheritLabel={t('specialistInherit')}
+          choices={state.specialistChoices}
+          onPick={props.pickSpecialist}
+          onReset={() => { props.pickSpecialist(SPECIALIST_INHERIT) }}
+        />
       </section>
 
       <section className={css.section}>

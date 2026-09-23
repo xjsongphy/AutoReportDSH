@@ -12,6 +12,7 @@ export type AutoReportLocaleKey =
   | 'idleTimeoutMs' | 'idleTimeoutMsHint' | 'timeoutMs' | 'timeoutMsHint'
   | 'python' | 'pythonHint'
   | 'pythonPick' | 'pythonManaged' | 'pythonCustom'
+  | 'specialistModel' | 'specialistHint' | 'specialistInherit' | 'specialistLoading' | 'specialistFailed'
   | 'modelPicker' | 'modelPickerLoading' | 'modelPickerFailed' | 'reasoningEffort'
   | 'languageLatex' | 'languageTypst'
   | 'mineru' | 'mineruHint' | 'mineruCommand' | 'mineruInstalled' | 'mineruNotInstalled'
@@ -50,6 +51,11 @@ export const en: Record<AutoReportLocaleKey, string> = {
   pythonPick: 'Select an environment',
   pythonManaged: 'AutoReport managed venv',
   pythonCustom: 'Custom path…',
+  specialistModel: 'Default subagent model',
+  specialistHint: 'New AutoReport subagents start on this model. Same as Main follows the conversation model; you can still switch a running subagent from its conversation window.',
+  specialistInherit: 'Same as Main',
+  specialistLoading: 'Loading models…',
+  specialistFailed: 'Could not load models; only Same as Main is available.',
   modelPicker: 'Model',
   modelPickerLoading: 'Loading models…',
   modelPickerFailed: 'Could not load models for this subagent.',
@@ -57,7 +63,7 @@ export const en: Record<AutoReportLocaleKey, string> = {
   languageLatex: 'LaTeX',
   languageTypst: 'Typst',
   mineru: 'MinerU',
-  mineruHint: 'Used by MAIN for precise PDF extraction with mineru-open-api. Status is checked when DSH starts.',
+  mineruHint: 'Used by Main for precise PDF extraction with mineru-open-api. Status is checked when DSH starts.',
   mineruCommand: 'CLI',
   mineruInstalled: 'Installed',
   mineruNotInstalled: 'Not installed',
@@ -92,14 +98,19 @@ export const zh: Record<AutoReportLocaleKey, string> = {
   projectsEmpty: '这个语言下还没有项目。',
   moveToOther: '切换到',
   idleTimeoutMs: '委派空闲超时（毫秒）',
-  idleTimeoutMsHint: 'Subagent 无可观测活动持续达到此时长后，MAIN 将结束同步等待；模型生成与工具执行期间不计入。',
+  idleTimeoutMsHint: 'Subagent 无可观测活动持续达到此时长后，Main 将结束同步等待；模型生成与工具执行期间不计入。',
   timeoutMs: '委派绝对等待上限（毫秒）',
-  timeoutMsHint: 'MAIN 使用 wait: true 发起委派时的同步等待上限；达到上限后结束等待，不受 Subagent 活动状态影响。',
+  timeoutMsHint: 'Main 使用 wait: true 发起委派时的同步等待上限；达到上限后结束等待，不受 Subagent 活动状态影响。',
   python: 'Python 环境',
   pythonHint: '托管环境会创建所需的 Python 环境；本机环境使用已检测到的解释器；也可指定解释器绝对路径。',
   pythonPick: '请选择环境',
   pythonManaged: 'AutoReport 托管环境',
   pythonCustom: '自定义路径…',
+  specialistModel: '默认 Subagent 模型',
+  specialistHint: '新建的 AutoReport subagent 将使用这个模型。“与 Main 一致”表示跟随会话模型；运行中的 subagent 仍可在其会话窗口里切换。',
+  specialistInherit: '与 Main 一致',
+  specialistLoading: '正在加载模型…',
+  specialistFailed: '无法加载模型列表，暂只能与 Main 一致。',
   modelPicker: '模型',
   modelPickerLoading: '正在加载模型…',
   modelPickerFailed: '无法加载这个 subagent 的模型列表。',
@@ -107,7 +118,7 @@ export const zh: Record<AutoReportLocaleKey, string> = {
   languageLatex: 'LaTeX',
   languageTypst: 'Typst',
   mineru: 'MinerU',
-  mineruHint: 'MAIN 使用 mineru-open-api 做精确 PDF 提取；状态在 DSH 启动时检测。',
+  mineruHint: 'Main 使用 mineru-open-api 做精确 PDF 提取；状态在 DSH 启动时检测。',
   mineruCommand: '命令',
   mineruInstalled: '已安装',
   mineruNotInstalled: '未安装',
