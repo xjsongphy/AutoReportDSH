@@ -17,7 +17,7 @@ import { installWorkflowTaskTool } from './tools/workflow-task.js'
 import type {} from './runtime.js'
 
 export const name = 'autoreport-preset'
-export const inject = ['tools', 'skills', 'subagents', 'autoreportWorkflow', 'systemPrompt'] as const
+export const inject = ['tools', 'skills', 'subagents', 'autoreportWorkflow', 'systemPrompt', 'llm'] as const
 
 /**
  * Register AutoReport's current MAIN tools.
@@ -47,5 +47,6 @@ export function apply(ctx: Context): void {
       ctx.autoreportWorkflow.deliverChild(parent, childSessionId, content, source, signal),
     workflow: ctx.autoreportWorkflow,
     config: ctx.autoreportWorkflow.config,
+    llm: ctx.llm,
   }))
 }

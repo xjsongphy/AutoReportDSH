@@ -59,6 +59,13 @@ export interface SendToAgentDependencies {
   }
   readonly workflow: SendToAgentWorkflow
   readonly config: Config
+  /**
+   * Host LLM adapter registry. When present, an explicit frozen specialist
+   * route whose provider no adapter serves fails the dispatch BEFORE any
+   * durable state is committed, instead of a child dying on its first turn
+   * with NO_ADAPTER while a wait=true caller sits out the idle timeout.
+   */
+  readonly llm?: { readonly listProviders: () => ReadonlyArray<{ readonly id: string }> }
   readonly now?: () => number
   readonly childId?: () => SessionId
   readonly persona?: (role: SpecialistRole) => string
@@ -224,6 +231,26 @@ function childAgentOptions(
   return fallbackRoute === undefined ? undefined : { provider: fallbackRoute.provider, model: fallbackRoute.model }
 }
 
+/**
+ * Refuse dispatches whose frozen specialist route names a provider no
+ * registered LLM adapter serves. `inheritMain` routes pass untouched: the
+ * Main request-time route is resolved by DSH at child-call time and has no
+ * stable provider id to check here.
+ */
+function ensureRouteRegistered(
+  llm: SendToAgentDependencies['llm'],
+  route: { provider: string; model: string } | undefined,
+): void {
+  if (llm === undefined || route === undefined) return
+  const registered = llm.listProviders().some(info => info.id === route.provider)
+  if (registered) return
+  throw new Error(
+    `specialist provider "${route.provider}" is not registered in this deployment; `
+    + `the ${route.model} subagent could not run. Install the matching provider plugin `
+    + '(e.g. dsh-codex-subscription) or clear the specialistModel setting in project.json.',
+  )
+}
+
 export function createSendToAgentTool(deps: SendToAgentDependencies): ToolDefinition {
   const now = deps.now ?? Date.now
   const mintChild = deps.childId ?? (() => SessionId(randomUUID()))
@@ -271,6 +298,15 @@ export function createSendToAgentTool(deps: SendToAgentDependencies): ToolDefini
       const context = args.context === undefined ? undefined : text(args.context, 'context', MAX_CONTEXT)
       const parentSession: Session = parent.session
       const live = deps.workflow.forSession(parentSession)
+
+      // Fail before creating or mutating any durable workflow state when the
+      // frozen route cannot run in this deployment. The same route resolves
+      // below for child creation; checking it here keeps a misrouted dispatch
+      // from reserving bindings and tasks it can never use.
+      ensureRouteRegistered(
+        deps.llm,
+        childAgentOptions(live.state.projection().meta?.settings, deps.config.specialistModel),
+      )
 
       // Provisioning is a runtime concern, not a Main tool concern. This
       // await only closes the startup race for a resident role; it does not
@@ -500,7 +536,7 @@ export function createSendToAgentTool(deps: SendToAgentDependencies): ToolDefini
 }
 
 export const name = 'autoreport-send-to-agent'
-export const inject = ['tools', 'subagents', 'autoreportWorkflow']
+export const inject = ['tools', 'subagents', 'autoreportWorkflow', 'llm']
 
 /**
  * Register the `send_to_agent` usage policy.
@@ -535,5 +571,6 @@ export function apply(ctx: Context): void {
       ctx.autoreportWorkflow.deliverChild(parent, childSessionId, content, source, signal),
     workflow: ctx.autoreportWorkflow,
     config: ctx.autoreportWorkflow.config,
+    llm: ctx.llm,
   }))
 }

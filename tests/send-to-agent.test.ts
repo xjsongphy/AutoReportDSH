@@ -536,4 +536,76 @@ describe('send_to_agent', () => {
     await tool.execute({ role: 'THEORY', task_id: 'task-1', prompt: 'x', wait: false } as never, exec as never)
     expect(startContinuable.mock.calls[0]?.[0]?.request?.agentOptions).toBeUndefined()
   })
+
+  it('fails dispatch fast when the frozen specialist provider has no registered adapter', async () => {
+    const session = sessionIn(WORKSPACE, 'main')
+    const state = workflowState(session)
+    const waiters = new WaiterRegistry()
+    const roleRegistry = new RoleRegistry()
+    const workflow: SendToAgentWorkflow = {
+      roleRegistry,
+      forSession: () => ({ state, waiters }),
+      commit(target, type, data) {
+        const event = appendWorkflowEvent(target, type, data)
+        state.apply(event)
+        return event
+      },
+    }
+    workflow.commit(session, 'autoreport/task', task())
+    workflow.commit(session, 'autoreport/workflow', workflowMeta(resolveWorkflowSettings({
+      override: { specialistModel: { provider: 'openai-codex', model: 'gpt-5.6-luna' } },
+    })))
+    const startContinuable = vi.fn(async () => ({ childId: SessionId('unused'), messageId: 'unused' }))
+    const tool = createSendToAgentTool({
+      subagents: { startContinuable, followup: vi.fn(async () => 'msg-f') },
+      deliverChild: vi.fn(async () => 'msg-f'),
+      workflow,
+      config: CONFIG,
+      llm: { listProviders: () => [{ id: 'deepseek-official' }] },
+      childId: () => SessionId('child-codex'),
+      persona: () => 'p',
+    })
+    const exec = { agent: { id: session.id, session }, signal: new AbortController().signal }
+    await expect(tool.execute({ role: 'THEORY', task_id: 'task-1', prompt: 'x', wait: false } as never, exec as never))
+      .rejects.toThrow(/openai-codex.*not registered/)
+    // Nothing was provisioned and nothing was dispatched: no child spawn, no
+    // role binding, no delegation record — the durable board stays untouched.
+    expect(startContinuable).not.toHaveBeenCalled()
+    expect(state.bindingForRole('THEORY')).toBeUndefined()
+    expect(state.currentDelegation('task-1')).toBeUndefined()
+  })
+
+  it('dispatches normally when the frozen specialist provider is registered', async () => {
+    const session = sessionIn(WORKSPACE, 'main')
+    const state = workflowState(session)
+    const waiters = new WaiterRegistry()
+    const roleRegistry = new RoleRegistry()
+    const workflow: SendToAgentWorkflow = {
+      roleRegistry,
+      forSession: () => ({ state, waiters }),
+      commit(target, type, data) {
+        const event = appendWorkflowEvent(target, type, data)
+        state.apply(event)
+        return event
+      },
+    }
+    workflow.commit(session, 'autoreport/task', task())
+    workflow.commit(session, 'autoreport/workflow', workflowMeta(resolveWorkflowSettings({
+      override: { specialistModel: { provider: 'openai-codex', model: 'gpt-5.6-luna' } },
+    })))
+    const startContinuable = vi.fn(async (spec: { childId?: SessionId }) => ({ childId: spec.childId, messageId: 'msg-ok' }))
+    const tool = createSendToAgentTool({
+      subagents: { startContinuable, followup: vi.fn(async () => 'msg-f') },
+      deliverChild: vi.fn(async () => 'msg-f'),
+      workflow,
+      config: CONFIG,
+      llm: { listProviders: () => [{ id: 'deepseek-official' }, { id: 'openai-codex' }] },
+      childId: () => SessionId('child-ok'),
+      persona: () => 'p',
+    })
+    const exec = { agent: { id: session.id, session }, signal: new AbortController().signal }
+    await expect(tool.execute({ role: 'THEORY', task_id: 'task-1', prompt: 'x', wait: false } as never, exec as never))
+      .resolves.toMatchObject({ status: 'delegated', task_id: 'task-1' })
+    expect(startContinuable).toHaveBeenCalledTimes(1)
+  })
 })

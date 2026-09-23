@@ -63,6 +63,9 @@ importers:
         specifier: link:../deepseek-harness/vendor/schemastery
         version: link:../deepseek-harness/vendor/schemastery
     devDependencies:
+      '@deepseek-ai/dsh-agent-loop':
+        specifier: link:../deepseek-harness/packages/core/agent-loop
+        version: link:../deepseek-harness/packages/core/agent-loop
       '@deepseek-ai/dsh-api-remotes':
         specifier: link:../deepseek-harness/packages/api/remotes
         version: link:../deepseek-harness/packages/api/remotes

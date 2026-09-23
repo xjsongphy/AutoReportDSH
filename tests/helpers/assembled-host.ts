@@ -172,6 +172,8 @@ export interface AssembleOptions {
   home?: string
   mainSession?: Session
   mainSessionId?: string
+  /** Provider ids the fake LLM registry serves; empty means none is installed. */
+  llmProviders?: readonly string[]
   followup?: () => Promise<string>
 }
 
@@ -262,6 +264,13 @@ export async function assemble(options: AssembleOptions = {}): Promise<Assembled
     getSectionOrder: fakeSectionOrder,
     getContextOrder: fakeContextOrder,
   } as never)
+  // The host LLM registry. Every real deployment mounts one (`llm` is a
+  // base-bundle root row), and the preset reads it to refuse a frozen
+  // specialist route no adapter serves, so a composition without it would sit
+  // waiting for the service instead of activating.
+  ctx.provide('llm', {
+    listProviders: () => (options.llmProviders ?? []).map(id => ({ id, name: id })),
+  } as never)
   ctx.provide('skills', {
     register: (registration: { name: string }) => {
       presetSkillNames.push(registration.name)
@@ -306,8 +315,12 @@ export async function assemble(options: AssembleOptions = {}): Promise<Assembled
     settingsHome: home,
     pythonDetect: ISOLATED_PYTHON_DETECT,
   })
-  reportRouterModule.apply(ctx)
-  presetModule.apply(ctx)
+  // Mounted through Cordis rather than called directly: a direct `apply(ctx)`
+  // skips the service proxy, so a plugin that reads a service it never
+  // declared in `inject` passes every test here and still fails to load in the
+  // real loader. Going through `ctx.plugin` keeps the inject contract honest.
+  await ctx.plugin(reportRouterModule)
+  await ctx.plugin(presetModule)
 
   ctx.tools.register(defineTool({
     name: 'write',
