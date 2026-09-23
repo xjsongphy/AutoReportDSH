@@ -77,23 +77,49 @@ export interface ReportInitCommandOptions extends ReportLanguageSources {
   readonly workspaceRoot?: string
 }
 
+/** Result of resolving one workspace's report language. */
+export interface ResolvedReportLanguage {
+  /** The language to use for this workspace. */
+  readonly language: ReportLanguage
+  /**
+   * Non-fatal warnings encountered during resolution (e.g. corrupt legacy
+   * project settings). Empty when every consulted layer was readable.
+   */
+  readonly warnings: readonly string[]
+}
+
 /**
  * Resolve one workspace's report language through the shared precedence chain.
  *
  * Filesystem inference is never consulted: a workspace whose language was
  * never recorded keeps materializing the composition default until someone
  * chooses.
+ *
+ * The legacy project-settings layer is best-effort: a corrupt or unreadable
+ * legacy document is treated as absent rather than failing the whole
+ * resolution, and the condition is reported in `warnings` so callers can
+ * surface it to the user. The authoritative language lives in the DSH
+ * settings namespace; the legacy file is only consulted as a migration aid.
  * @param root - absolute workspace root.
  * @param sources - the seam options carrying the chain's inputs.
- * @returns the language this workspace resolves to right now.
- * @throws when the legacy project document is present but unreadable.
+ * @returns the resolved language plus any non-fatal warnings.
  */
-export function resolveReportLanguage(root: string, sources: ReportLanguageSources): ReportLanguage {
-  const legacy: AutoReportProjectSettings = sources.legacyProject?.(root).load() ?? {}
-  return sources.languageStore?.read(root)
+export function resolveReportLanguage(root: string, sources: ReportLanguageSources): ResolvedReportLanguage {
+  const warnings: string[] = []
+  let legacy: AutoReportProjectSettings = {}
+  if (sources.legacyProject !== undefined) {
+    try {
+      legacy = sources.legacyProject(root).load()
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error)
+      warnings.push(`legacy project settings unreadable (ignored): ${message}`)
+    }
+  }
+  const language = sources.languageStore?.read(root)
     ?? legacy.reportLanguage
     ?? sources.currentDefaultReportLanguage?.()
     ?? sources.reportLanguage
+  return { language, warnings }
 }
 
 /** One-line summary of one initialization pass, rendered by the command. */
@@ -215,9 +241,11 @@ export function createReportInitCommand(options: ReportInitCommandOptions): Comm
       }
       try {
         // Read the chain even when the flag wins: a corrupt legacy document is
-        // a workspace-level failure the user has to know about either way.
-        const recorded = resolveReportLanguage(root, options)
-        const language = parsed.language ?? recorded
+        // reported as a warning so the user knows something is off, but it no
+        // longer blocks initialization — the authoritative layer is the DSH
+        // settings namespace.
+        const resolved = resolveReportLanguage(root, options)
+        const language = parsed.language ?? resolved.language
         let saved = ''
         if (parsed.language !== undefined && options.languageStore !== undefined) {
           // Record the explicit choice BEFORE materializing so a crash between
@@ -228,9 +256,12 @@ export function createReportInitCommand(options: ReportInitCommandOptions): Comm
           saved = ' (saved to settings)'
         }
         const initialization = ensureInitialized(root, language)
+        const warningLines = resolved.warnings.length > 0
+          ? '\n' + resolved.warnings.map(w => `warning: ${w}`).join('\n')
+          : ''
         return {
           kind: 'success',
-          text: `${renderInitialization(initialization)}\nreport language: ${language}${saved}`,
+          text: `${renderInitialization(initialization)}\nreport language: ${language}${saved}${warningLines}`,
         }
       } catch (error: unknown) {
         return {

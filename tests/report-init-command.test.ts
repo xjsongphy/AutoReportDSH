@@ -184,15 +184,19 @@ describe('init command', () => {
     expect(existsSync(join(root, 'Report/main.typ'))).toBe(true)
   })
 
-  it('surfaces a legacy settings failure as a command error without initializing', async () => {
+  it('treats a corrupt legacy settings file as absent and warns, still initializing', async () => {
     const root = tempRoot()
     const failing = createReportInitCommand({
       reportLanguage: 'latex',
       legacyProject: () => ({ load: () => { throw new Error('corrupt document') } }),
     })
     const result = await failing.handler(invocation(root))
-    expect(result.kind).toBe('error')
-    if (result.kind === 'error') expect(result.text).toContain('corrupt document')
-    expect(existsSync(join(root, 'Data'))).toBe(false)
+    expect(result.kind).toBe('success')
+    if (result.kind === 'success') {
+      expect(result.text).toContain('warning:')
+      expect(result.text).toContain('corrupt document')
+      expect(result.text).toContain('report language: latex')
+    }
+    expect(existsSync(join(root, 'Data'))).toBe(true)
   })
 })

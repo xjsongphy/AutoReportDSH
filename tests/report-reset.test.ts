@@ -243,4 +243,21 @@ describe('reset command', () => {
     expect(existsSync(join(root, 'Report/main.typ'))).toBe(true)
     expect(existsSync(join(root, 'Report/main.tex'))).toBe(false)
   })
+
+  it('treats a corrupt legacy settings file as absent and warns, still resetting', async () => {
+    const root = seededWorkspace('latex')
+    const command = createReportResetCommand({
+      reportLanguage: 'latex',
+      legacyProject: () => ({ load: () => { throw new Error('corrupt document') } }),
+    })
+    const result = await command.handler(invocation(root))
+    expect(result.kind).toBe('success')
+    if (result.kind === 'success') {
+      expect(result.text).toContain('warning:')
+      expect(result.text).toContain('corrupt document')
+      expect(result.text).toContain('report language: latex')
+    }
+    // Reset still cleared the generated work and restored the skeleton.
+    expect(existsSync(join(root, 'Report/main.tex'))).toBe(true)
+  })
 })
