@@ -37,21 +37,33 @@ let liveRoleRoots: Map<string, AutoReportRole> = new Map()
 const requireFromHere = createRequire(import.meta.url)
 const SANDBOX_DENIAL = /file access denied|access is denied|access to the path|permission denied|sandbox.*denied/i
 
+/**
+ * Built windows-acl runner entry, resolved through `createRequire` rather than
+ * `import.meta.resolve`: the vitest SSR transform rewrites `import.meta` to a
+ * shim without `resolve`, so the provider's own resolution throws on Windows.
+ * @returns the runner path, or undefined when the package cannot be resolved.
+ */
+function windowsAclRunnerEntry(): string | undefined {
+  try {
+    const sandboxLocalPkg = requireFromHere.resolve('@deepseek-ai/dsh-sandbox-local/package.json')
+    return createRequire(sandboxLocalPkg).resolve('@deepseek-ai/dsh-sandbox-windows-acl/runner')
+  } catch {
+    return undefined
+  }
+}
+
 function probeWindowsAcl(): boolean {
+  const runner = windowsAclRunnerEntry()
+  if (runner === undefined) return false
   const workspace = mkdtempSync(join(tmpdir(), 'autoreport-acl-ws-'))
   const temp = mkdtempSync(join(tmpdir(), 'autoreport-acl-tmp-'))
   try {
-    const sandboxLocalPkg = requireFromHere.resolve('@deepseek-ai/dsh-sandbox-local/package.json')
-    const requireSandbox = createRequire(sandboxLocalPkg)
-    const runner = requireSandbox.resolve('@deepseek-ai/dsh-sandbox-windows-acl/runner')
     const probe = spawnSync(
       process.execPath,
       [runner, '--workspace', workspace, '--temp', temp, '--mode', 'read-only', '--', 'cmd', '/c', 'exit', '0'],
       { timeout: 10_000, stdio: 'ignore' },
     )
     return probe.status === 0
-  } catch {
-    return false
   } finally {
     rmSync(workspace, { recursive: true, force: true })
     rmSync(temp, { recursive: true, force: true })
@@ -117,6 +129,14 @@ async function setupHarness(experimentRoot: string): Promise<Context> {
     ;(next.sandbox as LocalSandboxProvider).internals = {
       probeBwrap: () => false,
       probeLandlock: () => 'unusable',
+    }
+  }
+  if (process.platform === 'win32') {
+    // Pin the built runner entry so the provider never calls
+    // `import.meta.resolve`, which the vitest SSR shim does not implement.
+    const runner = windowsAclRunnerEntry()
+    ;(next.sandbox as LocalSandboxProvider).internals = {
+      ...(runner === undefined ? {} : { windowsAclRunnerEntry: runner }),
     }
   }
   await next.plugin(SessionProjectionRegistry)
