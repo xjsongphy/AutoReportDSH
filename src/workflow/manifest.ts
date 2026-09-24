@@ -79,6 +79,7 @@ export function projectManifest(
   const timestamps: number[] = []
 
   for (const [path, artifact] of [...artifacts].sort(([left], [right]) => left.localeCompare(right))) {
+    if (artifact.status === 'deleted') continue
     const note = noteForPath(projection.fileNotes, artifact, role)
     timestamps.push(artifact.recordedAt)
     if (note !== undefined) timestamps.push(note.descriptionUpdatedAt)

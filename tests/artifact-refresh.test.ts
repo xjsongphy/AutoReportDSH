@@ -60,8 +60,9 @@ describe('artifactMatchesDisk', () => {
     expect(artifactMatchesDisk(legacy, { sizeBytes: 10, mtimeMs: 1001 })).toBe(false)
   })
 
-  it('treats a missing file as unchanged (deletions are not refreshed here)', () => {
-    expect(artifactMatchesDisk({ recordedAt: 1000 }, undefined)).toBe(true)
+  it('treats a missing file as changed unless a deletion tombstone is already recorded', () => {
+    expect(artifactMatchesDisk({ recordedAt: 1000 }, undefined)).toBe(false)
+    expect(artifactMatchesDisk({ recordedAt: 1000, status: 'deleted' }, undefined)).toBe(true)
   })
 })
 
@@ -114,7 +115,7 @@ describe('refreshArtifactsFromDisk', () => {
     expect(committed[0].mtimeMs).toBeDefined()
   })
 
-  it('leaves deleted files and ignored paths alone', () => {
+  it('records deleted files once and leaves ignored paths alone', () => {
     const root = workspace()
     const artifacts = [
       artifact('Data/Processed/gone.csv', 1),
@@ -123,7 +124,12 @@ describe('refreshArtifactsFromDisk', () => {
     ]
     const committed: ArtifactSnapshot[] = []
     refreshArtifactsFromDisk(projectionWith(artifacts), 'DATA_ANALYSIS', root, 9_999, s => committed.push(s))
-    expect(committed).toHaveLength(0)
+    expect(committed).toHaveLength(1)
+    expect(committed[0]).toMatchObject({ path: 'Data/Processed/gone.csv', status: 'deleted' })
+    const afterTombstone = projectionWith([...artifacts, committed[0]!])
+    const secondRefresh: ArtifactSnapshot[] = []
+    refreshArtifactsFromDisk(afterTombstone, 'DATA_ANALYSIS', root, 10_000, s => secondRefresh.push(s))
+    expect(secondRefresh).toHaveLength(0)
   })
 
   it('only refreshes the requested role and uses the latest artifact per path', () => {

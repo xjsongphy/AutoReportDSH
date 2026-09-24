@@ -72,7 +72,53 @@ export function dirtyArtifactsForDelegation(
     if (!belongsToAttempt(artifact, delegation)) continue
     byPath.set(artifact.path, artifact)
   }
-  return [...byPath.values()].sort((left, right) => (left.path < right.path ? -1 : left.path > right.path ? 1 : 0))
+  return [...byPath.values()]
+    .filter(artifact => artifact.status !== 'deleted')
+    .sort((left, right) => (left.path < right.path ? -1 : left.path > right.path ? 1 : 0))
+}
+
+/**
+ * Current observed output paths for one delegation. Deletion tombstones remove
+ * paths from the current output set while remaining in durable history.
+ */
+export function observedProducedFilesForDelegation(
+  projection: WorkflowProjection,
+  delegation: DelegationSnapshot,
+): string[] {
+  const latest = new Map<string, ArtifactSnapshot>()
+  for (const artifact of projection.artifacts) {
+    if (artifact.delegationKey !== delegationKey(delegation.taskId, delegation.delegationRevision)) continue
+    if (artifact.producedBy !== delegation.role) continue
+    const previous = latest.get(artifact.path)
+    if (previous === undefined || artifact.recordedAt >= previous.recordedAt) latest.set(artifact.path, artifact)
+  }
+  return [...latest.values()]
+    .filter(artifact => artifact.status !== 'deleted')
+    .map(artifact => artifact.path)
+    .sort()
+}
+
+/**
+ * Every observed artifact path for one delegation attempt, including deletion
+ * tombstones. A delivered report is validated against this set so a child
+ * cannot attribute a path never observed for its attempt, while the canonical
+ * envelope MAIN received is preserved verbatim.
+ * @param projection - parent workflow fold.
+ * @param delegation - the attempt whose report is being folded.
+ * @returns the set of paths observed for that exact attempt.
+ */
+export function attemptArtifactPathsForDelegation(
+  projection: WorkflowProjection,
+  delegation: DelegationSnapshot,
+): ReadonlySet<string> {
+  const key = delegationKey(delegation.taskId, delegation.delegationRevision)
+  const paths = new Set<string>()
+  for (const artifact of projection.artifacts) {
+    if (artifact.delegationKey !== key) continue
+    if (artifact.producedBy !== delegation.role) continue
+    paths.add(artifact.path)
+  }
+  return paths
 }
 
 /**
@@ -121,9 +167,13 @@ function filesForRole(projection: WorkflowProjection, role: AutoReportRole): Fil
     if (artifact.producedBy !== role) continue
     latest.set(artifact.path, artifact)
   }
+  const deletedPaths = new Set([...latest.values()]
+    .filter(artifact => artifact.status === 'deleted')
+    .map(artifact => artifact.path))
   const notes: FileNoteSnapshot[] = []
   const seen = new Set<string>()
   for (const path of [...latest.keys()].sort((a, b) => (a < b ? -1 : 1))) {
+    if (deletedPaths.has(path)) continue
     const note = projection.fileNotes.get(path)
     if (note === undefined) continue
     seen.add(path)
@@ -133,6 +183,7 @@ function filesForRole(projection: WorkflowProjection, role: AutoReportRole): Fil
   if (notes.length >= MAX_HANDOFF_FILES) return notes
   for (const note of [...projection.fileNotes.values()].sort((a, b) => (a.path < b.path ? -1 : 1))) {
     if (seen.has(note.path)) continue
+    if (deletedPaths.has(note.path)) continue
     if (note.producedBy !== role) continue
     notes.push(note)
     if (notes.length >= MAX_HANDOFF_FILES) break

@@ -57,14 +57,15 @@ export function latestArtifactsForRole(
   return latest
 }
 
-/** Disk facts for one tracked file, or undefined when the file is gone/unreadable. */
+/** Disk facts for one tracked file, or undefined when it is gone. */
 function diskFacts(absolute: string): { sizeBytes: number; mtimeMs: number } | undefined {
   try {
     const stats = statSync(absolute)
     if (!stats.isFile()) return undefined
     return { sizeBytes: stats.size, mtimeMs: stats.mtimeMs }
-  } catch {
-    return undefined
+  } catch (error: unknown) {
+    if (typeof error === 'object' && error !== null && 'code' in error && error.code === 'ENOENT') return undefined
+    throw error
   }
 }
 
@@ -77,10 +78,10 @@ function diskFacts(absolute: string): { sizeBytes: number; mtimeMs: number } | u
  * @param disk - current disk facts, or undefined when the file is missing.
  */
 export function artifactMatchesDisk(
-  artifact: Pick<ArtifactSnapshot, 'recordedAt' | 'sizeBytes' | 'mtimeMs'>,
+  artifact: Pick<ArtifactSnapshot, 'recordedAt' | 'sizeBytes' | 'mtimeMs'> & Partial<Pick<ArtifactSnapshot, 'status'>>,
   disk: { sizeBytes: number; mtimeMs: number } | undefined,
 ): boolean {
-  if (disk === undefined) return true
+  if (disk === undefined) return artifact.status === 'deleted'
   if (artifact.sizeBytes !== undefined && artifact.mtimeMs !== undefined) {
     return artifact.sizeBytes === disk.sizeBytes && artifact.mtimeMs === disk.mtimeMs
   }
@@ -90,8 +91,7 @@ export function artifactMatchesDisk(
 /**
  * Stat every file tracked for `role` and commit a refreshed `modified`
  * artifact for each one whose disk state no longer matches its baseline.
- * Files deleted from disk are left alone: the observer owns deletions, and a
- * vanished file should not silently refresh anything.
+ * Missing files receive a deletion tombstone; permission and I/O errors surface.
  * @param projection - folded workflow state for the owning session.
  * @param role - role whose tracked files to check.
  * @param workspaceRoot - absolute experiment root for resolving tracked paths.
@@ -117,10 +117,9 @@ export function refreshArtifactsFromDisk(
       path,
       producedBy: role,
       origin: 'process',
-      status: 'modified',
+      status: disk === undefined ? 'deleted' : 'modified',
       recordedAt: now,
-      sizeBytes: disk!.sizeBytes,
-      mtimeMs: disk!.mtimeMs,
+      ...(disk === undefined ? {} : { sizeBytes: disk.sizeBytes, mtimeMs: disk.mtimeMs }),
     }
     commit(snapshot)
     committed.push(snapshot)

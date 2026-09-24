@@ -71,4 +71,19 @@ describe('AutoReport manifest projection', () => {
       notes_updated_at: null,
     })
   })
+
+  it('omits paths whose latest artifact is a deletion tombstone', () => {
+    const session = sessionIn(WORKSPACE, 'manifest-deleted')
+    for (const [status, recordedAt] of [['created', 10], ['deleted', 20]] as const) {
+      appendWorkflowEvent(session, 'autoreport/artifact', {
+        version: AUTOREPORT_SCHEMA_VERSION,
+        path: 'Theory/model.md',
+        producedBy: 'THEORY',
+        origin: 'process',
+        status,
+        recordedAt,
+      })
+    }
+    expect(projectManifest(workflowState(session).projection(), 'THEORY', () => 30).files).toEqual([])
+  })
 })

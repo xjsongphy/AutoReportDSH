@@ -186,7 +186,7 @@ export interface ArtifactSnapshot {
   /** Observer channel that recorded the artifact. */
   readonly origin: 'fs-tool' | 'process'
   /** Change classification; `unknown` covers unclassifiable process effects. */
-  readonly status: 'created' | 'modified' | 'unknown'
+  readonly status: 'created' | 'modified' | 'unknown' | 'deleted'
   /**
    * Recorded file size in bytes, when the observer could stat the file. The
    * disk-truth manifest refresh compares this baseline against the current
@@ -290,4 +290,3 @@ export const AUTOREPORT_RECORD_TYPES: readonly AutoReportRecordType[] = [
   'autoreport/file-note',
   'autoreport/role-note',
 ]
-

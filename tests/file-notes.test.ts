@@ -109,6 +109,35 @@ describe('semantic file notes', () => {
     expect(staleDescribedPathsForDelegation(projection, delegation)).toEqual(['Theory/equations.md'])
   })
 
+  it('does not require descriptions or hand off paths deleted during the attempt', () => {
+    const session = sessionIn(WORKSPACE, 'deleted-main')
+    const delegation = {
+      version: AUTOREPORT_SCHEMA_VERSION,
+      taskId: 'task-1',
+      delegationRevision: 1,
+      role: 'THEORY' as const,
+      childSessionId: SessionId('child-theory'),
+      phase: 'waiting_for_child' as const,
+      dispatchedAt: 10,
+    }
+    appendWorkflowEvent(session, 'autoreport/task', {
+      version: AUTOREPORT_SCHEMA_VERSION,
+      taskId: 'task-1', subject: 'Derive', role: 'THEORY', dependencies: [],
+      status: 'running', revision: 1, steps: [], scopes: ['Theory'], latestDelegationRevision: 1,
+    })
+    appendWorkflowEvent(session, 'autoreport/delegation', delegation)
+    appendWorkflowEvent(session, 'autoreport/artifact', artifact('Theory/model.md', 20))
+    appendWorkflowEvent(session, 'autoreport/file-note', {
+      version: AUTOREPORT_SCHEMA_VERSION, path: 'Theory/model.md', description: 'old model',
+      descriptionUpdatedAt: 21, producedBy: 'THEORY',
+    })
+    appendWorkflowEvent(session, 'autoreport/artifact', artifact('Theory/model.md', 30, { status: 'deleted' }))
+
+    const projection = workflowState(session).projection()
+    expect(staleDescribedPathsForDelegation(projection, delegation)).toEqual([])
+    expect(roleHandoffText(projection, 'THEORY')).not.toContain('Files:')
+  })
+
   it('builds a bounded role handoff from notes and prior tasks', () => {
     const session = sessionIn(WORKSPACE, 'handoff-main')
     appendWorkflowEvent(session, 'autoreport/artifact', artifact('Theory/model.md', 20))
