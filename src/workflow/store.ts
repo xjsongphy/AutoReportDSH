@@ -21,8 +21,7 @@
  *
  * State sits under the harness home, keyed by workspace, never inside the
  * experiment workspace. That is the arrangement AutoReportCLI used
- * (`~/.autoreport/workspaces/<id>/…`) and the one external project settings
- * already follow here; it also stays clear of `.autoreport`, which the ported
+ * (`~/.autoreport/workspaces/<id>/…`); it also stays clear of `.autoreport`, which the ported
  * policy reserves as a NON-writable workspace directory. `session.jsonl` is
  * DSH's generation-zero log name, so a future incompatible record format adds
  * `session.v1.jsonl` beside it under the same rule.
@@ -115,9 +114,8 @@ export interface WorkflowLogLocation {
  *
  * State lives under the harness home, keyed by workspace, never inside the
  * experiment workspace — the same arrangement AutoReportCLI used
- * (`~/.autoreport/workspaces/<id>/{manifests,taskboard.json,project.toml}`) and
- * the one this plugin already uses for external project settings. Keeping it
- * out of the workspace also keeps it clear of `.autoreport`, which the ported
+ * (`~/.autoreport/workspaces/<id>/{manifests,taskboard.json,project.toml}`). Keeping
+ * it out of the workspace also keeps it clear of `.autoreport`, which the ported
  * policy reserves as a NON-writable workspace directory.
  * @param settingsHome - harness home override; absent resolves `$DSH_HOME`.
  * @param workspaceRoot - absolute experiment workspace root.
@@ -165,7 +163,7 @@ export function readWorkflowLog(path: string): WorkflowRecord[] {
   try {
     raw = readFileSync(path, 'utf8')
   } catch (error: unknown) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return []
+    if (typeof error === 'object' && error !== null && 'code' in error && error.code === 'ENOENT') return []
     throw error
   }
   const records: WorkflowRecord[] = []
