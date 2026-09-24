@@ -21,6 +21,7 @@ import { defineTool } from '@deepseek-ai/dsh-tools'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import { SESSION_FORMAT_VERSION, Session, SessionId } from '@deepseek-ai/dsh-session'
+import { roleWritableRoot } from '../src/policy/sandbox-roots.js'
 import { REQUIRED_DIRS } from '../src/workspace/init.js'
 import { resolveWorkflowSettings, workspaceIdForRoot } from '../src/settings.js'
 import { AUTOREPORT_SCHEMA_VERSION, type RoleBindingSnapshot } from '../src/workflow/events.js'
@@ -59,7 +60,8 @@ async function boot(options: Parameters<typeof assemble>[0] = {}): Promise<Assem
 
 describe('integration: assembled host (real context)', () => {
   it('registers exactly ONE continuable setup and routes it by RoleRegistry', async () => {
-    const assembled = await boot()
+    const assembled = await boot({ roleSandbox: true })
+    const roleTools = ['bash', 'read', 'read_image', 'write', 'edit', 'str_replace_editor', 'manifest', 'report_workflow']
 
     // Ordinary DSH child: the router installs nothing — stock messaging comes
     // from the base bundle since the standalone report tool was removed upstream.
@@ -77,11 +79,20 @@ describe('integration: assembled host (real context)', () => {
       provisioning: 'reserved',
     }
     assembled.runtime.roleRegistry.registerReserved(binding)
-    const theory = makeChildRecorder('it-theory', assembled.runtime)
+    const theory = makeChildRecorder('it-theory', assembled.runtime, assembled.workspaceRoot)
     assembled.routeChild(theory)
-    expect(theory.toolNames).toEqual(['bash', 'manifest', 'report_workflow'])
+    expect(theory.toolNames).toEqual(roleTools)
     expect(theory.bashDescriptions[0]).toContain('AutoReport THEORY')
     expect(theory.bashLookupScopes).toEqual([theory.agent])
+    expect(theory.toolDescriptions.get('read')).toContain(`Relative paths resolve from ${assembled.workspaceRoot}.`)
+    expect(theory.toolDescriptions.get('write')).toContain(
+      `Relative paths resolve from ${roleWritableRoot(assembled.workspaceRoot, 'THEORY')}.`,
+    )
+    expect(theory.toolDescriptions.get('str_replace_editor')).toContain(
+      `the absolute workspace root for this agent is ${assembled.workspaceRoot}`,
+    )
+    expect(theory.toolLookupScopes.get('read')).toEqual([theory.agent])
+    expect(theory.toolLookupScopes.get('write')).toEqual([theory.agent])
     expect(theory.skillNames).toEqual([])
     expect(theory.toolNames).not.toContain('report')
     expect(theory.sections.some(section => section.name === 'tool:report-workflow')).toBe(false)
@@ -91,9 +102,9 @@ describe('integration: assembled host (real context)', () => {
 
     const reportBinding: RoleBindingSnapshot = { ...binding, role: 'REPORT', childSessionId: SessionId('it-report') }
     assembled.runtime.roleRegistry.registerReserved(reportBinding)
-    const reporter = makeChildRecorder('it-report', assembled.runtime)
+    const reporter = makeChildRecorder('it-report', assembled.runtime, assembled.workspaceRoot)
     assembled.routeChild(reporter)
-    expect(reporter.toolNames).toEqual(['bash', 'manifest', 'report_workflow'])
+    expect(reporter.toolNames).toEqual(roleTools)
     expect(reporter.bashDescriptions[0]).toContain('AutoReport REPORT')
     expect(reporter.skillNames).toEqual([
       'experiment-report-writer', 'latex-compile',
@@ -102,12 +113,12 @@ describe('integration: assembled host (real context)', () => {
       'autoreport:skill:experiment-report-writer',
       'autoreport:skill:latex-compile',
     ]))
-    const plotter = makeChildRecorder('it-plotting-bound', assembled.runtime)
+    const plotter = makeChildRecorder('it-plotting-bound', assembled.runtime, assembled.workspaceRoot)
     assembled.runtime.roleRegistry.registerReserved({
       ...binding, role: 'PLOTTING', childSessionId: SessionId('it-plotting-bound'),
     })
     assembled.routeChild(plotter)
-    expect(plotter.toolNames).toEqual(['bash', 'manifest', 'report_workflow'])
+    expect(plotter.toolNames).toEqual(roleTools)
     expect(plotter.bashDescriptions[0]).toContain('AutoReport PLOTTING')
     expect(plotter.skillNames).toEqual([])
   })

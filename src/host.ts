@@ -32,6 +32,7 @@ export const inject = ['tools', 'commands', 'shellEnv']
 
 const DEFAULT_WAIT_MS = 600_000
 const DEFAULT_IDLE_TIMEOUT_MS = 60_000
+const FILE_PATH_TOOLS = ['read', 'read_image', 'write', 'edit'] as const
 
 function initializeWorkflowIfOwnWorkspace(
   runtime: AutoReportWorkflowRuntime,
@@ -100,22 +101,58 @@ export async function apply(ctx: Context, config: Partial<Config> = {}, options:
   const sandboxPolicy = ctx.get('sandboxPolicy') as Parameters<typeof installSandboxOverride>[0] | undefined
   const resolved = resolveHostConfig(config)
   const runtime = new AutoReportWorkflowRuntime(ctx, resolved, options)
-  // DSH tools are inherited through agent scopes. Register a same-name variant
+  // DSH tools are inherited through agent scopes. Register same-name variants
   // in each AutoReport agent's own scope so the model sees role-specific shell
-  // guidance while execution still uses the stock bash implementation.
+  // and path guidance while execution still uses the stock implementations.
   ctx.on('agent/created', ({ agent }) => {
     const session = agent.session
     const role: AutoReportRole | undefined = runtime.roleFor(String(agent.id))
       ?? (isAutoReportMainSession(session) ? 'MAIN' : undefined)
     if (role === undefined) return undefined
+    const workspaceRoot = typeof session.header?.cwd === 'string' && session.header.cwd.length > 0
+      ? resolve(session.header.cwd)
+      : undefined
+    const mutationRoot = resolved.workspaceRoot ?? workspaceRoot
+    // Under AutoReport's sandbox override, write/edit resolve relative paths
+    // from the role's writable directory; reads still use the session cwd.
+    const writeEditRoot = sandboxPolicy !== undefined && mutationRoot !== undefined
+      ? roleWritableRoot(mutationRoot, role)
+      : workspaceRoot
     const bash = agent.ctx.tools.get('bash', agent)
-    if (bash === undefined) return undefined
-    const writable = rolePolicy(role).writableRoots.join(', ')
-    const guidance = role === 'MAIN'
-      ? ' AutoReport MAIN: use bash for directory discovery when read cannot enumerate directories (for example ls, find, and rg), including filenames and References/ scope. Bash writes are allowed only under Outline/. '
-        + 'Do not use bash for theory, analysis, plotting, report writing, or compilation.'
-      : ` AutoReport ${role}: use bash only for commands needed by your assigned specialist task. Writes are confined to ${writable}.`
-    agent.ctx.tools.register({ ...bash, description: `${bash.description}${guidance}` })
+    if (bash !== undefined) {
+      const writable = rolePolicy(role).writableRoots.join(', ')
+      const guidance = role === 'MAIN'
+        ? ' AutoReport MAIN: use bash for directory discovery when read cannot enumerate directories (for example ls, find, and rg), including filenames and References/ scope. Bash writes are allowed only under Outline/. '
+          + 'Do not use bash for theory, analysis, plotting, report writing, or compilation.'
+        : ` AutoReport ${role}: use bash only for commands needed by your assigned specialist task. Writes are confined to ${writable}.`
+      agent.ctx.tools.register({ ...bash, description: `${bash.description}${guidance}` })
+    }
+    // The stock filesystem schemas leave the path base implicit. Make the
+    // session-workspace rule explicit for AutoReport without changing the
+    // inherited tool implementations or their argument schemas.
+    for (const name of FILE_PATH_TOOLS) {
+      const tool = agent.ctx.tools.get(name, agent)
+      if (tool === undefined) continue
+      const isMutation = name === 'write' || name === 'edit'
+      const relativeRoot = isMutation ? writeEditRoot : workspaceRoot
+      const relativePathGuidance = relativeRoot === undefined
+        ? 'The absolute path base for relative paths is unavailable in this session; use an absolute path when the base is uncertain.'
+        : `Relative paths resolve from ${relativeRoot}.`
+      const filePathGuidance = isMutation
+        ? `AutoReport file paths: for this role's writable directory, prefer paths relative to its root, such as \`main.typ\`. ${relativePathGuidance} Absolute paths are accepted when they remain inside this role's writable directory.`
+        : `AutoReport file paths: for workspace files, prefer workspace-relative paths such as \`Report/main.typ\`. ${relativePathGuidance} Absolute paths are also accepted.`
+      agent.ctx.tools.register({
+        ...tool,
+        description: `${tool.description} ${filePathGuidance}`,
+      })
+    }
+    const strReplaceEditor = agent.ctx.tools.get('str_replace_editor', agent)
+    if (strReplaceEditor !== undefined && workspaceRoot !== undefined) {
+      agent.ctx.tools.register({
+        ...strReplaceEditor,
+        description: `${strReplaceEditor.description} AutoReport path context: the absolute workspace root for this agent is ${workspaceRoot}. This tool requires absolute paths; use that directory as the base for workspace files.`,
+      })
+    }
     return undefined
   })
   if (sandboxPolicy !== undefined) {

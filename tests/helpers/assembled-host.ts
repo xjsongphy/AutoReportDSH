@@ -79,6 +79,8 @@ export interface ChildRecorder {
   readonly toolNames: string[]
   readonly bashDescriptions: string[]
   readonly bashLookupScopes: Agent[]
+  readonly toolDescriptions: Map<string, string>
+  readonly toolLookupScopes: Map<string, Agent[]>
   readonly skillNames: string[]
   readonly sections: RecordedSection[]
   readonly contexts: RecordedSection[]
@@ -92,6 +94,8 @@ export function makeChildRecorder(
   const toolNames: string[] = []
   const bashDescriptions: string[] = []
   const bashLookupScopes: Agent[] = []
+  const toolDescriptions = new Map<string, string>()
+  const toolLookupScopes = new Map<string, Agent[]>()
   const skillNames: string[] = []
   const sections: RecordedSection[] = []
   const contexts: RecordedSection[] = []
@@ -118,12 +122,19 @@ export function makeChildRecorder(
     get: (name: string) => name === 'skills' ? skillsService : undefined,
     tools: {
       get: (name: string, scope?: Agent) => {
-        if (name !== 'bash' || scope !== agent) return undefined
-        bashLookupScopes.push(scope)
-        return { name: 'bash', description: 'fixture shell tool' }
+        if (scope !== agent) return undefined
+        if (name === 'bash') bashLookupScopes.push(scope)
+        if (name !== 'bash' && !['read', 'read_image', 'write', 'edit', 'str_replace_editor'].includes(name)) {
+          return undefined
+        }
+        const scopes = toolLookupScopes.get(name) ?? []
+        scopes.push(scope)
+        toolLookupScopes.set(name, scopes)
+        return { name, description: `fixture ${name} tool` }
       },
       register: (tool: { name: string; description?: string }) => {
         toolNames.push(tool.name)
+        if (tool.description !== undefined) toolDescriptions.set(tool.name, tool.description)
         if (tool.name === 'bash' && tool.description !== undefined) bashDescriptions.push(tool.description)
         return () => {}
       },
@@ -150,7 +161,10 @@ export function makeChildRecorder(
     autoreportWorkflow: workflow,
   }
   ;(agent as { ctx?: unknown }).ctx = ctx
-  return { agent, ctx: ctx as ChildRecorder['ctx'], toolNames, bashDescriptions, bashLookupScopes, skillNames, sections, contexts }
+  return {
+    agent, ctx: ctx as ChildRecorder['ctx'], toolNames, bashDescriptions, bashLookupScopes,
+    toolDescriptions, toolLookupScopes, skillNames, sections, contexts,
+  }
 }
 
 export interface Assembled {
@@ -183,6 +197,8 @@ export interface AssembleOptions {
   mainSessionId?: string
   /** Provider ids the fake LLM registry serves; empty means none is installed. */
   llmProviders?: readonly string[]
+  /** Install a minimal wrapped sandbox-policy service for role-root prompt tests. */
+  roleSandbox?: boolean
   followup?: () => Promise<string>
 }
 
@@ -305,6 +321,11 @@ export async function assemble(options: AssembleOptions = {}): Promise<Assembled
       throw new Error('process spawning is unused in assembled host tests')
     },
   } as never)
+  if (options.roleSandbox === true) {
+    ctx.provide('sandboxPolicy', {
+      resolve: () => ({ workspaceRoot }),
+    } as never)
+  }
 
   await ctx.plugin(ToolRuntime)
   // A live host always serves the settings namespace; mounting one here keeps
