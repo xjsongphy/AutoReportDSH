@@ -8,14 +8,14 @@
  * Proven end to end: single role-routed continuable setup, reservation before
  * `startContinuable`, first-call authorization through the assembled guard,
  * cross-role write denial, the full delegation round trip with artifact
- * facts, `/init` language coexistence against external project
- * settings, and agent-facing manifest projection.
+ * facts, `/init` language selection from DSH settings, and agent-facing
+ * manifest projection.
  * @module tests/integration.host
  */
 
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import type { Agent } from '@deepseek-ai/dsh-agent'
@@ -79,7 +79,9 @@ describe('integration: assembled host (real context)', () => {
     assembled.runtime.roleRegistry.registerReserved(binding)
     const theory = makeChildRecorder('it-theory', assembled.runtime)
     assembled.routeChild(theory)
-    expect(theory.toolNames).toEqual(['manifest', 'report_workflow'])
+    expect(theory.toolNames).toEqual(['bash', 'manifest', 'report_workflow'])
+    expect(theory.bashDescriptions[0]).toContain('AutoReport THEORY')
+    expect(theory.bashLookupScopes).toEqual([theory.agent])
     expect(theory.skillNames).toEqual([])
     expect(theory.toolNames).not.toContain('report')
     expect(theory.sections.some(section => section.name === 'tool:report-workflow')).toBe(false)
@@ -91,7 +93,8 @@ describe('integration: assembled host (real context)', () => {
     assembled.runtime.roleRegistry.registerReserved(reportBinding)
     const reporter = makeChildRecorder('it-report', assembled.runtime)
     assembled.routeChild(reporter)
-    expect(reporter.toolNames).toEqual(['manifest', 'report_workflow'])
+    expect(reporter.toolNames).toEqual(['bash', 'manifest', 'report_workflow'])
+    expect(reporter.bashDescriptions[0]).toContain('AutoReport REPORT')
     expect(reporter.skillNames).toEqual([
       'experiment-report-writer', 'latex-compile',
     ])
@@ -104,12 +107,13 @@ describe('integration: assembled host (real context)', () => {
       ...binding, role: 'PLOTTING', childSessionId: SessionId('it-plotting-bound'),
     })
     assembled.routeChild(plotter)
-    expect(plotter.toolNames).toEqual(['manifest', 'report_workflow'])
+    expect(plotter.toolNames).toEqual(['bash', 'manifest', 'report_workflow'])
+    expect(plotter.bashDescriptions[0]).toContain('AutoReport PLOTTING')
     expect(plotter.skillNames).toEqual([])
   })
 
   it('initializes the workspace once with the frozen settings snapshot on the workflow event', async () => {
-    const assembled = await boot({ projectLanguage: 'typst' })
+    const assembled = await boot({ workspaceLanguage: 'typst' })
     expect(assembled.presetSkillNames).toEqual(['pdf-reference-reader'])
     admitFirstTurn(assembled)
     for (const dir of REQUIRED_DIRS) expect(existsSync(join(assembled.workspaceRoot, dir))).toBe(true)
@@ -117,8 +121,9 @@ describe('integration: assembled host (real context)', () => {
     expect(meta?.initialized).toBe(true)
     expect(meta?.settings?.reportLanguage).toBe('typst')
     expect(meta?.settings).toEqual(resolveWorkflowSettings({
-      project: { reportLanguage: 'typst' },
-      composition: { ...CONFIG, workspaceRoot: assembled.workspaceRoot },
+      user: { workspaceLanguages: { [resolve(assembled.workspaceRoot)]: 'typst' } },
+      workspaceRoot: assembled.workspaceRoot,
+      composition: CONFIG,
     }))
   })
 
@@ -150,6 +155,35 @@ describe('integration: assembled host (real context)', () => {
     }, assembled.mainAgent, assembled.mainSession)
     expect(reopened.isError, reopened.text).toBe(false)
     expect(assembled.runtime.forSession(assembled.mainSession).state.getTask('task-1')?.status).toBe('pending')
+  })
+
+  it('runs explicit /init and /reset targets without initializing the caller workspace', async () => {
+    const callerRoot = makeTemp('autoreport-command-caller-')
+    const targetRoot = makeTemp('autoreport-command-target-')
+    const assembled = await boot({ workspaceRoot: callerRoot })
+    const invocation = (rawInput: string) => ({ agent: assembled.mainAgent, rawInput })
+
+    expect(assembled.reportInitCommand).toBeDefined()
+    const initialized = await assembled.reportInitCommand!.handler(invocation(targetRoot))
+    expect(initialized.kind).toBe('success')
+    for (const dir of REQUIRED_DIRS) {
+      expect(existsSync(join(targetRoot, dir))).toBe(true)
+      expect(existsSync(join(callerRoot, dir))).toBe(false)
+    }
+    expect(assembled.runtime.forSession(assembled.mainSession).state.projection().meta).toBeUndefined()
+
+    mkdirSync(join(targetRoot, 'Data', 'Raw'), { recursive: true })
+    writeFileSync(join(targetRoot, 'Data', 'Raw', 'measurements.csv'), 'x,y\n1,2\n')
+    writeFileSync(join(targetRoot, 'References', 'procedure.md'), 'keep this input')
+    writeFileSync(join(targetRoot, 'Outline', 'generated.md'), 'clear this output')
+    expect(assembled.reportResetCommand).toBeDefined()
+    const reset = await assembled.reportResetCommand!.handler(invocation(targetRoot))
+    expect(reset.kind).toBe('success')
+    expect(existsSync(join(targetRoot, 'Data', 'Raw', 'measurements.csv'))).toBe(true)
+    expect(existsSync(join(targetRoot, 'References', 'procedure.md'))).toBe(true)
+    expect(existsSync(join(targetRoot, 'Outline', 'generated.md'))).toBe(false)
+    for (const dir of REQUIRED_DIRS) expect(existsSync(join(callerRoot, dir))).toBe(false)
+    expect(assembled.runtime.forSession(assembled.mainSession).state.projection().meta).toBeUndefined()
   })
 
   it('runs the whole delegation round trip: reserve -> authorized first call -> denial -> report -> artifacts -> manifest', async () => {
@@ -326,7 +360,6 @@ describe('integration: assembled host (real context)', () => {
     expect(rejected.kind).toBe('error')
     expect(rejected.text).toContain("only in an 'autoreport' session")
     for (const dir of REQUIRED_DIRS) expect(existsSync(join(stockCwd, dir))).toBe(false)
-    expect(existsSync(join(assembled.home, 'autoreport', workspaceIdForRoot(stockCwd), 'project.json'))).toBe(false)
 
     admitFirstTurn(assembled)
     const invoke = (rawInput: string) => command.handler({

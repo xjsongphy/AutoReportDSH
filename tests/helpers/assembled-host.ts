@@ -7,7 +7,7 @@
 
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { dirname, join } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { expect } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
@@ -19,7 +19,6 @@ import type { Config } from '../../src/config.js'
 import { apply as applyHost } from '../../src/host.js'
 import { AUTOREPORT_MAIN_PRESET } from '../../src/membership.js'
 import AutoReportWorkflowRuntime from '../../src/runtime.js'
-import { saveProjectSettings, workspaceIdForRoot } from '../../src/settings.js'
 import { installWorkflowReportTool } from '../../src/tools/report-workflow.js'
 import { TURN_GUARD_PLUGIN } from '../../src/workflow/display.js'
 import * as presetModule from '../../src/preset.js'
@@ -78,6 +77,8 @@ export interface ChildRecorder {
   readonly agent: Agent
   readonly ctx: Parameters<typeof reportRouterModule.installRoutedReportTool>[0]
   readonly toolNames: string[]
+  readonly bashDescriptions: string[]
+  readonly bashLookupScopes: Agent[]
   readonly skillNames: string[]
   readonly sections: RecordedSection[]
   readonly contexts: RecordedSection[]
@@ -89,6 +90,8 @@ export function makeChildRecorder(
   cwd?: string,
 ): ChildRecorder {
   const toolNames: string[] = []
+  const bashDescriptions: string[] = []
+  const bashLookupScopes: Agent[] = []
   const skillNames: string[] = []
   const sections: RecordedSection[] = []
   const contexts: RecordedSection[] = []
@@ -114,8 +117,14 @@ export function makeChildRecorder(
   const ctx = {
     get: (name: string) => name === 'skills' ? skillsService : undefined,
     tools: {
-      register: (tool: { name: string }) => {
+      get: (name: string, scope?: Agent) => {
+        if (name !== 'bash' || scope !== agent) return undefined
+        bashLookupScopes.push(scope)
+        return { name: 'bash', description: 'fixture shell tool' }
+      },
+      register: (tool: { name: string; description?: string }) => {
         toolNames.push(tool.name)
+        if (tool.name === 'bash' && tool.description !== undefined) bashDescriptions.push(tool.description)
         return () => {}
       },
       restrict: () => () => {},
@@ -141,7 +150,7 @@ export function makeChildRecorder(
     autoreportWorkflow: workflow,
   }
   ;(agent as { ctx?: unknown }).ctx = ctx
-  return { agent, ctx: ctx as ChildRecorder['ctx'], toolNames, skillNames, sections, contexts }
+  return { agent, ctx: ctx as ChildRecorder['ctx'], toolNames, bashDescriptions, bashLookupScopes, skillNames, sections, contexts }
 }
 
 export interface Assembled {
@@ -166,7 +175,7 @@ export interface Assembled {
 }
 
 export interface AssembleOptions {
-  projectLanguage?: 'latex' | 'typst'
+  workspaceLanguage?: 'latex' | 'typst'
   pythonExecutable?: string
   workspaceRoot?: string
   home?: string
@@ -301,15 +310,18 @@ export async function assemble(options: AssembleOptions = {}): Promise<Assembled
   // A live host always serves the settings namespace; mounting one here keeps
   // the assembled path honest for `/init` (which records the choice) and for
   // every settings-driven behavior, without touching a developer's document.
-  await ctx.plugin(MemorySettings, { doc: { autoreport: {} } })
-
-  const projectPatch: { reportLanguage?: 'latex' | 'typst'; pythonExecutable?: string } = {
-    ...(options.projectLanguage === undefined ? {} : { reportLanguage: options.projectLanguage }),
-    ...(options.pythonExecutable === undefined ? {} : { pythonExecutable: options.pythonExecutable }),
-  }
-  if (Object.keys(projectPatch).length > 0) {
-    saveProjectSettings(home, workspaceIdForRoot(workspaceRoot), projectPatch)
-  }
+  await ctx.plugin(MemorySettings, { doc: { autoreport: {
+    ...(options.workspaceLanguage === undefined ? {} : { workspaceLanguages: { [resolve(workspaceRoot)]: options.workspaceLanguage } }),
+    ...(options.pythonExecutable === undefined ? {} : {
+      pythonExecutable: options.pythonExecutable,
+      pythonEnvironments: [{
+        label: 'Test Python',
+        executable: options.pythonExecutable,
+        source: 'path',
+        version: 'Python test fixture',
+      }],
+    }),
+  } } })
 
   await applyHost(ctx, { ...ASSEMBLED_CONFIG, workspaceRoot }, {
     settingsHome: home,

@@ -1,4 +1,4 @@
-# AutoReportDSH — Design Plan (rev 5, amended rev 10)
+# AutoReportDSH — Design Plan (rev 5, amended rev 11)
 
 Migrate the AutoReportCLI physics-report workflow into a DeepSeek Harness (`dsh`) plugin.
 The scope contract is `../autoreportcli/docs/own-features.md`: preserve AutoReport-owned
@@ -8,6 +8,11 @@ domain semantics while reusing DSH infrastructure wherever its contract is equiv
 user's inputs, and clears the invoking session's workflow with it (PLAN §2.19). The command
 carries no confirmation, because a slash command runs outside any turn and the approval panel is
 turn-enclosed.
+
+**Rev 11 amendment.** Remove the legacy external `project.json` settings layer completely.
+All report policy comes from the `autoreport` user settings namespace, plugin defaults, or
+the internal workflow override. No loader, migration, fallback, or setup script reads or writes
+`project.json`.
 
 **Rev 9 amendment.** Per-workspace report language gets one storage location, one display
 surface, and one switch action, and the settings card moves to the slot the Plugins page
@@ -552,7 +557,7 @@ preserves that behavior at the domain boundary: the first admitted report workfl
 calls idempotent `ensureInitialized()`. `/init` remains an explicit idempotent
 recovery/reinitialization command registered through `ctx.commands`. Because that
 command registry is host-global, its handler verifies effective `autoreport`
-membership before parsing input, saving project settings, or materializing files.
+membership before parsing input or materializing files.
 
 Initialization creates AutoReportCLI’s `REQUIRED_DIRS` (`loader.rs`):
 
@@ -650,16 +655,13 @@ with its already configured default route; it never declares a provider, endpoin
 credential. A controlled OpenRouter benchmark may be configured through DSH settings
 separately, but it is not the deployment e2e default. Credentials are never committed.
 
-### 2.14 Settings layering (rev 7)
+### 2.14 Settings layering (rev 11)
 
 DSH continues to own providers/credentials, Main model selection, compaction,
 approvals, sandbox/shell configuration, session lifecycle, and UI preferences.
 AutoReport owns ONLY report-workflow policy, layered as:
 
 ```text
-project settings        (<dshHome>/autoreport/<workspaceId>/project.json — external,
-                          never inside the experiment workspace)
-        ↓
 AutoReport user settings (DSH settings namespace 'autoreport')
         ↓
 Cordis composition Config (plugin defaults)
@@ -674,12 +676,11 @@ inherit-from-Main default, `executionTimeoutMs`), not live workflow inputs. When
 `resolveWorkflowSettings()` resolves the full precedence chain and persists the
 effective values as a `WorkflowSettingsSnapshot` in the durable
 `autoreport/workflow` event; execution reads the snapshot, so later settings
-changes never mutate an in-flight report. **Rev 9 supersedes project-scoped
-language storage** (PLAN §2.18): the authoritative per-workspace language lives
-in the user settings namespace keyed by workspace root, `/init [latex|typst]`
-records it there, and the host switches that workspace's templates from the
-record. `project.reportLanguage` stays readable for one version and is adopted
-into the map on a workspace's first initialization. Both `Report/main.tex` and
+changes never mutate an in-flight report. The authoritative per-workspace
+language lives in the user settings namespace keyed by workspace root;
+`/init [latex|typst]` records it there, and the host switches that workspace's
+templates from the record. The legacy `project.json` layer has been removed and
+is not read or migrated. Both `Report/main.tex` and
 `Report/main.typ` therefore coexist only while one of them is the user's own
 edit: an unmodified template of the other language is removed by the switch.
 
@@ -743,7 +744,7 @@ and where it lives in the codebase:
 | 1 | Opt-in preset as mode switch | **By design** — installer only adds `autoreport` to `$DSH_HOME/.agent-presets`; deployment default preset and ordinary `standard` sessions untouched; no global `enabled` flag (PLAN §2.1) |
 | 2 | DSH-owned vs AutoReport-owned settings split | **Implemented** — `src/settings.ts`; composition `Config` contains report-policy defaults only; `autoreport` is a live DSH user-settings namespace |
 | 3 | Plugin config = defaults, not live workflow inputs | **Implemented** — `defaultReportLanguage`/`specialistModel`/`executionTimeoutMs` are snapshotted; the unused Python-environment abstraction was removed |
-| 4 | Project-scoped language selection | **Implemented** — external `<dshHome>/autoreport/<workspaceId>/project.json`; concurrent projects supported |
+| 4 | Project-scoped language selection | **Revised, rev 11** — stored in the DSH `autoreport` settings map keyed by absolute workspace root; legacy file support was removed |
 | 5 | Persist resolved settings in workflow snapshot | **Implemented** — `WorkflowSettingsSnapshot` in `autoreport/workflow` payload (schema version 3); `resolveWorkflowSettings()` precedence chain |
 | 6 | `/init --language latex\|typst` | **Implemented, revised in rev 9** — records the choice in the user settings map (PLAN §2.18) and materializes missing resources; the other language's *unmodified* templates are deleted by the host-side switch, edited ones are kept |
 | 7 | Non-configurable authorization/execution policy | **By design** — fixed role table + immutable `network:'deny'`, no broadening knobs exposed |
@@ -757,24 +758,19 @@ and where it lives in the codebase:
 | 15 | Parent-owned continuation semantics | **Reused** — DSH continuation contract untouched; no independent subagent lifecycle |
 | 16 | Strictly scoped compatibility hooks | **Implemented** — the router installs nothing for non-AutoReport children (stock messaging comes from the base bundle) and routes bound roles through `agent/created` + child-scope injection; verified by keyless router tests |
 
-### 2.18 Per-workspace report language and the plugin settings page (rev 9)
+### 2.18 Per-workspace report language and the plugin settings page (rev 11)
 
-Rev 8 exposed a per-workspace language only through `/init --language`, which writes the
-external `project.json`, while the Web settings card offered one user-level default with no
-workspace dimension at all. The two surfaces could therefore disagree, and a user who set the
-card had no way to learn that `project.reportLanguage` outranked it. This revision gives the
-workspace dimension one storage location, one display surface, and one switch action.
+The workspace language is stored in one place and exposed in the AutoReport settings page.
+The legacy per-workspace `project.json` settings layer has been removed completely: no
+fallback, migration, schema, loader, writer, or command path remains.
 
-**Storage and precedence.** Per-workspace language lives in the `autoreport` user settings
-namespace; `project.json` keeps its other fields and its `reportLanguage` remains readable for
-one version:
+**Storage and precedence.** Per-workspace language and other report settings live in the
+`autoreport` user settings namespace:
 
 ```text
 explicit workflow override (internal only)
         ↓
 workspaceLanguages[workspaceRoot] (namespace 'autoreport' — authoritative)
-        ↓
-project.reportLanguage            (legacy, read-only compatibility)
         ↓
 user defaultReportLanguage
         ↓
@@ -787,8 +783,8 @@ The key is the workspace's absolute root path. `workspaceIdForRoot` remains the 
 AutoReport's own directories, but it cannot key a browser write: deriving it in the card would
 mean reimplementing the hash. Both sides read the same session record's `cwd`, and the host
 resolves the path before reading the map, so no path is re-derived and no fragment is guessed.
-`/init [--language latex|typst]` now writes `workspaceLanguages[root]` through the settings
-service instead of the file; it still materializes missing resources and still deletes nothing.
+`/init [--language latex|typst]` writes `workspaceLanguages[root]` through the settings
+service; it still materializes missing resources and still deletes nothing.
 
 **The project list needs no scan.** The card already holds every session in the Client's session
 store, whose rows carry `cwd`, `displayTitle`, `blank`, and the preset projection the
@@ -1025,7 +1021,7 @@ this status.
 | Execution policy | `execution-policy` | mutation guard matrix, seatbelt/bwrap isolation, `report_exec`, live macOS network-denial smoke |
 | Roles & delegation | `roles-delegation` | personas, Main preset, `send_to_agent`, `report_workflow`, global report router, observer |
 | Compile & manifests | `compile-manifests` ×3 lanes | `compile_report`, artifact policy ported from manifest.rs, observer, AutoReport manifest projection/tool |
-| Settings layering (rev 7) | `settings-layering` | precedence resolution, DSH `autoreport` user namespace, project settings store, durable workflow snapshots |
+| Settings layering (rev 11) | `settings-layering` | precedence resolution, DSH `autoreport` user namespace, durable workflow snapshots; no external project settings file |
 | Integration & e2e | `integration-e2e` | wiring fixes, assembled smokes, installer boot smoke, configured-route self-skipping e2e |
 
 Remaining optional/product work (documented in README): Windows support, MinerU network

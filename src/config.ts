@@ -4,8 +4,8 @@
  * deployment (the no-hardcoded-tunables rule). Validation fails loud at load.
  *
  * These fields are plugin DEFAULTS — the lowest configurable layer of the
- * report-workflow settings chain (PLAN.md §2.14), below user settings,
- * project settings, and explicit workflow overrides. They are not live
+ * report-workflow settings chain (PLAN.md §2.14), below user settings and
+ * explicit workflow overrides. They are not live
  * workflow inputs: workflows snapshot the resolved values at creation.
  *
  * Provider/model execution stays in DSH; {@link Config.specialistModel} only

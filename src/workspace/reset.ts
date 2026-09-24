@@ -212,12 +212,9 @@ export function createReportResetCommand(options: ReportResetCommandOptions): Co
         const resolved = resolveReportLanguage(root, options)
         const result = resetWorkspace(root, resolved.language)
         const board = await resetSessionWorkflow(invocation, root, options.workflow)
-        const warningLines = resolved.warnings.length > 0
-          ? '\n' + resolved.warnings.map(w => `warning: ${w}`).join('\n')
-          : ''
         return {
           kind: 'success',
-          text: `${renderReset(result)}\nreport language: ${resolved.language}${board}${warningLines}`,
+          text: `${renderReset(result)}\nreport language: ${resolved.language}${board}`,
         }
       } catch (error: unknown) {
         return {

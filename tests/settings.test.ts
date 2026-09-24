@@ -1,16 +1,11 @@
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, realpathSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { dirname, join, resolve } from 'node:path'
+import { join, resolve } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
 import type { CommandInvocation } from '@deepseek-ai/dsh-commands'
 import {
-  AUTO_REPORT_PROJECT_SETTINGS_SCHEMA,
   AUTO_REPORT_USER_SETTINGS_SCHEMA,
-  loadProjectSettings,
-  projectSettingsPath,
   resolveWorkflowSettings,
-  saveProjectSettings,
   validatePythonExecutableSetting,
   WORKFLOW_SETTINGS_SCHEMA_DEFAULTS,
   workspaceIdForRoot,
@@ -46,14 +41,6 @@ const USER = {
   delegationIdleTimeoutMs: 2200,
   delegationWaitTimeoutMs: 2000,
   pythonExecutable: '/user/python',
-} as const
-
-const PROJECT = {
-  reportLanguage: 'latex',
-  specialistModel: { provider: 'project-provider', model: 'project-model' },
-  delegationIdleTimeoutMs: 3300,
-  delegationWaitTimeoutMs: 3000,
-  pythonExecutable: '/project/python',
 } as const
 
 const OVERRIDE = {
@@ -104,17 +91,10 @@ describe('resolveWorkflowSettings precedence', () => {
       delegationWaitTimeoutMs: 2000,
       pythonExecutable: '/user/python',
     })
-    expect(resolveWorkflowSettings({ project: PROJECT })).toEqual({
-      reportLanguage: 'latex',
-      specialistModel: { inheritMain: false, provider: 'project-provider', model: 'project-model' },
-      delegationIdleTimeoutMs: 3300,
-      delegationWaitTimeoutMs: 3000,
-      pythonExecutable: '/project/python',
-    })
   })
 
   it('walks the full chain downward when higher layers drop out', () => {
-    const all = { override: OVERRIDE, project: PROJECT, user: USER, composition: COMPOSITION }
+    const all = { override: OVERRIDE, user: USER, composition: COMPOSITION }
     expect(resolveWorkflowSettings(all)).toMatchObject({
       reportLanguage: 'typst',
       delegationIdleTimeoutMs: 4400,
@@ -124,21 +104,13 @@ describe('resolveWorkflowSettings precedence', () => {
     })
     const withoutOverride = (({ override: _drop, ...rest }) => rest)(all)
     expect(resolveWorkflowSettings(withoutOverride)).toMatchObject({
-      reportLanguage: 'latex',
-      delegationIdleTimeoutMs: 3300,
-      delegationWaitTimeoutMs: 3000,
-      pythonExecutable: '/project/python',
-      specialistModel: { provider: 'project-provider' },
-    })
-    const withoutProject = (({ project: _drop, ...rest }) => rest)(withoutOverride)
-    expect(resolveWorkflowSettings(withoutProject)).toMatchObject({
       reportLanguage: 'typst',
       delegationIdleTimeoutMs: 2200,
       delegationWaitTimeoutMs: 2000,
       pythonExecutable: '/user/python',
       specialistModel: { provider: 'user-provider', reasoningEffort: 'high' },
     })
-    const withoutUser = (({ user: _drop, ...rest }) => rest)(withoutProject)
+    const withoutUser = (({ user: _drop, ...rest }) => rest)(withoutOverride)
     expect(resolveWorkflowSettings(withoutUser)).toMatchObject({
       reportLanguage: 'latex',
       delegationIdleTimeoutMs: 1100,
@@ -151,8 +123,7 @@ describe('resolveWorkflowSettings precedence', () => {
   it('merges sparse layers field by field', () => {
     const resolved = resolveWorkflowSettings({
       composition: COMPOSITION,
-      user: { defaultReportLanguage: 'typst' },
-      project: { delegationIdleTimeoutMs: 24, delegationWaitTimeoutMs: 42 },
+      user: { defaultReportLanguage: 'typst', delegationIdleTimeoutMs: 24, delegationWaitTimeoutMs: 42 },
       override: { pythonExecutable: '/override/python' },
     })
     expect(resolved).toEqual({
@@ -179,22 +150,20 @@ describe('resolveWorkflowSettings precedence', () => {
 })
 
 describe('per-workspace language', () => {
-  it('lets a workspace entry beat the legacy project setting and the user default', () => {
+  it('lets a workspace entry beat the user default', () => {
     // Keys are resolved paths: build them with `resolve` so the case holds on
     // Windows, where `resolve('/exp/a')` is a drive-qualified native path.
     const root = resolve('/exp/a')
     const resolved = resolveWorkflowSettings({
       user: { workspaceLanguages: { [root]: 'typst', [resolve('/exp/b')]: 'latex' } },
-      project: { reportLanguage: 'latex' },
       workspaceRoot: root,
     })
     expect(resolved.reportLanguage).toBe('typst')
   })
 
-  it('falls back through the legacy project setting, the user default, and the schema default', () => {
+  it('falls back through the user default and the schema default', () => {
     expect(resolveWorkflowSettings({
-      user: { workspaceLanguages: { '/exp/b': 'latex' } },
-      project: { reportLanguage: 'typst' },
+      user: { workspaceLanguages: { [resolve('/exp/b')]: 'latex' }, defaultReportLanguage: 'typst' },
       workspaceRoot: '/exp/a',
     }).reportLanguage).toBe('typst')
     expect(resolveWorkflowSettings({
@@ -243,72 +212,35 @@ describe('specialist model resolution representation', () => {
   })
 
   it('lets an explicit inheritMain:true override beat lower concrete routes', () => {
-    const resolved = resolveWorkflowSettings({ project: PROJECT, override: { specialistModel: { inheritMain: true } } })
+    const resolved = resolveWorkflowSettings({ user: USER, override: { specialistModel: { inheritMain: true } } })
     expect(resolved.specialistModel).toEqual({ inheritMain: true })
   })
 })
 
 describe('snapshot immutability', () => {
   it('freezes the snapshot deeply and stays detached from later input mutation', () => {
-    const project: Record<string, unknown> = { ...PROJECT }
-    const resolved = resolveWorkflowSettings({ project: project as never })
+    const user: Record<string, unknown> = { ...USER }
+    const resolved = resolveWorkflowSettings({ user: user as never })
     expect(Object.isFrozen(resolved)).toBe(true)
     expect(Object.isFrozen(resolved.specialistModel)).toBe(true)
 
-    project['reportLanguage'] = 'typst'
-    project['delegationWaitTimeoutMs'] = 999_999
-    project['specialistModel'] = { provider: 'mutated', model: 'mutated' }
+    user['defaultReportLanguage'] = 'latex'
+    user['delegationWaitTimeoutMs'] = 999_999
+    user['specialistModel'] = { provider: 'mutated', model: 'mutated' }
 
-    expect(resolved.reportLanguage).toBe('latex')
-    expect(resolved.delegationWaitTimeoutMs).toBe(3000)
-    expect(resolved.specialistModel).toEqual({ inheritMain: false, provider: 'project-provider', model: 'project-model' })
+    expect(resolved.reportLanguage).toBe('typst')
+    expect(resolved.delegationWaitTimeoutMs).toBe(2000)
+    expect(resolved.specialistModel).toEqual({ inheritMain: false, provider: 'user-provider', model: 'user-model', reasoningEffort: 'high' })
   })
 })
 
-describe('project settings persistence', () => {
-  it('derives a stable path-keyed id outside the experiment workspace', () => {
+describe('workspace log identity', () => {
+  it('derives a stable opaque key from the resolved workspace path', () => {
     const root = tempDir('autoreport-ws-')
     const id = workspaceIdForRoot(root)
     expect(id).toMatch(/^[a-z0-9]{16}$/u)
     expect(workspaceIdForRoot(`${root}/`)).toBe(id)
     expect(workspaceIdForRoot(join(root, 'other'))).not.toBe(id)
-    const path = projectSettingsPath(undefined, id)
-    expect(path.endsWith(join('autoreport', id, 'project.json'))).toBe(true)
-    expect(path.startsWith(resolveDshHome())).toBe(true)
-    expect(path).not.toContain(root)
-    expect(() => projectSettingsPath(undefined, '../escape')).toThrow(/workspace id/)
-  })
-
-  it('tolerates a missing file as the empty patch and roundtrips saves atomically', () => {
-    const home = tempDir('autoreport-home-')
-    const workspaceId = workspaceIdForRoot('/some/experiment')
-    expect(loadProjectSettings(home, workspaceId)).toEqual({})
-    expect(existsSync(join(home, 'autoreport'))).toBe(false)
-
-    saveProjectSettings(home, workspaceId, { reportLanguage: 'typst', delegationWaitTimeoutMs: 5000 })
-    const directory = join(home, 'autoreport', workspaceId)
-    expect(JSON.parse(readFileSync(join(directory, 'project.json'), 'utf8')))
-      .toEqual({ reportLanguage: 'typst', delegationWaitTimeoutMs: 5000 })
-    expect(loadProjectSettings(home, workspaceId)).toEqual({ reportLanguage: 'typst', delegationWaitTimeoutMs: 5000 })
-    expect(readdirSync(directory)).toEqual(['project.json'])
-
-    saveProjectSettings(home, workspaceId, {})
-    expect(loadProjectSettings(home, workspaceId)).toEqual({})
-    expect(readdirSync(directory)).toEqual(['project.json'])
-  })
-
-  it('validates writes and loads loud against the project schema', () => {
-    const home = tempDir('autoreport-home-')
-    const workspaceId = workspaceIdForRoot('/another/workspace')
-    expect(() => saveProjectSettings(home, workspaceId, { reportLanguage: 'markdown' as never })).toThrow()
-    const file = projectSettingsPath(home, workspaceId)
-    mkdirSync(dirname(file), { recursive: true })
-    writeFileSync(file, '{ not json')
-    expect(() => loadProjectSettings(home, workspaceId)).toThrow(/not valid JSON/)
-    writeFileSync(file, '[1, 2]')
-    expect(() => loadProjectSettings(home, workspaceId)).toThrow(/JSON object/)
-    writeFileSync(file, JSON.stringify({ reportLanguage: 'kotlin' }))
-    expect(() => loadProjectSettings(home, workspaceId)).toThrow()
   })
 
   it('exposes schemas whose standalone resolution carries documented defaults', () => {
@@ -333,7 +265,6 @@ describe('init --language recording', () => {
   function factoryWithStore(recorded: Map<string, 'latex' | 'typst'>) {
     return createReportInitCommand({
       reportLanguage: 'latex',
-      legacyProject: () => ({ load: () => ({}) }),
       languageStore: {
         read: root => recorded.get(root),
         write: (root, language) => { recorded.set(root, language) },
@@ -341,8 +272,7 @@ describe('init --language recording', () => {
     })
   }
 
-  it('records the choice, materializes it, and leaves the legacy document alone', async () => {
-    const home = tempDir('autoreport-cmdhome-')
+  it('records the choice in the workspace language store and materializes it', async () => {
     const recorded = new Map<string, 'latex' | 'typst'>()
     const definition = factoryWithStore(recorded)
     const root = tempDir('autoreport-record-')
@@ -354,10 +284,6 @@ describe('init --language recording', () => {
       expect(typst.text).toContain('+ Report/main.typ')
     }
     expect(recorded.get(root)).toBe('typst')
-    expect(existsSync(join(root, 'Report/main.typ'))).toBe(true)
-    // The external project document is legacy read-only now: nothing writes it.
-    expect(loadProjectSettings(home, workspaceIdForRoot(root))).toEqual({})
-
     const implicit = await definition.handler(invocation(root))
     expect(implicit.kind).toBe('success')
     if (implicit.kind === 'success') {

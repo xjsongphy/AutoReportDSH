@@ -1,5 +1,8 @@
 # Implementation plan — per-workspace report language & settings page (PLAN §2.18, rev 9)
 
+> Historical plan superseded by PLAN.md rev 11. Do not follow its legacy `project.json`
+> compatibility steps; the current implementation removes that settings layer entirely.
+
 Spec: `PLAN.md` §2.18 (commit d0e3d4c), plus §2.14 and §2.17 row 9. This file is the
 step-by-step execution plan; each step is independently verifiable. Base: `main` at
 `cea0bf8` (rename landed and verified — typecheck + 355 tests green).

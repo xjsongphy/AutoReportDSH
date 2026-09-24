@@ -257,7 +257,7 @@ export function installManifestTool(ctx: Context, hostCtx: Context, role: AutoRe
     disposeTool = ctx.tools.register(defineTool({
       name: 'manifest',
       description: [
-        'AutoReport semantic manifest for file discovery and cross-agent handoff: the runtime maintains the tracked file list and update times, agents maintain semantic file descriptions and role-level notes.',
+        'AutoReport semantic manifest for agent-produced file handoff; this is not a full workspace index. It tracks successful file mutations made by each role, while agents maintain semantic descriptions and role-level notes. Use bash for directory discovery and pre-existing file inventory.',
         'Every read first re-stats tracked files against their recorded baselines: files edited outside the harness (user editor, re-run scripts) get refreshed update times and read as stale until re-described.',
         'Read any role manifest; update only your own — action="update" defaults to the caller\u2019s own role, and agent is only for reading another role. A path must already be tracked for your role to accept a description; unknown paths are reported back in not_found and nothing is written for them.',
         'Descriptions are the handoff contract: report_workflow(success) is rejected while any file you changed still has a stale description.',

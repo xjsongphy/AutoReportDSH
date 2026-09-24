@@ -124,9 +124,7 @@ so later changes leave a running report untouched:
 workspace language   DSH user settings, namespace autoreport,
                      keyed by workspace root  (authoritative)
         ↓
-legacy project settings  <dshHome>/autoreport/<workspaceId>/project.json
-        ↓
-DSH user settings    namespace: autoreport (defaults, waits, Python)
+DSH user settings    namespace: autoreport (defaults, waits, Python, routes)
         ↓
 composition defaults
         ↓
@@ -139,7 +137,7 @@ schema defaults
   projects, with one control that moves a project to the other language and
   switches its templates.
 - **Subagent model** — new specialists inherit Main's model unless
-  `specialistModel` is set in cordis or project settings; switch a running
+  `specialistModel` is set in cordis or AutoReport settings; switch a running
   specialist's model from the conversation window.
 - **Python** — pick one of three: a managed environment that the plugin creates
   with `uv` under `$DSH_HOME/autoreport/venv` only when you select it (numpy,
@@ -173,7 +171,6 @@ $DSH_HOME/
 └── autoreport/
     ├── venv/                      AutoReport-managed Python (optional)
     └── <workspaceId>/
-        ├── project.json           language, python, subagent route
         └── workflow/<session id>/ session.jsonl — the durable workflow log
 ```
 

@@ -111,9 +111,7 @@ Provider、凭证和 Main 模型路由由 DSH 负责。本插件按以下顺序�
 工作区语言          DSH 用户设置 namespace: autoreport，
                    按工作区根路径为键（权威）
         ↓
-legacy 项目设置     <dshHome>/autoreport/<workspaceId>/project.json
-        ↓
-DSH 用户设置        namespace: autoreport（默认值、超时、Python）
+DSH 用户设置        namespace: autoreport（默认值、超时、Python、路由）
         ↓
 composition 默认值
         ↓
@@ -124,7 +122,7 @@ schema 默认值
   页面：**插件 → 已安装 → dsh-autoreport**。同一页按语言列出项目，一个控件即可把
   项目换到另一种语言并切换它的模板。
 - **specialist 模型** —— 新建的 specialist 默认继承 Main 的模型，除非在 cordis 或
-  项目设置中指定 `specialistModel`；运行中的 specialist 可在对话窗口切换模型。
+  AutoReport 设置中指定 `specialistModel`；运行中的 specialist 可在对话窗口切换模型。
 - **Python** —— 三选一：由插件用 `uv` 在 `$DSH_HOME/autoreport/venv` 创建的托管环境
   （仅在你选中时创建，含 numpy、scipy、pandas、matplotlib；删除该目录即回收磁盘）、
   本机已有的解释器（conda、virtualenv、pyenv 或 `PATH`，包括存在时的
@@ -155,7 +153,6 @@ $DSH_HOME/
 └── autoreport/
     ├── venv/                      AutoReport 托管的 Python（可选）
     └── <workspaceId>/
-        ├── project.json           语言、Python、subagent 路由
         └── workflow/<session id>/ session.jsonl — 工作流状态记录
 ```
 

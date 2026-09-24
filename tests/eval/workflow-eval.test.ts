@@ -18,7 +18,6 @@ import {
 } from '@deepseek-ai/dsh-sandbox-policy/src/session-mode.ts'
 import { validateStoredEvents } from '@deepseek-ai/dsh-session-persistence/src/storage-contract.ts'
 import { REQUIRED_DIRS } from '../../src/workspace/init.js'
-import { saveProjectSettings, workspaceIdForRoot } from '../../src/settings.js'
 import { resetAcknowledgedBlockedKeys } from '../../src/workflow/turn-guard.js'
 import {
   MAIN_STEER_SUMMARY,
@@ -169,7 +168,7 @@ describe('workflow eval', () => {
   })
 
   it('2. completes a Typst report pipeline with language snapshot and REPORT compile skills', async () => {
-    const assembled = await boot({ projectLanguage: 'typst' })
+    const assembled = await boot({ workspaceLanguage: 'typst' })
     admitFirstTurn(assembled)
     expect(tasks(assembled).projection().meta?.language).toBe('typst')
     expect(tasks(assembled).projection().meta?.settings?.reportLanguage).toBe('typst')
@@ -435,16 +434,13 @@ describe('workflow eval', () => {
     const decoy = join(other, 'bin', 'python')
     writeFileSync(decoy, '#!/bin/sh\necho Python 3.99.0-decoy\n')
     chmodSync(decoy, 0o755)
-    saveProjectSettings(assembled.home, workspaceIdForRoot(assembled.workspaceRoot), {
-      pythonExecutable: decoy,
-    })
-
     const dirs = assembled.ownedDirs.splice(0)
     await assembled.ctx.fiber?.dispose()
     const resumed = await assemble({
       workspaceRoot: assembled.workspaceRoot,
       home: assembled.home,
       mainSession: assembled.mainSession,
+      pythonExecutable: decoy,
     })
     resumed.ownedDirs.push(...dirs)
     live.push(resumed)

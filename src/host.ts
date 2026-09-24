@@ -8,8 +8,10 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import type { SessionId } from '@deepseek-ai/dsh-session'
+import { resolve } from 'node:path'
 import type { Config } from './config.js'
 import { isAutoReportMainSession } from './membership.js'
+import { rolePolicy, type AutoReportRole } from './roles.js'
 import { installSandboxOverride } from './policy/sandbox-override.js'
 import { roleWritableRoot } from './policy/sandbox-roots.js'
 import { createRoleToolGuard } from './policy/tool-guard.js'
@@ -17,9 +19,8 @@ import { createSkillGateGuard, skillLoadTracker } from './policy/skill-gate.js'
 import { installAutoReportPythonEnv } from './python-env.js'
 import { installAutoReportPythonContext } from './python-context.js'
 import AutoReportWorkflowRuntime, { type RuntimeOptions } from './runtime.js'
-import { createReportInitCommand } from './workspace/command.js'
-import { createReportResetCommand } from './workspace/reset.js'
-import { loadProjectSettings, workspaceIdForRoot } from './settings.js'
+import { createReportInitCommand, parseReportInitInput, resolveWorkspaceRoot } from './workspace/command.js'
+import { createReportResetCommand, parseReportResetInput } from './workspace/reset.js'
 import { describeDshVersionSupport, readRunningDshVersion } from './dsh-version.js'
 import { installTurnGuards } from './workflow/turn-guard.js'
 
@@ -31,6 +32,17 @@ export const inject = ['tools', 'commands', 'shellEnv']
 
 const DEFAULT_WAIT_MS = 600_000
 const DEFAULT_IDLE_TIMEOUT_MS = 60_000
+
+function initializeWorkflowIfOwnWorkspace(
+  runtime: AutoReportWorkflowRuntime,
+  session: Parameters<AutoReportWorkflowRuntime['workflowRootFor']>[0],
+  commandRoot: string | undefined,
+): void {
+  const workflowRoot = runtime.workflowRootFor(session)
+  if (workflowRoot === undefined || commandRoot === undefined) return
+  if (resolve(workflowRoot) !== resolve(commandRoot)) return
+  runtime.maybeInitialize(session)
+}
 
 const DEFAULT_CONFIG: Config = {
   defaultReportLanguage: 'latex',
@@ -88,6 +100,24 @@ export async function apply(ctx: Context, config: Partial<Config> = {}, options:
   const sandboxPolicy = ctx.get('sandboxPolicy') as Parameters<typeof installSandboxOverride>[0] | undefined
   const resolved = resolveHostConfig(config)
   const runtime = new AutoReportWorkflowRuntime(ctx, resolved, options)
+  // DSH tools are inherited through agent scopes. Register a same-name variant
+  // in each AutoReport agent's own scope so the model sees role-specific shell
+  // guidance while execution still uses the stock bash implementation.
+  ctx.on('agent/created', ({ agent }) => {
+    const session = agent.session
+    const role: AutoReportRole | undefined = runtime.roleFor(String(agent.id))
+      ?? (isAutoReportMainSession(session) ? 'MAIN' : undefined)
+    if (role === undefined) return undefined
+    const bash = agent.ctx.tools.get('bash', agent)
+    if (bash === undefined) return undefined
+    const writable = rolePolicy(role).writableRoots.join(', ')
+    const guidance = role === 'MAIN'
+      ? ' AutoReport MAIN: use bash for directory discovery when read cannot enumerate directories (for example ls, find, and rg), including filenames and References/ scope. Bash writes are allowed only under Outline/. '
+        + 'Do not use bash for theory, analysis, plotting, report writing, or compilation.'
+      : ` AutoReport ${role}: use bash only for commands needed by your assigned specialist task. Writes are confined to ${writable}.`
+    agent.ctx.tools.register({ ...bash, description: `${bash.description}${guidance}` })
+    return undefined
+  })
   if (sandboxPolicy !== undefined) {
     installSandboxOverride(sandboxPolicy, {
       roleRootOf: session => {
@@ -156,22 +186,15 @@ export async function apply(ctx: Context, config: Partial<Config> = {}, options:
         read: root => runtime.languageStore?.read(root),
         write: (root, language) => { runtime.languageStore?.write(root, language) },
       },
-      // The external project document is read-only legacy: it lives under the
-      // harness home, keyed by the invoked workspace root — never inside the
-      // experiment workspace. The runtime's settingsHome override (tests or
-      // isolated homes) applies.
-      legacyProject: root => ({
-        load: () => loadProjectSettings(options.settingsHome, workspaceIdForRoot(root)),
-      }),
     })
     commands.register({
       ...definition,
       async handler(invocation) {
         // Commands are registered by the host-wide command service, so unlike
         // preset-scoped tools their visibility alone cannot establish product
-        // membership. Reject before parsing, saving project settings, or
-        // materializing files: a stock session must have no AutoReport side
-        // effects merely because the overlay is loaded.
+        // membership. Reject before parsing or materializing files: a stock
+        // session must have no AutoReport side effects merely because the
+        // overlay is loaded.
         if (!isAutoReportMainSession(invocation.agent.session)) {
           return {
             kind: 'error',
@@ -179,7 +202,17 @@ export async function apply(ctx: Context, config: Partial<Config> = {}, options:
           }
         }
         const result = await definition.handler(invocation)
-        if (result.kind === 'success') runtime.maybeInitialize(invocation.agent.session)
+        if (result.kind === 'success') {
+          const parsed = parseReportInitInput(invocation.rawInput)
+          if (!('error' in parsed)) {
+            const commandRoot = resolveWorkspaceRoot(
+              parsed.directory,
+              invocation,
+              resolved.workspaceRoot === undefined ? {} : { workspaceRoot: resolved.workspaceRoot },
+            )
+            initializeWorkflowIfOwnWorkspace(runtime, invocation.agent.session, commandRoot)
+          }
+        }
         return result
       },
     })
@@ -193,9 +226,6 @@ export async function apply(ctx: Context, config: Partial<Config> = {}, options:
         read: root => runtime.languageStore?.read(root),
         write: () => {},
       },
-      legacyProject: root => ({
-        load: () => loadProjectSettings(options.settingsHome, workspaceIdForRoot(root)),
-      }),
       // Clearing the board belongs to the session that typed the command, and
       // only when the directory it named is that session's own workspace.
       workflow: {
@@ -216,7 +246,17 @@ export async function apply(ctx: Context, config: Partial<Config> = {}, options:
         // The reset dropped this session's workflow with its files; admit the
         // fresh one now so the board, the workspace root, and the settings
         // snapshot are consistent before the next turn reads them.
-        if (result.kind === 'success') runtime.maybeInitialize(invocation.agent.session)
+        if (result.kind === 'success') {
+          const parsed = parseReportResetInput(invocation.rawInput)
+          if (!('error' in parsed)) {
+            const commandRoot = resolveWorkspaceRoot(
+              parsed.directory,
+              invocation,
+              resolved.workspaceRoot === undefined ? {} : { workspaceRoot: resolved.workspaceRoot },
+            )
+            initializeWorkflowIfOwnWorkspace(runtime, invocation.agent.session, commandRoot)
+          }
+        }
         return result
       },
     })

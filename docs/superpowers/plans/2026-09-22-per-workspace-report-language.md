@@ -1,5 +1,8 @@
 # 按工作区选报告语言 + 设置页迁移 Implementation Plan
 
+> 已被 `PLAN.md` rev 11 取代。本文保留历史执行记录；其中 `project.json` 兼容与迁移
+> 步骤已废弃，当前实现不再读取、迁移或写入该设置层。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 让每个工作区的报告语言有一个存储位置、一个设置界面和一个切换动作：设置页把工作区列成 LaTeX/Typst 两张表，按 `−` 即把该项目换到另一种语言并切换目录里的模板。

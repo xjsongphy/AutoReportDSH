@@ -57,11 +57,8 @@ import {
   AUTOREPORT_SETTINGS_NAMESPACE,
   autoReportUserSettingsBase,
   childAgentOptions,
-  loadProjectSettings,
   resolveWorkflowSettings,
   validatePythonExecutableSetting,
-  workspaceIdForRoot,
-  type AutoReportProjectSettings,
   type AutoReportUserSettings,
   type WorkflowSettingsSnapshot,
 } from './settings.js'
@@ -113,7 +110,7 @@ function settlementNotice(childId: SessionId, summary: string): ReturnType<typeo
 
 /** Construction options beyond configuration (host wiring / tests). */
 export interface RuntimeOptions {
-  /** Harness home override for external project settings; absent resolves the DSH home. */
+  /** Harness home override for AutoReport-managed environment files. */
   readonly settingsHome?: string
   /** Interpreter discovery overlay; tests disable conda/PATH scans. */
   readonly pythonDetect?: PythonDetectOptions
@@ -131,7 +128,7 @@ export default class AutoReportWorkflowRuntime extends Service {
   readonly roleRegistry = new RoleRegistry()
   /** Validated plugin configuration used by tools and first-turn initialization. */
   readonly config: Config
-  /** Harness home override for external project settings; absent resolves the DSH home. */
+  /** Harness home override for AutoReport-managed environment files. */
   readonly settingsHome: string | undefined
   private readonly parents = new Map<string, ParentWorkflowRuntime>()
   // Retain admitted parent sessions for workflow/artifact ownership, but do
@@ -158,7 +155,7 @@ export default class AutoReportWorkflowRuntime extends Service {
    * Create the host runtime and observe committed report messages.
    * @param ctx - host context carrying Session events.
    * @param config - resolved plugin configuration.
-   * @param options - `settingsHome` overrides `<dshHome>` for project settings (tests).
+   * @param options - host wiring and test overrides.
    */
   constructor(ctx: Context, config: Config = DEFAULT_CONFIG, options: RuntimeOptions = {}) {
     super(ctx, 'autoreportWorkflow')
@@ -937,8 +934,8 @@ export default class AutoReportWorkflowRuntime extends Service {
 
   /**
    * Idempotent first-turn workspace initialization for one Main session:
-   * resolves the settings chain (override > workspace language > project >
-   * user > composition > defaults), materializes missing resources for the
+   * resolves the settings chain (override > workspace language > user >
+   * composition > defaults), materializes missing resources for the
    * resolved language, then records the workflow once via
    * {@link createWorkflow}.
    * @param session - Main session whose cwd (or configured root) is the experiment workspace.
@@ -952,19 +949,14 @@ export default class AutoReportWorkflowRuntime extends Service {
     if (root === undefined || root.length === 0) return
     let settings: WorkflowSettingsSnapshot
     try {
-      const project = loadProjectSettings(this.settingsHome, workspaceIdForRoot(root))
       settings = resolveWorkflowSettings({
         user: this.userSettingsSource(),
-        project,
         workspaceRoot: root,
         composition: this.config,
         dshHome: this.settingsHome ?? resolveDshHome(),
       })
-      this.adoptLegacyLanguage(root, project)
       ensureInitialized(root, settings.reportLanguage)
     } catch (error: unknown) {
-      // A broken external settings document must not wedge the first turn;
-      // the explicit /init path surfaces the same failure loudly for repair.
       const message = error instanceof Error ? error.message : String(error)
       try {
         this.ctx.logger.warn('AutoReportDSH: skipped workflow initialization: %s', message)
@@ -979,8 +971,7 @@ export default class AutoReportWorkflowRuntime extends Service {
 
   /**
    * Language currently in effect for one workspace root under the live user
-   * settings: the authoritative map entry, else the legacy project setting,
-   * else the user default.
+   * settings: the authoritative map entry, else the user default.
    * @param root - absolute workspace root.
    * @returns the language a workflow created now would resolve.
    */
@@ -1002,31 +993,13 @@ export default class AutoReportWorkflowRuntime extends Service {
   }
 
   /**
-   * Record a legacy `project.json` language in the authoritative map, once.
-   *
-   * Before this revision the only per-workspace language lived in that file, so
-   * a workspace configured by an older build would otherwise keep resolving
-   * from a layer the settings page can neither see nor set. Adopting it on the
-   * first initialization is idempotent: once the map carries the entry, later
-   * resolutions read it directly and never re-adopt.
-   * @param root - absolute workspace root.
-   * @param project - project settings already loaded for that root.
-   */
-  private adoptLegacyLanguage(root: string, project: AutoReportProjectSettings): void {
-    const key = resolve(root)
-    if (project.reportLanguage === undefined) return
-    if (this.userSettingsSource().workspaceLanguages?.[key] !== undefined) return
-    void this.writeWorkspaceLanguage(key, project.reportLanguage)
-  }
-
-  /**
    * React to one user-settings change by switching the templates of every
    * workspace whose resolved language moved.
    *
    * The first observation is not a change: it records the baseline. Later
    * observations compare each key either snapshot carries, so a move recorded
    * as a fresh map entry is diffed against the language in effect just before
-   * it (the legacy project setting, then the user default). A default-only
+   * it (the user default). A default-only
    * change therefore switches nothing, because no key moves.
    */
   private observeUserSettingsChange(): void {
@@ -1063,8 +1036,7 @@ export default class AutoReportWorkflowRuntime extends Service {
   private effectiveLanguageFor(root: string, settings: AutoReportUserSettings): ReportLanguage {
     const explicit = settings.workspaceLanguages?.[resolve(root)]
     if (explicit !== undefined) return explicit
-    const legacy = loadProjectSettings(this.settingsHome, workspaceIdForRoot(root)).reportLanguage
-    return legacy ?? settings.defaultReportLanguage
+    return settings.defaultReportLanguage
   }
 
   /**

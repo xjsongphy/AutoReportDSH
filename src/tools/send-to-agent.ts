@@ -247,7 +247,7 @@ function ensureRouteRegistered(
   throw new Error(
     `specialist provider "${route.provider}" is not registered in this deployment; `
     + `the ${route.model} subagent could not run. Install the matching provider plugin `
-    + '(e.g. dsh-codex-subscription) or clear the specialistModel setting in project.json.',
+    + '(e.g. dsh-codex-subscription) or clear specialistModel from AutoReport settings.',
   )
 }
 
