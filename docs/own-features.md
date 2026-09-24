@@ -44,8 +44,8 @@ platform.
   write anywhere outside its own directory. `tests/bash-confinement.live.test.ts`
   asserts both halves in one session.
 - **Settings integration:** report language, wait limits, Python interpreter,
-  and specialist-model selection are stored through DSH settings/project state;
-  DSH retains ownership of provider credentials and model execution.
+  and specialist-model selection are stored in DSH's `autoreport` user-settings
+  namespace; DSH retains ownership of provider credentials and model execution.
 - **Web settings UI:** the plugin contributes only its own configuration page,
   on its bundle's page in the Plugins page, and does not replace the DSH
   application UI. That page lists each language's projects (derived from the
@@ -242,22 +242,25 @@ refusing. The wiring, the retired seams, and the nightly upstream canary are in
 
 Open, and deliberately not claimed as done:
 
-- **Restart/rebind acceptance.** `tests/store.test.ts` covers record-log
-  read/write and torn-line tolerance; `tests/workflow-fold.test.ts` compares
-  batch against stepwise replay *in memory*. Neither proves that unfinished
-  task/delegation/manifest state survives a process restart and drives the same
-  next action. Until one does, the AutoReportCLI comparison above claims no
-  recovery equivalence.
+- **DSH restart/rebind acceptance.** `tests/workflow-task.test.ts` now clears
+  the process-local log sequence cache, constructs a fresh runtime and Session,
+  restores a blocked task, delegation, role binding, artifact, and manifest
+  note, then reopens and redispatches the task. This proves plugin-log replay
+  and redispatch in a cold runtime. It does not yet exercise DSH's own persisted
+  Session load, compaction, or a full process restart, so the AutoReportCLI
+  comparison above still claims no recovery equivalence.
 - **Windows role isolation end-to-end.** `tests/bash-confinement.live.test.ts`
   no longer skips win32 wholesale: it gates on sandbox usability, which on win32
   already requires both a working `bash -lc` and the windows-acl runner probe.
   What is missing is evidence, not code — one green Windows CI run that resolves
   a real role writable root through the ACL runner.
-- **`workflow_task` transition coverage.** The board has no test file of its own,
-  and redispatch-after-reopen is named by no case.
-- **Live provider smoke.** `tests/e2e/configured-route.e2e.test.ts` is opt-in
-  against a maintained DSH home; it has to be run on purpose after a
-  compatibility change.
+- **Live provider compatibility.** The opt-in
+  `tests/e2e/configured-route.e2e.test.ts` passed on 2026-09-24 against the
+  configured DSH home. Repeat it after a DSH compatibility change.
+
+`tests/workflow-task.test.ts` also covers update, cancel, reopen, redispatch of
+the same task at the next delegation revision, completion, and refusal to reopen
+a completed task.
 
 ### Durable state lives in the plugin's own log
 
@@ -269,9 +272,7 @@ log the plugin owns, under the harness home, keyed by workspace:
 ```
 
 That is where AutoReportCLI kept its per-workspace state
-(`~/.autoreport/workspaces/<id>/{manifests,taskboard.json,project.toml}`), and
-it sits beside this plugin's external project settings
-(`<home>/autoreport/<workspaceId>/project.json`). It is deliberately **not**
+(`~/.autoreport/workspaces/<id>/{manifests,taskboard.json,project.toml}`). It is deliberately **not**
 inside the experiment workspace: `.autoreport` is a name the ported policy
 reserves as a *non-writable* workspace directory
 (`autoreport-rs/tools/src/file_tools.rs`, asserted by its isolation test), so it
@@ -299,10 +300,8 @@ Properties this buys and costs:
   it, and nothing new for a user's `git status`. The log is keyed by a hash of
   the workspace path (`workspaceIdForRoot`), so it never leaks a path fragment.
 - Moving the workspace to another machine does **not** carry the workflow state:
-  same-workspace-path on a different home is a different log. The experiment
-  `project.json` settings behave the same way; the per-workspace report
-  language, which lives in the user settings namespace keyed by workspace root,
-  is keyed by that same path.
+  same-workspace-path on a different home is a different log. Per-workspace
+  report language lives in the user settings namespace keyed by workspace root.
 - `autoreport/*` no longer appears in the WebUI Trajectory event ledger. Reading
   the workflow means opening the log above, or the manifest tool.
 - We own durability: synchronous append-only writes, no session write lease and
