@@ -164,8 +164,9 @@ export function readWorkflowLog(path: string): WorkflowRecord[] {
   let raw: string
   try {
     raw = readFileSync(path, 'utf8')
-  } catch {
-    return []
+  } catch (error: unknown) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return []
+    throw error
   }
   const records: WorkflowRecord[] = []
   for (const line of raw.split('\n')) {

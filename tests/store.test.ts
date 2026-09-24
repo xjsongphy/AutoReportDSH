@@ -144,6 +144,13 @@ describe('appendWorkflowEvent / readWorkflowLog', () => {
     expect(readWorkflowLog(path).map(record => record.seq)).toEqual([1, 2])
   })
 
+  it('rethrows a non-ENOENT read error instead of reporting an empty log', () => {
+    // A directory is a present, openable path whose read fails (EISDIR); only a
+    // genuinely missing file may be swallowed as an empty log.
+    const directory = mkdtempSync(join(WORKSPACE, 'read-error-'))
+    expect(() => readWorkflowLog(directory)).toThrow()
+  })
+
   it('ignores a line whose type this build does not know', () => {
     const session = sessionIn(WORKSPACE, 'unknown-type')
     appendWorkflowEvent(session, 'autoreport/task', TASK)
