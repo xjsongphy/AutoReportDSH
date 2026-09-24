@@ -1,4 +1,5 @@
-import { describe, expect, it, beforeEach } from 'vitest'
+import { describe, expect, it, beforeEach, vi } from 'vitest'
+import type { Context } from '@deepseek-ai/cordis'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import { Session, SessionId } from '@deepseek-ai/dsh-session'
 import { appendWorkflowEvent } from '../src/workflow/store.js'
@@ -6,6 +7,7 @@ import { WorkflowState } from '../src/workflow/service.js'
 import { WaiterRegistry } from '../src/workflow/waiters.js'
 import type { DelegationSnapshot, TaskSnapshot } from '../src/workflow/events.js'
 import { observeWorkflowMessage, recoverWorkflowReports } from '../src/workflow/report-observer.js'
+import { installWorkflowReportTool } from '../src/tools/report-workflow.js'
 import { workflowState } from './helpers/workflow-log.js'
 import { sessionIn, workspaceForTests, workflowState } from './helpers/workflow-log.js'
 
@@ -45,6 +47,31 @@ function observe(session: Session, state: WorkflowState, waiters: WaiterRegistry
       state.apply(appendWorkflowEvent(session, type, data))
     },
   })
+}
+
+/** Minimal specialist scope carrying only the report tool under test. */
+function childReportContext(id: string) {
+  const tools: { name: string }[] = []
+  const sessionId = SessionId(id)
+  const session = sessionIn(WORKSPACE, id, SessionId('parent'))
+  const ctx = {
+    agent: { id: sessionId, session },
+    tools: {
+      register: (tool: { name: string }) => {
+        tools.push(tool)
+        return () => {}
+      },
+    },
+  } as unknown as Context
+  return { ctx, agent: { id: sessionId, session }, tools }
+}
+
+function reportTool(tools: { name: string }[]) {
+  const tool = tools.find(entry => entry.name === 'report_workflow') as
+    | { execute: (args: Record<string, unknown>, exec: unknown) => Promise<unknown> }
+    | undefined
+  if (tool === undefined) throw new Error('missing report_workflow')
+  return tool
 }
 
 // A fresh workspace per test: fixtures reuse session ids, so a shared root
@@ -342,6 +369,84 @@ describe('report observer', () => {
     expect(state.currentDelegation('task-7')?.phase).toBe('failed')
     expect(state.currentDelegation('task-7')?.reason).toBe('child cancelled')
     await expect(pending).resolves.toMatchObject({ status: 'failed', response: 'child cancelled' })
+  })
+
+  it('delivers the canonical produced_files sent to MAIN even when a later artifact lands before folding', async () => {
+    const session = sessionIn(WORKSPACE, 'parent')
+    const state = workflowState(session)
+    const waiters = new WaiterRegistry()
+    seedWaiting(session, state)
+
+    // Artifact A is observed before the child reports; its description is
+    // current so a success report is not rejected as stale.
+    state.apply(appendWorkflowEvent(session, 'autoreport/artifact', {
+      version: 1,
+      path: 'Data/Processed/a.csv',
+      producedBy: 'DATA_ANALYSIS',
+      origin: 'process',
+      status: 'created',
+      recordedAt: 20,
+      taskId: 'task-7',
+      delegationKey: 'task-7#1',
+    }))
+    state.apply(appendWorkflowEvent(session, 'autoreport/file-note', {
+      version: 1,
+      path: 'Data/Processed/a.csv',
+      description: 'current output',
+      descriptionUpdatedAt: 25,
+      producedBy: 'DATA_ANALYSIS',
+    }))
+
+    const sendMessage = vi.fn(async () => 'report-msg')
+    const child = childReportContext('child-da')
+    const runtime = { workflowForChild: () => ({ runtime: { state } }) }
+    const host = {
+      ctx: {
+        subagents: { sendMessage },
+        get: (name: string) => name === 'autoreportWorkflow' ? runtime : undefined,
+      } as unknown as Context,
+      sendMessage,
+    }
+    installWorkflowReportTool(child.ctx, host.ctx, 'DATA_ANALYSIS')
+
+    // The model's own claim (a forged path) must not reach MAIN; the tool
+    // sends the observed set instead.
+    await reportTool(child.tools).execute({
+      task_id: 'task-7',
+      delegation_revision: 1,
+      status: 'success',
+      response: 'wrote a.csv',
+      produced_files: ['Data/Processed/forged.csv'],
+    }, { agent: child.agent, signal: new AbortController().signal })
+    expect(sendMessage).toHaveBeenCalledOnce()
+    const content = sendMessage.mock.calls[0]?.[2] as { type: string; text: string }[]
+    expect(JSON.parse(content[1]?.text ?? '{}')).toMatchObject({
+      produced_files: ['Data/Processed/a.csv'],
+    })
+
+    // Artifact B lands after the report was sent but before the parent
+    // observer folds the delivered message.
+    state.apply(appendWorkflowEvent(session, 'autoreport/artifact', {
+      version: 1,
+      path: 'Data/Processed/b.csv',
+      producedBy: 'DATA_ANALYSIS',
+      origin: 'process',
+      status: 'created',
+      recordedAt: 30,
+      taskId: 'task-7',
+      delegationKey: 'task-7#1',
+    }))
+
+    const delivered = session.append('user/message', createUserMessage({
+      content,
+      source: { kind: 'subagent-report', form: 'relay', senderSessionId: SessionId('child-da') },
+    }), { surfaceOp: 'append' })
+    observe(session, state, waiters, delivered)
+
+    // The durable report mirrors the canonical envelope MAIN received, not a
+    // recomputation from the later projection.
+    expect(state.currentDelegation('task-7')?.phase).toBe('completed')
+    expect(state.currentDelegation('task-7')?.report?.produced_files).toEqual(['Data/Processed/a.csv'])
   })
 
   it('ignores reports from an unbound child', () => {

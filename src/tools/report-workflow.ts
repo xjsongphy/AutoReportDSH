@@ -8,6 +8,7 @@ import { formatWorkflowRelay } from '../workflow/display.js'
 import { staleDescribedPathsForDelegation } from '../workflow/file-notes.js'
 import { hasAcceptedWorkflowReport } from '../workflow/report-observer.js'
 import { parseWorkflowEnvelope } from '../workflow/protocol.js'
+import { observedProducedFilesForDelegation } from '../workflow/file-notes.js'
 import { genericCall } from './presentation.js'
 
 function runtimeOf(hostCtx: Context): AutoReportWorkflowRuntime | undefined {
@@ -73,7 +74,14 @@ export function installWorkflowReportTool(childCtx: Context, hostCtx: Context, r
         if (attempt !== undefined && hasAcceptedWorkflowReport(attempt) && attempt.reportMessageId !== undefined) {
           return { messageId: attempt.reportMessageId }
         }
-        if (parsed.value.status === 'success' && attempt !== undefined && owner !== undefined) {
+        if (owner === undefined || attempt === undefined || attempt.childSessionId !== (exec.agent as Agent).id) {
+          throw new Error('unknown task_id/delegation_revision for this child')
+        }
+        const canonical = {
+          ...parsed.value,
+          produced_files: observedProducedFilesForDelegation(owner.runtime.state.projection(), attempt),
+        }
+        if (canonical.status === 'success' && owner !== undefined) {
           const stale = staleDescribedPathsForDelegation(owner.runtime.state.projection(), attempt)
           if (stale.length > 0) {
             throw new Error(
@@ -82,8 +90,8 @@ export function installWorkflowReportTool(childCtx: Context, hostCtx: Context, r
           }
         }
         const content: ContentBlock[] = [
-          { type: 'text', text: `${formatWorkflowRelay(role, parsed.value)}\n\nDetails\n` },
-          { type: 'text', text: JSON.stringify(parsed.value) },
+          { type: 'text', text: `${formatWorkflowRelay(role, canonical)}\n\nDetails\n` },
+          { type: 'text', text: JSON.stringify(canonical) },
         ]
         const residentReport = typeof runtime?.reportFromResident === 'function'
           ? runtime.reportFromResident(exec.agent as Agent, content, exec.signal)

@@ -269,26 +269,52 @@ describe('report_workflow', () => {
 
   it('serializes a validated envelope through adjacent messaging', async () => {
     const child = childContext()
-    const host = hostContext()
-    installWorkflowReportTool(child.ctx, host.ctx, 'REPORT')
+    const sendMessage = vi.fn(async () => 'report-msg')
+    const attempt = {
+      taskId: 'task-3', delegationRevision: 2, role: 'THEORY',
+      childSessionId: child.agent.id, phase: 'waiting_for_child',
+    }
+    const projection = {
+      fileNotes: new Map([['Theory/model.md', {
+        path: 'Theory/model.md', description: 'current model', descriptionUpdatedAt: 20, producedBy: 'THEORY',
+      }]]),
+      roleNotes: new Map(),
+      artifacts: [{
+        path: 'Theory/model.md', producedBy: 'THEORY', delegationKey: 'task-3#2', status: 'created', recordedAt: 10,
+      }],
+    }
+    const runtime = {
+      workflowForChild: () => ({ runtime: { state: {
+        delegationAt: () => attempt,
+        projection: () => projection,
+      } } }),
+    }
+    const host = {
+      ctx: {
+        subagents: { sendMessage },
+        get: (name: string) => name === 'autoreportWorkflow' ? runtime : undefined,
+      } as unknown as Context,
+      sendMessage,
+    }
+    installWorkflowReportTool(child.ctx, host.ctx, 'THEORY')
     const result = await toolNamed(child.tools, 'report_workflow').execute({
       task_id: 'task-3',
       delegation_revision: 2,
       status: 'success',
       response: 'compiled',
-      produced_files: ['Report/main.pdf'],
+      produced_files: ['Theory/fake.md'],
     }, { agent: child.agent, signal: new AbortController().signal })
     expect(result).toEqual({ messageId: 'report-msg' })
     expect(host.sendMessage).toHaveBeenCalledOnce()
     const content = host.sendMessage.mock.calls[0]?.[2] as { type: string; text: string }[]
-    expect(content[0]?.text).toContain('REPORT → MAIN')
+    expect(content[0]?.text).toContain('THEORY → MAIN')
     expect(content[0]?.text).toContain('Details')
     expect(JSON.parse(content[1]?.text ?? '{}')).toMatchObject({
       task_id: 'task-3',
       delegation_revision: 2,
       status: 'success',
       block_type: null,
-      produced_files: ['Report/main.pdf'],
+      produced_files: ['Theory/model.md'],
     })
   })
 

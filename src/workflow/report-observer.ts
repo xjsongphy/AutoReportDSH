@@ -5,6 +5,7 @@ import type { DelegationSnapshot, TaskSnapshot } from './events.js'
 import { delegationKey, parseWorkflowEnvelopeFromText } from './protocol.js'
 import type { WorkflowState } from './service.js'
 import type { WaiterRegistry, WaiterOutcome } from './waiters.js'
+import { attemptArtifactPathsForDelegation } from './file-notes.js'
 
 /** Dependencies borrowed by the durable parent-message observer. */
 export interface WorkflowReportObserverDependencies {
@@ -145,14 +146,24 @@ function observeDeliveredMessage(message: DeliveredMessage, deps: WorkflowReport
       return
     }
 
-    const report = parsed.value
-    const attempt = deps.state.delegationAt(report.task_id, report.delegation_revision)
+    const claimedReport = parsed.value
+    const attempt = deps.state.delegationAt(claimedReport.task_id, claimedReport.delegation_revision)
     if (attempt === undefined || attempt.childSessionId !== reportSource.senderSessionId) return
     const reportMessageId = String(message.id)
     if (attempt.reportMessageId === reportMessageId) return
     if (hasAcceptedWorkflowReport(attempt)) return
-    const current = deps.state.currentDelegation(report.task_id)
-    const stale = current === undefined || current.delegationRevision !== report.delegation_revision
+    const current = deps.state.currentDelegation(claimedReport.task_id)
+    const stale = current === undefined || current.delegationRevision !== claimedReport.delegation_revision
+    // Deliver the canonical envelope MAIN received rather than recomputing it
+    // from a later projection (which may include artifacts observed after the
+    // report was sent). Validation still restricts the model's claim to paths
+    // observed for this exact attempt, so a child cannot attribute another
+    // role's or an older attempt's file.
+    const observed = attemptArtifactPathsForDelegation(deps.state.projection(), attempt)
+    const report = {
+      ...claimedReport,
+      produced_files: claimedReport.produced_files.filter(path => observed.has(path)),
+    }
     const settled: DelegationSnapshot = {
       ...attempt,
       phase: stale ? 'stale' : report.status === 'success' ? 'completed' : 'blocked',
