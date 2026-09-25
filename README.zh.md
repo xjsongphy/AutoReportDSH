@@ -228,7 +228,7 @@ CI（`.github/workflows/ci.yml`）在 Linux、macOS、Windows 上针对固定的
 | 上游 | 许可证 | 贡献内容 |
 | --- | --- | --- |
 | [lucifer1004/claude-skill-typst](https://github.com/lucifer1004/claude-skill-typst) | MIT | `typst` skill 及其四篇参考文档（`resources/typst/skills/typst/`） |
-| [xjsongphy/pkumpl-typst](https://github.com/xjsongphy/pkumpl-typst) | CC BY-SA 4.0 | Typst 主题、模板与参考文献资源（`resources/typst/`） |
+| [xjsongphy/pkumpl-typst](https://github.com/xjsongphy/pkumpl-typst) | CC BY-SA 4.0 | Typst 主题，以及完整的 `demo.typ` 报告示例（连同示例图片和完整参考文献打包为 `Report/main.typ`），来源提交 `fa3afe997fdc390ea0b15d41df32c7750cf68858` |
 | [CastleStar14654/PKUMpLtX](https://github.com/CastleStar14654/PKUMpLtX) | CC BY-SA 4.0 | `mpltx.cls`，北大近代物理实验 LaTeX 文档类（基于 `revtex4-2`），Typst 主题即其移植 |
 | [xjsongphy/skills](https://github.com/xjsongphy/skills) | 上游未声明 | `latex-compile` skill，以及 `experiment-report-writer` 投影——其上游 commit 与逐模块 blob 哈希记录在同目录的 `provenance.json` |
 | [citation-style-language/styles](https://github.com/citation-style-language/styles) | CC BY-SA 3.0 | `american-physics-society.csl`，作者 Richard Karnesky |

@@ -252,7 +252,7 @@ license file travels with its copy.
 | Upstream | License | Contributes |
 | --- | --- | --- |
 | [lucifer1004/claude-skill-typst](https://github.com/lucifer1004/claude-skill-typst) | MIT | the `typst` skill and its four reference documents (`resources/typst/skills/typst/`) |
-| [xjsongphy/pkumpl-typst](https://github.com/xjsongphy/pkumpl-typst) | CC BY-SA 4.0 | the Typst theme, template, and bibliography assets (`resources/typst/`) |
+| [xjsongphy/pkumpl-typst](https://github.com/xjsongphy/pkumpl-typst) | CC BY-SA 4.0 | the Typst theme and the full `demo.typ` report example (bundled as `Report/main.typ` with its figures and full bibliography), from upstream commit `fa3afe997fdc390ea0b15d41df32c7750cf68858` |
 | [CastleStar14654/PKUMpLtX](https://github.com/CastleStar14654/PKUMpLtX) | CC BY-SA 4.0 | `mpltx.cls`, the PKU Modern Physics Laboratory LaTeX class built on `revtex4-2`, which the Typst theme ports |
 | [xjsongphy/skills](https://github.com/xjsongphy/skills) | none declared | the `latex-compile` skill, and the `experiment-report-writer` projection whose upstream commit and per-module blob hashes are recorded in its `provenance.json` |
 | [citation-style-language/styles](https://github.com/citation-style-language/styles) | CC BY-SA 3.0 | `american-physics-society.csl`, authored by Richard Karnesky |

@@ -62,6 +62,8 @@ const TYPST_FILES: readonly ResourceFile[] = Object.freeze([
   { destination: 'Report/mplts.typ', resourcePath: 'typst/themes/mplts.typ' },
   { destination: 'Report/american-physics-society.csl', resourcePath: 'typst/templates/american-physics-society.csl' },
   { destination: 'Report/bibli.bib', resourcePath: 'typst/templates/bibli.bib' },
+  { destination: 'Report/fig/instruments.png', resourcePath: 'typst/templates/fig/instruments.png' },
+  { destination: 'Report/fig/figsample.pdf', resourcePath: 'typst/templates/fig/figsample.pdf' },
 ])
 
 /** Result of one idempotent initialization pass over a workspace root. */

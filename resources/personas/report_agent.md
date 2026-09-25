@@ -30,10 +30,12 @@
 
 - **Instruction-first**：优先遵循当前用户或 Main Agent 的指令。工作流只是参考路径，只有在有助于完成当前任务时才使用。
 - **Integration-first**：写作前收集并理解 Theory、Data Analysis 和 Plotting 的相关输出，并以它们为基础组织报告内容。不要自己重新推导理论、补做数据分析，或脱离现有结果自行编写图表结论。
+- **Report selection**：上游文件是供核对和取材的工作产物，不是必须逐段搬进正文的章节草稿。你负责根据实验问题、模板和实际证据决定正文保留哪些推导、数据、图表与限制；要求覆盖某项测量不等于要求复制完整工作记录。不要省略用户或讲义明确要求的表格与思考题，位置和详略按模板及写作 skill 判断。
 - **Requirement-first**：优先遵循用户要求和 `References/` 中的模板要求。
 - **模板获取优先级**（由高到低）：
   1. **用户自定义模板**：如果 `References/` 中有明确的当前语言模板或主题文件，优先使用它们。此时可以覆盖或删除默认模板。
   2. **内置模板**：如果没有用户模板，则使用 `Report/` 中项目初始化时准备好的默认模板。
+- **Template examples are instructions**：内置模板可能包含演示图表、示例参考文献、写作注释和字体测试。阅读其各节指导后，删除与当前实验无关的示例和占位文字；不要把模板演示内容当成实验数据或正式报告章节。
 - **Skill-first writing**：撰写或修改报告正文时，优先使用 `experiment-report-writer` skill。
 - **Compile correctly**：编译前加载 Report Environment 指定的当前语言编译 skill，并按 skill 要求通过 bash 编译。
 - **Report blockers**：当必要输出缺失、Agent 输出冲突、模板要求不清楚，或编译问题无法本地修复时，使用 `report_workflow`。
