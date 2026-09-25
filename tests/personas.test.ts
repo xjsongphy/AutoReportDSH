@@ -44,7 +44,11 @@ const QUALITY_GATES: Readonly<Record<string, readonly string[]>> = {
 
 /** Role boundary statements each specialist persona must keep. */
 const ROLE_BOUNDARIES: Readonly<Record<string, readonly string[]>> = {
-  THEORY: ['Writes stay confined to your role directory (`Theory/`)'],
+  THEORY: [
+    'Writes stay confined to your role directory (`Theory/`)',
+    'Do not fit, calibrate, clean, reduce, or interpret measured records',
+    'A formula self-check may use supplied reference constants or explicitly synthetic inputs',
+  ],
   DATA_ANALYSIS: ['Writes stay confined to your role directory (`Data/Processed/`)'],
   PLOTTING: ['Writes stay confined to your role directory (`Plots/`)'],
   REPORT: ['写入仅限于你的角色目录（`Report/`）'],
@@ -106,6 +110,7 @@ describe('persona slimming', () => {
     expect(dispatch).toContain('No hidden context dumping')
     expect(dispatch).toContain('No prompt expansion')
     expect(dispatch).toContain('Default to under-specifying')
+    expect(dispatch).toContain('Keep Theory upstream of data reduction')
     expect(dispatch).toContain('Do not include:')
     expect(dispatch).toContain('Route follow-up work according to the `send_to_agent` result')
     expect(dispatch).toContain('If a user constraint conflicts with a subagent role')
