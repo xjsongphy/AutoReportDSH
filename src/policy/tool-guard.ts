@@ -3,9 +3,10 @@
  *
  * The guard is authorization, not visibility. Domain invariants DSH cannot
  * represent: role membership, sandbox_permissions escalation denial, and
- * defense-in-depth write-path checks against role writable roots. Filesystem
- * targets are canonicalized through the closest existing ancestor so a
- * workspace symlink cannot escape a role's writable roots.
+ * defense-in-depth write-path checks against role writable roots. THEORY has
+ * no shell execution capability, matching the original AutoReport role tools.
+ * Filesystem targets are canonicalized through the closest existing ancestor
+ * so a workspace symlink cannot escape a role's writable roots.
  *
  * Coexistence: only AutoReport-owned sessions are restricted — a MAIN root is
  * one actually running the `autoreport` preset, or explicitly wired as Main, and
@@ -238,13 +239,13 @@ function sandboxPermissionsEscalation(exec: Readonly<ToolExecution>): boolean {
 export function createRoleToolGuard(options: RoleGuardOptions): ToolGuard {
   return exec => {
     const call = mutation(exec)
-    const protectedCall = call.kind !== 'none' || sandboxPermissionsEscalation(exec)
-    if (!protectedCall) return undefined
-
+    const protectedCall = call.kind !== 'none' || sandboxPermissionsEscalation(exec) || exec.name === 'bash'
     const resolved = resolveRole(exec, options)
     // Not an AutoReport-owned session: preserve stock DSH policy untouched.
     if (resolved === FOREIGN) return undefined
-    if (resolved === undefined) return `AutoReport denied ${exec.name}: calling agent has no valid role binding`
+    if (resolved === undefined) return protectedCall
+      ? `AutoReport denied ${exec.name}: calling agent has no valid role binding`
+      : undefined
 
     if (sandboxPermissionsEscalation(exec)) {
       if (resolved.role !== 'MAIN') {
@@ -256,6 +257,10 @@ export function createRoleToolGuard(options: RoleGuardOptions): ToolGuard {
       if (call.kind === 'malformed') return `AutoReport denied ${exec.name}: ${call.reason}`
       return undefined
     }
+    if (resolved.role === 'THEORY' && exec.name === 'bash') {
+      return 'AutoReport THEORY has no shell execution capability; data reduction belongs to DATA_ANALYSIS'
+    }
+    if (!protectedCall) return undefined
     if (call.kind === 'malformed') return `AutoReport denied ${exec.name}: ${call.reason}`
     if (call.kind === 'paths') {
       for (const path of call.paths) {

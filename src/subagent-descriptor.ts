@@ -30,6 +30,14 @@ import type { SpecialistRole } from './roles.js'
  */
 export const RESIDENT_TOOL_FILTER: ToolRestriction = { deny: ['send_to_agent', 'ask_user_question'] }
 
+/** Match the original AutoReport role capability: THEORY can inspect the
+ * workspace and maintain its own files, but has no shell execution tool. */
+export function residentToolFilter(role: SpecialistRole): ToolRestriction {
+  return role === 'THEORY'
+    ? { deny: ['send_to_agent', 'ask_user_question', 'bash'] }
+    : RESIDENT_TOOL_FILTER
+}
+
 /** Composition facts one resident child was created under. */
 export interface ResidentDescriptorFacts {
   /** Fixed role the child serves. */
@@ -60,7 +68,7 @@ export function residentDescriptor(facts: ResidentDescriptorFacts): SubagentDesc
     ...(facts.route.model === undefined ? {} : { agentModel: facts.route.model }),
     ...(facts.route.reasoningEffort === undefined ? {} : { agentReasoningEffort: facts.route.reasoningEffort }),
     persona: facts.persona,
-    toolFilter: RESIDENT_TOOL_FILTER,
+    toolFilter: residentToolFilter(facts.role),
   })
 }
 

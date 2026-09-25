@@ -81,9 +81,9 @@ describe('integration: assembled host (real context)', () => {
     assembled.runtime.roleRegistry.registerReserved(binding)
     const theory = makeChildRecorder('it-theory', assembled.runtime, assembled.workspaceRoot)
     assembled.routeChild(theory)
-    expect(theory.toolNames).toEqual(roleTools)
-    expect(theory.bashDescriptions[0]).toContain('AutoReport THEORY')
-    expect(theory.bashLookupScopes).toEqual([theory.agent])
+    expect(theory.toolNames).toEqual(roleTools.filter(name => name !== 'bash'))
+    expect(theory.bashDescriptions).toEqual([])
+    expect(theory.bashLookupScopes).toEqual([])
     expect(theory.toolDescriptions.get('read')).toContain(`Relative paths resolve from ${assembled.workspaceRoot}.`)
     expect(theory.toolDescriptions.get('write')).toContain(
       `Relative paths resolve from ${roleWritableRoot(assembled.workspaceRoot, 'THEORY')}.`,

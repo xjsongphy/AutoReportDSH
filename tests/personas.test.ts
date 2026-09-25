@@ -46,8 +46,7 @@ const QUALITY_GATES: Readonly<Record<string, readonly string[]>> = {
 const ROLE_BOUNDARIES: Readonly<Record<string, readonly string[]>> = {
   THEORY: [
     'Writes stay confined to your role directory (`Theory/`)',
-    'Do not fit, calibrate, clean, reduce, or interpret measured records',
-    'A formula self-check may use supplied reference constants or explicitly synthetic inputs',
+    'calibration, fitting, uncertainty estimation from measurements, and empirical conclusions belong to DATA_ANALYSIS',
   ],
   DATA_ANALYSIS: ['Writes stay confined to your role directory (`Data/Processed/`)'],
   PLOTTING: ['Writes stay confined to your role directory (`Plots/`)'],

@@ -118,7 +118,7 @@ export async function apply(ctx: Context, config: Partial<Config> = {}, options:
     const writeEditRoot = sandboxPolicy !== undefined && mutationRoot !== undefined
       ? roleWritableRoot(mutationRoot, role)
       : workspaceRoot
-    const bash = agent.ctx.tools.get('bash', agent)
+    const bash = role === 'THEORY' ? undefined : agent.ctx.tools.get('bash', agent)
     if (bash !== undefined) {
       const writable = rolePolicy(role).writableRoots.join(', ')
       const guidance = role === 'MAIN'

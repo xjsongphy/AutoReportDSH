@@ -18,7 +18,7 @@ import { deliverSubagentPrompt, type HostPromptDeliverer } from '@deepseek-ai/ds
 import {
   ensureSubagentDescriptor,
   residentDescriptor,
-  RESIDENT_TOOL_FILTER,
+  residentToolFilter,
 } from './subagent-descriptor.js'
 import type { Config, ReportLanguage } from './config.js'
 import type { CoordinatorMessageSource, SubagentReportMessageSource } from './messages.js'
@@ -467,7 +467,7 @@ export default class AutoReportWorkflowRuntime extends Service {
         order: childCtx.systemPrompt.getSectionOrder('DEPLOYMENT_PERSONA_PREFIX'),
         text: persona,
       })
-      if (joined !== undefined) childCtx.tools?.restrict(RESIDENT_TOOL_FILTER)
+      if (joined !== undefined) childCtx.tools?.restrict(residentToolFilter(role))
       // The parent preset is joined synchronously above, but its scoped skill
       // service is exposed through Cordis injection. Wait for that capability
       // before publishing the child so REPORT skills and the role report tool

@@ -8,6 +8,7 @@ import { SESSION_FORMAT_VERSION, Session, SessionId } from '@deepseek-ai/dsh-ses
 import {
   ensureSubagentDescriptor,
   residentDescriptor,
+  residentToolFilter,
   RESIDENT_TOOL_FILTER,
 } from '../src/subagent-descriptor.js'
 
@@ -39,7 +40,7 @@ describe('residentDescriptor', () => {
       agentModel: 'deepseek-flash',
       agentReasoningEffort: 'low',
       persona: 'theory persona',
-      toolFilter: { deny: ['send_to_agent', 'ask_user_question'] },
+      toolFilter: { deny: ['send_to_agent', 'ask_user_question', 'bash'] },
     })
   })
 
@@ -51,6 +52,8 @@ describe('residentDescriptor', () => {
 
   it('keeps the coordinator tools out of every resident child', () => {
     expect(RESIDENT_TOOL_FILTER).toEqual({ deny: ['send_to_agent', 'ask_user_question'] })
+    expect(residentToolFilter('THEORY')).toEqual({ deny: ['send_to_agent', 'ask_user_question', 'bash'] })
+    expect(residentToolFilter('DATA_ANALYSIS')).toBe(RESIDENT_TOOL_FILTER)
   })
 })
 

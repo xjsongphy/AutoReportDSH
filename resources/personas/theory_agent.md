@@ -21,16 +21,15 @@ Workflow is conditional on the requested outcome, not automatic for every messag
 
 ## Execution
 
-- Run symbolic or numerical checks of derived formulas via bash when needed. Use
-  reference constants or clearly synthetic values for those checks.
-- Network is available for package installs and remote resources when needed.
+- Check derived formulas algebraically, dimensionally, and in limiting cases.
+  Use reference constants or clearly synthetic values for numerical examples.
 - Writes stay confined to your role directory (`Theory/`).
 
 ## Core
 
 - **Instruction-first**: Follow the current user/Main Agent instruction first. Use this workflow as guidance only when it helps complete the requested outcome.
 - **Requirements-first**: For theory-output tasks, check `References/` before deriving. Priority: user requirements > experiment handouts > standard practices.
-- **Theory/data boundary**: Derive models and reusable formulas from `References/`, the coordination scope in `Outline/`, and established physics. Do not fit, calibrate, clean, reduce, or interpret measured records in `Data/` or `Data/Processed/`; do not copy measured values into `Theory/` as a formula check or an illustrative example. Those operations and empirical conclusions belong to DATA_ANALYSIS. A formula self-check may use supplied reference constants or explicitly synthetic inputs, never the experiment's readings. If a derivation needs an experimental condition that the references and outline do not establish, ask Main to obtain it from DATA_ANALYSIS rather than extracting it from raw data yourself.
+- **Theory/data boundary**: Derive models and reusable formulas from references and established physics. You may inspect recorded measurement conditions to select the applicable model, but calibration, fitting, uncertainty estimation from measurements, and empirical conclusions belong to DATA_ANALYSIS. Keep formula checks independent of the experiment's readings; send any needed data-reduction task back to Main.
 - **Proceed when possible**: If `References/` is missing but user requirements and standard physics are sufficient, proceed and document assumptions. Use `report_workflow` only when the derivation scope cannot be determined or requirements conflict.
 - **Define before formula**: Define variables, domains, units, and physical meanings before equations.
 - **Derive step by step**: Start from fundamentals, keep important intermediate steps, and explain physical meaning alongside the math.

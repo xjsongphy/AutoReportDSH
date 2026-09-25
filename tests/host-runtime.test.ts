@@ -423,7 +423,7 @@ describe('host workflow runtime', () => {
     // The persona section shadows the deployment persona and the deny-list
     // lands on the coordinator tools — but only after the join succeeded.
     expect(section).toHaveBeenCalledWith(expect.objectContaining({ name: 'deployment:persona-prefix' }))
-    expect(restrict).toHaveBeenCalledWith({ deny: ['send_to_agent', 'ask_user_question'] })
+    expect(restrict).toHaveBeenCalledWith({ deny: ['send_to_agent', 'ask_user_question', 'bash'] })
 
     // Unjoined parent: nothing preset-plane is restrictable, so the deny-list
     // is skipped rather than rejected.
@@ -488,7 +488,7 @@ describe('host workflow runtime', () => {
       label: 'AutoReport THEORY',
       agentProvider: 'deepseek-official',
       agentModel: 'deepseek-flash',
-      toolFilter: { deny: ['send_to_agent', 'ask_user_question'] },
+      toolFilter: { deny: ['send_to_agent', 'ask_user_question', 'bash'] },
     })
   })
 

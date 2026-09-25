@@ -198,6 +198,13 @@ async function boot(options: {
     output: { schema: { type: 'object', additionalProperties: true, properties: {} }, render: () => [{ type: 'text', text: 'stub' }] },
     async execute() { return {} },
   }))
+  ctx.tools.register(defineTool({
+    name: 'bash',
+    description: 'test shell stub so the THEORY denial is enforced',
+    parameters: {},
+    output: { schema: { type: 'object', additionalProperties: true, properties: {} }, render: () => [{ type: 'text', text: 'stub' }] },
+    async execute() { return {} },
+  }))
 
   const mainAdapter = new ScriptedAdapter([
     ...options.mainCalls.map(call => toolCallResponse(`main-${call.name}`, call.name, call.args)),
@@ -290,7 +297,9 @@ describe('integration: resident subagent through the real agent loop', () => {
     expect(descriptor?.['agentProvider']).toBe(SPECIALIST_PROVIDER)
     expect(descriptor?.['agentModel']).toBe(SPECIALIST_MODEL)
     // …and the role denial list rode the descriptor too.
-    expect(descriptor?.['toolFilter']).toMatchObject({ deny: ['send_to_agent', 'ask_user_question'] })
+    expect(descriptor?.['toolFilter']).toMatchObject({
+      deny: ['send_to_agent', 'ask_user_question', 'bash'],
+    })
 
     // Child session lineage: a real child of THIS main under the preset.
     expect(child!.header.parentSession?.toString()).toBe(booted.mainSession.id.toString())
@@ -308,6 +317,7 @@ describe('integration: resident subagent through the real agent loop', () => {
     const childTools = requestedToolNames(booted.specialistAdapter.requests[0]!)
     expect(childTools).toContain('report_workflow')
     expect(childTools).toContain('manifest')
+    expect(childTools).not.toContain('bash')
     expect(childTools).not.toContain('send_to_agent')
 
     // The child's own turn ended completed — no UNKNOWN turn error.
