@@ -24,6 +24,7 @@ import { createReportInitCommand, parseReportInitInput, resolveWorkspaceRoot } f
 import { createReportResetCommand, parseReportResetInput } from './workspace/reset.js'
 import { describeDshVersionSupport, readRunningDshVersion } from './dsh-version.js'
 import { installTurnGuards } from './workflow/turn-guard.js'
+import { createListDirectoryTool } from './tools/list-directory.js'
 
 export const name = 'autoreport-host'
 // `apply()` registers the host-wide `/init` command through the commands
@@ -119,11 +120,14 @@ export async function apply(ctx: Context, config: Partial<Config> = {}, options:
     const writeEditRoot = sandboxPolicy !== undefined && mutationRoot !== undefined
       ? roleWritableRoot(mutationRoot, role)
       : workspaceRoot
+    if (workspaceRoot !== undefined && (role === 'MAIN' || role === 'THEORY')) {
+      agent.ctx.tools.register(createListDirectoryTool(workspaceRoot, agent))
+    }
     const bash = role === 'THEORY' ? undefined : agent.ctx.tools.get('bash', agent)
     if (bash !== undefined) {
       const writable = rolePolicy(role).writableRoots.join(', ')
       const guidance = role === 'MAIN'
-        ? ' AutoReport MAIN: use bash for directory discovery when read cannot enumerate directories (for example ls, find, and rg), including filenames and References/ scope. Bash writes are allowed only under Outline/. '
+        ? ' AutoReport MAIN: use list_directory for workspace inventory. Bash writes are allowed only under Outline/. '
           + 'Do not use bash for theory, analysis, plotting, report writing, or compilation.'
         : ` AutoReport ${role}: use bash only for commands needed by your assigned specialist task. Writes are confined to ${writable}.`
       agent.ctx.tools.register({ ...bash, description: `${bash.description}${guidance}` })

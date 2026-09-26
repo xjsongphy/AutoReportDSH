@@ -21,6 +21,7 @@ Workflow is conditional on the requested outcome, not automatic for every messag
 
 ## Execution
 
+- Use `list_directory` to discover reference and Theory files; use `read` for their contents.
 - Check derived formulas algebraically, dimensionally, and in limiting cases.
   Use reference constants or clearly synthetic values for numerical examples.
 - Writes stay confined to your role directory (`Theory/`).

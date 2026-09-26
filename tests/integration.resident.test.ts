@@ -279,6 +279,7 @@ describe('integration: resident subagent through the real agent loop', () => {
 
     // The MAIN turn itself completed without a turn-level error.
     expect(lastTurnEndReason(booted.mainSession)?.kind).toBe('completed')
+    expect(requestedToolNames(booted.mainAdapter.requests[0]!)).toContain('list_directory')
 
     // The send_to_agent tool resolved with the child's report (wait=true path).
     const workflow = booted.runtime.forSession(booted.mainSession)
@@ -317,6 +318,7 @@ describe('integration: resident subagent through the real agent loop', () => {
     const childTools = requestedToolNames(booted.specialistAdapter.requests[0]!)
     expect(childTools).toContain('report_workflow')
     expect(childTools).toContain('manifest')
+    expect(childTools).toContain('list_directory')
     expect(childTools).not.toContain('bash')
     expect(childTools).not.toContain('send_to_agent')
 

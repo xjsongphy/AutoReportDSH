@@ -93,6 +93,7 @@ describe('persona slimming', () => {
     expect(text).not.toContain('report_task')
     expect(text).toContain('pdf-reference-reader')
     expect(text).toContain('bash')
+    expect(text).toContain('list_directory')
     expect(text).toContain('No tables by default')
     expect(text).not.toContain('subagent_fork')
     expect(text).not.toContain('`respond`')

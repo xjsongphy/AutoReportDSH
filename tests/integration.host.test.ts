@@ -81,7 +81,7 @@ describe('integration: assembled host (real context)', () => {
     assembled.runtime.roleRegistry.registerReserved(binding)
     const theory = makeChildRecorder('it-theory', assembled.runtime, assembled.workspaceRoot)
     assembled.routeChild(theory)
-    expect(theory.toolNames).toEqual(roleTools.filter(name => name !== 'bash'))
+    expect(theory.toolNames).toEqual(['list_directory', ...roleTools.filter(name => name !== 'bash')])
     expect(theory.bashDescriptions).toEqual([])
     expect(theory.bashLookupScopes).toEqual([])
     expect(theory.toolDescriptions.get('read')).toContain(`Relative paths resolve from ${assembled.workspaceRoot}.`)
