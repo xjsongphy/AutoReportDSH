@@ -264,10 +264,11 @@ export function createSendToAgentTool(deps: SendToAgentDependencies): ToolDefini
   return defineTool({
     name: 'send_to_agent',
     description: [
-      'Dispatch one durable AutoReport task to its fixed subagent role; creates a task when task_id is omitted. The subagent finishes only by calling report_workflow, which becomes your result.',
-      'With wait=true (default) the call blocks until the subagent reports and returns status: "success" (done — response holds results and produced file paths), "blocked" (subagent cannot proceed — block_type is "missing_data", "quality", or "missing_dependency"; response states what is needed; install reported dependencies yourself, never ask the subagent to), "failed" (the delegation itself broke; response carries the reason), "cancelled" (the task was cancelled with workflow_task while waiting), or "timeout" (the child stayed idle too long or reached the absolute wait limit; nothing was reported and the task stays open for redispatch).',
-      'wait=false returns "delegated" immediately and the report later arrives as a role \u2192 MAIN message in this conversation; do not poll for it.',
-      `The wait budget is timeout_ms, default ${defaultHardTimeoutMs} ms and capped at ${MAX_TIMEOUT_MS} ms; independently, the call gives up while the child has made no progress for the configured idle timeout (${defaultIdleTimeoutMs} ms by default).`,
+      'Dispatch one durable AutoReport task to its fixed subagent role; creates a task when task_id is omitted. Successful or blocked work is reported through report_workflow.',
+      'wait=true is the default. Dispatch waits for DSH to accept the message, then this call waits for that delegation revision to settle. It returns "success" (report response and produced_files), "blocked" (response and block_type: "missing_data", "quality", or "missing_dependency"), "failed" (child turn ended without a valid report; response gives the reason), "cancelled" (workflow_task cancelled it), or "timeout" (idle or hard limit reached). Errors before DSH accepts the message, including child startup or delivery errors, fail the tool call instead of returning one of these statuses.',
+      'For block_type "missing_dependency", install the reported dependency yourself; do not ask the subagent to install it.',
+      'wait=false returns "delegated" after DSH accepts the message. Any eventual workflow report arrives later as a role \u2192 MAIN message in this conversation; do not poll for it.',
+      `timeout_ms is the absolute post-acceptance wait limit (default ${defaultHardTimeoutMs} ms; maximum ${MAX_TIMEOUT_MS} ms); child startup and message delivery are outside this limit. A separate idle timeout (configured default ${defaultIdleTimeoutMs} ms) counts while DSH reports the child as idle, pauses while it is running, and restarts when it becomes idle. Either timeout leaves the task open for redispatch.`,
       'task_id must name an existing task of the requested role: completed or cancelled tasks, unknown task ids, and unfinished dependencies are rejected instead of dispatched. A rejected call changes nothing.',
       'To redispatch a blocked, failed, or timed-out task, call again with the same task_id — this starts a new delegation revision. Supply missing inputs or corrected constraints in prompt/context rather than repeating the failed prompt verbatim.',
     ].join(' '),
@@ -279,8 +280,8 @@ export function createSendToAgentTool(deps: SendToAgentDependencies): ToolDefini
       steps: { type: 'array', items: { type: 'object', additionalProperties: false, properties: { description: { type: 'string', required: true }, done: { type: 'boolean' } } }, description: 'Initial durable checklist when auto-creating a task; ignored for an existing task_id.' },
       task_id: { type: 'string', description: 'Existing task id to redispatch or follow up; must belong to role. Omit to create a new task.' },
       context: { type: 'string', description: 'Explicit user constraints the subagent must preserve.' },
-      wait: { type: 'boolean', description: 'Wait for the workflow report; default true. false returns immediately and the report arrives later as a message.' },
-      timeout_ms: { type: 'number', description: `Absolute wait limit in milliseconds: an integer from ${MIN_TIMEOUT_MS} through ${MAX_TIMEOUT_MS}, default ${defaultHardTimeoutMs}. Child activity only pauses the separate ${defaultIdleTimeoutMs} ms idle timeout.` },
+      wait: { type: 'boolean', description: 'Default true: after DSH accepts the dispatch, wait for this delegation revision to settle. false returns "delegated" after acceptance; the report arrives later as a message.' },
+      timeout_ms: { type: 'number', description: `Absolute post-acceptance wait limit in milliseconds: an integer from ${MIN_TIMEOUT_MS} through ${MAX_TIMEOUT_MS}, default ${defaultHardTimeoutMs} ms unless overridden by this workflow's frozen settings. Child startup and message delivery are outside this limit. The separate idle timeout (configured default ${defaultIdleTimeoutMs} ms; also overridable by frozen settings) pauses while the child is running and restarts when it becomes idle.` },
     },
     output: {
       schema: {
