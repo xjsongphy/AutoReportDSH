@@ -241,22 +241,25 @@ export default class AutoReportWorkflowRuntime extends Service {
       owner.runtime.waiters.noteChildActivity(String(agent.id), status)
     }, { global: true })
     ctx.on('agent/created', ({ agent }) => {
-      // Keep a reference only. Resident children are created lazily by the
-      // first role dispatch, so a new MAIN does not accumulate blank child
-      // sessions that the UI renders as the global empty hero.
       this.liveAgents.set(String(agent.id), agent)
+      // Load Main's durable role bindings before later created listeners (or
+      // child session events) need to resolve the resident identities. The
+      // host finishes role-specific tool composition before it asks us to
+      // materialize those bindings as live Agents.
+      if (isAutoReportMainSession(agent.session)) this.forSession(agent.session)
       return undefined
     }, { global: true })
     ctx.on('agent/disposed', ({ agent }) => {
       this.liveAgents.delete(String(agent.id))
-      if (isAutoReportMainSession(agent.session)) void this.disposeResidentFor(agent.id)
+      this.forgetResidentAgent(agent)
     }, { global: true })
-    ctx.effect(() => () => {
-      void this.disposeResidentRoles()
+    ctx.effect(() => async () => {
+      await this.disposeResidentRoles()
     }, 'autoreport.residentRoles()')
     const existingAgents = ctx.get('agents') as { list?: () => Agent[] } | undefined
     for (const agent of existingAgents?.list?.() ?? []) {
       this.liveAgents.set(String(agent.id), agent)
+      if (isAutoReportMainSession(agent.session)) this.forSession(agent.session)
     }
   }
 
@@ -297,6 +300,26 @@ export default class AutoReportWorkflowRuntime extends Service {
   /** Ensure all four fixed subagents exist after an explicit activation. */
   async ensureResidentRoles(parent: Agent, signal?: AbortSignal): Promise<void> {
     await Promise.all(allSpecialistRoles().map(role => this.ensureResidentRole(parent, role, signal)))
+  }
+
+  /** Restore only the specialist roles that already have durable bindings. */
+  async restoreResidentRoles(parent: Agent): Promise<void> {
+    if (!isAutoReportMainSession(parent.session)) return
+    const bindings = [...this.forSession(parent.session).state.projection().bindingsByRole.values()]
+      .filter(binding => binding.provisioning !== 'failed')
+    await Promise.all(bindings.map(async binding => {
+      try {
+        await this.ensureResidentRole(parent, binding.role)
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error)
+        this.ctx.logger.warn(
+          'AutoReportDSH: could not restore resident %s for MAIN %s: %s',
+          binding.role,
+          parent.id,
+          message,
+        )
+      }
+    }))
   }
 
   /**
@@ -356,7 +379,6 @@ export default class AutoReportWorkflowRuntime extends Service {
     const parentId = entry.binding.parentSessionId
     const agents = this.ctx.get('agents') as { get?: (id: SessionId) => Agent | undefined } | undefined
     const parent = agents?.get?.(parentId)
-    if (parent === undefined) throw new Error('direct parent is not live; report was not delivered')
     const message = createUserMessage({
       content: [
         { type: 'text', text: `Background subagent ${child.id} reported:` },
@@ -368,7 +390,18 @@ export default class AutoReportWorkflowRuntime extends Service {
         senderSessionId: child.id,
       } satisfies SubagentReportMessageSource,
     })
-    parent.steer(message)
+    if (parent !== undefined) {
+      parent.steer(message)
+    } else {
+      const parentSession = this.mainSessions.get(String(parentId))
+      if (parentSession === undefined) {
+        throw new Error('direct parent session is unavailable; report was not delivered')
+      }
+      // A durable resident can finish while Main has no live Activation.
+      // Append the same relay message to Main's Session so its normal observer
+      // folds the report and the next Main activation sees it in history.
+      parentSession.append('user/message', message, { surfaceOp: 'append' })
+    }
     return String(message.id)
   }
 
@@ -537,6 +570,18 @@ export default class AutoReportWorkflowRuntime extends Service {
       this.residentHandles.set(String(parent.id), byRole)
     }
     if (!byRole.has(role)) byRole.set(role, handle)
+  }
+
+  /** Remove the exact disposed activation while preserving its durable binding. */
+  private forgetResidentAgent(agent: Agent): void {
+    for (const [parentId, byRole] of this.residentHandles) {
+      for (const [role, handle] of byRole) {
+        if (handle.agent !== agent) continue
+        byRole.delete(role)
+        if (byRole.size === 0) this.residentHandles.delete(parentId)
+        return
+      }
+    }
   }
 
   private async disposeResidentRoles(): Promise<void> {

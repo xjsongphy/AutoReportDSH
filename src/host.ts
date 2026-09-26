@@ -7,6 +7,7 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
+import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { SessionId } from '@deepseek-ai/dsh-session'
 import { resolve } from 'node:path'
 import type { Config } from './config.js'
@@ -104,7 +105,7 @@ export async function apply(ctx: Context, config: Partial<Config> = {}, options:
   // DSH tools are inherited through agent scopes. Register same-name variants
   // in each AutoReport agent's own scope so the model sees role-specific shell
   // and path guidance while execution still uses the stock implementations.
-  ctx.on('agent/created', ({ agent }) => {
+  ctx.on('agent/created', async ({ agent }) => {
     const session = agent.session
     const role: AutoReportRole | undefined = runtime.roleFor(String(agent.id))
       ?? (isAutoReportMainSession(session) ? 'MAIN' : undefined)
@@ -153,6 +154,9 @@ export async function apply(ctx: Context, config: Partial<Config> = {}, options:
         description: `${strReplaceEditor.description} AutoReport path context: the absolute workspace root for this agent is ${workspaceRoot}. This tool requires absolute paths; use that directory as the base for workspace files.`,
       })
     }
+    // Rehydrate resident activations only after Main's scoped tools are ready,
+    // so resumed specialists inherit the same composed workspace as before.
+    if (role === 'MAIN') await runtime.restoreResidentRoles(agent)
     return undefined
   })
   if (sandboxPolicy !== undefined) {
@@ -298,6 +302,14 @@ export async function apply(ctx: Context, config: Partial<Config> = {}, options:
       },
     })
   }
+
+  // The host may be loaded after persisted Main agents have already been
+  // materialized. Run the same durable-binding restore path used by the
+  // created listener so those sessions do not wait for another user turn.
+  const existingAgents = ctx.get('agents') as { list?: () => Agent[] } | undefined
+  await Promise.all((existingAgents?.list?.() ?? [])
+    .filter(agent => isAutoReportMainSession(agent.session))
+    .map(agent => runtime.restoreResidentRoles(agent)))
 }
 
 export default AutoReportWorkflowRuntime
