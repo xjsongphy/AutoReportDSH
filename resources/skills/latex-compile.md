@@ -5,10 +5,17 @@ description: Use when compiling LaTeX documents with XeLaTeX, or encountering co
 
 ## AutoReport workspace
 
-Compile `Report/main.tex` from bash. Prefer `latexmk`, then `tectonic`, then `xelatex`. Do not use `compile_report`.
+Check the Bash tool description for its actual starting directory. With the
+role sandbox, REPORT starts in `Report/` and compiles `main.tex` directly. If
+bash starts at the workspace root, first use `cd Report &&` or set
+`workdir: "Report"`. Prefer `latexmk`, then `tectonic`, then `xelatex`. Do not use `compile_report`.
+Do not prefix a path with `Report/` after bash is already in `Report/`.
+Workspace-canonical output and handoff paths still include `Report/`; `read`
+paths are workspace-root-relative, while `write`/`edit` path bases are shown by
+those tools.
 
 ```bash
-cd Report && latexmk -xelatex -interaction=nonstopmode -file-line-error main.tex
+latexmk -xelatex -interaction=nonstopmode -file-line-error main.tex
 ```
 
 # LaTeX Compile

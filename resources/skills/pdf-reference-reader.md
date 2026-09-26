@@ -20,12 +20,16 @@ Extract reference PDFs into markdown so coordination and subagents can read expe
 
 ## Detect PDFs
 
-Locate candidates with workspace inspection (bash is allowed for MAIN):
+Check the Bash tool description for its actual starting directory. With the
+role sandbox, MAIN starts in `Outline/`: use `../References` for bash inputs
+and `.cache/mineru/` for bash outputs. Without it, bash starts at the workspace
+root: use `References/` and `Outline/.cache/mineru/`. `read` and `list` paths
+remain workspace-root-relative in either mode. Avoid Python here: MAIN's shell
+command list is for coordination and PDF extraction.
 
 ```bash
-find References -type f -iname '*.pdf'
-ls -la References/
-python3 -c "import pathlib; print('\n'.join(str(p) for p in pathlib.Path('References').rglob('*.pdf')))"
+find ../References -type f -iname '*.pdf'
+ls -la ../References/
 ```
 
 ## Extract via bash
@@ -33,13 +37,14 @@ python3 -c "import pathlib; print('\n'.join(str(p) for p in pathlib.Path('Refere
 Call `mineru-open-api` from bash (not flash-extract for production work):
 
 ```bash
-mineru-open-api extract "References/handout.pdf" -o "Outline/.cache/mineru/handout/"
+mineru-open-api extract "../References/handout.pdf" -o ".cache/mineru/handout/"
 ```
 
 Rules:
-- Always pass `-o` to a directory under `Outline/.cache/mineru/<stem>/` (use the PDF stem as `<stem>`).
+- The workspace-canonical output directory is `Outline/.cache/mineru/<stem>/`; from MAIN's sandboxed `Outline/` bash cwd, pass `.cache/mineru/<stem>/` to `-o`.
+- When bash starts at the workspace root, pass `Outline/.cache/mineru/<stem>/` to `-o` instead.
 - Never write extracted markdown or assets into `References/`.
-- After extraction, `read()` the generated markdown (often `full.md` or similar) inside the output directory.
+- After extraction, use workspace-root-relative `read()` on the generated markdown (often `Outline/.cache/mineru/<stem>/full.md`).
 
 ## Failures
 

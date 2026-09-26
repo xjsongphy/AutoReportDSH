@@ -18,5 +18,10 @@ beside this file:
 | Tables and measured data | [tables.md](tables.md) |
 | Citations, theorems, equations | [academic.md](academic.md) |
 
+The base directory above is DSH's absolute `resourceBase` for this loaded
+skill. To inspect a referenced document, resolve it against that base and pass
+the resulting absolute local path to `read`; AutoReport grants REPORT read
+access only to this registered bundle directory.
+
 Compiling is `typst-compile`'s job; that skill carries the command, the
 workspace entry file, and the diagnostics workflow.

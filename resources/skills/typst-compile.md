@@ -18,10 +18,17 @@ Typst compilation assistant for AutoReport Typst reports: bash-driven `typst com
 
 ## Compilation via bash
 
-Run from the experiment workspace root. Network access is allowed (package/font fetch when needed). Writes stay inside `Report/`.
+Check the Bash tool description for its actual starting directory. With the
+role sandbox, REPORT starts in `Report/`; otherwise bash starts at the workspace
+root, so first use `cd Report &&` or set `workdir: "Report"`. Compile without
+repeating `Report/` after bash enters that directory. Network access is allowed
+(package/font fetch when needed). Writes stay inside `Report/`. Workspace-
+canonical output paths and handoffs still include `Report/`; `read` paths are
+workspace-root-relative, while `write`/`edit` path bases are shown by those
+tools.
 
 ```bash
-typst compile Report/main.typ Report/main.pdf --root "$(pwd)"
+typst compile main.typ main.pdf --root "$(pwd)/.."
 ```
 
 The `--root` flag lets figures reference `../Plots/Fig/...` as the template does.
@@ -61,7 +68,7 @@ error: unknown font family: ...
 
 ## Workflow
 
-1. Run `typst compile` via bash with `--root` set to the experiment workspace.
+1. Run `typst compile` via bash from REPORT's `Report/` cwd with `--root` set to the experiment workspace (`$(pwd)/..`).
 2. Read full diagnostics; Typst errors carry file + line spans — read those exact lines before editing.
 3. Fix in `Report/*.typ` (writes stay confined there).
 4. Recompile until clean; confirm `Report/main.pdf`.

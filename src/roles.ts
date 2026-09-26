@@ -4,10 +4,12 @@
  * Session identity; this table is the domain source for authorization and
  * process isolation.
  *
- * Navigation cwd is always the experiment root (`'.'`). Writable roots are
- * narrower than the workspace and are enforced by DSH sandbox `workspaceRoot`
- * (independent of session cwd) plus a shrunk AutoReport guard. Network is
- * allowed: DSH sandbox is a file-effect boundary, not a network boundary.
+ * `cwd: '.'` is the logical workspace/session base, not the subprocess CWD and
+ * is not currently consumed by runtime code. The session header stays on the
+ * workspace root; with DSH sandboxing, Bash starts at the role's writable
+ * `workspaceRoot`, while no-sandbox Bash starts at the session cwd. Writable
+ * roots are enforced by DSH plus the AutoReport path guard. Network is allowed:
+ * DSH sandbox is a file-effect boundary, not a network boundary.
  * @module
  */
 
@@ -19,7 +21,7 @@ export type SpecialistRole = Exclude<AutoReportRole, 'MAIN'>
 
 /** Explicit execution policy for one role (PLAN.md §2.2, execution-layer rev). */
 export interface ReportRolePolicy {
-  /** Navigation cwd, always the experiment root. Not a write-authorization boundary. */
+  /** Logical workspace base (`.`); not the operating-system process CWD. */
   readonly cwd: string
   /** Directories the role may read; `'.'` is the whole workspace. */
   readonly readableRoots: readonly string[]
@@ -33,7 +35,7 @@ export interface ReportRolePolicy {
 
 const MAIN_POLICY: ReportRolePolicy = {
   cwd: '.',
-  readableRoots: ['.'],
+  readableRoots: ['References', 'Outline'],
   writableRoots: ['Outline'],
   network: 'allow',
   temp: 'private',
@@ -41,7 +43,7 @@ const MAIN_POLICY: ReportRolePolicy = {
 
 const THEORY_POLICY: ReportRolePolicy = {
   cwd: '.',
-  readableRoots: ['.'],
+  readableRoots: ['References', 'Outline', 'Theory'],
   writableRoots: ['Theory'],
   network: 'allow',
   temp: 'private',
@@ -49,7 +51,7 @@ const THEORY_POLICY: ReportRolePolicy = {
 
 const DATA_ANALYSIS_POLICY: ReportRolePolicy = {
   cwd: '.',
-  readableRoots: ['.'],
+  readableRoots: ['References', 'Outline', 'Theory', 'Data'],
   writableRoots: ['Data/Processed'],
   network: 'allow',
   temp: 'private',
@@ -57,7 +59,7 @@ const DATA_ANALYSIS_POLICY: ReportRolePolicy = {
 
 const PLOTTING_POLICY: ReportRolePolicy = {
   cwd: '.',
-  readableRoots: ['.'],
+  readableRoots: ['References', 'Outline', 'Theory', 'Data', 'Plots'],
   writableRoots: ['Plots'],
   network: 'allow',
   temp: 'private',
@@ -65,7 +67,7 @@ const PLOTTING_POLICY: ReportRolePolicy = {
 
 const REPORT_POLICY: ReportRolePolicy = {
   cwd: '.',
-  readableRoots: ['.'],
+  readableRoots: ['References', 'Outline', 'Theory', 'Data', 'Plots', 'Report'],
   writableRoots: ['Report'],
   network: 'allow',
   temp: 'private',

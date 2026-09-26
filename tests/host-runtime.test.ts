@@ -627,7 +627,10 @@ describe('host workflow runtime', () => {
     expect(decision('write', write)).toMatch(/experiment-report-writer/)
     // A shell command that only mentions a compiler is not a compilation.
     expect(decision('bash', { command: 'rg latexmk Report/build.log' })).toBeUndefined()
-    expect(decision('bash', { command: 'latexmk -xelatex main.tex' })).toMatch(/latex-compile/)
+    expect(decision('bash', {
+      command: 'latexmk -xelatex main.tex',
+      workdir: join(root, 'Report'),
+    })).toMatch(/latex-compile/)
 
     // The model loads one writing skill through dsh's own `skill` tool. The
     // gate reads the durable stream, so the load must be observed there.

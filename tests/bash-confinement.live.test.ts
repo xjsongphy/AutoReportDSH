@@ -219,6 +219,20 @@ function callBash(harness: Context, command: string, agent: Agent) {
   })
 }
 
+function callBashAt(harness: Context, command: string, agent: Agent, workdir?: string) {
+  return harness.tools.execute({
+    signal: testToolSignal,
+    callId: ToolCallId(`call-${++callCounter}`),
+    name: 'bash',
+    arguments: {
+      command,
+      description: 'check role-relative working directory',
+      ...(workdir === undefined ? {} : { workdir }),
+    },
+    agent,
+  })
+}
+
 const SANDBOX_USABLE = sandboxUsable()
 const CURL_AVAILABLE = spawnSync('curl', ['--version'], { timeout: 5_000, stdio: 'ignore' }).status === 0
 
@@ -257,6 +271,31 @@ describe('bash role write confinement (live)', () => {
   // (`Bash/Service/CreateInstance/E_ACCESSDENIED`), so the suite's own shell
   // never runs and the cases cannot pass yet — see `confinementTest`.
   describe.skipIf(!SANDBOX_USABLE)('role writable roots', () => {
+  confinementTest('DSH bash defaults and relative workdir use the role sandbox root', async () => {
+    const experimentRoot = experimentWorkspace()
+    const dataRoot = roleWritableRoot(experimentRoot, 'DATA_ANALYSIS')
+    const reportRoot = roleWritableRoot(experimentRoot, 'REPORT')
+    mkdirSync(join(dataRoot, 'nested'), { recursive: true })
+    mkdirSync(join(reportRoot, 'compile'), { recursive: true })
+    const harness = await setupHarness(experimentRoot)
+    const analyst = registerAgent(harness, sessionForRole(experimentRoot, 'DATA_ANALYSIS', 'cwd-data'))
+    const reporter = registerAgent(harness, sessionForRole(experimentRoot, 'REPORT', 'cwd-report'))
+
+    const analystDefault = await callBashAt(harness, 'pwd', analyst)
+    expect(analystDefault.isError, text(analystDefault)).toBe(false)
+    expect(text(analystDefault)).toContain(dataRoot)
+    const analystRelativeWorkdir = await callBashAt(harness, 'pwd', analyst, 'nested')
+    expect(analystRelativeWorkdir.isError, text(analystRelativeWorkdir)).toBe(false)
+    expect(text(analystRelativeWorkdir)).toContain(join(dataRoot, 'nested'))
+
+    const reportDefault = await callBashAt(harness, 'pwd', reporter)
+    expect(reportDefault.isError, text(reportDefault)).toBe(false)
+    expect(text(reportDefault)).toContain(reportRoot)
+    const reportCompileWorkdir = await callBashAt(harness, 'pwd', reporter, 'compile')
+    expect(reportCompileWorkdir.isError, text(reportCompileWorkdir)).toBe(false)
+    expect(text(reportCompileWorkdir)).toContain(join(reportRoot, 'compile'))
+  }, 30_000)
+
   confinementTest('DATA_ANALYSIS writes inside Data/Processed and denies Report', async () => {
     const experimentRoot = experimentWorkspace()
     const harness = await setupHarness(experimentRoot)

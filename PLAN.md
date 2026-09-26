@@ -20,11 +20,13 @@ documents for a bundle (PLAN §2.18). §2.14 keeps the precedence chain but lose
 language authority to the user settings namespace; §2.17 row 9 records the slot change.
 
 **Rev 8 execution-layer amendment.** Role writable roots are independent DSH sandbox
-workspace roots (cwd stays the experiment root). All five roles use DSH-native `bash`
-with network allowed. `report_exec`, `compile_report`, and AutoReport network-denial
-isolation are removed. Python/MinerU/LaTeX/Typst are skills plus shell-env facts, not
-dedicated model tools. Sections below that still describe `report_exec` / network deny
-are historical; README.md is the current product surface.
+roots; the DSH session cwd stays the experiment root while sandboxed Bash starts in the
+role root. MAIN, DATA_ANALYSIS, PLOTTING, and REPORT use DSH-native `bash`; THEORY has no
+shell tool and uses `list` for directory discovery. Network access is allowed.
+`report_exec`, `compile_report`, and AutoReport network-denial isolation are removed.
+Python/MinerU/LaTeX/Typst are skills plus shell-env facts, not dedicated model tools.
+Sections below that still describe `report_exec` / network deny are historical;
+README.md is the current product surface.
 
 Migrate the AutoReportCLI physics-report workflow into a DeepSeek Harness (`dsh`) plugin.
 The scope contract is `../autoreportcli/docs/own-features.md`: preserve AutoReport-owned
@@ -207,25 +209,30 @@ interface ReportExecutionPolicy {
   cwd: string
   readableRoots: string[]
   writableRoots: string[]
-  network: 'deny'
+  network: 'allow'
   temp: 'private'
 }
 ```
 
-| Role | Child | `cwd` | Readable roots | Writable roots |
-|---|---|---|---|---|
-| MAIN | user session | workspace | workspace | `Outline/` |
-| THEORY | one continuable child | `Theory/` | workspace | `Theory/` |
-| DATA_ANALYSIS | one continuable child | `Data/` | workspace | `Data/Processed/` |
-| PLOTTING | one continuable child | `Plots/` | workspace | `Plots/` |
-| REPORT | one continuable child | `Report/` | workspace | `Report/` |
+| Role | Child | Session/workspace base | Bash process cwd when sandboxed | Readable roots | Writable roots |
+|---|---|---|---|---|---|
+| MAIN | user session | workspace | `Outline/` | `References/`, `Outline/` | `Outline/` |
+| THEORY | one continuable child | workspace | — (no Bash tool) | `References/`, `Outline/`, `Theory/` | `Theory/` |
+| DATA_ANALYSIS | one continuable child | workspace | `Data/Processed/` | `References/`, `Outline/`, `Theory/`, `Data/` | `Data/Processed/` |
+| PLOTTING | one continuable child | workspace | `Plots/` | `References/`, `Outline/`, `Theory/`, `Data/`, `Plots/` | `Plots/` |
+| REPORT | one continuable child | workspace | `Report/` | `References/`, `Outline/`, `Theory/`, `Data/`, `Plots/`, `Report/` | `Report/` |
 
-Every report process has `network: 'deny'` and a private temporary area. `cwd` controls
-relative-command behavior only; it is not a read or write authorization boundary.
+`ReportRolePolicy.cwd` records the logical workspace base `.` and has no runtime
+consumer. The DSH session header remains on the workspace root. With the role
+sandbox, DSH uses the per-role sandbox `workspaceRoot` as Bash's default cwd and
+relative `workdir` base; without it, Bash uses the session cwd. Roles allow network
+access and use a private temporary area.
 
-All roles can read the experiment workspace subject to the deployment’s ordinary read
-policy. A role’s writable roots are narrower than the DSH workspace root and are enforced
-independently.
+`readableRoots` governs model-facing filesystem tools and `list`; directory
+listing is bounded and returns names only. It does not restrict reads made inside `bash`
+or another process. DSH's current `workspaceRoot` sandbox parameter restricts writes only,
+so process reads remain a prompt-level responsibility. Writable roots are enforced
+independently by the DSH sandbox and AutoReport write guard.
 
 ### 2.3 Role binding before child execution
 

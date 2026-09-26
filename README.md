@@ -24,7 +24,7 @@ The workflow ports the report pipeline of
 
 ### Core capabilities
 - **Multi-agent collaboration** — Main plans and coordinates; Theory, Data Analysis, Plotting, and Report carry out the specialized work
-- **Directory permission isolation** — every role is pinned to its own writable root by DSH's `workspace-write` sandbox (table below)
+- **Role-scoped filesystem access** — model-facing reads follow each role's readable roots, and DSH's `workspace-write` sandbox confines writes to the role's writable root; shell path checks are advisory and do not isolate arbitrary process reads
 - **LaTeX and Typst reports** — per-project language with bundled templates, themes, bibliography assets, and compile skills; Python for data processing and plotting
 - **Your DSH providers** — model routes and credentials come from DSH's own configuration
 - **Deterministic bundled resources** — templates, themes, skills, and their reference documents are committed in `resources/` and read from there; a session never fetches or replaces a prompt over the network
@@ -176,13 +176,21 @@ $DSH_HOME/
 
 ### Role permissions
 
-| Role | Writes | Reads |
+| Role | Model-facing file reads | Writes |
 |---|---|---|
-| Main | `Outline/` | the whole workspace |
-| Theory | `Theory/` | the whole workspace |
-| Data Analysis | `Data/Processed/` | the whole workspace |
-| Plotting | `Plots/` | the whole workspace |
-| Report | `Report/` | the whole workspace |
+| Main | `References/`, `Outline/` | `Outline/` |
+| Theory | `References/`, `Outline/`, `Theory/` | `Theory/` |
+| Data Analysis | `References/`, `Outline/`, `Theory/`, `Data/` | `Data/Processed/` |
+| Plotting | `References/`, `Outline/`, `Theory/`, `Data/`, `Plots/` | `Plots/` |
+| Report | `References/`, `Outline/`, `Theory/`, `Data/`, `Plots/`, `Report/` | `Report/` |
+
+These read roots apply to model-facing file tools. Theory has no Bash tool and
+uses `list` for directory discovery. In sandboxed sessions, Bash starts in the
+role's writable directory; its relative command paths and `workdir` use that
+directory as their base. `read`/`list`, manifest, and handoff paths remain
+workspace-relative, while relative `write`/`edit` arguments use the role's
+writable directory. Bash path checks are advisory: the current DSH sandbox
+does not restrict arbitrary process reads.
 
 ## Development
 

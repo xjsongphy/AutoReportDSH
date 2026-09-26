@@ -15,13 +15,14 @@
 
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join, resolve } from 'node:path'
+import { isAbsolute, join, resolve } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import { SESSION_FORMAT_VERSION, Session, SessionId } from '@deepseek-ai/dsh-session'
 import { roleWritableRoot } from '../src/policy/sandbox-roots.js'
+import { AUTOREPORT_MAIN_PRESET } from '../src/membership.js'
 import { REQUIRED_DIRS } from '../src/workspace/init.js'
 import { resolveWorkflowSettings, workspaceIdForRoot } from '../src/settings.js'
 import { AUTOREPORT_SCHEMA_VERSION, type RoleBindingSnapshot } from '../src/workflow/events.js'
@@ -59,6 +60,122 @@ async function boot(options: Parameters<typeof assemble>[0] = {}): Promise<Assem
 }
 
 describe('integration: assembled host (real context)', () => {
+  it('enforces readableRoots through the assembled tool runtime and leaves stock reads alone', async () => {
+    const assembled = await boot({ roleSandbox: true })
+    const stockRoot = makeTemp('autoreport-it-stock-read-root-')
+    mkdirSync(join(assembled.workspaceRoot, 'References'), { recursive: true })
+    mkdirSync(join(assembled.workspaceRoot, 'Data'), { recursive: true })
+    mkdirSync(join(stockRoot, 'Data'), { recursive: true })
+    writeFileSync(join(assembled.workspaceRoot, 'References', 'method.md'), 'allowed theory input')
+    writeFileSync(join(assembled.workspaceRoot, 'Data', 'raw.csv'), '1,2\n')
+    writeFileSync(join(stockRoot, 'Data', 'raw.csv'), 'stock session file\n')
+    const observedPaths: string[] = []
+    assembled.runtime.roleRegistry.registerReserved({
+      version: AUTOREPORT_SCHEMA_VERSION,
+      role: 'THEORY',
+      childSessionId: SessionId('it-theory-read-guard'),
+      parentSessionId: assembled.mainSession.id,
+      workflowId: 'wf-read-guard',
+      provisioning: 'reserved',
+    })
+    const childSession = Session.create(SessionId('it-theory-read-guard'), undefined, {
+      version: SESSION_FORMAT_VERSION,
+      isSeeded: false,
+      id: SessionId('it-theory-read-guard'),
+      createdAt: Date.now(),
+      cwd: stockRoot,
+      parentSession: assembled.mainSession.id,
+    })
+    const scopedTools = new Map<string, { name: string; description?: string; execute?: (...args: never[]) => unknown }>()
+    const childAgent = {
+      id: childSession.id,
+      session: childSession,
+      ctx: {
+        // The report router normally mounts its child tool plane through this
+        // scope injection; this test exercises only the host filesystem path
+        // wrapper, so leave that separate child plane inert.
+        inject: () => ({ dispose: async () => {} }),
+        tools: {
+          get: (name: string, scope?: Agent) => assembled.ctx.tools.get(name, scope),
+          register: (tool: { name: string; description?: string; execute?: (...args: never[]) => unknown }) => {
+            scopedTools.set(tool.name, tool)
+            return () => {}
+          },
+        },
+      },
+    } as unknown as Agent
+    const stockSession = Session.create(SessionId('it-stock-read'), undefined, {
+      version: SESSION_FORMAT_VERSION,
+      isSeeded: false,
+      id: SessionId('it-stock-read'),
+      createdAt: Date.now(),
+      cwd: stockRoot,
+    })
+    const stockAgent = { id: stockSession.id, session: stockSession } as Agent
+    assembled.ctx.tools.register(defineTool({
+      name: 'read',
+      description: 'fixture file read',
+      parameters: { file_path: { type: 'string', required: true } },
+      output: {
+        schema: { type: 'object', additionalProperties: true, properties: {} },
+        render: (_args, value) => [{ type: 'text', text: String((value as { text: string }).text) }],
+      },
+      execute(args, execution) {
+        const filePath = isAbsolute(String(args.file_path))
+          ? String(args.file_path)
+          : join(execution.agent?.session.header.cwd ?? process.cwd(), String(args.file_path))
+        observedPaths.push(filePath)
+        return { text: readFileSync(filePath, 'utf8') }
+      },
+    }))
+    await assembled.ctx.parallel('agent/created', { agent: childAgent, source: 'fresh' })
+
+    const readOverride = scopedTools.get('read') as unknown as {
+      execute(args: { file_path: string }, execution: { agent: Agent }): Promise<{ text: string }>
+    }
+    const allowed = await readOverride.execute({
+      file_path: 'References/method.md',
+    }, { agent: childAgent })
+    expect(allowed.text).toContain('allowed theory input')
+    expect(observedPaths.at(-1)).toBe(join(assembled.workspaceRoot, 'References', 'method.md'))
+
+    const denied = await execute(assembled.ctx, 'read', {
+      file_path: 'Data/raw.csv',
+    }, childAgent, childSession)
+    expect(denied.isError).toBe(true)
+    expect(denied.text).toContain('allowed read directories: References/, Outline/, Theory/')
+    expect(denied.text).toContain('allowed write directories: Theory/')
+
+    const stockRead = await execute(assembled.ctx, 'read', {
+      file_path: 'Data/raw.csv',
+    }, stockAgent, stockSession)
+    expect(stockRead.isError, stockRead.text).toBe(false)
+    expect(stockRead.text).toContain('stock session file')
+    expect(observedPaths.at(-1)).toBe(join(stockRoot, 'Data', 'raw.csv'))
+  })
+
+  it('fails fast when no sandbox can reconcile configured workspaceRoot with session cwd', async () => {
+    const configuredRoot = makeTemp('autoreport-configured-root-')
+    const sessionRoot = makeTemp('autoreport-session-root-')
+    const mainSession = Session.create(SessionId('it-anchor-mismatch'), undefined, {
+      version: SESSION_FORMAT_VERSION,
+      isSeeded: false,
+      id: SessionId('it-anchor-mismatch'),
+      createdAt: Date.now(),
+      cwd: sessionRoot,
+      agentPreset: AUTOREPORT_MAIN_PRESET,
+    })
+    const assembled = await boot({ workspaceRoot: configuredRoot, mainSession })
+    await expect(assembled.ctx.parallel('agent/created', {
+      agent: assembled.mainAgent,
+      source: 'fresh',
+    })).rejects.toMatchObject({
+      errors: expect.arrayContaining([
+        expect.objectContaining({ message: expect.stringMatching(/requires DSH sandboxPolicy.*differs from session cwd/u) }),
+      ]),
+    })
+  })
+
   it('registers exactly ONE continuable setup and routes it by RoleRegistry', async () => {
     const assembled = await boot({ roleSandbox: true })
     const roleTools = ['bash', 'read', 'read_image', 'write', 'edit', 'str_replace_editor', 'manifest', 'report_workflow']
@@ -81,7 +198,7 @@ describe('integration: assembled host (real context)', () => {
     assembled.runtime.roleRegistry.registerReserved(binding)
     const theory = makeChildRecorder('it-theory', assembled.runtime, assembled.workspaceRoot)
     assembled.routeChild(theory)
-    expect(theory.toolNames).toEqual(['list_directory', ...roleTools.filter(name => name !== 'bash')])
+    expect(theory.toolNames).toEqual(['list', ...roleTools.filter(name => name !== 'bash')])
     expect(theory.bashDescriptions).toEqual([])
     expect(theory.bashLookupScopes).toEqual([])
     expect(theory.toolDescriptions.get('read')).toContain(`Relative paths resolve from ${assembled.workspaceRoot}.`)

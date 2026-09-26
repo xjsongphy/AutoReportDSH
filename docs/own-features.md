@@ -35,14 +35,23 @@ platform.
   [Prompt-attached language guidance](#prompt-attached-language-guidance).
   Referenced skill documents are addressed through DSH's own resource anchor —
   see [Skill resource anchoring](#skill-resource-anchoring).
-- **Write isolation:** Main may write `Outline/`; Theory `Theory/`; Data
-  Analysis `Data/Processed/`; Plotting `Plots/`; Report `Report/`. The plugin
-  adds both a synchronous tool guard and a DSH workspace-write sandbox-root
-  override. Only writes are confined: every sandbox runner DSH ships grants the
-  resolved root write access and leaves reads unrestricted, so a role reads the
-  whole experiment tree — and the rest of the filesystem — without gaining a
-  write anywhere outside its own directory. `tests/bash-confinement.live.test.ts`
-  asserts both halves in one session.
+- **Role filesystem policy:** Main reads `References/` and `Outline/`; Theory
+  reads those plus `Theory/`; Data Analysis adds `Data/`; Plotting adds `Plots/`;
+  Report adds `Report/`. Model-facing `read`, `read_image`, directory listing,
+  and editor-view calls are checked by the AutoReport role guard. Each role may
+  write only its own root: Main `Outline/`, Theory `Theory/`, Data Analysis
+  `Data/Processed/`, Plotting `Plots/`, Report `Report/`. DSH's workspace-write
+  sandbox and the role guard enforce writes. Shell process reads remain
+  unrestricted by the current DSH sandbox; the shell preflight improves command
+  feedback but is not an OS-level read boundary. `tests/bash-confinement.live.test.ts`
+  verifies the sandbox's write confinement and shared process-read behavior.
+  The session header remains on the workspace root; sandboxed Bash starts in
+  the role writable root, while no-sandbox Bash uses the session cwd. The
+  `ReportRolePolicy.cwd` field records logical workspace base `.` and does not
+  set the operating-system process cwd.
+  The `list` tool rename, provider-backed filesystem contract, MAIN deliverables,
+  task cancellation, search limits, and process-isolation decisions are tracked
+  in [Role filesystem, delivery, and cancellation decisions](role-filesystem-decisions.md).
 - **Settings integration:** report language, wait limits, Python interpreter,
   and specialist-model selection are stored in DSH's `autoreport` user-settings
   namespace; DSH retains ownership of provider credentials and model execution.
@@ -145,6 +154,12 @@ prose, not only links. A skill whose body names the experiment workspace
 base, or the model would be told to look for `Report/main.tex` under
 `resources/`. Today `experiment-report-writer` and `typst` are bundles; the
 compile and PDF-extraction skills are flat.
+
+Bundle resources live outside the experiment workspace, so the role guard adds
+only the exact registered bundle directories available to that role (and the
+active report language) as read-only roots. The skill prompt's absolute
+`resourceBase` is the path the agent uses for those resources; ordinary
+`read`/`list` inputs, manifests, and handoffs stay workspace-root-relative.
 
 ## Resources are vendored, never fetched
 

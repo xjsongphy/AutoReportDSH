@@ -9,7 +9,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { SessionId } from '@deepseek-ai/dsh-session'
-import { resolve } from 'node:path'
+import { isAbsolute, resolve } from 'node:path'
 import type { Config } from './config.js'
 import { isAutoReportMainSession } from './membership.js'
 import { rolePolicy, type AutoReportRole } from './roles.js'
@@ -24,7 +24,9 @@ import { createReportInitCommand, parseReportInitInput, resolveWorkspaceRoot } f
 import { createReportResetCommand, parseReportResetInput } from './workspace/reset.js'
 import { describeDshVersionSupport, readRunningDshVersion } from './dsh-version.js'
 import { installTurnGuards } from './workflow/turn-guard.js'
-import { createListDirectoryTool } from './tools/list-directory.js'
+import { createListDirectoryTool, type DirectoryFileSystem } from './tools/list-directory.js'
+import { MAIN_SKILL_NAMES, skillNamesForRole } from './skills-preset.js'
+import { loadBundledSkills } from './workspace/skill-loader.js'
 
 export const name = 'autoreport-host'
 // `apply()` registers the host-wide `/init` command through the commands
@@ -35,6 +37,10 @@ export const inject = ['tools', 'commands', 'shellEnv']
 const DEFAULT_WAIT_MS = 600_000
 const DEFAULT_IDLE_TIMEOUT_MS = 60_000
 const FILE_PATH_TOOLS = ['read', 'read_image', 'write', 'edit'] as const
+
+function hasUriScheme(path: string): boolean {
+  return /^[A-Za-z][A-Za-z0-9+.-]*:\/\//u.test(path) && !/^[A-Za-z]:[\\/]/u.test(path)
+}
 
 function initializeWorkflowIfOwnWorkspace(
   runtime: AutoReportWorkflowRuntime,
@@ -102,7 +108,16 @@ export async function apply(ctx: Context, config: Partial<Config> = {}, options:
   // the experiment workspace.
   const sandboxPolicy = ctx.get('sandboxPolicy') as Parameters<typeof installSandboxOverride>[0] | undefined
   const resolved = resolveHostConfig(config)
+  if (resolved.workspaceRoot !== undefined) {
+    if (hasUriScheme(resolved.workspaceRoot)) {
+      throw new Error('AutoReport workspaceRoot must be a local filesystem path; URI workspaces are not supported by its role policy')
+    }
+    resolved.workspaceRoot = resolve(resolved.workspaceRoot)
+  }
   const runtime = new AutoReportWorkflowRuntime(ctx, resolved, options)
+  const bundledSkillRoots = new Map(
+    loadBundledSkills().flatMap(skill => skill.directory === undefined ? [] : [[skill.name, skill.directory] as const]),
+  )
   // DSH tools are inherited through agent scopes. Register same-name variants
   // in each AutoReport agent's own scope so the model sees role-specific shell
   // and path guidance while execution still uses the stock implementations.
@@ -111,25 +126,36 @@ export async function apply(ctx: Context, config: Partial<Config> = {}, options:
     const role: AutoReportRole | undefined = runtime.roleFor(String(agent.id))
       ?? (isAutoReportMainSession(session) ? 'MAIN' : undefined)
     if (role === undefined) return undefined
-    const workspaceRoot = typeof session.header?.cwd === 'string' && session.header.cwd.length > 0
+    const sessionRoot = typeof session.header?.cwd === 'string' && session.header.cwd.length > 0
       ? resolve(session.header.cwd)
       : undefined
-    const mutationRoot = resolved.workspaceRoot ?? workspaceRoot
-    // Under AutoReport's sandbox override, write/edit resolve relative paths
-    // from the role's writable directory; reads still use the session cwd.
-    const writeEditRoot = sandboxPolicy !== undefined && mutationRoot !== undefined
+    const workspaceRoot = resolved.workspaceRoot ?? sessionRoot
+    if (sandboxPolicy === undefined && resolved.workspaceRoot !== undefined
+      && (sessionRoot === undefined || resolve(resolved.workspaceRoot) !== sessionRoot)) {
+      throw new Error(
+        `AutoReport ${role} requires DSH sandboxPolicy when configured workspaceRoot ${resolve(resolved.workspaceRoot)} differs from session cwd ${sessionRoot ?? '(missing)'}; without the service DSH resolves relative file and bash paths from session cwd`,
+      )
+    }
+    const mutationRoot = workspaceRoot
+    // DSH's sandbox policy root wins for writes and bash when available. Without
+    // it, DSH file tools and bash use the immutable session cwd.
+    const relativeMutationRoot = sandboxPolicy !== undefined && mutationRoot !== undefined
       ? roleWritableRoot(mutationRoot, role)
-      : workspaceRoot
+      : sessionRoot ?? workspaceRoot
     if (workspaceRoot !== undefined && (role === 'MAIN' || role === 'THEORY')) {
-      agent.ctx.tools.register(createListDirectoryTool(workspaceRoot, agent))
+      const fileSystem = ctx.get('fs') as DirectoryFileSystem | undefined
+      agent.ctx.tools.register(createListDirectoryTool(workspaceRoot, agent, fileSystem))
     }
     const bash = role === 'THEORY' ? undefined : agent.ctx.tools.get('bash', agent)
     if (bash !== undefined) {
-      const writable = rolePolicy(role).writableRoots.join(', ')
+      const writable = rolePolicy(role).writableRoots.map(root => `${root}/`).join(', ')
+      const readable = rolePolicy(role).readableRoots.map(root => `${root}/`).join(', ')
+      const bashCwd = relativeMutationRoot
+      const canonicalOutputNote = 'Paths such as Report/main.typ in personas, manifests, and report_workflow are workspace-canonical. Bash paths and relative workdir use its current directory; do not repeat a role-directory prefix when bash is already in that directory.'
       const guidance = role === 'MAIN'
-        ? ' AutoReport MAIN: use list_directory for workspace inventory. Bash writes are allowed only under Outline/. '
-          + 'Do not use bash for theory, analysis, plotting, report writing, or compilation.'
-        : ` AutoReport ${role}: use bash only for commands needed by your assigned specialist task. Writes are confined to ${writable}.`
+        ? ` AutoReport MAIN: use list for workspace inventory. File reads are allowed under ${readable}; bash starts in ${bashCwd ?? 'the session workspace'}${sandboxPolicy === undefined ? '' : ' (Outline/)'} and relative workdir/command paths use that directory as their base. Bash writes are allowed only under Outline/. ${canonicalOutputNote} `
+          + 'Do not use bash for theory, analysis, plotting, report writing, or compilation. Process reads are not path-restricted by the current DSH sandbox, so use file tools for role-scoped reads.'
+        : ` AutoReport ${role}: use bash only for commands needed by your assigned specialist task. Bash starts in ${bashCwd ?? 'the session workspace'}${sandboxPolicy === undefined ? '' : ` (${rolePolicy(role).writableRoots[0]}/)`}; relative workdir and command paths resolve from there. File reads are allowed under ${readable}; writes are confined to ${writable}. ${canonicalOutputNote} Process reads are not path-restricted by the current DSH sandbox, so use file tools for role-scoped reads.`
       agent.ctx.tools.register({ ...bash, description: `${bash.description}${guidance}` })
     }
     // The stock filesystem schemas leave the path base implicit. Make the
@@ -139,17 +165,33 @@ export async function apply(ctx: Context, config: Partial<Config> = {}, options:
       const tool = agent.ctx.tools.get(name, agent)
       if (tool === undefined) continue
       const isMutation = name === 'write' || name === 'edit'
-      const relativeRoot = isMutation ? writeEditRoot : workspaceRoot
+      const relativeRoot = isMutation ? relativeMutationRoot : workspaceRoot
       const relativePathGuidance = relativeRoot === undefined
         ? 'The absolute path base for relative paths is unavailable in this session; use an absolute path when the base is uncertain.'
         : `Relative paths resolve from ${relativeRoot}.`
       const filePathGuidance = isMutation
-        ? `AutoReport file paths: for this role's writable directory, prefer paths relative to its root, such as \`main.typ\`. ${relativePathGuidance} Absolute paths are accepted when they remain inside this role's writable directory.`
-        : `AutoReport file paths: for workspace files, prefer workspace-relative paths such as \`Report/main.typ\`. ${relativePathGuidance} Absolute paths are also accepted.`
-      agent.ctx.tools.register({
-        ...tool,
-        description: `${tool.description} ${filePathGuidance}`,
-      })
+        ? `AutoReport file paths: workspace-canonical output identifiers (for manifests and handoffs) include the role directory, e.g. \`Report/main.typ\`. This tool's relative paths resolve from ${relativeRoot ?? 'the DSH session workspace'}; if that is the role root, write \`main.typ\` without repeating \`Report/\`. ${relativePathGuidance} Absolute workspace paths are accepted when they remain inside this role's writable directory.`
+        : `AutoReport file paths: reads use workspace-root-relative paths such as \`Theory/formulas.md\`, allowed under ${rolePolicy(role).readableRoots.join(', ')}. ${relativePathGuidance} The \`list\` path, manifest paths, and report_workflow produced_files are also workspace-relative. Skill resources use the absolute resourceBase shown when the skill is loaded.`
+      if ((name === 'read' || name === 'read_image') && workspaceRoot !== undefined) {
+        const execute = tool.execute
+        agent.ctx.tools.register({
+          ...tool,
+          description: `${tool.description} ${filePathGuidance}`,
+          async execute(args, execution) {
+            const fields = typeof args === 'object' && args !== null && !Array.isArray(args)
+              ? args as Record<string, unknown>
+              : undefined
+            const path = fields === undefined ? undefined : fields['file_path']
+            if (typeof path !== 'string' || isAbsolute(path)) return execute(args, execution)
+            return execute({ ...fields, file_path: resolve(workspaceRoot, path) }, execution)
+          },
+        })
+      } else {
+        agent.ctx.tools.register({
+          ...tool,
+          description: `${tool.description} ${filePathGuidance}`,
+        })
+      }
     }
     const strReplaceEditor = agent.ctx.tools.get('str_replace_editor', agent)
     if (strReplaceEditor !== undefined && workspaceRoot !== undefined) {
@@ -179,6 +221,22 @@ export async function apply(ctx: Context, config: Partial<Config> = {}, options:
     registry: runtime.roleRegistry,
     isMainSession: sessionId => runtime.isMainSession(sessionId),
     ...(resolved.workspaceRoot === undefined ? {} : { workspaceRoot: resolved.workspaceRoot }),
+    relativeWriteRootOf: (session, role, workspaceRoot) => sandboxPolicy === undefined
+      ? (typeof session.header?.cwd === 'string' ? resolve(session.header.cwd) : workspaceRoot)
+      : roleWritableRoot(workspaceRoot, role),
+    readableResourceRootsOf: (sessionId, role) => {
+      if (role !== 'MAIN' && role !== 'REPORT') return []
+      const language = role === 'REPORT'
+        ? runtime.reportLanguageForChild(sessionId as SessionId)
+        : undefined
+      const skillNames = role === 'MAIN'
+        ? MAIN_SKILL_NAMES
+        : skillNamesForRole('REPORT', language ?? 'latex')
+      return skillNames.flatMap(skillName => {
+        const root = bundledSkillRoots.get(skillName)
+        return root === undefined ? [] : [root]
+      })
+    },
   }))
   // Report-skill gate: a REPORT child may not edit report files or run its
   // compiler before it has loaded the skill governing that action. The refusal
