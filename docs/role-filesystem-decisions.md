@@ -1,6 +1,6 @@
 # Role filesystem, delivery, and cancellation decisions
 
-Decision record updated 2026-09-26. This document records the chosen product
+Decision record updated 2026-09-27. This document records the chosen product
 boundaries and the work needed to implement them. It does not claim that the
 unfinished items below are already enforced.
 
@@ -47,6 +47,10 @@ Provider details to preserve:
 `readableRoots`. Writes continue to use each role's `writableRoots`. Tests must
 cover role matrices, traversal, symlink escapes, missing paths, and unaffected
 stock DSH sessions.
+
+MAIN's `Report/` read permission supports the post-compilation editorial audit
+described in its persona. The role guard grants this root without a workflow-
+phase check; MAIN's writable root remains `Outline/`.
 
 This is a capability restriction for these known tool calls. It does not imply
 that `bash`, Python, compilers, or other subprocesses can read only those roots.

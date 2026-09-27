@@ -34,6 +34,36 @@ materials; select from them rather than reproducing their full contents. Cover
 every required measurement while keeping the body centered on the experimental
 question, observed behavior, analysis choice, and supported conclusion.
 
+For AutoReport experiment reports, this editorial contract takes precedence
+over the generic rules below when they conflict on level of detail, repetition,
+or document structure.
+
+### Default editorial selection pass
+
+Before finalizing every report, make one selection pass even when the user has
+not asked for a shorter report or set a page limit. For each paragraph, figure,
+table, and derivation, ask whether it is needed to establish the experimental
+question or necessary background, make the measurement reproducible, establish
+a reported result, interpret a result or its uncertainty/limitation, or satisfy
+an explicit template or course requirement. Remove material from the body when
+it serves none of these purposes. Keep verification detail in an appendix or a
+linked artifact when it remains useful and the template permits it. This is an
+information-selection pass, not a word-count target.
+
+Completeness applies to experimental coverage, not prose volume. Account for
+every required measurement, but do not give every dataset, fit, or generated
+figure equal space or its own subsection by default. Organize the report around
+the experimental question and results; do not mirror the upstream artifact tree.
+
+### Applying generic rules in AutoReport
+
+Define each variable and unit in narrative before its first substantive use.
+When a later equation reuses an unchanged variable, do not redefine it. A
+single lead-in and interpretation may cover a tightly connected equation
+sequence, figure group, or table group; do not wrap each element in repetitive
+prose. Keep enough local context for readers to understand what the grouped
+elements establish.
+
 ### Across the whole report
 
 - **Introduction:** name the sample or system, what was measured, the question
