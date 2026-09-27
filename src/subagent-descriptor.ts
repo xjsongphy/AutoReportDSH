@@ -34,7 +34,7 @@ export const RESIDENT_TOOL_FILTER: ToolRestriction = { deny: ['send_to_agent', '
  * workspace and maintain its own files, but has no shell execution tool. */
 export function residentToolFilter(role: SpecialistRole): ToolRestriction {
   return role === 'THEORY'
-    ? { deny: ['send_to_agent', 'ask_user_question', 'bash'] }
+    ? { deny: ['send_to_agent', 'ask_user_question', 'bash', 'pwsh'] }
     : RESIDENT_TOOL_FILTER
 }
 

@@ -178,18 +178,22 @@ $DSH_HOME/
 
 | Role | Model-facing file reads | Writes |
 |---|---|---|
-| Main | `References/`, `Outline/` | `Outline/` |
+| Main | `References/`, `Outline/`, `Report/` | `Outline/` |
 | Theory | `References/`, `Outline/`, `Theory/` | `Theory/` |
 | Data Analysis | `References/`, `Outline/`, `Theory/`, `Data/` | `Data/Processed/` |
 | Plotting | `References/`, `Outline/`, `Theory/`, `Data/`, `Plots/` | `Plots/` |
 | Report | `References/`, `Outline/`, `Theory/`, `Data/`, `Plots/`, `Report/` | `Report/` |
 
-These read roots apply to model-facing file tools. Theory has no Bash tool and
-uses `list` for directory discovery. In sandboxed sessions, Bash starts in the
-role's writable directory; its relative command paths and `workdir` use that
-directory as their base. `read`/`list`, manifest, and handoff paths remain
+Main's `Report/` read access is for its post-compilation editorial audit; its
+writes remain confined to `Outline/`.
+
+These read roots apply to model-facing file tools. Theory has no shell tool and
+uses `list` for directory discovery. AutoReport uses Bash on Linux/macOS and
+PowerShell on Windows. In sandboxed sessions, the shell starts in the role's
+writable directory; relative command paths and `workdir` use that directory as
+their base. `read`/`list`, manifest, and handoff paths remain
 workspace-relative, while relative `write`/`edit` arguments use the role's
-writable directory. Bash path checks are advisory: the current DSH sandbox
+writable directory. Shell path checks are advisory: the current DSH sandbox
 does not restrict arbitrary process reads.
 
 ## Development

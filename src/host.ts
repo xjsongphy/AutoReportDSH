@@ -37,6 +37,7 @@ export const inject = ['tools', 'commands', 'shellEnv']
 const DEFAULT_WAIT_MS = 600_000
 const DEFAULT_IDLE_TIMEOUT_MS = 60_000
 const FILE_PATH_TOOLS = ['read', 'read_image', 'write', 'edit'] as const
+const SHELL_TOOLS = ['bash', 'pwsh'] as const
 
 function hasUriScheme(path: string): boolean {
   return /^[A-Za-z][A-Za-z0-9+.-]*:\/\//u.test(path) && !/^[A-Za-z]:[\\/]/u.test(path)
@@ -133,12 +134,12 @@ export async function apply(ctx: Context, config: Partial<Config> = {}, options:
     if (sandboxPolicy === undefined && resolved.workspaceRoot !== undefined
       && (sessionRoot === undefined || resolve(resolved.workspaceRoot) !== sessionRoot)) {
       throw new Error(
-        `AutoReport ${role} requires DSH sandboxPolicy when configured workspaceRoot ${resolve(resolved.workspaceRoot)} differs from session cwd ${sessionRoot ?? '(missing)'}; without the service DSH resolves relative file and bash paths from session cwd`,
+        `AutoReport ${role} requires DSH sandboxPolicy when configured workspaceRoot ${resolve(resolved.workspaceRoot)} differs from session cwd ${sessionRoot ?? '(missing)'}; without the service DSH resolves relative file and shell paths from session cwd`,
       )
     }
     const mutationRoot = workspaceRoot
-    // DSH's sandbox policy root wins for writes and bash when available. Without
-    // it, DSH file tools and bash use the immutable session cwd.
+    // DSH's sandbox policy root wins for writes and shell tools when available.
+    // Without it, DSH file tools and shell calls use the immutable session cwd.
     const relativeMutationRoot = sandboxPolicy !== undefined && mutationRoot !== undefined
       ? roleWritableRoot(mutationRoot, role)
       : sessionRoot ?? workspaceRoot
@@ -146,17 +147,43 @@ export async function apply(ctx: Context, config: Partial<Config> = {}, options:
       const fileSystem = ctx.get('fs') as DirectoryFileSystem | undefined
       agent.ctx.tools.register(createListDirectoryTool(workspaceRoot, agent, fileSystem))
     }
-    const bash = role === 'THEORY' ? undefined : agent.ctx.tools.get('bash', agent)
-    if (bash !== undefined) {
-      const writable = rolePolicy(role).writableRoots.map(root => `${root}/`).join(', ')
-      const readable = rolePolicy(role).readableRoots.map(root => `${root}/`).join(', ')
-      const bashCwd = relativeMutationRoot
-      const canonicalOutputNote = 'Paths such as Report/main.typ in personas, manifests, and report_workflow are workspace-canonical. Bash paths and relative workdir use its current directory; do not repeat a role-directory prefix when bash is already in that directory.'
-      const guidance = role === 'MAIN'
-        ? ` AutoReport MAIN: use list for workspace inventory. File reads are allowed under ${readable}; bash starts in ${bashCwd ?? 'the session workspace'}${sandboxPolicy === undefined ? '' : ' (Outline/)'} and relative workdir/command paths use that directory as their base. Bash writes are allowed only under Outline/. ${canonicalOutputNote} `
-          + 'Do not use bash for theory, analysis, plotting, report writing, or compilation. Process reads are not path-restricted by the current DSH sandbox, so use file tools for role-scoped reads.'
-        : ` AutoReport ${role}: use bash only for commands needed by your assigned specialist task. Bash starts in ${bashCwd ?? 'the session workspace'}${sandboxPolicy === undefined ? '' : ` (${rolePolicy(role).writableRoots[0]}/)`}; relative workdir and command paths resolve from there. File reads are allowed under ${readable}; writes are confined to ${writable}. ${canonicalOutputNote} Process reads are not path-restricted by the current DSH sandbox, so use file tools for role-scoped reads.`
-      agent.ctx.tools.register({ ...bash, description: `${bash.description}${guidance}` })
+    if (role !== 'THEORY') {
+      for (const shellName of SHELL_TOOLS) {
+        const shell = agent.ctx.tools.get(shellName, agent)
+        if (shell === undefined) continue
+        const shellLabel = shellName === 'bash' ? 'Bash' : 'PowerShell'
+        const writable = rolePolicy(role).writableRoots.map(root => `${root}/`).join(', ')
+        const readable = rolePolicy(role).readableRoots.map(root => `${root}/`).join(', ')
+        const shellCwd = relativeMutationRoot
+        const canonicalOutputNote = `Paths such as Report/main.typ in personas, manifests, and report_workflow are workspace-canonical. ${shellLabel} paths and relative workdir use its current directory; do not repeat a role-directory prefix when ${shellLabel} is already in that directory.`
+        const guidance = role === 'MAIN'
+          ? ` AutoReport MAIN: use list for workspace inventory. File reads are allowed under ${readable}; ${shellLabel} starts in ${shellCwd ?? 'the session workspace'}${sandboxPolicy === undefined ? '' : ' (Outline/)'} and relative workdir/command paths use that directory as their base. Writes are allowed only under Outline/. ${canonicalOutputNote} `
+            + `Do not use ${shellLabel} for theory, analysis, plotting, report writing, or compilation. Process reads are not path-restricted by the current DSH sandbox, so use file tools for role-scoped reads.`
+          : ` AutoReport ${role}: use ${shellLabel} only for commands needed by your assigned specialist task. ${shellLabel} starts in ${shellCwd ?? 'the session workspace'}${sandboxPolicy === undefined ? '' : ` (${rolePolicy(role).writableRoots[0]}/)`}; relative workdir and command paths resolve from there. File reads are allowed under ${readable}; writes are confined to ${writable}. ${canonicalOutputNote} Process reads are not path-restricted by the current DSH sandbox, so use file tools for role-scoped reads.`
+        const execute = shell.execute
+        agent.ctx.tools.register({
+          ...shell,
+          description: `${shell.description}${guidance}`,
+          async execute(args, execution) {
+            // Bash already resolves its default and relative workdir from the
+            // overridden DSH sandbox root. Pwsh resolves both from session.cwd,
+            // so pin its explicit workdir to keep the same role-root semantics.
+            if (shellName !== 'pwsh' || shellCwd === undefined
+              || typeof args !== 'object' || args === null || Array.isArray(args)) {
+              return execute(args, execution)
+            }
+            const fields = args as Record<string, unknown>
+            const workdir = fields['workdir']
+            if (workdir !== undefined && typeof workdir !== 'string') return execute(args, execution)
+            const absoluteWorkdir = typeof workdir !== 'string'
+              ? shellCwd
+              : isAbsolute(workdir)
+                ? workdir
+                : resolve(shellCwd, workdir)
+            return execute({ ...fields, workdir: absoluteWorkdir }, execution)
+          },
+        })
+      }
     }
     // The stock filesystem schemas leave the path base implicit. Make the
     // session-workspace rule explicit for AutoReport without changing the

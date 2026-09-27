@@ -46,7 +46,7 @@ export const REPORT_WRITER_SKILL = 'experiment-report-writer'
 export interface ReportSkillRequirements {
   /** Required before a mutation in the report workspace. */
   readonly writing: readonly string[]
-  /** Required before the active language's compiler runs under bash/pwsh. */
+  /** Required before the active language's compiler runs in the platform shell. */
   readonly compile: string
   /** Registered for the role but never a precondition for acting. */
   readonly references: readonly string[]

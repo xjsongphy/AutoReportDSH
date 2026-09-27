@@ -34,7 +34,7 @@ export interface RoleGuardOptions {
   readonly isMainSession?: ((sessionId: SessionId) => boolean) | undefined
   /** Optional explicit workspace root, otherwise each session's immutable cwd. */
   readonly workspaceRoot?: string | undefined
-  /** Actual DSH base for relative mutations and bash workdir; defaults to the role root. */
+  /** Actual DSH base for relative mutations and bash/pwsh workdir; defaults to the role root. */
   readonly relativeWriteRootOf?: ((session: { id: unknown; header?: { cwd?: string } }, role: AutoReportRole, workspaceRoot: string) => string) | undefined
   /** Exact registered skill bundle roots the current role may read. */
   readonly readableResourceRootsOf?: ((sessionId: SessionId, role: AutoReportRole) => readonly string[]) | undefined
@@ -118,8 +118,9 @@ function mutation(exec: Readonly<ToolExecution>): Mutation {
         return { kind: 'malformed', reason: 'str_replace_editor carries an unknown command' }
       }
       const path = stringField(args, 'path')
-      return path === undefined
-        ? { kind: 'malformed', reason: 'str_replace_editor mutation requires path' }
+      if (path === undefined) return { kind: 'malformed', reason: 'str_replace_editor mutation requires path' }
+      return !isAbsolute(path)
+        ? { kind: 'malformed', reason: 'str_replace_editor path must be absolute' }
         : { kind: 'paths', paths: [path] }
     }
     // DSH currently mounts no delete/apply-patch tool. These strict adapters
@@ -155,8 +156,9 @@ function readTarget(exec: Readonly<ToolExecution>): ReadTarget {
   }
   if (exec.name === 'str_replace_editor' && args['command'] === 'view') {
     const path = stringField(args, 'path')
-    return path === undefined
-      ? { kind: 'malformed', reason: 'str_replace_editor view requires path' }
+    if (path === undefined) return { kind: 'malformed', reason: 'str_replace_editor view requires path' }
+    return !isAbsolute(path)
+      ? { kind: 'malformed', reason: 'str_replace_editor path must be absolute' }
       : { kind: 'path', path }
   }
   if (exec.name === 'list') {
@@ -376,6 +378,134 @@ function commandWords(segment: string): string[] {
   return [...segment.matchAll(/"([^"]*)"|'([^']*)'|([^\s]+)/gu)]
     .map(match => match[1] ?? match[2] ?? match[3] ?? '')
     .filter(Boolean)
+}
+
+const PWSH_COMMAND_ALIASES: Readonly<Record<string, string>> = {
+  'get-childitem': 'ls', gci: 'ls', dir: 'ls', ls: 'ls',
+  'get-content': 'cat', gc: 'cat', type: 'cat', cat: 'cat',
+  'get-location': 'pwd', gl: 'pwd', pwd: 'pwd',
+  'set-location': 'cd', sl: 'cd', cd: 'cd', chdir: 'cd',
+  'copy-item': 'cp', cpi: 'cp', copy: 'cp', cp: 'cp',
+  'move-item': 'mv', mi: 'mv', move: 'mv', mv: 'mv',
+  'remove-item': 'rm', ri: 'rm', del: 'rm', erase: 'rm', rm: 'rm', rmdir: 'rm',
+  'new-item': 'mkdir', ni: 'mkdir', mkdir: 'mkdir',
+  'write-output': 'echo', write: 'echo', echo: 'echo',
+  'select-string': 'rg', sls: 'rg',
+  'get-command': 'which', gcm: 'which',
+  'get-item': 'stat', gi: 'stat', 'get-filehash': 'stat', 'test-path': 'stat',
+  'import-csv': 'cat',
+}
+
+interface PowerShellArguments {
+  readonly named: ReadonlyMap<string, readonly string[]>
+  readonly positional: readonly string[]
+  readonly switches: ReadonlySet<string>
+}
+
+/** Small tokenizer for explicit PowerShell parameters used in path preflight. */
+function powershellArguments(words: readonly string[]): PowerShellArguments {
+  const named = new Map<string, string[]>()
+  const positional: string[] = []
+  const switches = new Set<string>()
+  for (let index = 1; index < words.length; index += 1) {
+    const word = words[index] ?? ''
+    if (!word.startsWith('-') || word === '-') {
+      positional.push(word)
+      continue
+    }
+    const parameter = word.slice(1).split(':', 1)[0]?.toLowerCase() ?? ''
+    const inlineValue = word.includes(':') ? word.slice(word.indexOf(':') + 1) : undefined
+    const next = words[index + 1]
+    const value = inlineValue !== undefined
+      ? inlineValue
+      : next !== undefined && !next.startsWith('-')
+        ? next
+        : undefined
+    if (value === undefined) {
+      switches.add(parameter)
+      continue
+    }
+    if (inlineValue === undefined) index += 1
+    const values = named.get(parameter) ?? []
+    values.push(value)
+    named.set(parameter, values)
+  }
+  return { named, positional, switches }
+}
+
+function powershellParameter(args: PowerShellArguments, ...names: string[]): readonly string[] {
+  for (const name of names) {
+    const values = args.named.get(name)
+    if (values !== undefined) return values.flatMap(value => value.split(','))
+  }
+  return []
+}
+
+function quoteCommandWord(value: string): string {
+  return `"${value.replaceAll('"', '\\"')}"`
+}
+
+/** Convert common PowerShell aliases/cmdlets to the shell vocabulary already preflighted below. */
+function normalizePowerShellCommand(command: string): { readonly command?: string } {
+  const normalized: string[] = []
+  const statements = command.split(/(?:&&|\|\||[;|\n])/u).map(part => part.trim()).filter(Boolean)
+  for (const statement of statements) {
+    const words = commandWords(statement)
+    if (words[0] === '&') words.shift()
+    const rawHead = words[0]?.toLowerCase()
+    if (rawHead === undefined) continue
+    const isPathWriter = ['set-content', 'add-content', 'out-file', 'export-csv'].includes(rawHead)
+    const aliasHead = PWSH_COMMAND_ALIASES[rawHead]
+    if (aliasHead === undefined && !isPathWriter) {
+      // Preserve external commands, arguments, and shell redirections exactly;
+      // the shared role command check below decides whether the executable is allowed.
+      normalized.push(statement)
+      continue
+    }
+    const head = aliasHead ?? rawHead
+    const args = powershellArguments(words)
+    const path = powershellParameter(args, 'path', 'literalpath', 'filepath')
+    let mappedHead = head
+    let operands: readonly string[] = []
+    let suffix = ''
+    if (head === 'cat' || head === 'ls' || head === 'cd' || head === 'stat') {
+      operands = path.length > 0 ? path : args.positional.slice(0, head === 'cat' || head === 'ls' ? undefined : 1)
+    } else if (head === 'cp' || head === 'mv') {
+      const destination = powershellParameter(args, 'destination', 'target')[0]
+      const sources = path.length > 0 ? path : (destination === undefined ? args.positional.slice(0, -1) : args.positional)
+      const target = destination ?? args.positional.at(-1)
+      operands = [...sources, ...(target === undefined ? [] : [target])]
+    } else if (head === 'rm') {
+      operands = path.length > 0 ? path : args.positional
+      if (args.switches.has('recurse') || args.switches.has('r')) suffix = ' -r'
+    } else if (head === 'mkdir') {
+      const name = powershellParameter(args, 'name')[0]
+      const parent = path[0]
+      const childPath = parent === undefined || name === undefined
+        ? undefined
+        : isAbsolute(parent)
+          ? resolve(parent, name)
+          : `${parent.replace(/[\\/]+$/u, '') || '.'}${sep}${name}`
+      operands = childPath !== undefined ? [childPath] : path.length > 0 ? path : args.positional
+      if (powershellParameter(args, 'itemtype')[0]?.toLowerCase() === 'file') mappedHead = 'touch'
+    } else if (isPathWriter) {
+      mappedHead = 'echo'
+      operands = []
+      const target = powershellParameter(args, 'path', 'literalpath', 'filepath')[0]
+      if (target !== undefined) suffix = rawHead === 'add-content' ? ` >> ${quoteCommandWord(target)}` : ` > ${quoteCommandWord(target)}`
+    } else if (head === 'rg') {
+      const pattern = powershellParameter(args, 'pattern')[0] ?? args.positional[0]
+      const files = path.length > 0 ? path : args.positional.slice(pattern === undefined ? 0 : 1)
+      operands = [...(pattern === undefined ? [] : [pattern]), ...files]
+    } else {
+      normalized.push(statement.replace(/^\s*(?:&\s*)?[^\s]+/u, head))
+      continue
+    }
+    const redirected = suffix || redirectionPaths(commandWords(statement)).writes.length > 0
+    const line = [mappedHead, ...operands.map(quoteCommandWord)].join(' ')
+    normalized.push(redirected && suffix ? line + suffix : line)
+  }
+  return normalized.length === 0 ? {} : { command: normalized.join('; ') }
 }
 
 function fileOperands(head: string, words: readonly string[]): string[] {
@@ -629,7 +759,7 @@ function bashPathDenial(command: string, resolved: ResolvedRole, workdir: string
   return undefined
 }
 
-function rmPolicyDenial(command: string, resolved: ResolvedRole, workdir?: string): string | undefined {
+function rmPolicyDenial(command: string, resolved: ResolvedRole, workdir: string | undefined, shellName: string): string | undefined {
   let cwd = canonicalPath(workdir ?? resolved.workspaceRoot)
   for (const segment of shellSegments(command)) {
     const rm = /^rm\s+(.+)$/u.exec(segment)
@@ -637,17 +767,17 @@ function rmPolicyDenial(command: string, resolved: ResolvedRole, workdir?: strin
       const rawArgs = rm[1]?.trim().split(/\s+/u) ?? []
       const args = rawArgs.filter(arg => !arg.startsWith('-'))
       if (rawArgs.some(arg => /^-[^-]*[rR]|^--recursive$/u.test(arg))) {
-        return `recursive rm is blocked for AutoReport ${resolved.role}; ${bashHelp(resolved)}`
+        return `recursive rm is blocked for AutoReport ${resolved.role}; ${bashHelp(resolved, shellName)}`
       }
       if (args.length === 0 || args.some(arg => isAbsolute(arg) || arg.split(/[\\/]/u).includes('..'))) {
-        return `rm requires explicit files inside this role's writable directories; ${bashHelp(resolved)}`
+        return `rm requires explicit files inside this role's writable directories; ${bashHelp(resolved, shellName)}`
       }
       const permitted = args.every(arg => {
         const target = canonicalPath(resolve(cwd, arg))
         return resolved.policy.writableRoots.some(root =>
           contained(canonicalPath(resolve(resolved.workspaceRoot, root)), target))
       })
-      if (!permitted) return `rm may remove files only inside this role's writable directories; ${bashHelp(resolved)}`
+      if (!permitted) return `rm may remove files only inside this role's writable directories; ${bashHelp(resolved, shellName)}`
     }
     const cd = /^cd\s+(?:"([^"]+)"|'([^']+)'|([^\s;|&]+))$/u.exec(segment)
     const directory = cd?.[1] ?? cd?.[2] ?? cd?.[3]
@@ -656,22 +786,22 @@ function rmPolicyDenial(command: string, resolved: ResolvedRole, workdir?: strin
   return undefined
 }
 
-function bashPolicyDenial(command: string, resolved: ResolvedRole, workdir: string): string | undefined {
+function bashPolicyDenial(command: string, resolved: ResolvedRole, workdir: string, shellName = 'bash'): string | undefined {
   const shell = stripHereDocBodies(command)
   const supported = supportedBashCommands(resolved.role)
   const heads = commandHeads(shell)
-  if (heads.length === 0) return `unsupported empty or compound command; ${bashHelp(resolved)}`
+  if (heads.length === 0) return `unsupported empty or compound command; ${bashHelp(resolved, shellName)}`
   const dangerous = heads.find(head => DANGEROUS_BASH_COMMANDS.has(head))
   if (dangerous !== undefined) {
-    return `dangerous command "${dangerous}" is blocked for AutoReport ${resolved.role}; ${bashHelp(resolved)}`
+    return `dangerous command "${dangerous}" is blocked for AutoReport ${resolved.role}; ${bashHelp(resolved, shellName)}`
   }
   const unsupported = heads.find(head => !supported.has(head))
   if (unsupported !== undefined) {
-    return `unsupported command "${unsupported}" for AutoReport ${resolved.role}; ${bashHelp(resolved)}`
+    return `unsupported command "${unsupported}" for AutoReport ${resolved.role}; ${bashHelp(resolved, shellName)}`
   }
   const pathDenial = bashPathDenial(shell, resolved, workdir)
   if (pathDenial !== undefined) return pathDenial
-  const rmDenial = rmPolicyDenial(shell, resolved, workdir)
+  const rmDenial = rmPolicyDenial(shell, resolved, workdir, shellName)
   if (rmDenial !== undefined) return rmDenial
   // Textual command screening helps explain common refusals; it is not an OS
   // process boundary. In particular, an allowed interpreter can still read
@@ -683,8 +813,29 @@ function supportedBashCommands(role: AutoReportRole): Set<string> {
   return new Set([...COMMON_BASH_COMMANDS, ...ROLE_BASH_COMMANDS[role]])
 }
 
-function bashHelp(resolved: ResolvedRole): string {
-  return `advisory supported commands for this role: ${[...supportedBashCommands(resolved.role)].sort().join(', ')}; ${directoryHelp(resolved)}; this preflight is not an OS process read boundary`
+function supportedPowerShellCommands(role: AutoReportRole): Set<string> {
+  return new Set([
+    ...Object.keys(PWSH_COMMAND_ALIASES),
+    'add-content', 'export-csv', 'out-file', 'set-content',
+    ...COMMON_BASH_COMMANDS,
+    ...ROLE_BASH_COMMANDS[role],
+  ])
+}
+
+function bashHelp(resolved: ResolvedRole, shellName = 'bash'): string {
+  const commands = shellName === 'PowerShell'
+    ? [...supportedPowerShellCommands(resolved.role)].sort()
+    : [...supportedBashCommands(resolved.role)].sort()
+  const prefix = shellName === 'bash'
+    ? 'advisory supported commands for this role'
+    : `advisory ${shellName} command names checked by AutoReport for this role`
+  return `${prefix}: ${commands.join(', ')}; ${directoryHelp(resolved)}; this preflight is not an OS process read boundary`
+}
+
+function pwshPolicyDenial(command: string, resolved: ResolvedRole, workdir: string): string | undefined {
+  const normalized = normalizePowerShellCommand(command)
+  if (normalized.command === undefined) return `unsupported empty PowerShell command; ${bashHelp(resolved, 'PowerShell')}`
+  return bashPolicyDenial(normalized.command, resolved, workdir, 'PowerShell')
 }
 
 /** Create the parent for an authorized file mutation, without repairing the workspace. */
@@ -727,7 +878,8 @@ export function createRoleToolGuard(options: RoleGuardOptions): ToolGuard {
   return exec => {
     const call = mutation(exec)
     const read = readTarget(exec)
-    const protectedCall = call.kind !== 'none' || read.kind !== 'none' || sandboxPermissionsEscalation(exec) || exec.name === 'bash'
+    const shellCall = exec.name === 'bash' || exec.name === 'pwsh'
+    const protectedCall = call.kind !== 'none' || read.kind !== 'none' || sandboxPermissionsEscalation(exec) || shellCall
     const resolved = resolveRole(exec, options)
     // Not an AutoReport-owned session: preserve stock DSH policy untouched.
     if (resolved === FOREIGN) return undefined
@@ -745,13 +897,14 @@ export function createRoleToolGuard(options: RoleGuardOptions): ToolGuard {
       if (call.kind === 'malformed') return `AutoReport denied ${exec.name}: ${call.reason}`
       return undefined
     }
-    if (resolved.role === 'THEORY' && exec.name === 'bash') {
+    if (resolved.role === 'THEORY' && shellCall) {
       return `unsupported command tool for AutoReport THEORY: no shell execution is assigned to this role; use read, read_image, list, write, or edit instead; ${directoryHelp(resolved)}; data reduction belongs to DATA_ANALYSIS`
     }
-    if (exec.name === 'bash') {
+    if (shellCall) {
+      const shellName = exec.name === 'bash' ? 'bash' : 'PowerShell'
       const args = record(exec.arguments)
       const command = args === undefined ? undefined : stringField(args, 'command')
-      if (command === undefined) return `unsupported bash call: command string is required; ${bashHelp(resolved)}`
+      if (command === undefined) return `unsupported ${shellName} call: command string is required; ${bashHelp(resolved, shellName)}`
       const workdirArg = args === undefined ? undefined : stringField(args, 'workdir')
       const workdir = workdirArg === undefined
         ? resolved.relativeWriteRoot
@@ -759,10 +912,12 @@ export function createRoleToolGuard(options: RoleGuardOptions): ToolGuard {
       if (workdirArg !== undefined) {
         const workdirDenial = readableTargetDenial(workdirArg, resolved, resolved.relativeWriteRoot)
         if (workdirDenial !== undefined) {
-          return `AutoReport ${resolved.role} cannot use bash workdir ${workdirArg}: ${workdirDenial}`
+          return `AutoReport ${resolved.role} cannot use ${shellName} workdir ${workdirArg}: ${workdirDenial}`
         }
       }
-      const denial = bashPolicyDenial(command, resolved, workdir)
+      const denial = exec.name === 'bash'
+        ? bashPolicyDenial(command, resolved, workdir)
+        : pwshPolicyDenial(command, resolved, workdir)
       if (denial !== undefined) return denial
     }
     if (!protectedCall) return undefined

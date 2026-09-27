@@ -1,11 +1,11 @@
 ---
 name: typst-compile
-description: Use when compiling Typst reports in an AutoReport workspace via bash, or when diagnosing Typst compilation errors.
+description: Use when compiling Typst reports in an AutoReport workspace via the available shell, or when diagnosing Typst compilation errors.
 ---
 
 # Typst Compile
 
-Typst compilation assistant for AutoReport Typst reports: bash-driven `typst compile`, common errors, and artifact locations.
+Typst compilation assistant for AutoReport Typst reports: shell-driven `typst compile`, common errors, and artifact locations.
 
 ## When to Use
 
@@ -16,19 +16,18 @@ Typst compilation assistant for AutoReport Typst reports: bash-driven `typst com
 **Don't use when:**
 - The active report language is LaTeX (`latex-compile` covers that path)
 
-## Compilation via bash
+## Compilation via the available shell
 
-Check the Bash tool description for its actual starting directory. With the
-role sandbox, REPORT starts in `Report/`; otherwise bash starts at the workspace
-root, so first use `cd Report &&` or set `workdir: "Report"`. Compile without
-repeating `Report/` after bash enters that directory. Network access is allowed
-(package/font fetch when needed). Writes stay inside `Report/`. Workspace-
+Check the shell tool description for its actual starting directory. With the
+role sandbox, REPORT starts in `Report/`; without it, set `workdir: "Report"`
+when needed. Compile without repeating `Report/` after the shell enters that
+directory. Network access is allowed (package/font fetch when needed). Writes stay inside `Report/`. Workspace-
 canonical output paths and handoffs still include `Report/`; `read` paths are
 workspace-root-relative, while `write`/`edit` path bases are shown by those
 tools.
 
 ```bash
-typst compile main.typ main.pdf --root "$(pwd)/.."
+typst compile main.typ main.pdf --root ..
 ```
 
 The `--root` flag lets figures reference `../Plots/Fig/...` as the template does.
@@ -68,7 +67,7 @@ error: unknown font family: ...
 
 ## Workflow
 
-1. Run `typst compile` via bash from REPORT's `Report/` cwd with `--root` set to the experiment workspace (`$(pwd)/..`).
+1. Run `typst compile` via the available shell from REPORT's `Report/` cwd with `--root ..` set to the experiment workspace.
 2. Read full diagnostics; Typst errors carry file + line spans — read those exact lines before editing.
 3. Fix in `Report/*.typ` (writes stay confined there).
 4. Recompile until clean; confirm `Report/main.pdf`.

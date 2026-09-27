@@ -20,29 +20,38 @@ Extract reference PDFs into markdown so coordination and subagents can read expe
 
 ## Detect PDFs
 
-Check the Bash tool description for its actual starting directory. With the
-role sandbox, MAIN starts in `Outline/`: use `../References` for bash inputs
-and `.cache/mineru/` for bash outputs. Without it, bash starts at the workspace
-root: use `References/` and `Outline/.cache/mineru/`. `read` and `list` paths
-remain workspace-root-relative in either mode. Avoid Python here: MAIN's shell
-command list is for coordination and PDF extraction.
+Check the available shell tool description for its starting directory. With the
+role sandbox, MAIN starts in `Outline/`: use `../References` for shell inputs
+and `.cache/mineru/` for shell outputs. Without it, set `workdir: "Outline"`
+when needed. `read` and `list` paths remain workspace-root-relative in either
+mode. AutoReport uses Bash on Linux/macOS and PowerShell on Windows; use the
+platform's directory-listing syntax. Avoid Python here: MAIN's shell commands
+are for coordination and PDF extraction.
 
 ```bash
 find ../References -type f -iname '*.pdf'
 ls -la ../References/
 ```
 
-## Extract via bash
+PowerShell equivalent:
 
-Call `mineru-open-api` from bash (not flash-extract for production work):
+```powershell
+Get-ChildItem ../References -File -Recurse -Filter '*.pdf'
+Get-ChildItem ../References -Force
+```
+
+## Extract via the available shell
+
+Call `mineru-open-api` from the available shell (not flash-extract for
+production work):
 
 ```bash
 mineru-open-api extract "../References/handout.pdf" -o ".cache/mineru/handout/"
 ```
 
 Rules:
-- The workspace-canonical output directory is `Outline/.cache/mineru/<stem>/`; from MAIN's sandboxed `Outline/` bash cwd, pass `.cache/mineru/<stem>/` to `-o`.
-- When bash starts at the workspace root, pass `Outline/.cache/mineru/<stem>/` to `-o` instead.
+- The workspace-canonical output directory is `Outline/.cache/mineru/<stem>/`; from MAIN's sandboxed `Outline/` shell cwd, pass `.cache/mineru/<stem>/` to `-o`.
+- When the shell starts at the workspace root, pass `Outline/.cache/mineru/<stem>/` to `-o` instead.
 - Never write extracted markdown or assets into `References/`.
 - After extraction, use workspace-root-relative `read()` on the generated markdown (often `Outline/.cache/mineru/<stem>/full.md`).
 

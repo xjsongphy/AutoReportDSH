@@ -1,7 +1,7 @@
 /**
  * Registers `DSH_AUTOREPORT_PYTHON` and `DSH_AUTOREPORT_PYTHON_BIN` through the
  * DSH shell-env registry, and prepends that interpreter's bin directory to
- * PATH on owned bash/pwsh calls so `python` / `python3` resolve to the selected
+ * PATH on owned shell calls so `python` / `python3` resolve to the selected
  * environment without requiring the agent to type the `$DSH_*` names.
  * @module autoreport-python-env
  */
@@ -22,7 +22,7 @@ export interface AutoReportPythonEnvDeps {
   snapshotPythonExecutable(session: Session): string | undefined
 }
 
-/** Ordinary env plus trusted dshEnv as bash/pwsh pass them to `ctx.shell.resolve`. */
+/** Ordinary env plus trusted dshEnv as Bash/PowerShell pass them to `ctx.shell.resolve`. */
 export interface PythonPathRequest {
   env?: Record<string, string>
   dshEnv?: Record<string, string>
@@ -74,10 +74,10 @@ function installPythonShellFacts(ctx: Context, deps: AutoReportPythonEnvDeps): (
     name: 'autoreport-python',
     variables: {
       DSH_AUTOREPORT_PYTHON: {
-        description: 'Absolute path to the Python interpreter AutoReport subagents should use in bash.',
+        description: 'Absolute path to the Python interpreter AutoReport subagents should use from the shell.',
       },
       DSH_AUTOREPORT_PYTHON_BIN: {
-        description: 'Directory containing the selected Python interpreter; prepended to PATH on owned bash.',
+        description: 'Directory containing the selected Python interpreter; prepended to PATH on owned shell calls.',
       },
     },
     resolve(execution: ToolExecution) {

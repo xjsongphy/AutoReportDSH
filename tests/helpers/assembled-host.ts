@@ -79,6 +79,10 @@ export interface ChildRecorder {
   readonly toolNames: string[]
   readonly bashDescriptions: string[]
   readonly bashLookupScopes: Agent[]
+  readonly pwshDescriptions: string[]
+  readonly pwshLookupScopes: Agent[]
+  readonly shellCalls: Map<string, unknown[]>
+  readonly registeredTools: Map<string, { execute?: (args: unknown, execution: unknown) => Promise<unknown> }>
   readonly toolDescriptions: Map<string, string>
   readonly toolLookupScopes: Map<string, Agent[]>
   readonly skillNames: string[]
@@ -94,6 +98,10 @@ export function makeChildRecorder(
   const toolNames: string[] = []
   const bashDescriptions: string[] = []
   const bashLookupScopes: Agent[] = []
+  const pwshDescriptions: string[] = []
+  const pwshLookupScopes: Agent[] = []
+  const shellCalls = new Map<string, unknown[]>()
+  const registeredTools = new Map<string, { execute?: (args: unknown, execution: unknown) => Promise<unknown> }>()
   const toolDescriptions = new Map<string, string>()
   const toolLookupScopes = new Map<string, Agent[]>()
   const skillNames: string[] = []
@@ -124,18 +132,30 @@ export function makeChildRecorder(
       get: (name: string, scope?: Agent) => {
         if (scope !== agent) return undefined
         if (name === 'bash') bashLookupScopes.push(scope)
-        if (name !== 'bash' && !['read', 'read_image', 'write', 'edit', 'str_replace_editor'].includes(name)) {
+        if (name === 'pwsh') pwshLookupScopes.push(scope)
+        if (!['bash', 'pwsh', 'read', 'read_image', 'write', 'edit', 'str_replace_editor'].includes(name)) {
           return undefined
         }
         const scopes = toolLookupScopes.get(name) ?? []
         scopes.push(scope)
         toolLookupScopes.set(name, scopes)
-        return { name, description: `fixture ${name} tool` }
+        return {
+          name,
+          description: `fixture ${name} tool`,
+          async execute(args: unknown) {
+            const calls = shellCalls.get(name) ?? []
+            calls.push(args)
+            shellCalls.set(name, calls)
+            return args
+          },
+        }
       },
-      register: (tool: { name: string; description?: string }) => {
+      register: (tool: { name: string; description?: string; execute?: (args: unknown, execution: unknown) => Promise<unknown> }) => {
         toolNames.push(tool.name)
         if (tool.description !== undefined) toolDescriptions.set(tool.name, tool.description)
         if (tool.name === 'bash' && tool.description !== undefined) bashDescriptions.push(tool.description)
+        if (tool.name === 'pwsh' && tool.description !== undefined) pwshDescriptions.push(tool.description)
+        registeredTools.set(tool.name, tool)
         return () => {}
       },
       restrict: () => () => {},
@@ -163,6 +183,7 @@ export function makeChildRecorder(
   ;(agent as { ctx?: unknown }).ctx = ctx
   return {
     agent, ctx: ctx as ChildRecorder['ctx'], toolNames, bashDescriptions, bashLookupScopes,
+    pwshDescriptions, pwshLookupScopes, shellCalls, registeredTools,
     toolDescriptions, toolLookupScopes, skillNames, sections, contexts,
   }
 }

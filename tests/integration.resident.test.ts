@@ -205,6 +205,13 @@ async function boot(options: {
     output: { schema: { type: 'object', additionalProperties: true, properties: {} }, render: () => [{ type: 'text', text: 'stub' }] },
     async execute() { return {} },
   }))
+  ctx.tools.register(defineTool({
+    name: 'pwsh',
+    description: 'test PowerShell stub so the THEORY denial is enforced on Windows',
+    parameters: {},
+    output: { schema: { type: 'object', additionalProperties: true, properties: {} }, render: () => [{ type: 'text', text: 'stub' }] },
+    async execute() { return {} },
+  }))
 
   const mainAdapter = new ScriptedAdapter([
     ...options.mainCalls.map(call => toolCallResponse(`main-${call.name}`, call.name, call.args)),
@@ -299,7 +306,7 @@ describe('integration: resident subagent through the real agent loop', () => {
     expect(descriptor?.['agentModel']).toBe(SPECIALIST_MODEL)
     // …and the role denial list rode the descriptor too.
     expect(descriptor?.['toolFilter']).toMatchObject({
-      deny: ['send_to_agent', 'ask_user_question', 'bash'],
+      deny: ['send_to_agent', 'ask_user_question', 'bash', 'pwsh'],
     })
 
     // Child session lineage: a real child of THIS main under the preset.
@@ -320,6 +327,7 @@ describe('integration: resident subagent through the real agent loop', () => {
     expect(childTools).toContain('manifest')
     expect(childTools).toContain('list')
     expect(childTools).not.toContain('bash')
+    expect(childTools).not.toContain('pwsh')
     expect(childTools).not.toContain('send_to_agent')
 
     // The child's own turn ended completed — no UNKNOWN turn error.

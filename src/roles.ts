@@ -6,9 +6,10 @@
  *
  * `cwd: '.'` is the logical workspace/session base, not the subprocess CWD and
  * is not currently consumed by runtime code. The session header stays on the
- * workspace root; with DSH sandboxing, Bash starts at the role's writable
- * `workspaceRoot`, while no-sandbox Bash starts at the session cwd. Writable
- * roots are enforced by DSH plus the AutoReport path guard. Network is allowed:
+ * workspace root; with DSH sandboxing, the platform shell starts at the role's writable
+ * `workspaceRoot`, while an unconfined shell starts at the session cwd. AutoReport
+ * composes Bash on Unix and PowerShell on Windows. Writable roots are enforced by
+ * DSH plus the AutoReport path guard. Network is allowed:
  * DSH sandbox is a file-effect boundary, not a network boundary.
  * @module
  */
@@ -35,7 +36,8 @@ export interface ReportRolePolicy {
 
 const MAIN_POLICY: ReportRolePolicy = {
   cwd: '.',
-  readableRoots: ['References', 'Outline'],
+  // MAIN reads Report/ for the post-compilation editorial audit; writes stay in Outline/.
+  readableRoots: ['References', 'Outline', 'Report'],
   writableRoots: ['Outline'],
   network: 'allow',
   temp: 'private',

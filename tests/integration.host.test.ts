@@ -176,9 +176,34 @@ describe('integration: assembled host (real context)', () => {
     })
   })
 
+  it('pins PowerShell defaults and relative workdirs to the role writable root', async () => {
+    const assembled = await boot({ roleSandbox: true })
+    const binding: RoleBindingSnapshot = {
+      version: AUTOREPORT_SCHEMA_VERSION,
+      role: 'DATA_ANALYSIS',
+      childSessionId: SessionId('it-data-shell-root'),
+      parentSessionId: assembled.mainSession.id,
+      workflowId: 'wf-shell-root',
+      provisioning: 'reserved',
+    }
+    assembled.runtime.roleRegistry.registerReserved(binding)
+    const child = makeChildRecorder('it-data-shell-root', assembled.runtime, assembled.workspaceRoot)
+    assembled.routeChild(child)
+    const expectedRoot = roleWritableRoot(assembled.workspaceRoot, 'DATA_ANALYSIS')
+    const pwsh = child.registeredTools.get('pwsh')
+    expect(pwsh?.execute).toBeTypeOf('function')
+
+    await pwsh!.execute!({ command: 'Get-Location', description: 'Check default working directory' }, { agent: child.agent })
+    await pwsh!.execute!({ command: 'Get-Location', description: 'Check relative working directory', workdir: 'nested' }, { agent: child.agent })
+    expect(child.shellCalls.get('pwsh')).toEqual([
+      expect.objectContaining({ workdir: expectedRoot }),
+      expect.objectContaining({ workdir: join(expectedRoot, 'nested') }),
+    ])
+  })
+
   it('registers exactly ONE continuable setup and routes it by RoleRegistry', async () => {
     const assembled = await boot({ roleSandbox: true })
-    const roleTools = ['bash', 'read', 'read_image', 'write', 'edit', 'str_replace_editor', 'manifest', 'report_workflow']
+    const roleTools = ['bash', 'pwsh', 'read', 'read_image', 'write', 'edit', 'str_replace_editor', 'manifest', 'report_workflow']
 
     // Ordinary DSH child: the router installs nothing — stock messaging comes
     // from the base bundle since the standalone report tool was removed upstream.
@@ -198,9 +223,11 @@ describe('integration: assembled host (real context)', () => {
     assembled.runtime.roleRegistry.registerReserved(binding)
     const theory = makeChildRecorder('it-theory', assembled.runtime, assembled.workspaceRoot)
     assembled.routeChild(theory)
-    expect(theory.toolNames).toEqual(['list', ...roleTools.filter(name => name !== 'bash')])
+    expect(theory.toolNames).toEqual(['list', ...roleTools.filter(name => name !== 'bash' && name !== 'pwsh')])
     expect(theory.bashDescriptions).toEqual([])
     expect(theory.bashLookupScopes).toEqual([])
+    expect(theory.pwshDescriptions).toEqual([])
+    expect(theory.pwshLookupScopes).toEqual([])
     expect(theory.toolDescriptions.get('read')).toContain(`Relative paths resolve from ${assembled.workspaceRoot}.`)
     expect(theory.toolDescriptions.get('write')).toContain(
       `Relative paths resolve from ${roleWritableRoot(assembled.workspaceRoot, 'THEORY')}.`,
@@ -223,6 +250,7 @@ describe('integration: assembled host (real context)', () => {
     assembled.routeChild(reporter)
     expect(reporter.toolNames).toEqual(roleTools)
     expect(reporter.bashDescriptions[0]).toContain('AutoReport REPORT')
+    expect(reporter.pwshDescriptions[0]).toContain('AutoReport REPORT')
     expect(reporter.skillNames).toEqual([
       'experiment-report-writer', 'latex-compile',
     ])
@@ -237,6 +265,7 @@ describe('integration: assembled host (real context)', () => {
     assembled.routeChild(plotter)
     expect(plotter.toolNames).toEqual(roleTools)
     expect(plotter.bashDescriptions[0]).toContain('AutoReport PLOTTING')
+    expect(plotter.pwshDescriptions[0]).toContain('AutoReport PLOTTING')
     expect(plotter.skillNames).toEqual([])
   })
 

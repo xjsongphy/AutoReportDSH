@@ -35,8 +35,9 @@ platform.
   [Prompt-attached language guidance](#prompt-attached-language-guidance).
   Referenced skill documents are addressed through DSH's own resource anchor —
   see [Skill resource anchoring](#skill-resource-anchoring).
-- **Role filesystem policy:** Main reads `References/` and `Outline/`; Theory
-  reads those plus `Theory/`; Data Analysis adds `Data/`; Plotting adds `Plots/`;
+- **Role filesystem policy:** Main reads `References/` and `Outline/`, plus
+  `Report/` for its post-compilation editorial audit; Theory reads the first two
+  plus `Theory/`; Data Analysis adds `Data/`; Plotting adds `Plots/`;
   Report adds `Report/`. Model-facing `read`, `read_image`, directory listing,
   and editor-view calls are checked by the AutoReport role guard. Each role may
   write only its own root: Main `Outline/`, Theory `Theory/`, Data Analysis
@@ -45,8 +46,8 @@ platform.
   unrestricted by the current DSH sandbox; the shell preflight improves command
   feedback but is not an OS-level read boundary. `tests/bash-confinement.live.test.ts`
   verifies the sandbox's write confinement and shared process-read behavior.
-  The session header remains on the workspace root; sandboxed Bash starts in
-  the role writable root, while no-sandbox Bash uses the session cwd. The
+  The session header remains on the workspace root; sandboxed platform shells
+  start in the role writable root, while unconfined shells use the session cwd. The
   `ReportRolePolicy.cwd` field records logical workspace base `.` and does not
   set the operating-system process cwd.
   The `list` tool rename, provider-backed filesystem contract, MAIN deliverables,
@@ -78,7 +79,7 @@ close that window:
 | Action | Gate | Refused until loaded |
 | --- | --- | --- |
 | Any file mutation in the report workspace (`write`, `edit`, `str_replace_editor`, `apply_patch`, `delete`) | writing | `experiment-report-writer` |
-| `bash`/`pwsh` invoking the active language's compiler (`latexmk`, `tectonic`, `xelatex`, `pdflatex`, `lualatex`; `typst compile`) | compile | the active language's compile skill (`latex-compile` / `typst-compile`) |
+| The platform shell (`bash`/`pwsh`) invoking the active language's compiler (`latexmk`, `tectonic`, `xelatex`, `pdflatex`, `lualatex`; `typst compile`) | compile | the active language's compile skill (`latex-compile` / `typst-compile`) |
 
 The call is refused with an error that names the missing skills, says how to
 load them (the `skill` tool, one call per name), and states that nothing else
@@ -109,7 +110,7 @@ Boundaries:
   view is a read.
 - Only AutoReport-bound REPORT sessions are gated. MAIN, every other role, and
   every stock DSH session pass through untouched.
-- A refused child is never stuck: it keeps `read`, non-compiler `bash`,
+- A refused child is never stuck: it keeps `read`, non-compiler shell tools,
   `manifest`, and `report_workflow(blocked)`, so it can report the blockage
   instead of stalling silently.
 - The gates live in `src/policy/skill-gate.ts`; registration and enforcement
@@ -264,11 +265,10 @@ Open, and deliberately not claimed as done:
   and redispatch in a cold runtime. It does not yet exercise DSH's own persisted
   Session load, compaction, or a full process restart, so the AutoReportCLI
   comparison above still claims no recovery equivalence.
-- **Windows role isolation end-to-end.** `tests/bash-confinement.live.test.ts`
-  no longer skips win32 wholesale: it gates on sandbox usability, which on win32
-  already requires both a working `bash -lc` and the windows-acl runner probe.
-  What is missing is evidence, not code — one green Windows CI run that resolves
-  a real role writable root through the ACL runner.
+- **Windows PowerShell role isolation end-to-end.** `tests/bash-confinement.live.test.ts`
+  has a live `pwsh` case gated on a working PowerShell executable and the
+  windows-acl runner. A green Windows CI run is still needed to confirm the
+  platform's role writable root through that executor.
 - **Live provider compatibility.** The opt-in
   `tests/e2e/configured-route.e2e.test.ts` passed on 2026-09-24 against the
   configured DSH home. Repeat it after a DSH compatibility change.

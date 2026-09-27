@@ -40,7 +40,7 @@ describe('residentDescriptor', () => {
       agentModel: 'deepseek-flash',
       agentReasoningEffort: 'low',
       persona: 'theory persona',
-      toolFilter: { deny: ['send_to_agent', 'ask_user_question', 'bash'] },
+      toolFilter: { deny: ['send_to_agent', 'ask_user_question', 'bash', 'pwsh'] },
     })
   })
 
@@ -52,7 +52,7 @@ describe('residentDescriptor', () => {
 
   it('keeps the coordinator tools out of every resident child', () => {
     expect(RESIDENT_TOOL_FILTER).toEqual({ deny: ['send_to_agent', 'ask_user_question'] })
-    expect(residentToolFilter('THEORY')).toEqual({ deny: ['send_to_agent', 'ask_user_question', 'bash'] })
+    expect(residentToolFilter('THEORY')).toEqual({ deny: ['send_to_agent', 'ask_user_question', 'bash', 'pwsh'] })
     expect(residentToolFilter('DATA_ANALYSIS')).toBe(RESIDENT_TOOL_FILTER)
   })
 })

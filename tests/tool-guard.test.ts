@@ -157,6 +157,8 @@ describe('AutoReport role tool guard', () => {
     registry.registerReserved(binding('DATA_ANALYSIS', analyst.id))
     const guard = createRoleToolGuard({ registry })
     expect(guard(execution('str_replace_editor', { command: 'view', path: join(root, 'Theory/formulas.md') }, analyst))).toBeUndefined()
+    expect(guard(execution('str_replace_editor', { command: 'view', path: 'Theory/formulas.md' }, analyst))).toContain('path must be absolute')
+    expect(guard(execution('str_replace_editor', { command: 'insert', path: 'result.csv' }, analyst))).toContain('path must be absolute')
     expect(guard(execution('str_replace_editor', { command: 'insert', path: join(root, 'Report/main.tex') }, analyst))).toContain('Data/Processed')
     expect(guard(execution('delete', { file_path: 'old.md' }, analyst))).toBeUndefined()
     expect(guard(execution('apply_patch', { patch: `*** Update File: ${join(root, 'Report/main.tex')}\n@@` }, analyst))).toContain('Data/Processed')
@@ -224,6 +226,17 @@ describe('AutoReport role tool guard', () => {
     expect(guard(execution('read', { file_path: '../outside.txt' }, analyst))).toContain('outside the experiment workspace')
   })
 
+  it('lets MAIN review report sources while keeping Report read-only', () => {
+    const root = workspace()
+    const main = agent('main-editorial-review', root)
+    const guard = createRoleToolGuard({ registry: new RoleRegistry(), mainSessionId: main.id })
+
+    expect(guard(execution('read', { file_path: 'Report/main.tex' }, main))).toBeUndefined()
+    expect(guard(execution('write', { file_path: join(root, 'Report/main.tex'), content: 'edited by MAIN' }, main)))
+      .toContain('allowed write directories: Outline/')
+    expect(guard(execution('write', { file_path: 'Outline/report_outline.md', content: 'scope' }, main))).toBeUndefined()
+  })
+
   it('gives bash preflight denials actionable command and directory context', () => {
     const root = workspace()
     const registry = new RoleRegistry()
@@ -245,6 +258,36 @@ describe('AutoReport role tool guard', () => {
     }, analyst))).toBeUndefined()
     expect(guard(execution('bash', { command: 'typst compile Report/main.typ' }, analyst))).toContain('unsupported command "typst"')
     expect(guard(execution('bash', { command: 'python analyze.py' }, analyst))).toBeUndefined()
+  })
+
+  it('applies role command, path, cwd, and escalation preflight to PowerShell', () => {
+    const root = workspace()
+    const registry = new RoleRegistry()
+    const main = agent('main-pwsh-policy', root)
+    const analyst = agent('analyst-pwsh-policy', root)
+    const reporter = agent('reporter-pwsh-policy', root)
+    const theory = agent('theory-pwsh-policy', root)
+    registry.registerReserved(binding('DATA_ANALYSIS', analyst.id))
+    registry.registerReserved(binding('REPORT', reporter.id))
+    registry.registerReserved(binding('THEORY', theory.id))
+    const guard = createRoleToolGuard({ registry, mainSessionId: main.id })
+
+    expect(guard(execution('pwsh', { command: 'Get-Content ../Data/raw.csv' }, main))).toContain('cannot read ../Data/raw.csv with cat')
+    expect(guard(execution('pwsh', { command: 'Set-Content -Path ../Theory/blocked.txt -Value x' }, reporter)))
+      .toContain('allowed write directories: Report/')
+    expect(guard(execution('pwsh', { command: 'Copy-Item -Path ../Data/raw.csv -Destination ../Theory/raw.csv' }, reporter)))
+      .toContain('cannot write ../Theory/raw.csv with cp')
+    expect(guard(execution('pwsh', { command: 'Remove-Item -Path temp.txt -Recurse' }, reporter)))
+      .toContain('recursive rm is blocked')
+    expect(guard(execution('pwsh', { command: 'python analysis.py' }, analyst))).toBeUndefined()
+    expect(guard(execution('pwsh', { command: 'Invoke-WebRequest https://example.com' }, analyst)))
+      .toContain('unsupported command "invoke-webrequest"')
+    expect(guard(execution('pwsh', { command: 'Get-Location', workdir: '../Data' }, main)))
+      .toContain('cannot use PowerShell workdir ../Data')
+    expect(guard(execution('pwsh', { command: 'Get-Location', sandbox_permissions: 'danger-full-access' }, analyst)))
+      .toContain('sandbox_permissions')
+    expect(guard(execution('pwsh', { command: 'Get-Content Theory/formulas.md' }, theory)))
+      .toContain('no shell execution')
   })
 
   it('advertises shell commands by role without offering other specialists’ tools', () => {
@@ -287,7 +330,7 @@ describe('AutoReport role tool guard', () => {
 
     const catDenied = guard(execution('bash', { command: 'cat ../Data/raw.csv' }, main))
     expect(catDenied).toContain('cannot read ../Data/raw.csv with cat')
-    expect(catDenied).toContain('allowed read directories: References/, Outline/')
+    expect(catDenied).toContain('allowed read directories: References/, Outline/, Report/')
     expect(guard(execution('bash', { command: 'cat ../References/procedure.md' }, main))).toBeUndefined()
     expect(guard(execution('bash', { command: 'cd ../Data && pwd' }, main))).toContain('cannot cd to ../Data')
     expect(guard(execution('bash', { command: 'pwd', workdir: '../Data' }, main))).toContain('cannot use bash workdir ../Data')
