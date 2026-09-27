@@ -108,6 +108,44 @@ function settlementNotice(childId: SessionId, summary: string): ReturnType<typeo
   })
 }
 
+/**
+ * Whether the route a resident Plotting Agent will use is declared image-capable
+ * and its scoped tool surface contains `read_image`. Unknown capability is a
+ * conservative false: visual review must never become a requirement the route
+ * cannot satisfy.
+ */
+async function plotterCanReviewImages(ctx: Context, child: Agent, signal: AbortSignal): Promise<boolean> {
+  const tools = ctx.get('tools') as { get?: (name: string, scope?: Agent) => unknown } | undefined
+  if (tools?.get?.('read_image', child) === undefined) return false
+
+  // Match DSH's read_image route resolution: the latest persisted request
+  // config wins, then the Agent's creation route supplies the initial value.
+  const requestRoute = child.session.requestHeader()?.config
+  const provider = requestRoute?.provider ?? child.options.provider
+  const model = requestRoute?.model ?? child.options.model
+  if (provider === undefined || model === undefined) return false
+
+  const llm = ctx.get('llm') as {
+    resolveModelInfo?: (
+      provider: string,
+      model: string,
+      signal?: AbortSignal,
+    ) => Promise<{ inputModalities?: readonly string[] }>
+  } | undefined
+  if (llm?.resolveModelInfo === undefined) return false
+
+  try {
+    const modelInfo = await llm.resolveModelInfo(provider, model, signal)
+    signal.throwIfAborted()
+    return modelInfo.inputModalities?.includes('image') === true
+  } catch {
+    // Capability discovery is prompt personalization, never a reason to fail
+    // provisioning. read_image owns the actionable rejection if later called.
+    signal.throwIfAborted()
+    return false
+  }
+}
+
 /** Construction options beyond configuration (host wiring / tests). */
 export interface RuntimeOptions {
   /** Harness home override for AutoReport-managed environment files. */
@@ -501,6 +539,16 @@ export default class AutoReportWorkflowRuntime extends Service {
         text: persona,
       })
       if (joined !== undefined) childCtx.tools?.restrict(residentToolFilter(role))
+      if (role === 'PLOTTING' && await plotterCanReviewImages(childCtx, child, signal)) {
+        childCtx.systemPrompt.section({
+          name: 'autoreport:plot-image-review',
+          order: childCtx.systemPrompt.getSectionOrder('TOOL_REPORT'),
+          text: [
+            '## Visual review of final figures',
+            'Before reporting success, use read_image to inspect each final figure at its rendered size. Use your judgment to correct any visible problems.',
+          ].join('\n\n'),
+        })
+      }
       // The parent preset is joined synchronously above, but its scoped skill
       // service is exposed through Cordis injection. Wait for that capability
       // before publishing the child so REPORT skills and the role report tool

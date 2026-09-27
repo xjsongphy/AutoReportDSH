@@ -56,6 +56,26 @@ This is a capability restriction for these known tool calls. It does not imply
 that `bash`, Python, compilers, or other subprocesses can read only those roots.
 Keep that limitation visible in tool guidance and documentation.
 
+### Plotting visual review follows declared route capability
+
+At resident Plotting setup, resolve the exact provider/model route using the
+latest Session request config, falling back to the Agent's options, and query
+`ctx.llm.resolveModelInfo()`. Add a prompt requirement to inspect each final
+figure with `read_image` only when the resolved model metadata explicitly
+declares `image` input and the scoped `read_image` tool is available. An absent
+modality declaration is unknown, not proof of image support; this metadata is
+the adapter's declared capability, not a live probe of the remote endpoint.
+
+When image input is unsupported or unknown, do not add a visual-review
+requirement or a report to MAIN. The DSH `read_image` error itself identifies a
+model that does not declare image input; rely on that tool feedback instead of
+adding a persona fallback. Visual review supplements the numeric and script
+checks; it does not replace them. The condition is resolved when the resident
+Agent is created or resumed. If a future route picker can change a resident's
+model without rebuilding its Agent, refresh the prompt condition after the
+route change; the `read_image` tool continues to enforce the current route
+independently.
+
 ### MAIN presents final deliverables
 
 Only MAIN declares final files with DSH `present`, after a specialist reports
@@ -98,6 +118,7 @@ until there is a demonstrated need.
 |---|---|---|
 | P0 | Finish provider-backed `list` | DSH provider only in production; bounds, symlink behavior, abort propagation, and output paths work for supported providers. |
 | P0 | Enforce readable roots on known file tools | Role tests cover `read`, `read_image`, `list`, and editor view; no claim is made about subprocess reads. |
+| P1 | Gate Plotting visual review on declared image input | Prompt requires `read_image` only for a route that declares image input and has the tool; unsupported/unknown routes continue without a MAIN limitation report. |
 | P1 | Add MAIN-only, workspace-contained `present` | A successful REPORT result can make the final PDF a Web deliverable; out-of-workspace and unapproved files are rejected. |
 | P1 | Wire `workflow_task(cancel)` to the exact resident activation | The turn stops, the task settles as cancelled, and the same child Session remains resumable. |
 | P2 | Add bounded provider-backed `glob`/`grep` if users need them | Search stays inside readable roots and obeys resource/output caps without unconfined subprocess access. |
