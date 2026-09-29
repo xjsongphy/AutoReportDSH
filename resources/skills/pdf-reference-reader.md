@@ -1,70 +1,34 @@
 ---
 name: pdf-reference-reader
-description: Use when References/ PDFs, lab manuals, handouts, or templates cannot be read with read() and need markdown extraction via MinerU (mineru-open-api) into Outline/.cache/mineru/ for MAIN coordination or subagent reference lookup.
+description: Use when References/ PDFs, lab manuals, handouts, or templates cannot be read and need extraction through MAIN's reference_extract capability into Outline/.cache/mineru/.
 ---
 
 # PDF Reference Reader (MAIN)
 
-Extract reference PDFs into markdown so coordination and subagents can read experiment requirements, handouts, and templates. **MAIN only** performs extraction; subagents read cached markdown read-only from `Outline/.cache/mineru/` when MAIN has already extracted.
+Use this skill when a project requirement, handout, or template is a PDF that the read tool cannot parse. MAIN owns extraction. Specialists read cached Markdown from Outline/.cache/mineru/ and never extract PDFs themselves.
 
-## When to Use
+## Find PDFs
 
-**Use when:**
-- `References/` contains PDFs that `read()` cannot parse
-- Project audit needs requirement or template text from a PDF
-- A subagent task depends on PDF content MAIN has not yet extracted
+Use the names-only list tool to inspect References/ and its subdirectories. Paths passed to list and reference_extract are workspace-relative.
 
-**Don't use when:**
-- The file is already markdown, plain text, or readable by `read()`
-- You are a subagent and MAIN has already extracted to `Outline/.cache/mineru/<stem>/`
+## Extract a reference
 
-## Detect PDFs
+Call reference_extract with one PDF beneath References/, for example:
 
-Check the available shell tool description for its starting directory. With the
-role sandbox, MAIN starts in `Outline/`: use `../References` for shell inputs
-and `.cache/mineru/` for shell outputs. Without it, set `workdir: "Outline"`
-when needed. `read` and `list` paths remain workspace-root-relative in either
-mode. AutoReport uses Bash on Linux/macOS and PowerShell on Windows; use the
-platform's directory-listing syntax. Avoid Python here: MAIN's shell commands
-are for coordination and PDF extraction.
+reference_extract(file_path="References/handout.pdf")
 
-```bash
-find ../References -type f -iname '*.pdf'
-ls -la ../References/
-```
+The tool writes extracted Markdown and assets beneath Outline/.cache/mineru/<stem>/. Read the returned Markdown paths with the read tool. Never write extracted content into References/.
 
-PowerShell equivalent:
-
-```powershell
-Get-ChildItem ../References -File -Recurse -Filter '*.pdf'
-Get-ChildItem ../References -Force
-```
-
-## Extract via the available shell
-
-Call `mineru-open-api` from the available shell (not flash-extract for
-production work):
-
-```bash
-mineru-open-api extract "../References/handout.pdf" -o ".cache/mineru/handout/"
-```
-
-Rules:
-- The workspace-canonical output directory is `Outline/.cache/mineru/<stem>/`; from MAIN's sandboxed `Outline/` shell cwd, pass `.cache/mineru/<stem>/` to `-o`.
-- When the shell starts at the workspace root, pass `Outline/.cache/mineru/<stem>/` to `-o` instead.
-- Never write extracted markdown or assets into `References/`.
-- After extraction, use workspace-root-relative `read()` on the generated markdown (often `Outline/.cache/mineru/<stem>/full.md`).
+Do not use shell commands or Python for extraction. Do not use flash-extract for production work; it truncates large documents.
 
 ## Failures
 
 | Situation | Action |
 |-----------|--------|
-| Auth / API token missing | Tell the user to configure MinerU (`mineru-open-api auth`). Do not invent PDF content. |
-| Extract fails | Report the error; do not guess requirements from filenames. |
-| Partial or truncated output | Do not treat as complete; re-run or ask the user. |
+| MinerU authentication is missing | Tell the user to configure MinerU authentication. Do not invent PDF content. |
+| Extraction fails | Report the tool error; do not infer requirements from filenames. |
+| Output is partial or truncated | Treat it as incomplete; retry or ask the user. |
 
-**Do not fallback to `flash-extract` without warning** — it truncates large documents (20-page limit).
+## Specialist handoff
 
-## Subagent read path
-
-Subagents do not run extraction. When MAIN has cached output, read markdown under `Outline/.cache/mineru/` read-only. If no cache exists for a needed PDF, report `missing_data` via `report_workflow` so MAIN can extract.
+After extraction, identify the relevant cached Markdown path in the task inputs. If a subagent needs a PDF that MAIN has not extracted, MAIN performs the extraction first; specialists report missing inputs through report_workflow.

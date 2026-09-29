@@ -14,10 +14,12 @@ import { installReferencesSkills } from './skills-references.js'
 import { installManifestTool } from './tools/manifest.js'
 import { createSendToAgentTool, installSendToAgentGuidance } from './tools/send-to-agent.js'
 import { installWorkflowTaskTool } from './tools/workflow-task.js'
+import { createPythonEnvironmentTool } from './tools/python-environment.js'
+import { createReferenceExtractTool } from './tools/reference-extract.js'
 import type {} from './runtime.js'
 
 export const name = 'autoreport-preset'
-export const inject = ['tools', 'skills', 'subagents', 'autoreportWorkflow', 'systemPrompt', 'llm'] as const
+export const inject = ['tools', 'skills', 'subagents', 'autoreportWorkflow', 'systemPrompt', 'llm', 'subprocess', 'shellEnv', 'fs'] as const
 
 /**
  * Register AutoReport's current MAIN tools.
@@ -36,6 +38,12 @@ export function apply(ctx: Context): void {
   installSendToAgentGuidance(ctx)
   installManifestTool(ctx, ctx, 'MAIN')
   installWorkflowTaskTool(ctx, ctx)
+  ctx.tools.register(createPythonEnvironmentTool(ctx))
+  ctx.tools.register(createReferenceExtractTool(ctx, execution => {
+    const session = execution.agent?.session
+    return ctx.autoreportWorkflow.config.workspaceRoot
+      ?? (typeof session?.header?.cwd === 'string' ? session.header.cwd : undefined)
+  }))
   ctx.tools.register(createSendToAgentTool({
     subagents: ctx.subagents,
     resident: {

@@ -1,7 +1,7 @@
 /**
  * Dynamic Python-environment context on every AutoReport session (MAIN and
- * specialists): what interpreter is selected, where it came from, and which
- * package-manager commands fit it. Registered as a `systemPrompt.context()`,
+ * specialists): what interpreter is selected, where it came from, and how
+ * MAIN manages packages through the approval-gated tool. Registered as a `systemPrompt.context()`,
  * so the DSH agent loop materializes it as a durable user-role snapshot that
  * is appended ONLY when the rendered text changes — the host owns the
  * "compare with the last snapshot, append on difference" choreography, and
@@ -30,25 +30,13 @@ interface PythonAssembleContext {
   agent?: { session?: Session }
 }
 
-/** Whether an interpreter selection looks like a conda env python. */
-function isCondaPython(executable: string): boolean {
-  return /(?:^|[/\\])(?:envs[/\\][^/\\]+|miniconda3|anaconda3|miniforge3|mambaforge|micromamba)[/\\]/u.test(executable)
-}
-
 /**
- * Package-manager guidance for one resolved interpreter: which install
- * command fits the environment the interpreter belongs to. Managed venvs use
- * `uv pip --python`; conda prefixes prefer `conda install` (pip still works
- * but can fight the conda solver); everything else uses plain pip via the
- * interpreter itself.
- * @param executable - resolved absolute interpreter, or `'python3'` fallback.
- * @param managed - whether the selection is the AutoReport-managed venv.
- * @returns the install-command guidance line.
+ * Point MAIN at the dedicated environment capability instead of exposing
+ * package-manager commands in the prompt.
+ * @returns the environment-tool guidance line.
  */
-export function packageManagerGuidance(executable: string, managed: boolean): string {
-  if (managed) return `install packages with \`uv pip install --python ${executable} <packages>\` (uv is required for the managed venv)`
-  if (isCondaPython(executable)) return 'prefer `conda install <packages>` (or `mamba`); fall back to `pip` only for packages conda does not package'
-  return `install packages with \`${executable} -m pip install <packages>\``
+export function packageManagerGuidance(): string {
+  return 'Use python_environment(action=inspect|list) to review this environment; use python_environment(action=install, packages=[...]) for approved package changes.'
 }
 
 /**
@@ -77,20 +65,15 @@ function cachedPythonVersion(executable: string): string | undefined {
 export function renderPythonContext(executable: string, sourceLabel: string | undefined): string {
   if (executable.length === 0) return ''
   const version = cachedPythonVersion(executable)
-  const managed = isManagedLabel(sourceLabel)
   const lines = [
     '# Python environment',
     `selected: ${executable}${version === undefined ? '' : ` (${version})`}`,
     ...(sourceLabel === undefined ? [] : [`source: ${sourceLabel}`]),
-    `shell PATH already resolves \`python\`/\`python3\` to it — never activate or pass an explicit interpreter path unless targeting another environment`,
-    packageManagerGuidance(executable, managed),
+    `Role-aware process tools resolve \`python\`/\`python3\` to this interpreter — never activate it or pass an explicit interpreter path unless targeting another environment`,
+    packageManagerGuidance(),
     'Only MAIN may install or change packages; specialists report `missing_dependency` through `report_workflow` instead.',
   ]
   return lines.join('\n')
-}
-
-function isManagedLabel(label: string | undefined): boolean {
-  return label !== undefined && /managed/iu.test(label)
 }
 
 /**
