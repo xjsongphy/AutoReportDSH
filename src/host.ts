@@ -211,7 +211,7 @@ export async function apply(ctx: Context, config: Partial<Config> = {}, options:
       agent.ctx.tools.register(createGrepTool(workspaceRoot, agent, searchFileSystem))
     }
     let processToolAvailable = false
-    if (rolePolicy(role).hasProcessTool && process.platform !== 'win32' && workspaceRoot !== undefined) {
+    if (rolePolicy(role).hasProcessTool && workspaceRoot !== undefined) {
       const shell = agent.ctx.tools.get(ROLE_PROCESS_TOOL, agent)
       if (shell !== undefined) {
         agent.ctx.tools.register(wrapRoleAwareShell(shell, role, workspaceRoot))

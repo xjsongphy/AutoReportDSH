@@ -11,6 +11,7 @@ import {
   residentToolFilter,
   RESIDENT_TOOL_FILTER,
 } from '../src/subagent-descriptor.js'
+import { ROLE_PROCESS_TOOL } from '../src/roles.js'
 
 function childSession(id = 'resident-child'): Session {
   return Session.create(SessionId(id), undefined, {
@@ -51,9 +52,10 @@ describe('residentDescriptor', () => {
   })
 
   it('keeps the coordinator tools out of every resident child', () => {
-    const delegatedTools = ['send_to_agent', 'ask_user_question', 'workflow', 'subagent', 'subagent_fork', 'send_message', 'interrupt_agent', 'list_agents', 'todo_write', 'glob', 'pwsh']
+    const otherProcessTool = ROLE_PROCESS_TOOL === 'bash' ? 'pwsh' : 'bash'
+    const delegatedTools = ['send_to_agent', 'ask_user_question', 'workflow', 'subagent', 'subagent_fork', 'send_message', 'interrupt_agent', 'list_agents', 'todo_write', 'glob', otherProcessTool]
     expect(RESIDENT_TOOL_FILTER).toEqual({ deny: delegatedTools })
-    expect(residentToolFilter('THEORY')).toEqual({ deny: [...delegatedTools, 'bash'] })
+    expect(residentToolFilter('THEORY')).toEqual({ deny: [...delegatedTools, ROLE_PROCESS_TOOL] })
     expect(residentToolFilter('DATA_ANALYSIS')).toEqual(RESIDENT_TOOL_FILTER)
   })
 })

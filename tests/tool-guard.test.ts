@@ -10,6 +10,7 @@ import { AUTOREPORT_SCHEMA_VERSION, type RoleBindingSnapshot } from '../src/work
 import { AUTOREPORT_MAIN_PRESET } from '../src/membership.js'
 import { RoleRegistry } from '../src/workflow/role-registry.js'
 import { createRoleToolGuard } from '../src/policy/tool-guard.js'
+import { ROLE_PROCESS_TOOL } from '../src/roles.js'
 
 const roots: string[] = []
 afterEach(() => {
@@ -237,12 +238,13 @@ describe('AutoReport role tool guard', () => {
     // Reads must stay inside the workspace boundary.
     expect(guard(execution('read', { file_path: '../outside.txt' }, analyst))).toContain('experiment workspace')
     // No shell parsing: a process role's shell call is never inspected.
-    expect(guard(execution('bash', { command: 'python analyze.py' }, analyst))).toBeUndefined()
-    expect(guard(execution('bash', { command: 'rm -rf Data' }, analyst))).toBeUndefined()
-    expect(guard(execution('bash', { command: 'typst compile Report/main.typ' }, analyst))).toBeUndefined()
+    expect(guard(execution(ROLE_PROCESS_TOOL, { command: 'python analyze.py' }, analyst))).toBeUndefined()
+    expect(guard(execution(ROLE_PROCESS_TOOL, { command: 'rm -rf Data' }, analyst))).toBeUndefined()
+    expect(guard(execution(ROLE_PROCESS_TOOL, { command: 'typst compile Report/main.typ' }, analyst))).toBeUndefined()
     expect(guard(execution('bash', { command: 'cat Data/raw.txt' }, theory))).toContain('no process tool')
     // Platform shell mismatch stays denied.
-    expect(guard(execution('pwsh', { command: 'Get-Location' }, analyst))).toContain('bash tool')
+    const otherProcessTool = ROLE_PROCESS_TOOL === 'bash' ? 'pwsh' : 'bash'
+    expect(guard(execution(otherProcessTool, { command: 'Get-Location' }, analyst))).toContain(`${ROLE_PROCESS_TOOL} tool`)
   })
 
   it('lets MAIN review report sources while keeping Report read-only', () => {

@@ -23,6 +23,7 @@ import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import { SESSION_FORMAT_VERSION, Session, SessionId } from '@deepseek-ai/dsh-session'
 import { roleWritableRoot } from '../src/policy/sandbox-roots.js'
 import { AUTOREPORT_MAIN_PRESET } from '../src/membership.js'
+import { ROLE_PROCESS_TOOL } from '../src/roles.js'
 import { REQUIRED_DIRS } from '../src/workspace/init.js'
 import { resolveWorkflowSettings, workspaceIdForRoot } from '../src/settings.js'
 import { AUTOREPORT_SCHEMA_VERSION, type RoleBindingSnapshot } from '../src/workflow/events.js'
@@ -187,7 +188,7 @@ describe('integration: assembled host (real context)', () => {
 
   it('registers exactly ONE continuable setup and routes it by RoleRegistry', async () => {
     const assembled = await boot({ roleSandbox: true })
-    const roleTools = ['list', 'grep', 'bash', 'read', 'read_image', 'write', 'edit', 'str_replace_editor', 'manifest', 'report_workflow']
+    const roleTools = ['list', 'grep', ROLE_PROCESS_TOOL, 'read', 'read_image', 'write', 'edit', 'str_replace_editor', 'manifest', 'report_workflow']
 
     // Ordinary DSH child: the router installs nothing — stock messaging comes
     // from the base bundle since the standalone report tool was removed upstream.
@@ -207,7 +208,7 @@ describe('integration: assembled host (real context)', () => {
     assembled.runtime.roleRegistry.registerReserved(binding)
     const theory = makeChildRecorder('it-theory', assembled.runtime, assembled.workspaceRoot)
     assembled.routeChild(theory)
-    expect(theory.toolNames.slice().sort()).toEqual(roleTools.filter(name => name !== 'bash').sort())
+    expect(theory.toolNames.slice().sort()).toEqual(roleTools.filter(name => name !== ROLE_PROCESS_TOOL).sort())
     expect(theory.bashDescriptions).toEqual([])
     expect(theory.pwshDescriptions).toEqual([])
     expect(theory.toolDescriptions.get('read')).toContain(`Relative paths resolve from ${assembled.workspaceRoot}.`)
@@ -231,7 +232,7 @@ describe('integration: assembled host (real context)', () => {
     assembled.runtime.roleRegistry.registerReserved(reportBinding)
     const reporter = makeChildRecorder('it-report', assembled.runtime, assembled.workspaceRoot)
     assembled.routeChild(reporter)
-    expect(reporter.toolNames.slice().sort()).toEqual([...roleTools.filter(name => name !== 'bash'), 'compile_report'].sort())
+    expect(reporter.toolNames.slice().sort()).toEqual([...roleTools.filter(name => name !== ROLE_PROCESS_TOOL), 'compile_report'].sort())
     expect(reporter.bashDescriptions).toEqual([])
     expect(reporter.pwshDescriptions).toEqual([])
     expect(reporter.toolRestrictions.at(-1)?.allow).not.toContain('bash')
@@ -255,8 +256,8 @@ describe('integration: assembled host (real context)', () => {
     })
     assembled.routeChild(plotter)
     expect(plotter.toolNames.slice().sort()).toEqual(roleTools.slice().sort())
-    expect(plotter.bashDescriptions[0]).toContain('AutoReport PLOTTING')
-    expect(plotter.pwshDescriptions).toEqual([])
+    const plotterShellDescriptions = ROLE_PROCESS_TOOL === 'bash' ? plotter.bashDescriptions : plotter.pwshDescriptions
+    expect(plotterShellDescriptions[0]).toContain('AutoReport PLOTTING')
     expect(plotter.skillNames).toEqual(['plotting-quality'])
   })
 
@@ -341,7 +342,7 @@ describe('integration: assembled host (real context)', () => {
     // (before/after writable-root snapshots) keys on the tool NAME 'bash', so
     // the child-bash regression below needs an actual command to run.
     assembled.ctx.tools.register(defineTool({
-      name: 'bash',
+      name: ROLE_PROCESS_TOOL,
       description: 'fixture process execution',
       parameters: { command: { type: 'string', required: true } },
       output: {
@@ -411,7 +412,7 @@ describe('integration: assembled host (real context)', () => {
     // relative target would miss; forward slashes keep the drive-letter path
     // portable under Git Bash on Windows without any backslash escaping.
     const writeCommand = `printf 'bash wrote this' > "${scriptPath.replaceAll('\\', '/')}"`
-    const bash = await execute(assembled.ctx, 'bash', {
+    const bash = await execute(assembled.ctx, ROLE_PROCESS_TOOL, {
       command: writeCommand,
     }, childAgent, childSession)
     expect(bash.isError, bash.text).toBe(false)

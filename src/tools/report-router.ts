@@ -1,5 +1,6 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { apply as installBashTool } from '@deepseek-ai/dsh-tool-bash'
+import { apply as installPowerShellTool } from '@deepseek-ai/dsh-tool-pwsh'
 import { installModelSelection, type Agent, type ModelSelection } from '@deepseek-ai/dsh-agent'
 import { ReasoningEffortId } from '@deepseek-ai/dsh-llm'
 import type AutoReportWorkflowRuntime from '../runtime.js'
@@ -150,7 +151,8 @@ export function installRoutedReportTool(
     if (child.session !== undefined && rolePolicy(entry.binding.role).hasProcessTool && childCtx.get('shell') !== undefined) {
       // Scoped registration gives only these roles a shell. DSH owns its
       // registration lifetime together with the child context.
-      installBashTool(childCtx, { enableRunInBackground: false })
+      if (process.platform === 'win32') installPowerShellTool(childCtx, { enableRunInBackground: false })
+      else installBashTool(childCtx, { enableRunInBackground: false })
     }
     disposers.push(registerRoleSkills(childCtx, entry.binding.role, language))
     disposers.push(installReferencesSkills(childCtx))

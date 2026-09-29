@@ -353,11 +353,11 @@ export function createRoleToolGuard(options: RoleGuardOptions): ToolGuard {
       return 'AutoReport denies generic sandbox escalation; use the dedicated MAIN environment capability for package changes'
     }
     if (shellCall) {
-      if (exec.name !== ROLE_PROCESS_TOOL) {
-        return `AutoReport process execution on ${process.platform} uses the ${ROLE_PROCESS_TOOL} tool; ${exec.name} is unavailable`
-      }
       if (!resolved.policy.hasProcessTool) {
         return `AutoReport ${resolved.role} has no process tool; use its dedicated tools and assigned specialists`
+      }
+      if (exec.name !== ROLE_PROCESS_TOOL) {
+        return `AutoReport process execution on ${process.platform} uses the ${ROLE_PROCESS_TOOL} tool; ${exec.name} is unavailable`
       }
     }
     if (!resolved.policy.tools.includes(exec.name)) {

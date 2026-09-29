@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { allSpecialistRoles, isAutoReportRole, isSpecialistRole, rolePolicy } from '../src/roles.js'
+import { allSpecialistRoles, isAutoReportRole, isSpecialistRole, rolePolicy, ROLE_PROCESS_TOOL } from '../src/roles.js'
 
 describe('fixed role table', () => {
   it('encodes the three-fact permission model per role', () => {
@@ -19,7 +19,7 @@ describe('fixed role table', () => {
           : role === 'PLOTTING' ? 'Plots' : 'Report')
       expect(rolePolicy(role).hasProcessTool).toBe(true)
       expect(rolePolicy(role).tools).toEqual(
-        ['read', 'list', 'grep', 'read_image', 'write', 'edit', 'skill', 'manifest', 'report_workflow', 'bash'])
+        ['read', 'list', 'grep', 'read_image', 'write', 'edit', 'skill', 'manifest', 'report_workflow', ROLE_PROCESS_TOOL])
     }
     expect(rolePolicy('REPORT')).toEqual({
       writableRoot: 'Report',
