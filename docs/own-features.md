@@ -35,33 +35,26 @@ platform.
   [Prompt-attached language guidance](#prompt-attached-language-guidance).
   Referenced skill documents are addressed through DSH's own resource anchor —
   see [Skill resource anchoring](#skill-resource-anchoring).
-- **Role filesystem policy:** Main can list names throughout the workspace and
-  read `References/`, `Outline/`, `Theory/`, `Data/Processed/`, `Plots/`, and
-  `Report/`; MAIN cannot read raw `Data/Raw/` content by default. Theory reads
-  its references and `Theory/`; Data Analysis reads `Data/`; Plotting reads
-  processed data and `Plots/`; Report reads all upstream outputs. Model-facing
-  `read`, `read_image`, provider-backed `grep`, and editor-view calls follow
-  `readableRoots`; `list` follows names-only `discoverableRoots`. Each role may
-  write only its own root: Main `Outline/`, Theory `Theory/`, Data Analysis
-  `Data/Processed/`, Plotting `Plots/`, Report `Report/`. DSH's workspace-write
-  sandbox and the role guard enforce writes. MAIN and Theory have no general
-  shell. Data Analysis, Plotting, and Report get role-aware Bash on Linux/macOS
-  and role-constrained PowerShell on Windows.
+- **Role filesystem policy (three facts per role):** read permission never
+  expresses role boundaries — every role reads the whole experiment workspace
+  through `read`, `read_image`, workspace-wide `grep`, and names-only `list`;
+  whether a role "should" touch data is persona guidance, not an ACL. The
+  single writable root is the real sandbox boundary: Main `Outline/`, Theory
+  `Theory/`, Data Analysis `Data/Processed/`, Plotting `Plots/`, Report
+  `Report/` — enforced by DSH's `workspace-write` sandbox (rooted at the
+  writable root via the sandbox-policy override) plus one write-path check in
+  the role guard. Tools differ only by "does this role need to execute code":
+  MAIN and Theory have no shell; Data Analysis, Plotting, and Report get the
+  platform shell (`bash` on Linux/macOS, `pwsh` on Windows) with the session
+  starting at the workspace root — navigation only, no command parsing; the OS
+  sandbox owns every write effect. All model-facing paths are
+  experiment-workspace-relative, including shell arguments and
+  `write`/`edit` targets; the host adapter rewrites relative paths to absolute
+  workspace paths before the stock DSH tools run.
   MAIN uses `python_environment` for approved package changes and
   `reference_extract` for MinerU PDF extraction; it has no general shell.
-  On Linux/macOS, the AutoReport Bash wrapper exposes each role's readable
-  workspace roots to child processes, including Python, and makes its writable
-  root writable. On Windows, PowerShell uses DSH's partial Windows ACL write
-  sandbox and AutoReport command/path preflight; arbitrary child-process reads
-  are not confined to `readableRoots`. `tests/process-sandbox.live.test.ts`
-  exercises the Unix workspace-view wrapper directly, but not the full DSH host
-  tool path. The existing `tests/bash-confinement.live.test.ts` exercises DSH
-  executors directly. Windows role integration still needs end-to-end
-  verification. Role shells start in the writable root. The
-  `ReportRolePolicy.cwd` field records logical workspace base `.` and does not
-  set the operating-system process cwd.
   The `list` tool rename, provider-backed filesystem contract, MAIN deliverables,
-  task cancellation, search limits, and process-isolation decisions are tracked
+  task cancellation, and search limits are tracked
   in [Role filesystem, delivery, and cancellation decisions](role-filesystem-decisions.md).
 - **Settings integration:** report language, wait limits, Python interpreter,
   and specialist-model selection are stored in DSH's `autoreport` user-settings
@@ -276,11 +269,10 @@ Open, and deliberately not claimed as done:
   Session load, compaction, or a full process restart, so the AutoReportCLI
   comparison above still claims no recovery equivalence.
 - **Windows PowerShell role verification.** AutoReport exposes `pwsh` only to
-  DATA_ANALYSIS, PLOTTING, and REPORT, with role-root workdirs, command/path
-  preflight, and DSH's partial ACL write sandbox. End-to-end AutoReport
-  verification is still open. Windows process reads remain outside the role
-  readable-root boundary; the existing live `pwsh` probe exercises DSH's
-  sandbox executor directly.
+  DATA_ANALYSIS, PLOTTING, and REPORT, with the DSH partial ACL write sandbox
+  rooted at each role's writable root. End-to-end AutoReport verification is
+  still open; the existing live `pwsh` probe exercises DSH's sandbox executor
+  directly.
 - **Live provider compatibility.** The opt-in
   `tests/e2e/configured-route.e2e.test.ts` passed on 2026-09-24 against the
   configured DSH home. Repeat it after a DSH compatibility change.

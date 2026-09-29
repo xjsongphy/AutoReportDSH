@@ -1,4 +1,4 @@
-# AutoReportDSH — Design Plan (rev 5, amended rev 12)
+# AutoReportDSH — Design Plan (rev 5, amended rev 13)
 
 Migrate the AutoReportCLI physics-report workflow into a DeepSeek Harness (`dsh`) plugin.
 The scope contract is `../autoreportcli/docs/own-features.md`: preserve AutoReport-owned
@@ -13,6 +13,19 @@ turn-enclosed.
 All report policy comes from the `autoreport` user settings namespace, plugin defaults, or
 the internal workflow override. No loader, migration, fallback, or setup script reads or writes
 `project.json`.
+
+**Rev 13 amendment.** Collapse the permission model to three facts per role:
+`writableRoot`, `hasProcessTool`, and the tool list. Read permission never
+expresses role boundaries — every role reads the whole experiment workspace
+(`discoverableRoots`/`readableRoots` are deleted). The single writable root is
+the real sandbox boundary, enforced by DSH's native `workspace-write` sandbox
+rooted at the writable root; `write`/`edit` re-check the target once. Tools
+differ only by "does this role need to execute code": MAIN and THEORY have no
+shell; DATA_ANALYSIS, PLOTTING, and REPORT get the platform shell rooted at the
+workspace root with no command parsing — the entire bash/pwsh command
+preflight is deleted, because DSH's OS sandbox owns write effects and shell
+parsing cannot authorize interpreter scripts anyway. All model-facing paths
+are experiment-workspace-relative, including shell CWD.
 
 **Rev 12 amendment.** Separate names-only discovery from content reads with
 `discoverableRoots`, `readableRoots`, and `writableRoots`. MAIN reviews specialist
@@ -212,59 +225,46 @@ AutoReport Delegation (task_id, revision)
 DSH MessageId
 ```
 
-Role policies use separate dimensions rather than one ambiguous execution root:
+Role policies use three facts (rev 13). Reads are never role-scoped, so the
+policy carries no read dimension at all:
 
 ```ts
-interface ReportExecutionPolicy {
-  cwd: string
-  discoverableRoots: string[]
-  readableRoots: string[]
-  writableRoots: string[]
-  process: 'none' | 'role-aware'
-  processCommands: string[]
-  tools: string[]
-  network: 'allow'
-  temp: 'private'
+interface ReportRolePolicy {
+  writableRoot: string      // the only writable directory; DSH sandbox root
+  hasProcessTool: boolean   // platform shell (bash/pwsh) or none
+  tools: string[]           // BASE + protocol/coordinator packs
 }
 ```
 
-| Role | Child | Discoverable roots | Readable roots | Shell cwd when sandboxed | Writable roots |
-|---|---|---|---|---|---|
-| MAIN | user session | whole workspace (names only) | `References/`, `Outline/`, `Theory/`, `Data/Processed/`, `Plots/`, `Report/` | — (dedicated tools; no general shell) | `Outline/` |
-| THEORY | one continuable child | `References/`, `Outline/`, `Theory/` | same | — (no shell) | `Theory/` |
-| DATA_ANALYSIS | one continuable child | `References/`, `Outline/`, `Theory/`, `Data/` | same | `Data/Processed/` | `Data/Processed/` |
-| PLOTTING | one continuable child | `References/`, `Outline/`, `Theory/`, `Data/Processed/`, `Plots/` | same | `Plots/` | `Plots/` |
-| REPORT | one continuable child | `References/`, `Outline/`, `Theory/`, `Data/Processed/`, `Plots/`, `Report/` | same | `Report/` | `Report/` |
+Tool packs: `BASE = read, list, grep, read_image, write, edit, skill` (whole
+workspace readable); specialists add `manifest, report_workflow`; MAIN instead
+adds the coordinator pack `manifest, workflow_task, send_to_agent,
+ask_user_question, reference_extract, python_environment`; the three executing
+roles add the platform shell.
 
-MAIN can inventory all workspace names and review specialist outputs, including
-`Report/`, but cannot read `Data/Raw/` by default or write specialist-owned files.
-Its writable root remains `Outline/`.
+| Role | Child | Shell | Writable root |
+|---|---|---|---|
+| MAIN | user session | — (dedicated tools; no general shell) | `Outline/` |
+| THEORY | one continuable child | — (no shell) | `Theory/` |
+| DATA_ANALYSIS | one continuable child | `bash` / `pwsh` | `Data/Processed/` |
+| PLOTTING | one continuable child | `bash` / `pwsh` | `Plots/` |
+| REPORT | one continuable child | `bash` / `pwsh` | `Report/` |
 
-`ReportRolePolicy.cwd` records the logical workspace base `.` and has no runtime
-consumer. The DSH session header remains on the workspace root. Role-aware shell
-tools start in the role's writable root and resolve relative `workdir` values
-from there. Roles allow network access and use a private temporary area.
+Every role reads the whole experiment workspace. Duty boundaries (which role
+analyzes data, draws figures, writes prose) are persona guidance, not read
+ACLs. Writes are confined to the single writable root by DSH's native
+`workspace-write` sandbox — rooted at the writable root through the
+sandbox-policy override — plus one workspace-relative target check per
+`write`/`edit` in the role guard. No command preflight exists: shell calls are
+never parsed, because the OS sandbox owns their write effects and a shell
+parser cannot authorize what a Python script does anyway.
 
-`discoverableRoots` governs bounded names-only `list`; `readableRoots` governs
-model-facing `read`, `read_image`, and AutoReport's provider-backed `grep`.
-`Data/Raw/` is discoverable by MAIN's `list` but outside MAIN's readable roots.
-The search tool streams through `ctx.fs`, follows no symlinks, and bounds depth,
-files, bytes, matches, and output line size. On Linux/macOS, AutoReport wraps
-role-aware Bash in a bwrap/Seatbelt workspace view that exposes the role's readable
-roots and writable root to child processes. This is separate from DSH's
-write-focused `workspaceRoot` sandbox. This confines workspace visibility, not
-the whole host filesystem: other paths readable by the user and explicitly
-exposed runtime paths may remain accessible. `tests/process-sandbox.live.test.ts`
-probes the wrapper directly, but does not exercise the full DSH host tool path;
-command preflight alone is not a security boundary.
-
-On Windows, role-bound `pwsh` calls are limited to the assigned specialists,
-foreground execution, role-root workdirs, an allowlisted command set, and
-preflight checks on known file operands. DSH's Windows ACL runner confines
-writes to the role root with its documented `partial` enforcement. It does not
-confine process reads; Python or PowerShell code can still read workspace files
-outside the role's `readableRoots`. This limitation is explicit until a Windows
-read-capable sandbox or isolated filesystem view is available.
+All model-facing paths are experiment-workspace-relative, including shell
+arguments and CWD: the shell session starts at the workspace root (navigation)
+while the sandbox root stays at the writable root (enforcement). `grep` streams
+through `ctx.fs`, follows no symlinks, and bounds depth, files, bytes, matches,
+and output line size. On Windows, DSH's ACL runner confines writes to the role
+root with its documented `partial` enforcement.
 
 ### 2.3 Role binding before child execution
 

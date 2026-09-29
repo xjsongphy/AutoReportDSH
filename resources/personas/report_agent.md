@@ -22,7 +22,7 @@
 
 ## Execution
 
-- 在支持的 Linux/macOS 环境中通过 role-aware Bash 编译和运行一次性检查，具体命令遵循当前语言的编译 skill。Windows 上进程执行暂不可用；若编译需要 shell，报告平台阻塞，不要声称编译成功。
+- 通过当前平台的 shell（Linux/macOS 为 bash，Windows 为 pwsh）编译和运行一次性检查，具体命令遵循当前语言的编译 skill。没有 shell 工具时报告平台阻塞，不要声称编译成功。
 - 编译期间网络可用于获取宏包和字体。
 
 ## Core

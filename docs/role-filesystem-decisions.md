@@ -42,22 +42,20 @@ Provider details to preserve:
 - Use the resolved child targets returned by `ctx.fs.listDir()` for containment and
   recursion. Treat target keys as opaque.
 
-### Discovery, reads, and writes use separate role roots
+### Reads are workspace-wide; writes are the role boundary (rev 13)
 
-`list` is bounded names-only discovery governed by `discoverableRoots`;
-`read`, `read_image`, `grep`, and editor view are governed by `readableRoots`;
-writes use `writableRoots`. MAIN can inventory the workspace and review
-`Data/Processed/`, plots, and reports, while `Data/Raw/` remains names-only by
-default. Tests cover role matrices, traversal, symlink escapes, missing paths,
-and unaffected stock DSH sessions.
+Read permission never expresses role boundaries: `list`, `read`, `read_image`,
+`grep`, and editor view cover the whole experiment workspace for every role.
+Whether a role should touch data is persona guidance, not an ACL — a Theory
+agent that can read `Data/raw.csv` still must not analyze it, and the persona
+says so. Tests cover the workspace boundary, traversal, symlink escapes,
+missing paths, and unaffected stock DSH sessions.
 
-MAIN's broad read permission supports routing-level coverage and editorial
-review, not technical reanalysis. The role guard grants these roots without a
-workflow-phase check; MAIN's writable root remains `Outline/`.
-
-This policy covers known DSH tools. The separate process wrapper carries the
-same readable and writable roots into Python, compilers, and their descendants;
-the shell parser remains defense in depth and is not the isolation boundary.
+The single writable root per role is the real boundary, enforced by DSH's
+native `workspace-write` sandbox rooted at the writable root plus one
+workspace-relative `write`/`edit` target check in the role guard. There is no
+shell parser and no process wrapper: DSH's OS sandbox owns process write
+effects, and command parsing could never authorize interpreter scripts anyway.
 
 ### Plotting visual review follows declared route capability
 
@@ -110,32 +108,26 @@ request is cooperative and may take time to reach quiescence.
 
 ### Search is provider-backed and bounded
 
-Do not mount DSH's generic `glob`/`grep` tools directly for role-scoped search:
+Do not mount DSH's generic `glob`/`grep` tools directly:
 they execute packaged ripgrep through `ctx.subprocess`, outside `ctx.fs` path
-authorization. AutoReport's `grep` uses `ctx.fs` streaming reads, checks each
-file against role `readableRoots`, skips symlinks and internal metadata, and
+authorization. AutoReport's `grep` uses `ctx.fs` streaming reads across the
+whole workspace, skips symlinks and internal metadata, and
 caps depth, files, bytes, line previews, and matches. The generic DSH `glob` is
-denied to AutoReport sessions; use role-scoped `list` for names-only discovery.
+denied to AutoReport sessions; use `list` for names-only discovery.
 
 ## Work order
 
 | Priority | Work | Completion condition |
 |---|---|---|
-| P0 | Finish provider-backed `list` | DSH provider only in production; role `discoverableRoots`, bounds, symlink behavior, abort propagation, and output paths work for supported providers. |
-| P0 | Enforce role read roots on known tools | Role tests cover `read`, `read_image`, `grep`, `list`, and editor view. |
+| P0 | Finish provider-backed `list` | DSH provider only in production; workspace-wide roots, bounds, symlink behavior, abort propagation, and output paths work for supported providers. |
 | P1 | Gate Plotting visual review on declared image input | Prompt requires `read_image` only for a route that declares image input and has the tool; unsupported/unknown routes continue without a MAIN limitation report. |
 | P1 | Add MAIN-only, workspace-contained `present` | A successful REPORT result can make the final PDF a Web deliverable; out-of-workspace and unapproved files are rejected. |
 | P1 | Wire `workflow_task(cancel)` to the exact resident activation | The turn stops, the task settles as cancelled, and the same child Session remains resumable. |
-| P1 | Verify role process integration | `tests/process-sandbox.live.test.ts` probes allowed/denied workspace reads and writes through the Unix wrapper. Add DSH host-chain coverage for Bash/Python and Windows coverage for the `pwsh` roster, preflight, and ACL writes. Windows arbitrary-process reads remain an explicit limitation until a read-capable sandbox is available. |
+| P1 | Verify role process integration | DSH host-chain coverage for shell execution through the per-role sandbox roots, including Windows `pwsh` ACL writes. |
 
 ## Explicit non-claims
 
-- Shell command screening does not provide workspace-only read isolation.
-- DSH's write-oriented `workspaceRoot` sandbox does not by itself confine
-  subprocess reads. AutoReport adds a bwrap/Seatbelt workspace view for
-  role-aware Bash on Linux/macOS, but that wrapper is not yet covered by a
-  dedicated live test. This is workspace isolation, not complete host
-  filesystem isolation; other user-readable paths and explicitly exposed runtime
-  paths may remain accessible.
+- Read scope is the whole workspace by design; the sandbox does not confine
+  subprocess reads to it. It confines writes to the role's writable root.
 - A `present` declaration is not a copied or versioned artifact.
 - A cancelled turn does not destroy or replace its resident specialist Session.

@@ -24,7 +24,7 @@ The workflow ports the report pipeline of
 
 ### Core capabilities
 - **Multi-agent collaboration** — Main plans and coordinates; Theory, Data Analysis, Plotting, and Report carry out the specialized work
-- **Role-scoped filesystem access** — model-facing reads follow each role's readable roots; role-aware Bash gets a workspace view on Linux/macOS, while Windows PowerShell uses role command/path preflight and DSH's partial write ACL sandbox
+- **Role-scoped filesystem access** — every role reads the whole experiment workspace; each role writes only its own root, enforced by DSH's `workspace-write` sandbox. Roles that execute code get the platform shell (`bash`/`pwsh`) rooted at the workspace with no command parsing; MAIN and Theory have no shell
 - **LaTeX and Typst reports** — per-project language with bundled templates, themes, bibliography assets, and compile skills; Python for data processing and plotting
 - **Your DSH providers** — model routes and credentials come from DSH's own configuration
 - **Deterministic bundled resources** — templates, themes, skills, and their reference documents are committed in `resources/` and read from there; a session never fetches or replaces a prompt over the network
@@ -176,34 +176,33 @@ $DSH_HOME/
 
 ### Role permissions
 
-| Role | Names discoverable with `list` | Contents readable with `read`/`grep` | Writes |
-|---|---|---|---|
-| Main | Whole workspace | `References/`, `Outline/`, `Theory/`, `Data/Processed/`, `Plots/`, `Report/` | `Outline/` |
-| Theory | `References/`, `Outline/`, `Theory/` | Same | `Theory/` |
-| Data Analysis | `References/`, `Outline/`, `Theory/`, `Data/` | Same | `Data/Processed/` |
-| Plotting | `References/`, `Outline/`, `Theory/`, `Data/Processed/`, `Plots/` | Same | `Plots/` |
-| Report | `References/`, `Outline/`, `Theory/`, `Data/Processed/`, `Plots/`, `Report/` | Same | `Report/` |
+The model is deliberately small — three facts per role:
 
-Main's broad read access supports coverage checks and its post-compilation
-editorial audit; its writes remain confined to `Outline/`.
-MAIN has no general shell; PDF extraction and Python package management use its
-dedicated, parameter-limited tools.
+1. **Reads are never role-scoped.** Every role can read the whole experiment
+   workspace (`read`, `read_image`, `list`, `grep`). Whether a role *should*
+   analyze data or write the report is persona guidance, not an ACL.
+2. **One writable root per role** is the real sandbox boundary, enforced by
+   DSH's `workspace-write` sandbox plus a single write-path check in the role
+   guard.
+3. **Tools differ only by "does this role execute code"**: MAIN and Theory have
+   no shell; the other specialists get the platform shell (`bash` on
+   Linux/macOS, `pwsh` on Windows) starting at the workspace root — navigation
+   only, no command parsing; the OS sandbox owns every write effect.
 
-All roles have a bounded, names-only `list`; MAIN can inventory the whole
-workspace. MAIN may review processed results, figures, and the final report, but
-`Data/Raw/` contents remain unreadable to MAIN by default. `grep` is AutoReport-owned and
-uses DSH `ctx.fs` streaming reads, limited to the same readable roots as `read`.
-MAIN and Theory have no general shell. Data Analysis, Plotting, and Report get
-role-aware Bash on Linux/macOS and constrained PowerShell on Windows. Both start
-in the role's writable directory. The Unix wrapper exposes only the role's
-readable workspace roots to child processes, including Python. Windows DSH ACLs
-restrict writes to the role root, while AutoReport preflights known commands,
-paths, and workdirs. Windows does not enforce readable roots for arbitrary
-PowerShell or Python reads; this remains a prompt/preflight guardrail. The Unix
-workspace-view wrapper has a dedicated live probe in
-`tests/process-sandbox.live.test.ts`, but that probe does not exercise the full
-DSH host tool chain. Windows role integration also needs end-to-end
-verification. Manifest and handoff paths remain workspace-relative.
+| Role | Shell | Writes |
+|---|---|---|
+| Main | none (`python_environment` + `reference_extract` instead) | `Outline/` |
+| Theory | none | `Theory/` |
+| Data Analysis | `bash` / `pwsh` | `Data/Processed/` |
+| Plotting | `bash` / `pwsh` | `Plots/` |
+| Report | `bash` / `pwsh` | `Report/` |
+
+All model-facing paths — `read`, `write`, `edit`, `list`, `grep`, manifest,
+`report_workflow`, and shell arguments — are experiment-workspace-relative
+(e.g. `Report/main.typ`). The host adapter rewrites relative paths to absolute
+workspace paths before the stock DSH tools run, and the DSH sandbox (rooted at
+the role's writable root) enforces the write. Manifest and handoff paths use
+the same convention.
 
 ## Development
 
