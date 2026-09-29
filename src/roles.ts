@@ -1,16 +1,19 @@
 /**
- * The fixed five-role AutoReport table and each role's explicit execution
- * policy dimensions (PLAN.md §2.2). Role identity is independent of DSH
- * Session identity; this table is the domain source for authorization and
- * process isolation.
+ * The fixed five-role AutoReport table. The permission model is deliberately
+ * minimal (three facts per role):
  *
- * `cwd: '.'` is the logical workspace/session base, not the subprocess CWD and
- * is not currently consumed by runtime code. MAIN and THEORY have no general
- * process tool. DATA_ANALYSIS, PLOTTING, and REPORT get role-aware Bash on
- * Linux/macOS and role-constrained PowerShell on Windows. The Unix wrapper
- * exposes role-readable workspace roots; Windows uses DSH's partial write ACL
- * sandbox plus AutoReport command/path preflight, without process read isolation.
- * Network is allowed.
+ * 1. Read permission does not express role boundaries — every role can read
+ *    the whole experiment workspace. Whether a role "should" analyze data or
+ *    write the report is persona guidance, not an ACL.
+ * 2. The single writable root is the real sandbox boundary. DSH's native
+ *    `workspace-write` sandbox (rooted at the writable root) enforces it for
+ *    processes and file tools; `write`/`edit` re-check the target once.
+ * 3. Tools differ only by "does this role need to execute code": THEORY and
+ *    MAIN get no process tool; the other specialists get the platform shell.
+ *
+ * All model-facing paths are experiment-workspace-relative, including shell
+ * CWD, which starts at the workspace root. The writable root is enforcement,
+ * not navigation.
  * @module
  */
 
@@ -29,88 +32,59 @@ export const DSH_ROLE_CONTROL_TOOL_NAMES = [
 /** Additional DSH execution/search names whose visibility must follow role policy. */
 export const DSH_ROLE_ESCAPE_TOOL_NAMES = [...DSH_ROLE_CONTROL_TOOL_NAMES, 'glob', 'pwsh', 'bash'] as const
 
-/** Explicit execution policy for one role (PLAN.md §2.2, execution-layer rev). */
+/** DSH's base composition mounts Bash on Unix and PowerShell on Windows. */
+export const ROLE_PROCESS_TOOL = process.platform === 'win32' ? 'pwsh' : 'bash'
+
+/** File tools every role receives; paths are workspace-relative. */
+export const BASE_TOOLS = ['read', 'list', 'grep', 'read_image', 'write', 'edit', 'skill'] as const
+
+/** Coordination/protocol tools MAIN uses to orchestrate the workflow. */
+const MAIN_COORDINATOR_TOOLS = [
+  'manifest', 'workflow_task', 'send_to_agent', 'ask_user_question',
+  'reference_extract', 'python_environment',
+] as const
+
+/** Shared handoff-protocol tools for specialist roles. */
+const SPECIALIST_PROTOCOL_TOOLS = ['manifest', 'report_workflow'] as const
+
+/** Explicit policy for one role: the whole authorization surface. */
 export interface ReportRolePolicy {
-  /** Logical workspace base (`.`); not the operating-system process CWD. */
-  readonly cwd: string
-  /** Directories the role may list names from; `'.'` is the whole workspace. */
-  readonly discoverableRoots: readonly string[]
-  /** Directories whose file contents the role may read. */
-  readonly readableRoots: readonly string[]
-  /** Directories role mutations may target; DSH sandbox workspaceRoot. */
-  readonly writableRoots: readonly string[]
-  /** Whether this role may use the role-aware foreground process tool. */
-  readonly process: 'none' | 'role-aware'
-  /** Additional executables allowed by the process preflight for this role. */
-  readonly processCommands: readonly string[]
+  /** The role's only writable directory (workspace-relative); the DSH sandbox root. */
+  readonly writableRoot: string
+  /** Whether this role may execute code through the platform shell. */
+  readonly hasProcessTool: boolean
   /** DSH tool names exposed to this role after AutoReport compositions are joined. */
   readonly tools: readonly string[]
-  /** Network posture: allowed. File writes stay confined by sandbox. */
-  readonly network: 'allow'
-  /** Private temporary area per process; never a shared world-writable dir. */
-  readonly temp: 'private'
 }
 
 const MAIN_POLICY: ReportRolePolicy = {
-  cwd: '.',
-  // MAIN inventories the whole workspace and reviews outputs, but does not
-  // read raw measurements or mutate specialist-owned results.
-  discoverableRoots: ['.'],
-  readableRoots: ['References', 'Outline', 'Theory', 'Data/Processed', 'Plots', 'Report'],
-  writableRoots: ['Outline'],
-  process: 'none',
-  processCommands: [],
-  tools: ['read', 'read_image', 'write', 'edit', 'delete', 'apply_patch', 'str_replace_editor', 'list', 'grep', 'skill', 'manifest', 'workflow_task', 'send_to_agent', 'ask_user_question', 'python_environment', 'reference_extract'],
-  network: 'allow',
-  temp: 'private',
+  writableRoot: 'Outline',
+  hasProcessTool: false,
+  tools: [...BASE_TOOLS, ...MAIN_COORDINATOR_TOOLS],
 }
 
 const THEORY_POLICY: ReportRolePolicy = {
-  cwd: '.',
-  discoverableRoots: ['References', 'Outline', 'Theory'],
-  readableRoots: ['References', 'Outline', 'Theory'],
-  writableRoots: ['Theory'],
-  process: 'none',
-  processCommands: [],
-  tools: ['read', 'read_image', 'write', 'edit', 'delete', 'apply_patch', 'str_replace_editor', 'list', 'grep', 'skill', 'manifest', 'report_workflow'],
-  network: 'allow',
-  temp: 'private',
+  writableRoot: 'Theory',
+  hasProcessTool: false,
+  tools: [...BASE_TOOLS, ...SPECIALIST_PROTOCOL_TOOLS],
 }
 
 const DATA_ANALYSIS_POLICY: ReportRolePolicy = {
-  cwd: '.',
-  discoverableRoots: ['References', 'Outline', 'Theory', 'Data'],
-  readableRoots: ['References', 'Outline', 'Theory', 'Data'],
-  writableRoots: ['Data/Processed'],
-  process: 'role-aware',
-  processCommands: ['node', 'pdfinfo', 'pdftotext', 'python', 'python3', 'uv'],
-  tools: ['read', 'read_image', 'write', 'edit', 'delete', 'apply_patch', 'str_replace_editor', 'list', 'grep', 'skill', 'manifest', 'report_workflow', 'bash'],
-  network: 'allow',
-  temp: 'private',
+  writableRoot: 'Data/Processed',
+  hasProcessTool: true,
+  tools: [...BASE_TOOLS, ...SPECIALIST_PROTOCOL_TOOLS, ROLE_PROCESS_TOOL],
 }
 
 const PLOTTING_POLICY: ReportRolePolicy = {
-  cwd: '.',
-  discoverableRoots: ['References', 'Outline', 'Theory', 'Data/Processed', 'Plots'],
-  readableRoots: ['References', 'Outline', 'Theory', 'Data/Processed', 'Plots'],
-  writableRoots: ['Plots'],
-  process: 'role-aware',
-  processCommands: ['gnuplot', 'node', 'pdfinfo', 'pdftotext', 'python', 'python3', 'uv'],
-  tools: ['read', 'read_image', 'write', 'edit', 'delete', 'apply_patch', 'str_replace_editor', 'list', 'grep', 'skill', 'manifest', 'report_workflow', 'bash'],
-  network: 'allow',
-  temp: 'private',
+  writableRoot: 'Plots',
+  hasProcessTool: true,
+  tools: [...BASE_TOOLS, ...SPECIALIST_PROTOCOL_TOOLS, ROLE_PROCESS_TOOL],
 }
 
 const REPORT_POLICY: ReportRolePolicy = {
-  cwd: '.',
-  discoverableRoots: ['References', 'Outline', 'Theory', 'Data/Processed', 'Plots', 'Report'],
-  readableRoots: ['References', 'Outline', 'Theory', 'Data/Processed', 'Plots', 'Report'],
-  writableRoots: ['Report'],
-  process: 'role-aware',
-  processCommands: ['latexmk', 'pandoc', 'pdfinfo', 'pdflatex', 'pdftoppm', 'pdftotext', 'python', 'python3', 'qpdf', 'tectonic', 'typst', 'uv', 'xelatex'],
-  tools: ['read', 'read_image', 'write', 'edit', 'delete', 'apply_patch', 'str_replace_editor', 'list', 'grep', 'skill', 'manifest', 'report_workflow', 'bash'],
-  network: 'allow',
-  temp: 'private',
+  writableRoot: 'Report',
+  hasProcessTool: true,
+  tools: [...BASE_TOOLS, ...SPECIALIST_PROTOCOL_TOOLS, ROLE_PROCESS_TOOL],
 }
 
 const POLICIES: Readonly<Record<AutoReportRole, ReportRolePolicy>> = {

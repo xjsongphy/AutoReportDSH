@@ -1,55 +1,37 @@
 import { describe, expect, it } from 'vitest'
 import { allSpecialistRoles, isAutoReportRole, isSpecialistRole, rolePolicy } from '../src/roles.js'
 
-describe('fixed role table (PLAN 2.2)', () => {
-  it('matches the plan policy matrix', () => {
+describe('fixed role table', () => {
+  it('encodes the three-fact permission model per role', () => {
     expect(rolePolicy('MAIN')).toEqual({
-      cwd: '.', discoverableRoots: ['.'],
-      readableRoots: ['References', 'Outline', 'Theory', 'Data/Processed', 'Plots', 'Report'],
-      writableRoots: ['Outline'], process: 'none', processCommands: [],
-      tools: ['read', 'read_image', 'write', 'edit', 'delete', 'apply_patch', 'str_replace_editor', 'list', 'grep', 'skill', 'manifest', 'workflow_task', 'send_to_agent', 'ask_user_question', 'python_environment', 'reference_extract'],
-      network: 'allow', temp: 'private',
+      writableRoot: 'Outline',
+      hasProcessTool: false,
+      tools: ['read', 'list', 'grep', 'read_image', 'write', 'edit', 'skill', 'manifest', 'workflow_task', 'send_to_agent', 'ask_user_question', 'reference_extract', 'python_environment'],
     })
-    expect(rolePolicy('THEORY').writableRoots).toEqual(['Theory'])
-    expect(rolePolicy('DATA_ANALYSIS').writableRoots).toEqual(['Data/Processed'])
-    expect(rolePolicy('DATA_ANALYSIS').cwd).toBe('.')
-    expect(rolePolicy('PLOTTING').writableRoots).toEqual(['Plots'])
-    expect(rolePolicy('REPORT').writableRoots).toEqual(['Report'])
-    const discoverableRoots = {
-      MAIN: ['.'],
-      THEORY: ['References', 'Outline', 'Theory'],
-      DATA_ANALYSIS: ['References', 'Outline', 'Theory', 'Data'],
-      PLOTTING: ['References', 'Outline', 'Theory', 'Data/Processed', 'Plots'],
-      REPORT: ['References', 'Outline', 'Theory', 'Data/Processed', 'Plots', 'Report'],
-    } as const
-    const readableRoots = {
-      MAIN: ['References', 'Outline', 'Theory', 'Data/Processed', 'Plots', 'Report'],
-      THEORY: ['References', 'Outline', 'Theory'],
-      DATA_ANALYSIS: ['References', 'Outline', 'Theory', 'Data'],
-      PLOTTING: ['References', 'Outline', 'Theory', 'Data/Processed', 'Plots'],
-      REPORT: ['References', 'Outline', 'Theory', 'Data/Processed', 'Plots', 'Report'],
-    } as const
-    const tools = {
-      MAIN: ['read', 'read_image', 'write', 'edit', 'delete', 'apply_patch', 'str_replace_editor', 'list', 'grep', 'skill', 'manifest', 'workflow_task', 'send_to_agent', 'ask_user_question', 'python_environment', 'reference_extract'],
-      THEORY: ['read', 'read_image', 'write', 'edit', 'delete', 'apply_patch', 'str_replace_editor', 'list', 'grep', 'skill', 'manifest', 'report_workflow'],
-      DATA_ANALYSIS: ['read', 'read_image', 'write', 'edit', 'delete', 'apply_patch', 'str_replace_editor', 'list', 'grep', 'skill', 'manifest', 'report_workflow', 'bash'],
-      PLOTTING: ['read', 'read_image', 'write', 'edit', 'delete', 'apply_patch', 'str_replace_editor', 'list', 'grep', 'skill', 'manifest', 'report_workflow', 'bash'],
-      REPORT: ['read', 'read_image', 'write', 'edit', 'delete', 'apply_patch', 'str_replace_editor', 'list', 'grep', 'skill', 'manifest', 'report_workflow', 'bash'],
-    } as const
-    for (const role of ['MAIN', 'THEORY', 'DATA_ANALYSIS', 'PLOTTING', 'REPORT'] as const) {
-      expect(rolePolicy(role).network).toBe('allow')
-      expect(rolePolicy(role).temp).toBe('private')
-      expect(rolePolicy(role).discoverableRoots).toEqual(discoverableRoots[role])
-      expect(rolePolicy(role).readableRoots).toEqual(readableRoots[role])
-      expect(rolePolicy(role).tools).toEqual(tools[role])
-      expect(rolePolicy(role).cwd).toBe('.')
-    }
-    expect(rolePolicy('MAIN').process).toBe('none')
-    expect(rolePolicy('MAIN').processCommands).toEqual([])
-    expect(rolePolicy('THEORY').process).toBe('none')
+    expect(rolePolicy('THEORY')).toEqual({
+      writableRoot: 'Theory',
+      hasProcessTool: false,
+      tools: ['read', 'list', 'grep', 'read_image', 'write', 'edit', 'skill', 'manifest', 'report_workflow'],
+    })
     for (const role of ['DATA_ANALYSIS', 'PLOTTING', 'REPORT'] as const) {
-      expect(rolePolicy(role).process).toBe('role-aware')
-      expect(rolePolicy(role).processCommands.length).toBeGreaterThan(0)
+      expect(rolePolicy(role).writableRoot).toBe(
+        role === 'DATA_ANALYSIS' ? 'Data/Processed'
+          : role === 'PLOTTING' ? 'Plots' : 'Report')
+      expect(rolePolicy(role).hasProcessTool).toBe(true)
+      expect(rolePolicy(role).tools).toEqual(
+        ['read', 'list', 'grep', 'read_image', 'write', 'edit', 'skill', 'manifest', 'report_workflow', 'bash'])
+    }
+  })
+
+  it('gives every role the BASE file pack over the whole workspace', () => {
+    for (const role of ['MAIN', 'THEORY', 'DATA_ANALYSIS', 'PLOTTING', 'REPORT'] as const) {
+      const policy = rolePolicy(role)
+      expect(policy.tools).toContain('read')
+      expect(policy.tools).toContain('list')
+      expect(policy.tools).toContain('grep')
+      expect(policy.tools).toContain('write')
+      expect(policy.tools).toContain('edit')
+      expect(policy.writableRoot).not.toBe('.')
     }
   })
 
