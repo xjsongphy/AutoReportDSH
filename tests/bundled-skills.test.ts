@@ -29,6 +29,7 @@ describe('loadBundledSkills', () => {
       'experiment-report-writer',
       'latex-compile',
       'pdf-reference-reader',
+      'plotting-quality',
       'typst',
       'typst-compile',
     ])
@@ -72,7 +73,7 @@ describe('loadBundledSkills', () => {
   })
 
   it('omits the base for skills whose prose addresses the experiment workspace', () => {
-    for (const name of ['latex-compile', 'typst-compile', 'pdf-reference-reader']) {
+    for (const name of ['latex-compile', 'typst-compile', 'pdf-reference-reader', 'plotting-quality']) {
       expect(skills.find(skill => skill.name === name)?.directory).toBeUndefined()
     }
   })

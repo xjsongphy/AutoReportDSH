@@ -29,6 +29,9 @@ export const MAIN_SKILL_NAMES: readonly string[] = ['pdf-reference-reader']
 /** The language-neutral report-authoring skill every REPORT child receives. */
 export const REPORT_WRITER_SKILL = 'experiment-report-writer'
 
+/** Figure-design and inspection guidance for the PLOTTING child. */
+export const PLOTTING_QUALITY_SKILL = 'plotting-quality'
+
 /**
  * Bundled skills a REPORT child must hold before it may act, split by the
  * action each governs.
@@ -81,8 +84,9 @@ export function skillNamesForRole(role: SpecialistRole, language: ReportSkillLan
   switch (role) {
     case 'THEORY':
     case 'DATA_ANALYSIS':
-    case 'PLOTTING':
       return []
+    case 'PLOTTING':
+      return [PLOTTING_QUALITY_SKILL]
     case 'REPORT': {
       const required = reportSkillRequirements(language)
       return [...required.writing, ...required.references, required.compile]
