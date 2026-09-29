@@ -1,4 +1,4 @@
-# AutoReportDSH — Design Plan (rev 5, amended rev 11)
+# AutoReportDSH — Design Plan (rev 5, amended rev 12)
 
 Migrate the AutoReportCLI physics-report workflow into a DeepSeek Harness (`dsh`) plugin.
 The scope contract is `../autoreportcli/docs/own-features.md`: preserve AutoReport-owned
@@ -14,12 +14,21 @@ All report policy comes from the `autoreport` user settings namespace, plugin de
 the internal workflow override. No loader, migration, fallback, or setup script reads or writes
 `project.json`.
 
+**Rev 12 amendment.** Separate names-only discovery from content reads with
+`discoverableRoots`, `readableRoots`, and `writableRoots`. MAIN reviews specialist
+outputs but cannot read raw measurements or write specialist-owned files. MAIN's
+general shell is replaced by dedicated Python-environment and reference-extraction
+tools. Data Analysis, Plotting, and Report use role-aware Bash on Linux/macOS and
+role-constrained PowerShell on Windows. The Unix wrapper applies a role-specific
+workspace filesystem view; Windows uses DSH's partial write ACL sandbox and
+AutoReport command/path preflight, without arbitrary-process read isolation.
+
 **Rev 9 amendment.** Per-workspace report language gets one storage location, one display
 surface, and one switch action, and the settings card moves to the slot the Plugins page
 documents for a bundle (PLAN §2.18). §2.14 keeps the precedence chain but loses project-scoped
 language authority to the user settings namespace; §2.17 row 9 records the slot change.
 
-**Rev 8 execution-layer amendment.** Role writable roots are independent DSH sandbox
+**Rev 8 execution-layer amendment (historical; superseded by Rev 12).** Role writable roots are independent DSH sandbox
 roots; the DSH session cwd stays the experiment root while the platform shell starts in
 the role root. MAIN, DATA_ANALYSIS, PLOTTING, and REPORT use DSH-native Bash on Unix and
 PowerShell on Windows; THEORY has no shell tool and uses `list` for directory discovery.
@@ -98,8 +107,8 @@ AutoReportDSH owns report semantics and policy.
   workspace-to-prompt injection at resume. A recreated subagent recovers from: task
   state + workspace state + role ownership + semantic file notes (cold-rebind handoff).
 - MinerU instructions are a vendored skill document under `resources/skills/` and are
-  registered only for MAIN. Default network denial remains unchanged, so
-  actual `mineru-open-api` API execution still needs a later explicit network-policy change.
+  registered only for MAIN. MAIN calls the fixed-argument `reference_extract` tool; it
+  never runs the MinerU CLI through a general shell.
 - Semantic file descriptions and role notes are agent-authored through `manifest(action="update")`
   and last-write-wins per path/role. Mechanical create/modify facts stay on
   `autoreport/artifact`. A description is stale when `artifact.recordedAt > descriptionUpdatedAt`.
@@ -208,35 +217,54 @@ Role policies use separate dimensions rather than one ambiguous execution root:
 ```ts
 interface ReportExecutionPolicy {
   cwd: string
+  discoverableRoots: string[]
   readableRoots: string[]
   writableRoots: string[]
+  process: 'none' | 'role-aware'
+  processCommands: string[]
+  tools: string[]
   network: 'allow'
   temp: 'private'
 }
 ```
 
-| Role | Child | Session/workspace base | Shell process cwd when sandboxed | Readable roots | Writable roots |
+| Role | Child | Discoverable roots | Readable roots | Shell cwd when sandboxed | Writable roots |
 |---|---|---|---|---|---|
-| MAIN | user session | workspace | `Outline/` | `References/`, `Outline/`, `Report/` | `Outline/` |
-| THEORY | one continuable child | workspace | — (no shell tool) | `References/`, `Outline/`, `Theory/` | `Theory/` |
-| DATA_ANALYSIS | one continuable child | workspace | `Data/Processed/` | `References/`, `Outline/`, `Theory/`, `Data/` | `Data/Processed/` |
-| PLOTTING | one continuable child | workspace | `Plots/` | `References/`, `Outline/`, `Theory/`, `Data/`, `Plots/` | `Plots/` |
-| REPORT | one continuable child | workspace | `Report/` | `References/`, `Outline/`, `Theory/`, `Data/`, `Plots/`, `Report/` | `Report/` |
+| MAIN | user session | whole workspace (names only) | `References/`, `Outline/`, `Theory/`, `Data/Processed/`, `Plots/`, `Report/` | — (dedicated tools; no general shell) | `Outline/` |
+| THEORY | one continuable child | `References/`, `Outline/`, `Theory/` | same | — (no shell) | `Theory/` |
+| DATA_ANALYSIS | one continuable child | `References/`, `Outline/`, `Theory/`, `Data/` | same | `Data/Processed/` | `Data/Processed/` |
+| PLOTTING | one continuable child | `References/`, `Outline/`, `Theory/`, `Data/Processed/`, `Plots/` | same | `Plots/` | `Plots/` |
+| REPORT | one continuable child | `References/`, `Outline/`, `Theory/`, `Data/Processed/`, `Plots/`, `Report/` | same | `Report/` | `Report/` |
 
-MAIN's `Report/` read permission supports its post-compilation editorial audit.
+MAIN can inventory all workspace names and review specialist outputs, including
+`Report/`, but cannot read `Data/Raw/` by default or write specialist-owned files.
 Its writable root remains `Outline/`.
 
 `ReportRolePolicy.cwd` records the logical workspace base `.` and has no runtime
-consumer. The DSH session header remains on the workspace root. With the role
-sandbox, AutoReport supplies the per-role writable root as the platform shell's
-default cwd and resolves relative `workdir` values from it; without the sandbox,
-the shell uses the session cwd. Roles allow network access and use a private temporary area.
+consumer. The DSH session header remains on the workspace root. Role-aware shell
+tools start in the role's writable root and resolve relative `workdir` values
+from there. Roles allow network access and use a private temporary area.
 
-`readableRoots` governs model-facing filesystem tools and `list`; directory
-listing is bounded and returns names only. It does not restrict reads made inside a shell
-or another process. DSH's current `workspaceRoot` sandbox parameter restricts writes only,
-so process reads remain a prompt-level responsibility. Writable roots are enforced
-independently by the DSH sandbox and AutoReport write guard.
+`discoverableRoots` governs bounded names-only `list`; `readableRoots` governs
+model-facing `read`, `read_image`, and AutoReport's provider-backed `grep`.
+`Data/Raw/` is discoverable by MAIN's `list` but outside MAIN's readable roots.
+The search tool streams through `ctx.fs`, follows no symlinks, and bounds depth,
+files, bytes, matches, and output line size. On Linux/macOS, AutoReport wraps
+role-aware Bash in a bwrap/Seatbelt workspace view that exposes the role's readable
+roots and writable root to child processes. This is separate from DSH's
+write-focused `workspaceRoot` sandbox. This confines workspace visibility, not
+the whole host filesystem: other paths readable by the user and explicitly
+exposed runtime paths may remain accessible. `tests/process-sandbox.live.test.ts`
+probes the wrapper directly, but does not exercise the full DSH host tool path;
+command preflight alone is not a security boundary.
+
+On Windows, role-bound `pwsh` calls are limited to the assigned specialists,
+foreground execution, role-root workdirs, an allowlisted command set, and
+preflight checks on known file operands. DSH's Windows ACL runner confines
+writes to the role root with its documented `partial` enforcement. It does not
+confine process reads; Python or PowerShell code can still read workspace files
+outside the role's `readableRoots`. This limitation is explicit until a Windows
+read-capable sandbox or isolated filesystem view is available.
 
 ### 2.3 Role binding before child execution
 
@@ -703,7 +731,9 @@ only when the user selects it: `uv venv` at `$dshHome/autoreport/venv`, then
 `uv pip install numpy scipy pandas matplotlib`. It is not created at plugin
 load. Deleting that directory reclaims space; selecting managed again recreates
 it. Custom/user interpreters are probed only: missing packages warn at first-turn
-init and are never auto-installed. `uv` is required for the managed row.
+init. MAIN manages explicit package additions through the approval-gated
+`python_environment` tool; specialists report `missing_dependency`. `uv` is
+required for the managed row.
 
 ### 2.15 Direct human conversation vs workflow delegation (rev 7)
 

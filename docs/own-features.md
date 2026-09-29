@@ -35,19 +35,29 @@ platform.
   [Prompt-attached language guidance](#prompt-attached-language-guidance).
   Referenced skill documents are addressed through DSH's own resource anchor —
   see [Skill resource anchoring](#skill-resource-anchoring).
-- **Role filesystem policy:** Main reads `References/` and `Outline/`, plus
-  `Report/` for its post-compilation editorial audit; Theory reads the first two
-  plus `Theory/`; Data Analysis adds `Data/`; Plotting adds `Plots/`;
-  Report adds `Report/`. Model-facing `read`, `read_image`, directory listing,
-  and editor-view calls are checked by the AutoReport role guard. Each role may
+- **Role filesystem policy:** Main can list names throughout the workspace and
+  read `References/`, `Outline/`, `Theory/`, `Data/Processed/`, `Plots/`, and
+  `Report/`; MAIN cannot read raw `Data/Raw/` content by default. Theory reads
+  its references and `Theory/`; Data Analysis reads `Data/`; Plotting reads
+  processed data and `Plots/`; Report reads all upstream outputs. Model-facing
+  `read`, `read_image`, provider-backed `grep`, and editor-view calls follow
+  `readableRoots`; `list` follows names-only `discoverableRoots`. Each role may
   write only its own root: Main `Outline/`, Theory `Theory/`, Data Analysis
   `Data/Processed/`, Plotting `Plots/`, Report `Report/`. DSH's workspace-write
-  sandbox and the role guard enforce writes. Shell process reads remain
-  unrestricted by the current DSH sandbox; the shell preflight improves command
-  feedback but is not an OS-level read boundary. `tests/bash-confinement.live.test.ts`
-  verifies the sandbox's write confinement and shared process-read behavior.
-  The session header remains on the workspace root; sandboxed platform shells
-  start in the role writable root, while unconfined shells use the session cwd. The
+  sandbox and the role guard enforce writes. MAIN and Theory have no general
+  shell. Data Analysis, Plotting, and Report get role-aware Bash on Linux/macOS
+  and role-constrained PowerShell on Windows.
+  MAIN uses `python_environment` for approved package changes and
+  `reference_extract` for MinerU PDF extraction; it has no general shell.
+  On Linux/macOS, the AutoReport Bash wrapper exposes each role's readable
+  workspace roots to child processes, including Python, and makes its writable
+  root writable. On Windows, PowerShell uses DSH's partial Windows ACL write
+  sandbox and AutoReport command/path preflight; arbitrary child-process reads
+  are not confined to `readableRoots`. `tests/process-sandbox.live.test.ts`
+  exercises the Unix workspace-view wrapper directly, but not the full DSH host
+  tool path. The existing `tests/bash-confinement.live.test.ts` exercises DSH
+  executors directly. Windows role integration still needs end-to-end
+  verification. Role shells start in the writable root. The
   `ReportRolePolicy.cwd` field records logical workspace base `.` and does not
   set the operating-system process cwd.
   The `list` tool rename, provider-backed filesystem contract, MAIN deliverables,
@@ -79,7 +89,7 @@ close that window:
 | Action | Gate | Refused until loaded |
 | --- | --- | --- |
 | Any file mutation in the report workspace (`write`, `edit`, `str_replace_editor`, `apply_patch`, `delete`) | writing | `experiment-report-writer` |
-| The platform shell (`bash`/`pwsh`) invoking the active language's compiler (`latexmk`, `tectonic`, `xelatex`, `pdflatex`, `lualatex`; `typst compile`) | compile | the active language's compile skill (`latex-compile` / `typst-compile`) |
+| Role-aware Bash invoking the active language's compiler (`latexmk`, `tectonic`, `xelatex`, `pdflatex`, `lualatex`; `typst compile`) | compile | the active language's compile skill (`latex-compile` / `typst-compile`) |
 
 The call is refused with an error that names the missing skills, says how to
 load them (the `skill` tool, one call per name), and states that nothing else
@@ -265,10 +275,12 @@ Open, and deliberately not claimed as done:
   and redispatch in a cold runtime. It does not yet exercise DSH's own persisted
   Session load, compaction, or a full process restart, so the AutoReportCLI
   comparison above still claims no recovery equivalence.
-- **Windows PowerShell role isolation end-to-end.** `tests/bash-confinement.live.test.ts`
-  has a live `pwsh` case gated on a working PowerShell executable and the
-  windows-acl runner. A green Windows CI run is still needed to confirm the
-  platform's role writable root through that executor.
+- **Windows PowerShell role verification.** AutoReport exposes `pwsh` only to
+  DATA_ANALYSIS, PLOTTING, and REPORT, with role-root workdirs, command/path
+  preflight, and DSH's partial ACL write sandbox. End-to-end AutoReport
+  verification is still open. Windows process reads remain outside the role
+  readable-root boundary; the existing live `pwsh` probe exercises DSH's
+  sandbox executor directly.
 - **Live provider compatibility.** The opt-in
   `tests/e2e/configured-route.e2e.test.ts` passed on 2026-09-24 against the
   configured DSH home. Repeat it after a DSH compatibility change.

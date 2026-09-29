@@ -45,12 +45,12 @@ const QUALITY_GATES: Readonly<Record<string, readonly string[]>> = {
 /** Role boundary statements each specialist persona must keep. */
 const ROLE_BOUNDARIES: Readonly<Record<string, readonly string[]>> = {
   THEORY: [
-    'Writes stay confined to your role directory (`Theory/`)',
-    'calibration, fitting, uncertainty estimation from measurements, and empirical conclusions belong to DATA_ANALYSIS',
+    'Write theory outputs to `Theory/`',
+    'Calibration, fitting, uncertainty estimation from measurements, and empirical conclusions belong to DATA_ANALYSIS',
   ],
-  DATA_ANALYSIS: ['Writes stay confined to your role directory (`Data/Processed/`)'],
-  PLOTTING: ['Writes stay confined to your role directory (`Plots/`)'],
-  REPORT: ['写入仅限于你的角色目录（`Report/`）'],
+  DATA_ANALYSIS: ['write results to `Data/Processed/`'],
+  PLOTTING: ['Save high-resolution images and code to `Plots/`'],
+  REPORT: ['报告内容在需要持久化输出时写入 `Report/`'],
 }
 
 /** Tool/skill names each persona must reference. */
@@ -92,7 +92,8 @@ describe('persona slimming', () => {
     expect(text).toContain('send_to_agent')
     expect(text).not.toContain('report_task')
     expect(text).toContain('pdf-reference-reader')
-    expect(text).toContain('bash')
+    expect(text).toContain('python_environment')
+    expect(text).not.toContain('bash')
     expect(text).toContain('list')
     expect(text).toContain('No tables by default')
     expect(text).not.toContain('subagent_fork')

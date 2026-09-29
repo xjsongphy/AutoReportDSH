@@ -96,10 +96,10 @@ describe('loadBundledSkills', () => {
     expect(writer?.content).toContain('[`provenance.json`](provenance.json)')
   })
 
-  it('documents bash-driven LaTeX compilation without compile_report', () => {
+  it('documents role-shell LaTeX compilation without compile_report', () => {
     const latex = skills.find(skill => skill.name === 'latex-compile')
     expect(latex?.content).toContain('latexmk')
-    expect(latex?.content).toContain('Do not use `compile_report`')
+    expect(latex?.content).toContain('Compile `main.tex` directly')
   })
 
   it('keeps the typst bundle free of workspace paths its base would mis-resolve', () => {
@@ -128,7 +128,7 @@ describe('loadBundledSkills', () => {
 
   it('includes pdf-reference-reader for MAIN PDF extraction', () => {
     const reader = skills.find(skill => skill.name === 'pdf-reference-reader')
-    expect(reader?.content).toContain('mineru-open-api extract')
+    expect(reader?.content).toContain('reference_extract')
     expect(reader?.content).toContain('Outline/.cache/mineru/')
   })
 })

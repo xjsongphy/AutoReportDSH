@@ -1,6 +1,6 @@
 ---
 name: typst-compile
-description: Use when compiling Typst reports in an AutoReport workspace via the available shell, or when diagnosing Typst compilation errors.
+description: Use when compiling Typst reports in an AutoReport workspace via its role shell, or when diagnosing Typst compilation errors.
 ---
 
 # Typst Compile
@@ -16,15 +16,15 @@ Typst compilation assistant for AutoReport Typst reports: shell-driven `typst co
 **Don't use when:**
 - The active report language is LaTeX (`latex-compile` covers that path)
 
-## Compilation via the available shell
+## Compilation via the role shell
 
-Check the shell tool description for its actual starting directory. With the
-role sandbox, REPORT starts in `Report/`; without it, set `workdir: "Report"`
-when needed. Compile without repeating `Report/` after the shell enters that
-directory. Network access is allowed (package/font fetch when needed). Writes stay inside `Report/`. Workspace-
-canonical output paths and handoffs still include `Report/`; `read` paths are
-workspace-root-relative, while `write`/`edit` path bases are shown by those
-tools.
+On supported Linux/macOS hosts, REPORT's role-aware Bash starts in `Report/`.
+Compile without repeating `Report/` after the shell enters that directory.
+Windows process execution is unavailable until a role-aware backend exists;
+report the platform blocker instead of claiming compilation succeeded. Network
+access is allowed (package/font fetch when needed). Workspace-canonical output
+paths and handoffs still include `Report/`; `read` paths are workspace-root-
+relative, while `write`/`edit` path bases are shown by those tools.
 
 ```bash
 typst compile main.typ main.pdf --root ..

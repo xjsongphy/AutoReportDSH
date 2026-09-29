@@ -24,7 +24,7 @@ The workflow ports the report pipeline of
 
 ### Core capabilities
 - **Multi-agent collaboration** — Main plans and coordinates; Theory, Data Analysis, Plotting, and Report carry out the specialized work
-- **Role-scoped filesystem access** — model-facing reads follow each role's readable roots, and DSH's `workspace-write` sandbox confines writes to the role's writable root; shell path checks are advisory and do not isolate arbitrary process reads
+- **Role-scoped filesystem access** — model-facing reads follow each role's readable roots; role-aware Bash gets a workspace view on Linux/macOS, while Windows PowerShell uses role command/path preflight and DSH's partial write ACL sandbox
 - **LaTeX and Typst reports** — per-project language with bundled templates, themes, bibliography assets, and compile skills; Python for data processing and plotting
 - **Your DSH providers** — model routes and credentials come from DSH's own configuration
 - **Deterministic bundled resources** — templates, themes, skills, and their reference documents are committed in `resources/` and read from there; a session never fetches or replaces a prompt over the network
@@ -176,25 +176,34 @@ $DSH_HOME/
 
 ### Role permissions
 
-| Role | Model-facing file reads | Writes |
-|---|---|---|
-| Main | `References/`, `Outline/`, `Report/` | `Outline/` |
-| Theory | `References/`, `Outline/`, `Theory/` | `Theory/` |
-| Data Analysis | `References/`, `Outline/`, `Theory/`, `Data/` | `Data/Processed/` |
-| Plotting | `References/`, `Outline/`, `Theory/`, `Data/`, `Plots/` | `Plots/` |
-| Report | `References/`, `Outline/`, `Theory/`, `Data/`, `Plots/`, `Report/` | `Report/` |
+| Role | Names discoverable with `list` | Contents readable with `read`/`grep` | Writes |
+|---|---|---|---|
+| Main | Whole workspace | `References/`, `Outline/`, `Theory/`, `Data/Processed/`, `Plots/`, `Report/` | `Outline/` |
+| Theory | `References/`, `Outline/`, `Theory/` | Same | `Theory/` |
+| Data Analysis | `References/`, `Outline/`, `Theory/`, `Data/` | Same | `Data/Processed/` |
+| Plotting | `References/`, `Outline/`, `Theory/`, `Data/Processed/`, `Plots/` | Same | `Plots/` |
+| Report | `References/`, `Outline/`, `Theory/`, `Data/Processed/`, `Plots/`, `Report/` | Same | `Report/` |
 
-Main's `Report/` read access is for its post-compilation editorial audit; its
-writes remain confined to `Outline/`.
+Main's broad read access supports coverage checks and its post-compilation
+editorial audit; its writes remain confined to `Outline/`.
+MAIN has no general shell; PDF extraction and Python package management use its
+dedicated, parameter-limited tools.
 
-These read roots apply to model-facing file tools. Theory has no shell tool and
-uses `list` for directory discovery. AutoReport uses Bash on Linux/macOS and
-PowerShell on Windows. In sandboxed sessions, the shell starts in the role's
-writable directory; relative command paths and `workdir` use that directory as
-their base. `read`/`list`, manifest, and handoff paths remain
-workspace-relative, while relative `write`/`edit` arguments use the role's
-writable directory. Shell path checks are advisory: the current DSH sandbox
-does not restrict arbitrary process reads.
+All roles have a bounded, names-only `list`; MAIN can inventory the whole
+workspace. MAIN may review processed results, figures, and the final report, but
+`Data/Raw/` contents remain unreadable to MAIN by default. `grep` is AutoReport-owned and
+uses DSH `ctx.fs` streaming reads, limited to the same readable roots as `read`.
+MAIN and Theory have no general shell. Data Analysis, Plotting, and Report get
+role-aware Bash on Linux/macOS and constrained PowerShell on Windows. Both start
+in the role's writable directory. The Unix wrapper exposes only the role's
+readable workspace roots to child processes, including Python. Windows DSH ACLs
+restrict writes to the role root, while AutoReport preflights known commands,
+paths, and workdirs. Windows does not enforce readable roots for arbitrary
+PowerShell or Python reads; this remains a prompt/preflight guardrail. The Unix
+workspace-view wrapper has a dedicated live probe in
+`tests/process-sandbox.live.test.ts`, but that probe does not exercise the full
+DSH host tool chain. Windows role integration also needs end-to-end
+verification. Manifest and handoff paths remain workspace-relative.
 
 ## Development
 
@@ -242,7 +251,7 @@ sandbox policy in process instead. See
 seams.
 
 Design record, including the rejected alternatives and the risk list:
-**[PLAN.md](PLAN.md)** — rev 5, amended rev 8, and it says itself which sections
+**[PLAN.md](PLAN.md)** — rev 5, amended rev 12, and it says itself which sections
 are historical. For what the plugin does **now**, plus the current gates and what
 is deliberately still open: **[docs/own-features.md](docs/own-features.md)**.
 
@@ -275,7 +284,7 @@ license, so its two vendored documents carry none.
 
 Referenced at runtime rather than vendored:
 
-- [MinerU](https://github.com/opendatalab/MinerU) — the `mineru-open-api` CLI that `pdf-reference-reader` drives to extract `References/` PDFs into `Outline/.cache/mineru/`
+- [MinerU](https://github.com/opendatalab/MinerU) — the CLI used internally by MAIN's `reference_extract` tool to extract `References/` PDFs into `Outline/.cache/mineru/`
 
 ## License
 
