@@ -4,8 +4,8 @@
  * not loaded them.
  *
  * Registering a skill only publishes a catalog line; the body arrives when the
- * model loads it. A REPORT child can therefore write report prose, or run the
- * compiler, before ever reading the instructions that govern either. The gate
+ * model loads it. A REPORT child can therefore write report prose before
+ * reading its instructions. The gate
  * refuses that call through `ctx.tools.guard()` and names the exact skills to
  * load. **The model loads them itself with DSH's `skill` tool** — the harness
  * injects nothing on its behalf, so the transcript records a real tool call by
@@ -22,7 +22,7 @@
  * REPORT child can make lands in `Report/`; a `str_replace_editor` view is a
  * read and stays ungated.
  *
- * A refused child is never stuck: it keeps `read`, non-compiler `bash`,
+ * A refused child is never stuck: it keeps `read`, `compile_report`,
  * `manifest`, and `report_workflow(blocked)`, so it can report the blockage.
  * Only AutoReport-bound REPORT sessions are gated — MAIN, every other role, and
  * every stock DSH session pass through untouched.
@@ -40,66 +40,8 @@ import {
 } from '../skills-preset.js'
 import { MUTATION_TOOL_NAMES } from './tool-guard.js'
 
-/** Shell tools whose command text is inspected for a compiler invocation. */
-const SHELL_TOOL_NAMES: ReadonlySet<string> = new Set(['bash', 'pwsh'])
-
-/** Compilers for the LaTeX report language, as the workspace compile skill names them. */
-const LATEX_COMPILERS: readonly string[] = ['latexmk', 'tectonic', 'xelatex', 'pdflatex', 'lualatex']
-
-/**
- * Wrappers that lead a command without changing which program runs. A gate that
- * ignored them would let `sudo latexmk` past the compile requirement.
- */
-const COMMAND_PREFIXES: ReadonlySet<string> = new Set([
-  'sudo', 'command', 'env', 'time', 'nohup', 'exec', 'nice', 'setsid', 'stdbuf',
-])
-
-/** Shell separators that each begin an independent command. */
-const SEGMENT_SEPARATOR = /[;&|()\n]/u
-
-/** An inline environment assignment prefix (`FOO=bar cmd`). */
-const ENV_ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/u
-
 /** The `<skill_content>` marker `renderSkillContent` emits, as a capture. */
 const SKILL_CONTENT_MARKER = /<skill_content name="([a-z0-9-]+)">/gu
-
-/**
- * Which report language's compiler a shell command invokes, if any.
- *
- * The check is structural rather than textual: the command is split on shell
- * separators and only each segment's leading program word is considered, so
- * `grep -E "latexmk" Report/main.log` and `echo 'run latexmk'` are not
- * compiler invocations. `typst` counts only with its `compile` subcommand —
- * `typst --version` is not a report compilation.
- * @param command - raw shell command text from the tool call.
- * @returns the invoked compiler's language, or undefined when none is invoked.
- */
-export function compileCommandLanguage(command: string): ReportSkillLanguage | undefined {
-  for (const segment of command.split(SEGMENT_SEPARATOR)) {
-    const tokens = segment.trim().split(/\s+/u).filter(token => token.length > 0)
-    let index = 0
-    while (index < tokens.length) {
-      const token = tokens[index] ?? ''
-      if (COMMAND_PREFIXES.has(programName(token)) || ENV_ASSIGNMENT.test(token)) {
-        index += 1
-        continue
-      }
-      break
-    }
-    const head = programName(tokens[index] ?? '')
-    if (head.length === 0) continue
-    if (LATEX_COMPILERS.includes(head)) return 'latex'
-    if (head === 'typst' && programName(tokens[index + 1] ?? '') === 'compile') return 'typst'
-  }
-  return undefined
-}
-
-/** A command word reduced to its program name, ignoring any path and quoting. */
-function programName(token: string): string {
-  const unquoted = token.replace(/^['"]|['"]$/gu, '')
-  const separator = unquoted.lastIndexOf('/')
-  return separator === -1 ? unquoted : unquoted.slice(separator + 1)
-}
 
 /**
  * Skill names {@link renderSkillContent} marked as loaded inside one tool result.
@@ -267,32 +209,18 @@ export interface SkillGateOptions {
 function gatedAction(
   exec: Readonly<ToolExecution>,
   requirements: ReportSkillRequirements,
-  language: ReportSkillLanguage,
 ): { readonly label: string; readonly required: readonly string[] } | undefined {
   if (MUTATION_TOOL_NAMES.has(exec.name)) {
     if (exec.name === 'str_replace_editor' && isViewCall(exec)) return undefined
     return { label: 'modifying report files', required: requirements.writing }
   }
-  if (!SHELL_TOOL_NAMES.has(exec.name)) return undefined
-  const command = shellCommand(exec)
-  if (command === undefined) return undefined
-  // Only the ACTIVE language's compiler is gated; a REPORT child running some
-  // other toolchain is not this requirement's business.
-  if (compileCommandLanguage(command) !== language) return undefined
-  return { label: 'running the report compiler', required: [requirements.compile] }
+  return undefined
 }
 
 function isViewCall(exec: Readonly<ToolExecution>): boolean {
   const args = exec.arguments
   return typeof args === 'object' && args !== null
     && (args as { command?: unknown }).command === 'view'
-}
-
-function shellCommand(exec: Readonly<ToolExecution>): string | undefined {
-  const args = exec.arguments
-  if (typeof args !== 'object' || args === null) return undefined
-  const command = (args as { command?: unknown }).command
-  return typeof command === 'string' && command.length > 0 ? command : undefined
 }
 
 /**
@@ -324,7 +252,7 @@ export function createSkillGateGuard(options: SkillGateOptions): ToolGuard {
     const language = options.languageOf(sessionId)
     if (language === undefined) return undefined
 
-    const action = gatedAction(exec, reportSkillRequirements(language), language)
+    const action = gatedAction(exec, reportSkillRequirements(language))
     if (action === undefined || action.required.length === 0) return undefined
 
     tracker.ensureSeeded(session)

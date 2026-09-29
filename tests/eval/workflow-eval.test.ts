@@ -123,7 +123,6 @@ describe('workflow eval', () => {
     const report = await dispatch(assembled, { role: 'REPORT', prompt: 'write and compile latex' })
     expect(specialistSkills(assembled, report.childId).skillNames).toEqual([
       'experiment-report-writer',
-      'latex-compile',
     ])
     await specialistWrite(assembled, report, 'Report/main.tex', '\\documentclass{article}\\begin{document}ok\\end{document}\n')
     await specialistWrite(assembled, report, 'Report/main.pdf', '%PDF-eval\n')
@@ -168,7 +167,7 @@ describe('workflow eval', () => {
     ))).toBe(true)
   })
 
-  it('2. completes a Typst report pipeline with language snapshot and REPORT compile skills', async () => {
+  it('2. completes a Typst report pipeline with language snapshot and REPORT compiler tool', async () => {
     const assembled = await boot({ projectLanguage: 'typst' })
     admitFirstTurn(assembled)
     expect(tasks(assembled).projection().meta?.language).toBe('typst')
@@ -179,9 +178,7 @@ describe('workflow eval', () => {
     expect(specialistSkills(assembled, report.childId).skillNames).toEqual([
       'experiment-report-writer',
       'typst',
-      'typst-compile',
     ])
-    expect(specialistSkills(assembled, report.childId).skillNames).not.toContain('latex-compile')
     await specialistWrite(assembled, report, 'Report/main.typ', '#set page(paper: "a4")\nHello\n')
     await specialistWrite(assembled, report, 'Report/main.pdf', '%PDF-typst-eval\n')
     expect((await updateManifest(assembled, report, [
@@ -411,7 +408,7 @@ describe('workflow eval', () => {
     const shelled = await execute(assembled.ctx, 'bash', {
       command: 'echo extra >> Report/main.tex',
     }, report.childAgent, report.childSession)
-    expect(shelled.isError).toBe(false)
+    expect(shelled.isError).toBe(true)
 
     const artifacts = tasks(assembled).projection().artifacts
     expect(artifacts.some(item => item.path === 'Report/main.tex' && item.origin === 'fs-tool' && item.status === 'modified')).toBe(true)

@@ -6,6 +6,7 @@
  */
 
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { spawnSync } from 'node:child_process'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { expect } from 'vitest'
@@ -56,6 +57,7 @@ const FAKE_SECTION_ORDERS: Readonly<Record<string, number>> = {
   DEPLOYMENT_PERSONA_PREFIX: 0,
   TOOL_SUBAGENT: 2800,
   TOOL_REPORT: 2900,
+  TOOL_BASH: 2700,
 }
 
 const FAKE_CONTEXT_ORDERS: Readonly<Record<string, number>> = {
@@ -113,6 +115,8 @@ export function makeChildRecorder(
   const agent = { id: sessionId, session } as Agent
   const ctx = {
     get: (name: string) => name === 'skills' ? skillsService : undefined,
+    shell: { sandboxMode: undefined },
+    shellEnv: { collect: () => ({}) },
     tools: {
       register: (tool: { name: string }) => {
         toolNames.push(tool.name)
@@ -288,6 +292,26 @@ export async function assemble(options: AssembleOptions = {}): Promise<Assembled
     }) => {
       pythonResolver = contributor.resolve
       return () => {}
+    },
+    collect: () => ({}),
+  } as never)
+  ctx.provide('shell', {
+    sandboxMode: undefined,
+    resolve: (request: { command: string; workdir?: string }) => request,
+    run: async (spec: { command: string; workdir?: string }) => {
+      const result = spawnSync('bash', ['-c', spec.command], {
+        cwd: spec.workdir ?? workspaceRoot,
+        encoding: 'utf8',
+      })
+      return {
+        exitCode: result.status,
+        signal: result.signal,
+        timedOut: false,
+        aborted: false,
+        timeoutMs: 60_000,
+        stdout: { text: result.stdout ?? '', truncated: false },
+        stderr: { text: result.stderr ?? '', truncated: false },
+      }
     },
   } as never)
   ctx.provide('subprocess', {
@@ -611,7 +635,7 @@ export async function specialistWrite(
   if (!first.isError) return
   if (!first.text.includes(SKILL_GATE_REFUSAL)) throw new Error(first.text)
   const required = reportSkillRequirements(assembled.runtime.reportLanguageForChild(child.childSession.id))
-  for (const name of [...required.writing, required.compile]) loadSkill(assembled, child, name)
+  for (const name of [...required.writing]) loadSkill(assembled, child, name)
   const retry = await execute(assembled.ctx, 'write', args, child.childAgent, child.childSession)
   expect(retry.isError).toBe(false)
 }

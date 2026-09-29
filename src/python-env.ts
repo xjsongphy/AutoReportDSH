@@ -116,7 +116,7 @@ function wrapShellResolve(
   }
 }
 
-function resolvePythonExecutable(deps: AutoReportPythonEnvDeps, session: Session): string {
+export function resolvePythonExecutable(deps: AutoReportPythonEnvDeps, session: Session): string {
   const fromSnapshot = deps.snapshotPythonExecutable(session)
   if (fromSnapshot !== undefined && fromSnapshot.length > 0) {
     return isManagedPythonSetting(fromSnapshot)

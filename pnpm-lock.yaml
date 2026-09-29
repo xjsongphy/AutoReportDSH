@@ -26,6 +26,9 @@ importers:
       '@deepseek-ai/dsh-llm':
         specifier: link:../deepseek-harness/packages/llm/llm
         version: link:../deepseek-harness/packages/llm/llm
+      '@deepseek-ai/dsh-sandbox':
+        specifier: link:../deepseek-harness/packages/sandbox/sandbox
+        version: link:../deepseek-harness/packages/sandbox/sandbox
       '@deepseek-ai/dsh-sandbox-policy':
         specifier: link:../deepseek-harness/packages/sandbox/sandbox-policy
         version: link:../deepseek-harness/packages/sandbox/sandbox-policy
@@ -53,6 +56,9 @@ importers:
       '@deepseek-ai/dsh-subprocess':
         specifier: link:../deepseek-harness/packages/subprocess/subprocess
         version: link:../deepseek-harness/packages/subprocess/subprocess
+      '@deepseek-ai/dsh-tool-bash':
+        specifier: link:../deepseek-harness/packages/shell/tool-bash
+        version: link:../deepseek-harness/packages/shell/tool-bash
       '@deepseek-ai/dsh-system-prompt':
         specifier: link:../deepseek-harness/packages/core/system-prompt
         version: link:../deepseek-harness/packages/core/system-prompt
@@ -108,9 +114,6 @@ importers:
       '@deepseek-ai/dsh-client-ui-tool':
         specifier: link:../deepseek-harness/packages/client/ui-tool
         version: link:../deepseek-harness/packages/client/ui-tool
-      '@deepseek-ai/dsh-sandbox':
-        specifier: link:../deepseek-harness/packages/sandbox/sandbox
-        version: link:../deepseek-harness/packages/sandbox/sandbox
       '@deepseek-ai/dsh-sandbox-local':
         specifier: link:../deepseek-harness/packages/sandbox/sandbox-local
         version: link:../deepseek-harness/packages/sandbox/sandbox-local
@@ -120,9 +123,6 @@ importers:
       '@deepseek-ai/dsh-subprocess-local':
         specifier: link:../deepseek-harness/packages/subprocess/subprocess-local
         version: link:../deepseek-harness/packages/subprocess/subprocess-local
-      '@deepseek-ai/dsh-tool-bash':
-        specifier: link:../deepseek-harness/packages/shell/tool-bash
-        version: link:../deepseek-harness/packages/shell/tool-bash
       '@testing-library/react':
         specifier: ^16.3.2
         version: 16.3.2(@testing-library/dom@10.4.1)(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)

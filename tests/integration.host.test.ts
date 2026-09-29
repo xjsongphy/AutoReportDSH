@@ -91,20 +91,19 @@ describe('integration: assembled host (real context)', () => {
     assembled.runtime.roleRegistry.registerReserved(reportBinding)
     const reporter = makeChildRecorder('it-report', assembled.runtime)
     assembled.routeChild(reporter)
-    expect(reporter.toolNames).toEqual(['manifest', 'report_workflow'])
+    expect(reporter.toolNames).toEqual(['manifest', 'report_workflow', 'compile_report'])
     expect(reporter.skillNames).toEqual([
-      'experiment-report-writer', 'latex-compile',
+      'experiment-report-writer',
     ])
     expect(reporter.sections.map(section => section.name)).not.toEqual(expect.arrayContaining([
       'autoreport:skill:experiment-report-writer',
-      'autoreport:skill:latex-compile',
     ]))
     const plotter = makeChildRecorder('it-plotting-bound', assembled.runtime)
     assembled.runtime.roleRegistry.registerReserved({
       ...binding, role: 'PLOTTING', childSessionId: SessionId('it-plotting-bound'),
     })
     assembled.routeChild(plotter)
-    expect(plotter.toolNames).toEqual(['manifest', 'report_workflow'])
+    expect(plotter.toolNames).toEqual(['manifest', 'report_workflow', 'bash'])
     expect(plotter.skillNames).toEqual([])
   })
 
@@ -231,6 +230,7 @@ describe('integration: assembled host (real context)', () => {
     const writeCommand = `printf 'bash wrote this' > "${scriptPath.replaceAll('\\', '/')}"`
     const bash = await execute(assembled.ctx, 'bash', {
       command: writeCommand,
+      description: 'Write a processed dataset',
     }, childAgent, childSession)
     expect(bash.isError, bash.text).toBe(false)
     expect(existsSync(scriptPath)).toBe(true)

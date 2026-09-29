@@ -475,7 +475,7 @@ export default class AutoReportWorkflowRuntime extends Service {
       // service is exposed through Cordis injection. Wait for that capability
       // before publishing the child so REPORT skills and the role report tool
       // are present from the first resident request.
-      await childCtx.inject(['skills'], (skillCtx) => {
+      await childCtx.inject(['skills', 'shell', 'shellEnv'], (skillCtx) => {
         skillCtx.effect(
           () => installRoutedReportTool(skillCtx, child, this.ctx, this),
           `autoreport.resident.${role}()`,

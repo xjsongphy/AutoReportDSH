@@ -1,8 +1,17 @@
-# AutoReportDSH — Design Plan (rev 5, amended rev 10)
+# AutoReportDSH — Design Plan (rev 5, amended rev 11)
 
 Migrate the AutoReportCLI physics-report workflow into a DeepSeek Harness (`dsh`) plugin.
 The scope contract is `../autoreportcli/docs/own-features.md`: preserve AutoReport-owned
 domain semantics while reusing DSH infrastructure wherever its contract is equivalent.
+
+**Rev 11 execution amendment.** All roles read the experiment workspace and write
+only their DSH-confined output root. `bash` is registered only in Data Analysis
+and Plotting child scopes. Main and Theory have no general shell; Main has
+structured PDF extraction and approval-backed Python package installation.
+Report has `compile_report` only: it accepts one workspace-relative entry path,
+selects the frozen LaTeX/Typst backend, writes a complete log under `Report/`,
+and returns bounded diagnostics. Compiler invocation is no longer a skill or
+shell-command gate. The Rev 8 all-role-bash decision below is superseded.
 
 **Rev 10 amendment.** A workspace can be reset: `/reset` clears the generated work, keeps the
 user's inputs, and clears the invoking session's workflow with it (PLAN §2.19). The command

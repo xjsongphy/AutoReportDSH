@@ -186,7 +186,7 @@ describe('report router', () => {
     expect(child.providers).toEqual(['autoreport-references'])
   })
 
-  it('installs report_workflow only for REPORT with compile skills', () => {
+  it('installs report_workflow and compile_report only for REPORT', () => {
     const workspaceRoot = '/tmp/autoreport-report-workspace'
     const child = childContext('child-report', workspaceRoot)
     const host = hostContext()
@@ -200,15 +200,14 @@ describe('report router', () => {
       provisioning: 'reserved',
     })
     installRoutedReportTool(child.ctx, child.agent as never, host.ctx, routedWorkflow({ roleRegistry }))
-    expect(child.tools.map(tool => tool.name)).toEqual(['manifest', 'report_workflow'])
+    expect(child.tools.map(tool => tool.name)).toEqual(['manifest', 'report_workflow', 'compile_report'])
     expect(child.skills.map(skill => skill.name)).toEqual([
       'experiment-report-writer',
-      'latex-compile',
     ])
     const environment = child.sections.find(section => section.name === 'tool:report-environment')
     expect(environment?.text).toContain('language: latex')
     expect(environment?.text).toContain('entry: Report/main.tex')
-    expect(environment?.text).toContain('compile skill: latex-compile')
+    expect(environment?.text).toContain('compiler tool: compile_report')
     // The active language's layout rules ride the prompt: they are unconditional
     // guidance, so no child has to load a skill to obtain them.
     const guidance = child.sections.find(section => section.name === 'tool:report-language')
@@ -216,7 +215,6 @@ describe('report router', () => {
     expect(guidance?.text).toContain('Use `[H]` for every figure and table')
     expect(child.sections.map(section => section.name)).not.toEqual(expect.arrayContaining([
       'autoreport:skill:experiment-report-writer',
-      'autoreport:skill:latex-compile',
     ]))
     expect(
       child.session.snapshotEvents().filter(event => event.type === 'sandbox/mode').map(event => event.data),

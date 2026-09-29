@@ -18,7 +18,7 @@ describe('AutoReport role-scoped domain skills', () => {
   it('keeps domain skills out of unrelated specialists', () => {
     expect(skillNamesForRole('THEORY', 'latex')).toEqual([])
     expect(skillNamesForRole('DATA_ANALYSIS', 'latex')).toEqual([])
-    expect(skillNamesForRole('PLOTTING', 'typst')).toEqual([])
+    expect(skillNamesForRole('PLOTTING', 'typst')).toEqual(['plotting-quality'])
   })
 
   it('does not give THEORY or REPORT MinerU — MAIN extracts PDFs', () => {
@@ -27,12 +27,12 @@ describe('AutoReport role-scoped domain skills', () => {
     expect(skillNamesForRole('REPORT', 'typst')).not.toContain('mineru')
   })
 
-  it('gives REPORT the writer, the active compiler, and that language\'s references', () => {
+  it('gives REPORT the writer and that language\'s references', () => {
     expect(skillNamesForRole('REPORT', 'latex')).toEqual([
-      'experiment-report-writer', 'latex-compile',
+      'experiment-report-writer',
     ])
     expect(skillNamesForRole('REPORT', 'typst')).toEqual([
-      'experiment-report-writer', 'typst', 'typst-compile',
+      'experiment-report-writer', 'typst',
     ])
   })
 
@@ -51,13 +51,20 @@ describe('AutoReport role-scoped domain skills', () => {
     const skills = recorder()
     registerRoleSkills({ skills } as never, 'REPORT', 'latex')
     expect(skills.registrations.map(skill => skill.name)).toEqual([
-      'experiment-report-writer', 'latex-compile',
+      'experiment-report-writer',
     ])
     skills.registrations.length = 0
     registerRoleSkills({ skills } as never, 'REPORT', 'typst')
     expect(skills.registrations.map(skill => skill.name)).toEqual([
-      'experiment-report-writer', 'typst', 'typst-compile',
+      'experiment-report-writer', 'typst',
     ])
+  })
+
+  it('registers only plotting guidance for the PLOTTING child', () => {
+    const skills = recorder()
+    registerRoleSkills({ skills } as never, 'PLOTTING', 'latex')
+    expect(skills.registrations.map(skill => skill.name)).toEqual(['plotting-quality'])
+    expect(skills.registrations[0]?.resourceBase).toBeUndefined()
   })
 
   it('anchors the skills that ship sibling documents and only those', () => {
@@ -72,10 +79,6 @@ describe('AutoReport role-scoped domain skills', () => {
     // Split on segments: the path is native to the platform running the test.
     const typstPath = (typst as { path: string }).path
     expect(typstPath.split(/[\\/]+/u)).toEqual(expect.arrayContaining(['typst', 'skills', 'typst']))
-    // A flat document whose prose names workspace paths must NOT carry a base:
-    // DSH tells the model to resolve those paths against it.
-    expect(byName.get('typst-compile')?.resourceBase).toBeUndefined()
-    expect(byName.get('latex-compile')?.resourceBase).toBeUndefined()
   })
 
   it('fails loud when the child skills service is missing', () => {

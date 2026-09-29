@@ -19,13 +19,13 @@ export function loadMainPersona(): string {
 }
 
 /**
- * Load one specialist persona with the shared AutoReport collaboration rules.
+ * Load one specialist persona with its role contract first, followed by shared rules.
  * @param role - fixed specialist role.
- * @returns shared plus role-specific instructions.
+ * @returns role-specific instructions followed by shared rules.
  */
 export function loadSpecialistPersona(role: SpecialistRole): string {
   const directory = join(resourcesRoot(), 'personas')
   const common = readFileSync(join(directory, 'Common.md'), 'utf8')
   const roleText = readFileSync(join(directory, ROLE_FILES[role]), 'utf8')
-  return `${common}\n\n${roleText}`
+  return `${roleText}\n\n${common}`
 }

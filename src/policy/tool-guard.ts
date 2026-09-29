@@ -194,11 +194,10 @@ function targetDenial(target: string, resolved: ResolvedRole): string | undefine
   if (!contained(resolved.workspaceRoot, absolute)) {
     return `AutoReport ${resolved.role} cannot write outside the experiment workspace: ${target}`
   }
-  const allowed = resolved.policy.writableRoots.some(root =>
-    contained(canonicalPath(resolve(resolved.workspaceRoot, root)), absolute))
+  const allowed = contained(canonicalPath(resolve(resolved.workspaceRoot, resolved.policy.writableRoot)), absolute)
   return allowed
     ? undefined
-    : `AutoReport ${resolved.role} may write only ${resolved.policy.writableRoots.join(', ')}: ${target}`
+    : `AutoReport ${resolved.role} may write only ${resolved.policy.writableRoot}: ${target}`
 }
 
 /** Create the parent for an authorized file mutation, without repairing the workspace. */
@@ -213,7 +212,7 @@ function prepareMutationParent(
     mkdirSync(dirname(absolute), { recursive: true })
     return undefined
   } catch (error: unknown) {
-    const writable = resolved.policy.writableRoots.join(', ')
+    const writable = resolved.policy.writableRoot
     const detail = error instanceof Error ? error.message : String(error)
     return 'AutoReport ' + resolved.role
       + ' could not create its writable directory (' + writable + ') for ' + target
@@ -228,17 +227,16 @@ function sandboxPermissionsEscalation(exec: Readonly<ToolExecution>): boolean {
 
 /**
  * Create the monotonic role guard registered through `ctx.tools.guard()`.
- * MAIN may request sandbox escalation — the host approval flow prompts the
- * user, and an approved call is how MAIN installs packages into the selected
- * Python environment. Specialists keep the hard denial: they report
- * `missing_dependency` instead of acting on the environment.
+ * No AutoReport role may widen the experiment's file sandbox.
  * @param options - registry and Main/workspace identity inputs.
  * @returns synchronous fail-closed DSH guard.
  */
 export function createRoleToolGuard(options: RoleGuardOptions): ToolGuard {
   return exec => {
     const call = mutation(exec)
-    const protectedCall = call.kind !== 'none' || sandboxPermissionsEscalation(exec)
+    const shellCall = exec.name === 'bash' || exec.name === 'pwsh'
+    const specializedCall = exec.name === 'compile_report' || exec.name === 'reference_extract' || exec.name === 'install_python_package'
+    const protectedCall = call.kind !== 'none' || sandboxPermissionsEscalation(exec) || shellCall || specializedCall
     if (!protectedCall) return undefined
 
     const resolved = resolveRole(exec, options)
@@ -246,15 +244,15 @@ export function createRoleToolGuard(options: RoleGuardOptions): ToolGuard {
     if (resolved === FOREIGN) return undefined
     if (resolved === undefined) return `AutoReport denied ${exec.name}: calling agent has no valid role binding`
 
+    if (shellCall && resolved.policy.execution !== 'shell') {
+      return `AutoReport ${resolved.role} has no general shell capability`
+    }
+    if (exec.name === 'compile_report' && resolved.policy.execution !== 'compile') return 'compile_report belongs to REPORT'
+    if (exec.name === 'reference_extract' && resolved.role !== 'MAIN') return 'reference_extract belongs to MAIN'
+    if (exec.name === 'install_python_package' && resolved.role !== 'MAIN') return 'install_python_package belongs to MAIN'
+
     if (sandboxPermissionsEscalation(exec)) {
-      if (resolved.role !== 'MAIN') {
-        return 'AutoReport denies sandbox_permissions escalation for specialist roles; report missing dependencies to MAIN instead'
-      }
-      // MAIN passes through to DSH's approval flow: the user decides on the
-      // prompt, and a denied request never executes. Write-path checks still
-      // apply to the mutation targets of a non-escalated call below.
-      if (call.kind === 'malformed') return `AutoReport denied ${exec.name}: ${call.reason}`
-      return undefined
+      return 'AutoReport denies sandbox_permissions escalation; report missing dependencies through the workflow'
     }
     if (call.kind === 'malformed') return `AutoReport denied ${exec.name}: ${call.reason}`
     if (call.kind === 'paths') {

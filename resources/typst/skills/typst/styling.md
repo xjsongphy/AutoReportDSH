@@ -110,22 +110,13 @@ Prefer SVG for diagrams (scales cleanly), PNG/JPG for photos. Use `fit: "contain
 #set text(font: "Fira Code", size: 9pt)                 // Monospace for code
 ```
 
-```bash
-# List available fonts
-typst fonts
-
-# Search for a font
-typst fonts | grep -i "noto"
-
-# Add font directory
-typst compile document.typ --font-path ./fonts
-```
-
-If `typst fonts` does not list the font you need, install it system-wide or use `--font-path` to point to a directory containing `.ttf`/`.otf` files.
+Use `compile_report` and read its font diagnostics. If the selected font is
+unavailable, choose one already installed on the host or report the missing
+font to MAIN. Keep CJK coverage when changing the document font.
 
 ### Variable Fonts (Typst 0.15+)
 
-Use `typst fonts --variants` to inspect weights, stretches, and variable axes. Set standard axes through `weight` / `stretch`; use `variations` for custom OpenType axes such as `wght`, `GRAD`, or `MONO` when the selected font supports them.
+Set standard axes through `weight` / `stretch`; use `variations` for custom OpenType axes such as `wght`, `GRAD`, or `MONO` when the selected font supports them.
 
 Inline pattern: `#set text(font: "Your Variable Font", weight: 650, variations: (GRAD: 0.4))`.
 

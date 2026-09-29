@@ -1,7 +1,7 @@
 /**
  * Runtime artifact observation over the durable tool pipeline (PLAN.md
  * §2.11). Successful mutations made by model-facing filesystem tools and
- * process tools (`bash` / `pwsh`) produce `autoreport/artifact` facts; agents
+ * process tools (`bash`, `pwsh`, `compile_report`, `reference_extract`) produce `autoreport/artifact` facts; agents
  * never report their own files.
  *
  * The observer folds BOTH halves of a tool call from the session log: the
@@ -21,7 +21,7 @@ import { ARTIFACT_SCHEMA_VERSION } from './refresh.js'
 import { MUTATION_TOOL_NAMES } from '../policy/tool-guard.js'
 
 /** Process tools whose workspace writes are observed via before/after snapshots. */
-const PROCESS_TOOL_NAMES = new Set(['bash', 'pwsh'])
+const PROCESS_TOOL_NAMES = new Set(['bash', 'pwsh', 'compile_report', 'reference_extract'])
 
 /** Caller identity resolved by the same mechanism as the role guard. */
 export interface ArtifactCaller {
@@ -150,13 +150,13 @@ function diskBaseline(absolute: string): Pick<ArtifactSnapshot, 'sizeBytes' | 'm
 
 /** Absolute writable root for one caller role (first policy entry). */
 function writableRoot(caller: ArtifactCaller): string {
-  const relativeRoot = rolePolicy(caller.role).writableRoots[0] ?? '.'
+  const relativeRoot = rolePolicy(caller.role).writableRoot
   return resolve(caller.workspaceRoot, relativeRoot)
 }
 
 /** Workspace-relative path for one entry returned by {@link snapshotDir}. */
 function processArtifactPath(caller: ArtifactCaller, relativeToWritableRoot: string): string {
-  const relRoot = rolePolicy(caller.role).writableRoots[0] ?? '.'
+  const relRoot = rolePolicy(caller.role).writableRoot
   if (relRoot === '.') return relativeToWritableRoot.split('\\').join('/')
   return `${relRoot}/${relativeToWritableRoot}`.split('\\').join('/')
 }
