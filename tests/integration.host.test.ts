@@ -60,7 +60,7 @@ async function boot(options: Parameters<typeof assemble>[0] = {}): Promise<Assem
 }
 
 describe('integration: assembled host (real context)', () => {
-  it('enforces readableRoots through the assembled tool runtime and leaves stock reads alone', async () => {
+  it('enforces workspace-wide reads and the write boundary through the assembled tool runtime', async () => {
     const assembled = await boot({ roleSandbox: true })
     const stockRoot = makeTemp('autoreport-it-stock-read-root-')
     mkdirSync(join(assembled.workspaceRoot, 'References'), { recursive: true })
@@ -140,12 +140,20 @@ describe('integration: assembled host (real context)', () => {
     expect(allowed.text).toContain('allowed theory input')
     expect(observedPaths.at(-1)).toBe(join(assembled.workspaceRoot, 'References', 'method.md'))
 
-    const denied = await execute(assembled.ctx, 'read', {
+    // Read scope is the whole workspace for every role: Data is context, not duty.
+    const rawRead = await execute(assembled.ctx, 'read', {
       file_path: 'Data/raw.csv',
     }, childAgent, childSession)
-    expect(denied.isError).toBe(true)
-    expect(denied.text).toContain('allowed read directories: References/, Outline/, Theory/')
-    expect(denied.text).toContain('allowed write directories: Theory/')
+    expect(rawRead.isError, rawRead.text).toBe(false)
+    expect(observedPaths.at(-1)).toBe(join(stockRoot, 'Data', 'raw.csv'))
+
+    // Reads outside the experiment workspace boundary stay denied.
+    const outsideDir = makeTemp('autoreport-it-outside-read-')
+    const outsideRead = await execute(assembled.ctx, 'read', {
+      file_path: join(outsideDir, 'secret.txt'),
+    }, childAgent, childSession)
+    expect(outsideRead.isError).toBe(true)
+    expect(outsideRead.text).toContain('can read only the experiment workspace')
 
     const stockRead = await execute(assembled.ctx, 'read', {
       file_path: 'Data/raw.csv',
@@ -204,7 +212,7 @@ describe('integration: assembled host (real context)', () => {
     expect(theory.pwshDescriptions).toEqual([])
     expect(theory.toolDescriptions.get('read')).toContain(`Relative paths resolve from ${assembled.workspaceRoot}.`)
     expect(theory.toolDescriptions.get('write')).toContain(
-      `Relative paths resolve from ${roleWritableRoot(assembled.workspaceRoot, 'THEORY')}.`,
+      `Relative paths resolve from ${assembled.workspaceRoot}.`,
     )
     expect(theory.toolDescriptions.get('str_replace_editor')).toContain(
       `the absolute workspace root for this agent is ${assembled.workspaceRoot}`,
@@ -384,7 +392,7 @@ describe('integration: assembled host (real context)', () => {
       content: 'forbidden',
     }, childAgent, childSession)
     expect(denied.isError).toBe(true)
-    expect(denied.text).toMatch(/may write only/)
+    expect(denied.text).toMatch(/writes only inside Data\/Processed/)
     expect(existsSync(join(assembled.workspaceRoot, 'Data', 'raw.csv'))).toBe(false)
 
     // The AUTHORIZED first child tool call lands while still waiting_for_child.

@@ -1,6 +1,4 @@
 /** Dynamic, role-derived filesystem capability context for AutoReport agents. */
-import { existsSync } from 'node:fs'
-import { delimiter, resolve } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import type { Session } from '@deepseek-ai/dsh-session'
 import { rolePolicy, type AutoReportRole } from './roles.js'
@@ -17,60 +15,32 @@ export interface FilesystemScopeDependencies {
   workspaceRootOf(session: Session): string | undefined
 }
 
-function listRoots(roots: readonly string[]): string {
-  return roots.length === 0 ? '(none)' : roots.map(root => root === '.' ? './' : `${root}/`).join(', ')
-}
-
-function hasLocalProcessBackend(): boolean {
-  // On Windows the product requires DSH's pwsh-sandbox + Windows ACL policy;
-  // the host only exposes pwsh after that sandboxPolicy is present.
-  if (process.platform === 'win32') return true
-  if (process.platform === 'darwin') return existsSync('/usr/bin/sandbox-exec')
-  if (process.platform !== 'linux') return false
-  return (process.env['PATH'] ?? '').split(delimiter).some(entry => existsSync(resolve(entry, 'bwrap')))
-}
-
 /** Render the single workspace authorization statement from the fixed role table. */
 export function renderFilesystemScope(
   role: AutoReportRole,
   workspaceRoot: string,
-  processBackend = hasLocalProcessBackend(),
+  processToolVisible: boolean,
 ): string {
   const policy = rolePolicy(role)
-  const platformShell = process.platform === 'win32' ? 'pwsh' : 'bash'
-  const processAvailable = policy.process === 'role-aware' && processBackend
-  const availableTools = policy.tools.filter(name =>
-    (name !== 'bash' && name !== 'pwsh') || (processAvailable && name === platformShell))
+  const processLine = policy.hasProcessTool
+    ? (processToolVisible
+      ? 'The shell starts at the workspace root (navigation only); the DSH sandbox confines its writes to your writable root.'
+      : 'This role is assigned a shell, but it is unavailable in this session. Report the blocker through report_workflow; do not fall back to an unguarded tool.')
+    : 'This role has no process tool. Use its dedicated capabilities or request execution work from an assigned specialist; there is no shell fallback.'
   return [
-    '# AutoReport filesystem scope',
+    '# AutoReport workspace scope',
     `Role: ${role}`,
     `Workspace root: ${workspaceRoot}`,
-    '',
-    'Discoverable roots (names only):',
-    `- ${listRoots(policy.discoverableRoots)}`,
-    '',
-    'Readable roots (file contents):',
-    `- ${listRoots(policy.readableRoots)}`,
-    '',
-    'Writable roots:',
-    `- ${listRoots(policy.writableRoots)}`,
-    '',
-    `AutoReport tools: ${availableTools.join(', ')}`,
+    `Writable root: ${policy.writableRoot}/ (the only directory you may mutate; enforced by the DSH sandbox and tool guards)`,
+    'Read scope: the entire experiment workspace. Read permission is context, not duty — your persona defines what you produce.',
+    `AutoReport tools: ${policy.tools.join(', ')}`,
     'Other DSH tools are not available to this role.',
     '',
-    `Network: ${policy.network}; temporary files: ${policy.temp}.`,
-    'Within the experiment workspace, read/write tools enforce these role capabilities. Workspace mutations performed indirectly must remain in the writable roots. System files and explicitly exposed runtime paths remain outside this workspace scope.',
-    processAvailable && process.platform === 'win32'
-      ? 'PowerShell is constrained to this role, starts in its writable root, and uses DSH Windows ACL write confinement plus AutoReport command/path preflight. Windows does not enforce the readable-root boundary for arbitrary process reads; treat the preflight as a guardrail, not a security boundary.'
-      : processAvailable
-        ? 'Bash uses the role filesystem sandbox for this role and its descendants; if the operating-system backend cannot start, the call fails closed.'
-        : policy.process === 'role-aware'
-          ? 'This role needs a process backend for execution tasks, but none is available on this platform. Report the blocker through report_workflow; do not fall back to an unguarded tool.'
-          : 'This role has no general process tool. Use its dedicated AutoReport capabilities or request help from the assigned specialist; no shell fallback is provided.',
+    processLine,
+    '',
+    'Path conventions: every path you exchange with any tool is experiment-workspace-relative, e.g. `Report/main.typ`, `Data/Processed/results.csv` — including `read`, `write`, `edit`, `list`, `grep`, manifest, report_workflow, and shell arguments. `glob` is disabled for AutoReport.',
     'Cross-role manifest and workflow handoff metadata remain an explicitly permitted coordination channel; metadata does not grant access to the referenced file contents.',
     'Skill bodies delivered through this role\'s skill catalog are a separate trusted instruction channel, not experiment-workspace file access.',
-    '',
-    `Path conventions: \`read\`/\`read_image\`/\`list\`/\`grep\` use workspace-root-relative paths; \`write\`/\`edit\` use the role writable root when sandboxed; \`str_replace_editor\` requires absolute workspace paths; ${processAvailable ? `role-aware \`${platformShell}\` starts in the writable root and resolves relative \`workdir\` there` : 'general process path conventions do not apply to this role'}; manifest and \`report_workflow\` paths are workspace-relative. \`glob\` is disabled for AutoReport.`,
   ].join('\n')
 }
 
@@ -91,9 +61,12 @@ export function installFilesystemScopeContext(ctx: Context, deps: FilesystemScop
       const role = deps.roleOf(session)
       const root = deps.workspaceRootOf(session)
       if (role === undefined || root === undefined) return ''
-      const platformShell = process.platform === 'win32' ? 'pwsh' : 'bash'
-      const shellVisible = assembly.agent?.ctx?.tools?.get(platformShell, assembly.agent) !== undefined
-      return renderFilesystemScope(role, root, shellVisible && hasLocalProcessBackend())
+      const shellName = rolePolicy(role).hasProcessTool
+        ? (process.platform === 'win32' ? 'pwsh' : 'bash')
+        : undefined
+      const shellVisible = shellName !== undefined
+        && assembly.agent?.ctx?.tools?.get(shellName, assembly.agent) !== undefined
+      return renderFilesystemScope(role, root, shellVisible)
     },
   })
 }
