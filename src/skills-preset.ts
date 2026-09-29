@@ -29,12 +29,15 @@ export const MAIN_SKILL_NAMES: readonly string[] = ['pdf-reference-reader']
 /** The language-neutral report-authoring skill every REPORT child receives. */
 export const REPORT_WRITER_SKILL = 'experiment-report-writer'
 
+/** Figure-design and inspection guidance for the PLOTTING child. */
+export const PLOTTING_QUALITY_SKILL = 'plotting-quality'
+
 /**
  * Bundled skills a REPORT child must hold before writing.
  *
  * Registering a skill only publishes a catalog line; its body arrives when the
- * model loads it. Two actions therefore gate on a body that must already be
- * present: authoring report content (`writing`). `references` are consulted
+ * model loads it. Writing gates on a body that must already be
+ * present. `references` are consulted
  * on demand and gate nothing. Compilation is a Report-only tool.
  *
  * The active language's own layout rules are NOT here. They ship as fixed
@@ -76,8 +79,9 @@ export function skillNamesForRole(role: SpecialistRole, language: ReportSkillLan
   switch (role) {
     case 'THEORY':
     case 'DATA_ANALYSIS':
-    case 'PLOTTING':
       return []
+    case 'PLOTTING':
+      return [PLOTTING_QUALITY_SKILL]
     case 'REPORT': {
       const required = reportSkillRequirements(language)
       return [...required.writing, ...required.references]

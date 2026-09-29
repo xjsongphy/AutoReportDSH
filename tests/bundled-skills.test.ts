@@ -28,6 +28,7 @@ describe('loadBundledSkills', () => {
     expect(skills.map(skill => skill.name)).toEqual([
       'experiment-report-writer',
       'pdf-reference-reader',
+      'plotting-quality',
       'typst',
     ])
   })
@@ -70,7 +71,7 @@ describe('loadBundledSkills', () => {
   })
 
   it('omits the base for skills whose prose addresses the experiment workspace', () => {
-    for (const name of ['pdf-reference-reader']) {
+    for (const name of ['pdf-reference-reader', 'plotting-quality']) {
       expect(skills.find(skill => skill.name === name)?.directory).toBeUndefined()
     }
   })
@@ -117,7 +118,7 @@ describe('loadBundledSkills', () => {
 
   it('includes pdf-reference-reader for MAIN PDF extraction', () => {
     const reader = skills.find(skill => skill.name === 'pdf-reference-reader')
-    expect(reader?.content).toContain('mineru-open-api extract')
+    expect(reader?.content).toContain('reference_extract')
     expect(reader?.content).toContain('Outline/.cache/mineru/')
   })
 })
@@ -135,7 +136,7 @@ describe('loadReportLanguageGuidance', () => {
   it('selects the text for the requested language and names its skills', () => {
     expect(loadReportLanguageGuidance('typst')).toContain('# Active report language: Typst')
     expect(loadReportLanguageGuidance('typst')).toContain('do not use LaTeX commands')
-    expect(loadReportLanguageGuidance('typst')).toContain('`compile_report`')
+    expect(loadReportLanguageGuidance('typst')).toContain('`compile_report({path:')
     expect(loadReportLanguageGuidance('typst')).not.toContain('LaTeX layout rules')
   })
 })
