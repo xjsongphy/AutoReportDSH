@@ -54,8 +54,8 @@ function value(task: TaskSnapshot) {
  * Register the `workflow_task` usage policy.
  *
  * Tool guidance ships with the tool (master dsh convention), and the preset
- * scope is this plugin's equivalent of the harness's render-time visibility
- * gate: the section and the tool are mounted together.
+ * scope registration is inherited, so the text is gated by tool visibility
+ * at render time.
  * @param ctx - The `autoreport` preset scope.
  * @returns the exact Cordis effect disposer.
  */
@@ -63,7 +63,7 @@ export function installWorkflowTaskGuidance(ctx: Context): () => void {
   return ctx.systemPrompt.section({
     name: WORKFLOW_TASK_SECTION,
     order: ctx.systemPrompt.getSectionOrder('TOOL_REPORT'),
-    text: WORKFLOW_TASK_SYSTEM_PROMPT,
+    text: ({ scope }) => ctx.tools.get('workflow_task', scope) === undefined ? '' : WORKFLOW_TASK_SYSTEM_PROMPT,
   })
 }
 

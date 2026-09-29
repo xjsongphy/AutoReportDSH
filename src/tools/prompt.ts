@@ -33,22 +33,6 @@ explicit user constraints.
 - **No prompt expansion**: Do not turn a task into a mini-spec. If a subagent can infer the method from its own prompt and the referenced files, stop there.
 - **Default to under-specifying**: When unsure whether to include a technical detail, omit it unless it is a user constraint or a routing dependency.
 
-When dispatching, include only:
-
-- Task goal
-- Dependency relationship
-- Explicit user constraints needed to preserve the request
-
-Do not include:
-
-- Implementation steps or methods
-- Technical formulas or copied source content
-- Processed results copied from files
-- Plotting or report design choices
-- report-engine classes, packages, section structures, filenames, or formats
-- Subagent built-in output or quality requirements
-- Internal plans or unrelated context
-
 If a user constraint conflicts with a subagent role, forward it as user-provided
 and let the subagent handle or report the conflict.
 
@@ -62,11 +46,11 @@ dependent work when needed, or escalate to the user.
 
 **Environment blockers**: when a task comes back with
 \`block_type="missing_dependency"\`, check the selected Python environment.
-If another configured environment already has the dependency, select it and
-re-dispatch the task. Otherwise call \`install_python_package\` with one named
-requirement; the tool asks for user approval before changing the environment.
-After a successful install, re-dispatch the same task. Specialists report
-dependency needs instead of changing the environment themselves.`
+Call \`install_python_package\` with one named requirement; the tool asks for
+user approval before changing the selected environment. After a successful
+install, re-dispatch the same task. If the selected environment itself must
+change, ask the user to choose it in settings. Specialists report dependency
+needs instead of changing the environment themselves.`
 
 /**
  * MAIN's `tool:workflow_task` policy: when the durable board is worth writing

@@ -1,8 +1,20 @@
-# AutoReportDSH — Design Plan (rev 5, amended rev 11)
+# AutoReportDSH — Design Plan (rev 5, amended rev 12)
 
 Migrate the AutoReportCLI physics-report workflow into a DeepSeek Harness (`dsh`) plugin.
 The scope contract is `../autoreportcli/docs/own-features.md`: preserve AutoReport-owned
 domain semantics while reusing DSH infrastructure wherever its contract is equivalent.
+
+**Rev 12 context and capability amendment.** A shared code-owned role roster
+briefly names every other role's work in each agent's prompt. Main-only tool
+sections render only where their tools are visible; specialist scopes hide
+`workflow_task` and the other Main tools. The base DSH bash/pwsh prompt is
+shadowed for AutoReport, and non-compute roles hide inherited shell tools.
+Compute roles receive a scoped bash tool without an escalation parameter and
+fail closed when DSH cannot provide full file confinement. All roles receive
+read-only `glob`/`grep`; Report can render PDF pages to PNG for `read_image`.
+The PDF extraction recipe skill is removed now that `reference_extract` owns
+its invocation. Python runtime context names the selected interpreter only
+for Main and compute roles, with shell facts only for compute roles.
 
 **Rev 11 execution amendment.** All roles read the experiment workspace and write
 only their DSH-confined output root. `bash` is registered only in Data Analysis

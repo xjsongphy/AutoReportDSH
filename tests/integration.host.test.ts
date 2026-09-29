@@ -91,7 +91,7 @@ describe('integration: assembled host (real context)', () => {
     assembled.runtime.roleRegistry.registerReserved(reportBinding)
     const reporter = makeChildRecorder('it-report', assembled.runtime)
     assembled.routeChild(reporter)
-    expect(reporter.toolNames).toEqual(['manifest', 'report_workflow', 'compile_report'])
+    expect(reporter.toolNames).toEqual(['manifest', 'report_workflow', 'compile_report', 'render_report_page'])
     expect(reporter.skillNames).toEqual([
       'experiment-report-writer',
     ])
@@ -104,12 +104,12 @@ describe('integration: assembled host (real context)', () => {
     })
     assembled.routeChild(plotter)
     expect(plotter.toolNames).toEqual(['manifest', 'report_workflow', 'bash'])
-    expect(plotter.skillNames).toEqual([])
+    expect(plotter.skillNames).toEqual(['plotting-quality'])
   })
 
   it('initializes the workspace once with the frozen settings snapshot on the workflow event', async () => {
     const assembled = await boot({ projectLanguage: 'typst' })
-    expect(assembled.presetSkillNames).toEqual(['pdf-reference-reader'])
+    expect(assembled.presetSkillNames).toEqual([])
     admitFirstTurn(assembled)
     for (const dir of REQUIRED_DIRS) expect(existsSync(join(assembled.workspaceRoot, dir))).toBe(true)
     const meta = assembled.runtime.forSession(assembled.mainSession).state.projection().meta

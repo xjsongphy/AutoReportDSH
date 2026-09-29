@@ -85,6 +85,7 @@ describe('AutoReport role tool guard', () => {
     expect(guard(execution('reference_extract', { path: 'References/a.pdf' }, main))).toBeUndefined()
     expect(guard(execution('install_python_package', { package: 'pandas' }, main))).toBeUndefined()
     expect(guard(execution('compile_report', { path: 'Report/main.tex' }, main))).toContain('REPORT')
+    expect(guard(execution('render_report_page', { path: 'Report/main.pdf', page: 1 }, main))).toContain('REPORT')
   })
 
   it('keeps compile_report on REPORT and shell on compute roles', () => {
@@ -96,6 +97,7 @@ describe('AutoReport role tool guard', () => {
     registry.registerReserved(binding('DATA_ANALYSIS', data.id))
     const guard = createRoleToolGuard({ registry })
     expect(guard(execution('compile_report', { path: 'Report/main.tex' }, report))).toBeUndefined()
+    expect(guard(execution('render_report_page', { path: 'Report/main.pdf', page: 1 }, report))).toBeUndefined()
     expect(guard(execution('bash', { command: 'true' }, report))).toContain('no general shell')
     expect(guard(execution('bash', { command: 'true' }, data))).toBeUndefined()
     expect(guard(execution('reference_extract', { path: 'References/a.pdf' }, data))).toContain('MAIN')

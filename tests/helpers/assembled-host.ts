@@ -58,6 +58,7 @@ const FAKE_SECTION_ORDERS: Readonly<Record<string, number>> = {
   TOOL_SUBAGENT: 2800,
   TOOL_REPORT: 2900,
   TOOL_BASH: 2700,
+  TOOL_PWSH: 2710,
 }
 
 const FAKE_CONTEXT_ORDERS: Readonly<Record<string, number>> = {
@@ -115,7 +116,7 @@ export function makeChildRecorder(
   const agent = { id: sessionId, session } as Agent
   const ctx = {
     get: (name: string) => name === 'skills' ? skillsService : undefined,
-    shell: { sandboxMode: undefined },
+    shell: { sandboxMode: 'workspace-write' },
     shellEnv: { collect: () => ({}) },
     tools: {
       register: (tool: { name: string }) => {

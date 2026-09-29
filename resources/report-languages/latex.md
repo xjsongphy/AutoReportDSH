@@ -1,7 +1,6 @@
 # Active report language: LaTeX
 
-Write the report entry point as `Report/main.tex`. Compile with
-`compile_report({path: "Report/main.tex"})`; read the returned full log if needed.
+Write the report entry point as `Report/main.tex`.
 
 ## LaTeX layout rules
 

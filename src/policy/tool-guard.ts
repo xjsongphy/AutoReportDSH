@@ -235,7 +235,8 @@ export function createRoleToolGuard(options: RoleGuardOptions): ToolGuard {
   return exec => {
     const call = mutation(exec)
     const shellCall = exec.name === 'bash' || exec.name === 'pwsh'
-    const specializedCall = exec.name === 'compile_report' || exec.name === 'reference_extract' || exec.name === 'install_python_package'
+    const specializedCall = exec.name === 'compile_report' || exec.name === 'render_report_page'
+      || exec.name === 'reference_extract' || exec.name === 'install_python_package'
     const protectedCall = call.kind !== 'none' || sandboxPermissionsEscalation(exec) || shellCall || specializedCall
     if (!protectedCall) return undefined
 
@@ -248,6 +249,7 @@ export function createRoleToolGuard(options: RoleGuardOptions): ToolGuard {
       return `AutoReport ${resolved.role} has no general shell capability`
     }
     if (exec.name === 'compile_report' && resolved.policy.execution !== 'compile') return 'compile_report belongs to REPORT'
+    if (exec.name === 'render_report_page' && resolved.policy.execution !== 'compile') return 'render_report_page belongs to REPORT'
     if (exec.name === 'reference_extract' && resolved.role !== 'MAIN') return 'reference_extract belongs to MAIN'
     if (exec.name === 'install_python_package' && resolved.role !== 'MAIN') return 'install_python_package belongs to MAIN'
 

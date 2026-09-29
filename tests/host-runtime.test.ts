@@ -367,6 +367,30 @@ describe('host workflow runtime', () => {
     expect(fake.resolve({ session: stock }).workspaceRoot).toBe(root)
   })
 
+  it('hides inherited shell tools only while an agent uses the AutoReport preset', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'autoreport-main-tools-'))
+    tempDirs.push(root)
+    const ctx = new Context()
+    ctx.provide('tools', { guard: () => () => {} } as never)
+    const { apply: applyHost } = await import('../src/host.js')
+    await applyHost(ctx, { ...CONFIG, workspaceRoot: root }, { pythonDetect: ISOLATED_PYTHON_DETECT })
+    const denied: string[][] = []
+    let released = 0
+    const toolScope = { tools: {
+      get: (name: string) => name === 'bash' ? { name } : undefined,
+      restrict: (filter: { deny: string[] }) => { denied.push(filter.deny); return () => { released += 1 } },
+    } }
+    const agent = { id: SessionId('main-tools'), session: rootSession('main-tools', AUTOREPORT_MAIN_PRESET, root), ctx: toolScope } as unknown as Agent
+    ctx.emit('agent/created', { agent, source: 'fresh' } as never)
+    expect(denied).toEqual([['bash']])
+    const selection = agent.session.append('agent-preset/selected', { agentPreset: 'minimal' })
+    ctx.emit('session/event', agent.session, selection)
+    expect(released).toBe(1)
+    const restored = agent.session.append('agent-preset/selected', { agentPreset: AUTOREPORT_MAIN_PRESET })
+    ctx.emit('session/event', agent.session, restored)
+    expect(denied).toEqual([['bash'], ['bash']])
+  })
+
   it('resident setup joins the parent preset before restricting coordinator tools', async () => {
     // Regression: the retargeted direct-creation path dropped the composeFrom
     // join its applyChildComposition predecessor performed. On a real host the
@@ -420,7 +444,7 @@ describe('host workflow runtime', () => {
     // The persona section shadows the deployment persona and the deny-list
     // lands on the coordinator tools — but only after the join succeeded.
     expect(section).toHaveBeenCalledWith(expect.objectContaining({ name: 'deployment:persona-prefix' }))
-    expect(restrict).toHaveBeenCalledWith({ deny: ['send_to_agent', 'ask_user_question', 'reference_extract', 'install_python_package'] })
+    expect(restrict).toHaveBeenCalledWith({ deny: ['send_to_agent', 'workflow_task', 'ask_user_question', 'reference_extract', 'install_python_package'] })
 
     // Unjoined parent: nothing preset-plane is restrictable, so the deny-list
     // is skipped rather than rejected.
@@ -485,7 +509,7 @@ describe('host workflow runtime', () => {
       label: 'AutoReport THEORY',
       agentProvider: 'deepseek-official',
       agentModel: 'deepseek-flash',
-      toolFilter: { deny: ['send_to_agent', 'ask_user_question', 'reference_extract', 'install_python_package'] },
+      toolFilter: { deny: ['send_to_agent', 'workflow_task', 'ask_user_question', 'reference_extract', 'install_python_package'] },
     })
   })
 

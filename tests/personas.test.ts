@@ -8,6 +8,7 @@ import {
   WORKFLOW_TASK_SYSTEM_PROMPT,
 } from '../src/tools/prompt.js'
 import { allSpecialistRoles } from '../src/roles.js'
+import { otherRoleResponsibilities } from '../src/role-roster.js'
 
 const CLI_AGENTS = join(import.meta.dirname, '../../autoreportcli/templates/agents')
 const REPO_PERSONAS = join(import.meta.dirname, '../resources/personas')
@@ -68,7 +69,7 @@ const FORBIDDEN_PERSONA_PATTERNS: readonly { pattern: RegExp; reason: string }[]
   { pattern: /report_exec/u, reason: 'retired tool; do not tell the model what not to call' },
   { pattern: /delegation_revision/u, reason: 'delegation mechanics belong to the report_workflow tool description' },
   { pattern: /block_type(?=="|:|\s)/u, reason: 'delegation mechanics belong to the report_workflow tool description; the missing_dependency policy names the blocker itself' },
-  { pattern: /mineru-open-api/u, reason: 'MinerU CLI lives in the pdf-reference-reader skill, not personas' },
+  { pattern: /mineru-open-api/u, reason: 'MinerU invocation belongs to reference_extract, not personas' },
   { pattern: /apply_patch/u, reason: 'apply_patch is not mounted in DSH; auto-validation claims are false' },
   { pattern: /automatically validated/iu, reason: 'runtime auto-validation claims must be true' },
   { pattern: /do the work yourself/iu, reason: 'contradicts MAIN coordinate-do-not-execute' },
@@ -84,24 +85,35 @@ function assertNoForbiddenPatterns(text: string, label: string): void {
 }
 
 describe('persona slimming', () => {
+  it('gives every role one shared account of the other roles', () => {
+    for (const role of ['MAIN', ...allSpecialistRoles()] as const) {
+      const roster = otherRoleResponsibilities(role)
+      const prompt = role === 'MAIN' ? loadMainPersona() : loadSpecialistPersona(role)
+      expect(prompt).toContain(roster)
+      expect(roster).not.toContain(`- ${role}:`)
+      for (const other of ['MAIN', ...allSpecialistRoles()] as const) {
+        if (other !== role) expect(roster).toContain(`- ${other}:`)
+      }
+      expect(roster).not.toMatch(/path:|sandbox_permissions|tool schema/u)
+    }
+  })
   it('loads Main with DSH tool names and skill pointers but no protocol mechanics', () => {
     const text = loadMainPersona()
     expect(text).toContain('send_to_agent')
     expect(text).not.toContain('report_task')
-    expect(text).toContain('pdf-reference-reader')
-    expect(text).toContain('reference_extract')
+    expect(text).not.toContain('pdf-reference-reader')
+    expect(text).not.toContain('reference_extract')
     expect(text).not.toContain('bash')
     expect(text).toContain('avoid tables unless requested')
     expect(text).not.toContain('subagent_fork')
     expect(text).not.toContain('`respond`')
     assertNoForbiddenPatterns(text, 'MAIN persona')
-    // Detailed dispatch and task-board mechanics stay with their tools; the
-    // short dispatch boundary is visible in Main's role instructions.
+    // Dispatch mechanics live in the tool-owned section, not the persona.
     expect(text).not.toContain('Selective workflow tasks')
     expect(text).not.toContain('## Dispatch Protocol')
-    expect(text).toContain('Minimal dispatch')
+    expect(text).not.toContain('Minimal dispatch')
     for (const rule of ['No micromanagement', 'No technical relay', 'No hidden context dumping', 'No prompt expansion', 'Default to under-specifying']) {
-      expect(text).toContain(rule)
+      expect(text).not.toContain(rule)
     }
     const dispatch = SEND_TO_AGENT_SYSTEM_PROMPT
     expect(dispatch).toContain('Use `send_to_agent` for all subagent delegation')
@@ -110,7 +122,6 @@ describe('persona slimming', () => {
     expect(dispatch).toContain('No hidden context dumping')
     expect(dispatch).toContain('No prompt expansion')
     expect(dispatch).toContain('Default to under-specifying')
-    expect(dispatch).toContain('Do not include:')
     expect(dispatch).toContain('Route follow-up work according to the `send_to_agent` result')
     expect(dispatch).toContain('If a user constraint conflicts with a subagent role')
     // MAIN owns environment changes; blocked missing_dependency tasks come back to it.

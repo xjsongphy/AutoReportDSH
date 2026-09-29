@@ -7,7 +7,7 @@ describe('autoreport preset contribution', () => {
   it('registers only the current fixed-workflow MAIN tools', () => {
     const tools: string[] = []
     const skills: string[] = []
-    const sections: { name: string; text: string }[] = []
+    const sections: { name: string; text: string | ((render: { scope: unknown }) => string) }[] = []
     let referencesProvider = 0
     const skillsService = {
       register: (registration: { name: string }) => {
@@ -22,6 +22,9 @@ describe('autoreport preset contribution', () => {
     const context = {
       get: (name: string) => name === 'skills' ? skillsService : undefined,
       tools: {
+        get: (name: string, scope: unknown) => scope === 'specialist' && ['send_to_agent', 'workflow_task'].includes(name)
+          ? undefined
+          : tools.includes(name) ? { name } : undefined,
         register: (definition: { name: string }) => {
           tools.push(definition.name)
           return () => {}
@@ -29,7 +32,7 @@ describe('autoreport preset contribution', () => {
       },
       skills: skillsService,
       systemPrompt: {
-        section: (section: { name: string; text: string }) => {
+        section: (section: { name: string; text: string | ((render: { scope: unknown }) => string) }) => {
           sections.push(section)
           return () => {}
         },
@@ -50,13 +53,21 @@ describe('autoreport preset contribution', () => {
     apply(context)
 
     expect(tools.sort()).toEqual(['install_python_package', 'manifest', 'reference_extract', 'send_to_agent', 'workflow_task'])
-    expect(skills).toEqual(['pdf-reference-reader'])
+    expect(skills).toEqual([])
     expect(referencesProvider).toBe(1)
     // Tool-owned policy ships with the tools (master dsh convention): the two
     // sections carry the dispatch and task-board rules, not the persona.
-    expect(sections.map(section => section.name)).toEqual(['tool:send_to_agent', 'tool:workflow_task'])
-    expect(sections[0]?.text).toContain('Use `send_to_agent` for all subagent delegation')
-    expect(sections[0]?.text).toContain('Do not include:')
-    expect(sections[1]?.text).toContain('do not use generic todo tools')
+    expect(sections.map(section => section.name)).toEqual(['tool:bash', 'tool:pwsh', 'tool:send_to_agent', 'tool:workflow_task'])
+    const render = (index: number, scope: unknown): string => {
+      const text = sections[index]?.text
+      return typeof text === 'function' ? text({ scope }) : text ?? ''
+    }
+    expect(render(0, 'main')).toBe('')
+    expect(render(1, 'main')).toBe('')
+    expect(render(2, 'main')).toContain('Use `send_to_agent` for all subagent delegation')
+    expect(render(2, 'main')).toContain('No technical relay')
+    expect(render(3, 'main')).toContain('do not use generic todo tools')
+    expect(render(2, 'specialist')).toBe('')
+    expect(render(3, 'specialist')).toBe('')
   })
 })

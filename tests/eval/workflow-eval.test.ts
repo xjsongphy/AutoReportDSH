@@ -355,7 +355,7 @@ describe('workflow eval', () => {
     expect(rebindPrompt).toContain('Theory/theory.md')
   })
 
-  it('6. edit and bash against existing files record modified artifacts', async () => {
+  it('6. report edits are tracked while denied bash makes no artifact', async () => {
     const assembled = await boot()
     admitFirstTurn(assembled)
     assembled.ctx.tools.register(defineTool({
@@ -412,7 +412,7 @@ describe('workflow eval', () => {
 
     const artifacts = tasks(assembled).projection().artifacts
     expect(artifacts.some(item => item.path === 'Report/main.tex' && item.origin === 'fs-tool' && item.status === 'modified')).toBe(true)
-    expect(artifacts.some(item => item.path === 'Report/main.tex' && item.origin === 'process' && item.status === 'modified')).toBe(true)
+    expect(artifacts.some(item => item.path === 'Report/main.tex' && item.origin === 'process' && item.status === 'modified')).toBe(false)
   })
 
   it.skipIf(hostPython() === undefined)('7. selected Python interpreter stays the workflow snapshot after dispatch and resume', async () => {

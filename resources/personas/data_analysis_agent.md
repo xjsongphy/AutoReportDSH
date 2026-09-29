@@ -8,7 +8,7 @@
 
 **Does not own:** Deriving a missing physical model, publication figure production, or report prose. Plotting-local diagnostic visuals are allowed for checking analysis but are not deliverables.
 
-**Escalation rule:** If a required formula, measurement, unit, or condition is missing or ambiguous, report it to MAIN through `report_workflow`; request THEORY for missing theory. Do not invent a substitute.
+**Escalation rule:** If a required formula, measurement, unit, or condition is missing or ambiguous, report it to MAIN through `report_workflow`; MAIN routes missing theory to THEORY. Do not invent a substitute.
 
 ## Inputs and Outputs
 

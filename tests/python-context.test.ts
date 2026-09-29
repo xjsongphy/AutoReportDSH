@@ -3,7 +3,6 @@ import type { Context } from '@deepseek-ai/cordis'
 import { SESSION_FORMAT_VERSION, Session, SessionId } from '@deepseek-ai/dsh-session'
 import {
   installAutoReportPythonContext,
-  packageManagerGuidance,
   renderPythonContext,
   type AutoReportPythonContextDeps,
 } from '../src/python-context.js'
@@ -21,49 +20,38 @@ function makeSession(id: string, cwd?: string): Session {
 function baseDeps(overrides: Partial<AutoReportPythonContextDeps> = {}): AutoReportPythonContextDeps {
   return {
     ownsSession: () => false,
+    roleOf: () => undefined,
     snapshotPythonExecutable: () => undefined,
     ...overrides,
   }
 }
 
-describe('packageManagerGuidance', () => {
-  it('routes the managed venv through uv with --python', () => {
-    const guidance = packageManagerGuidance('/home/.dsh/autoreport/venv/bin/python', true)
-    expect(guidance).toContain('uv pip install --python /home/.dsh/autoreport/venv/bin/python')
-  })
-
-  it('prefers conda install for conda interpreters', () => {
-    const guidance = packageManagerGuidance('/opt/miniconda3/envs/lab/bin/python', false)
-    expect(guidance).toContain('conda install')
-  })
-
-  it('uses interpreter -m pip for plain venvs and PATH pythons', () => {
-    const venv = packageManagerGuidance('/work/.venv/bin/python', false)
-    expect(venv).toContain('/work/.venv/bin/python -m pip install')
-    const path = packageManagerGuidance('python3', false)
-    expect(path).toContain('python3 -m pip install')
-  })
-})
-
 describe('renderPythonContext', () => {
-  it('deterministically renders selection, guidance, and ownership rules', () => {
-    const first = renderPythonContext('/opt/miniconda3/envs/lab/bin/python', 'Conda · lab')
-    const second = renderPythonContext('/opt/miniconda3/envs/lab/bin/python', 'Conda · lab')
+  it('renders a compute-only shell fact without package-install commands', () => {
+    const first = renderPythonContext('/opt/miniconda3/envs/lab/bin/python', 'Conda · lab', 'DATA_ANALYSIS')
+    const second = renderPythonContext('/opt/miniconda3/envs/lab/bin/python', 'Conda · lab', 'DATA_ANALYSIS')
     expect(first).toBe(second)
     expect(first).toContain('# Python environment')
     expect(first).toContain('/opt/miniconda3/envs/lab/bin/python')
-    expect(first).toContain('conda install')
-    expect(first).toContain('missing_dependency')
-    expect(first).toContain('Only MAIN may install')
+    expect(first).toContain('compute shell resolves')
+    expect(first).not.toContain('install')
+  })
+
+  it('does not send shell guidance to Main or Python context to Theory and Report', () => {
+    const main = renderPythonContext('/work/.venv/bin/python', 'selected', 'MAIN')
+    expect(main).toContain('/work/.venv/bin/python')
+    expect(main).not.toContain('shell')
+    expect(renderPythonContext('/work/.venv/bin/python', 'selected', 'THEORY')).toBe('')
+    expect(renderPythonContext('/work/.venv/bin/python', 'selected', 'REPORT')).toBe('')
   })
 
   it('is empty when nothing is known so the snapshot contributes nothing', () => {
-    expect(renderPythonContext('', undefined)).toBe('')
+    expect(renderPythonContext('', undefined, 'MAIN')).toBe('')
   })
 
   it('changes text when the environment changes (host snapshot diff then appends)', () => {
-    const before = renderPythonContext('/opt/miniconda3/envs/a/bin/python', 'Conda · a')
-    const after = renderPythonContext('/opt/miniconda3/envs/b/bin/python', 'Conda · b')
+    const before = renderPythonContext('/opt/miniconda3/envs/a/bin/python', 'Conda · a', 'MAIN')
+    const after = renderPythonContext('/opt/miniconda3/envs/b/bin/python', 'Conda · b', 'MAIN')
     expect(before).not.toBe(after)
   })
 })
@@ -91,6 +79,7 @@ describe('installAutoReportPythonContext', () => {
     } as unknown as Context
     const dispose = installAutoReportPythonContext(ctx, baseDeps({
       ownsSession: session => session === owned,
+      roleOf: session => session === owned ? 'DATA_ANALYSIS' : undefined,
       snapshotPythonExecutable: session => session === owned ? '/work/.venv/bin/python' : undefined,
     }))
     expect(dispose).toBeTypeOf('function')

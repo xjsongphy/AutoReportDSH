@@ -110,7 +110,7 @@ Prefer SVG for diagrams (scales cleanly), PNG/JPG for photos. Use `fit: "contain
 #set text(font: "Fira Code", size: 9pt)                 // Monospace for code
 ```
 
-Use `compile_report` and read its font diagnostics. If the selected font is
+Use compiler diagnostics to check fonts. If the selected font is
 unavailable, choose one already installed on the host or report the missing
 font to MAIN. Keep CJK coverage when changing the document font.
 

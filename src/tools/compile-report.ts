@@ -137,7 +137,7 @@ export async function compileReport(
 export function installCompileReportTool(ctx: Context, language: ReportLanguage, workspaceRootOverride?: string): () => void {
   return ctx.tools.register(defineTool({
     name: 'compile_report',
-    description: 'Compile a Report/ LaTeX or Typst entry file to PDF. Pass a workspace-relative path. Returns diagnostics and a path to the complete log; read that log if more context is needed.',
+    description: 'Compile one Report/ entry file to PDF using the workspace-selected LaTeX or Typst backend. Pass only its workspace-relative path. Returns status, bounded diagnostics, PDF path on success, and a complete log path; read the log if more context is needed.',
     parameters: { path: { type: 'string', required: true, description: 'Report entry file relative to the experiment workspace, e.g. Report/main.tex.' } },
     timeoutMs: COMPILE_TIMEOUT_MS + 10_000,
     presentCall: args => genericCall('Compile report', args.path),

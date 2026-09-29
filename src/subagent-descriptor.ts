@@ -24,13 +24,9 @@ import { snapshotSubagentDescriptor, type SubagentDescriptorData } from '@deepse
 import type { ToolRestriction } from '@deepseek-ai/dsh-tools'
 import type { SpecialistRole } from './roles.js'
 
-/**
- * Tools every resident child is denied: delegation belongs to MAIN, and a
- * role never asks the user anything directly.
- */
-/** Bash is registered only in compute-role scopes; these are Main-only tools. */
+/** Main-only tools excluded from every specialist scope. */
 export const RESIDENT_TOOL_FILTER: ToolRestriction = {
-  deny: ['send_to_agent', 'ask_user_question', 'reference_extract', 'install_python_package'],
+  deny: ['send_to_agent', 'workflow_task', 'ask_user_question', 'reference_extract', 'install_python_package'],
 }
 
 /** Composition facts one resident child was created under. */

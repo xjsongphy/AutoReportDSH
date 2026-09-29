@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { installPythonPackageTool } from '../src/tools/python-package-install.js'
 
 describe('install_python_package input', () => {
-  it('runs fixed uv argv only after approval', async () => {
+  it('runs fixed package-manager argv only after approval', async () => {
     const root = mkdtempSync(join(tmpdir(), 'autoreport-package-'))
     let tool: { execute: (args: unknown, exec: unknown) => Promise<unknown> } | undefined
     let decision = 'rejected'
@@ -32,6 +32,6 @@ describe('install_python_package input', () => {
     expect(argv).toEqual([])
     decision = 'allowed-once'
     await expect(tool?.execute({ package: 'pandas==2.2.3' }, exec)).resolves.toMatchObject({ status: 'success' })
-    expect(argv).toEqual(['uv', 'pip', 'install', '--python', '/usr/bin/python3', 'pandas==2.2.3'])
+    expect(argv).toEqual(['/usr/bin/python3', '-m', 'pip', 'install', 'pandas==2.2.3'])
   })
 })

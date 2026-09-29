@@ -185,7 +185,13 @@ $DSH_HOME/
 | Theory | `Theory/` | the whole workspace | none |
 | Data Analysis | `Data/Processed/` | the whole workspace | `bash` |
 | Plotting | `Plots/` | the whole workspace | `bash` |
-| Report | `Report/` | the whole workspace | `compile_report` |
+| Report | `Report/` | the whole workspace | `compile_report`, `render_report_page` |
+
+All roles receive file read/edit tools and the read-only `glob`/`grep` search
+tools. Each role sees a shared summary of the other roles' responsibilities;
+specialists return missing upstream work to Main. The base DSH shell tool and
+its generic prompt are hidden for roles without shell access. Data Analysis and
+Plotting receive a scoped bash tool with no escalation parameter.
 
 The write column describes workspace artifacts; DSH's process sandbox also
 provides its backend-defined temporary area. Package installation is a separate
@@ -195,7 +201,10 @@ Structured tool paths use the experiment workspace as their base, such as
 `Report/main.tex` and `References/handout.pdf`. `compile_report` selects the
 LaTeX or Typst backend from the frozen report language. It returns this run's
 status, PDF path, bounded diagnostics, and a complete log under `Report/.build/`.
-The Report agent can read that log when the summary lacks context.
+The Report agent can read that log when the summary lacks context. For visual
+checks, `render_report_page` uses `pdftoppm` to create one PNG under
+`Report/.cache/preview/`; `read_image` can inspect that PNG when the mounted
+model supports image input.
 
 ## Development
 

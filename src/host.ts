@@ -7,6 +7,7 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
+import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { SessionId } from '@deepseek-ai/dsh-session'
 import type { Config } from './config.js'
 import { isAutoReportMainSession } from './membership.js'
@@ -22,6 +23,7 @@ import { createReportResetCommand } from './workspace/reset.js'
 import { loadProjectSettings, workspaceIdForRoot } from './settings.js'
 import { describeDshVersionSupport, readRunningDshVersion } from './dsh-version.js'
 import { installTurnGuards } from './workflow/turn-guard.js'
+import { restrictInheritedShell } from './policy/role-tool-visibility.js'
 
 export const name = 'autoreport-host'
 // `apply()` registers the host-wide `/init` command through the commands
@@ -88,6 +90,38 @@ export async function apply(ctx: Context, config: Partial<Config> = {}, options:
   const sandboxPolicy = ctx.get('sandboxPolicy') as Parameters<typeof installSandboxOverride>[0] | undefined
   const resolved = resolveHostConfig(config)
   const runtime = new AutoReportWorkflowRuntime(ctx, resolved, options)
+  const liveAgents = new Map<string, Agent>()
+  const mainShellFilters = new Map<Agent, () => void>()
+  const refreshMainShell = (agent: Agent) => {
+    const active = mainShellFilters.get(agent)
+    if (!isAutoReportMainSession(agent.session)) {
+      active?.()
+      mainShellFilters.delete(agent)
+      return
+    }
+    if (active !== undefined || agent.ctx?.tools === undefined) return
+    mainShellFilters.set(agent, restrictInheritedShell(agent.ctx, agent, 'MAIN'))
+  }
+  ctx.on('agent/created', ({ agent }) => {
+    liveAgents.set(String(agent.id), agent)
+    refreshMainShell(agent)
+    return undefined
+  }, { global: true })
+  ctx.on('agent/disposed', ({ agent }) => {
+    if (liveAgents.get(String(agent.id)) === agent) liveAgents.delete(String(agent.id))
+    mainShellFilters.get(agent)?.()
+    mainShellFilters.delete(agent)
+    return undefined
+  }, { global: true })
+  ctx.on('session/event', (session, event) => {
+    if (event.type !== 'agent-preset/selected') return
+    const agent = liveAgents.get(String(session.id))
+    if (agent !== undefined) refreshMainShell(agent)
+  }, { global: true })
+  for (const agent of (ctx.get('agents') as { list?: () => Agent[] } | undefined)?.list?.() ?? []) {
+    liveAgents.set(String(agent.id), agent)
+    refreshMainShell(agent)
+  }
   if (sandboxPolicy !== undefined) {
     installSandboxOverride(sandboxPolicy, {
       roleRootOf: session => {
@@ -105,8 +139,8 @@ export async function apply(ctx: Context, config: Partial<Config> = {}, options:
     isMainSession: sessionId => runtime.isMainSession(sessionId),
     ...(resolved.workspaceRoot === undefined ? {} : { workspaceRoot: resolved.workspaceRoot }),
   }))
-  // Report-skill gate: a REPORT child may not edit report files or run its
-  // compiler before it has loaded the skill governing that action. The refusal
+  // Report-skill gate: a REPORT child may not edit report files before it
+  // has loaded the writer skill governing that action. The refusal
   // names the skill and the model loads it with DSH's own `skill` tool, so the
   // transcript records a real agent tool call and the harness fabricates
   // nothing. Loads are read from the durable stream for the same reason.
@@ -135,6 +169,7 @@ export async function apply(ctx: Context, config: Partial<Config> = {}, options:
     promptCtx.effect(
       () => installAutoReportPythonContext(promptCtx, {
         ownsSession: session => runtime.ownsSession(session),
+        roleOf: session => runtime.roleFor(String(session.id)),
         snapshotPythonExecutable: session =>
           runtime.projectionFor(String(session.id))?.meta?.settings?.pythonExecutable,
       }),

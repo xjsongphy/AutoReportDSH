@@ -149,6 +149,8 @@ async function boot(options: {
   specialistTexts?: readonly string[]
   /** Composition specialist route; defaults to the registered test provider. */
   specialistModel?: Config['specialistModel']
+  /** Simulate the base DSH bundle mounting a generic shell tool. */
+  probeBash?: boolean
 }): Promise<Booted> {
   const ctx = new Context()
   const workspaceRoot = tempDir('autoreport-resident-ws-')
@@ -159,6 +161,15 @@ async function boot(options: {
   await ctx.plugin(SessionProjectionRegistry)
   await ctx.plugin(SystemPrompt, {})
   await ctx.plugin(ToolRuntime)
+  if (options.probeBash === true) {
+    ctx.tools.register(defineTool({
+      name: 'bash',
+      description: 'generic DSH bash tool with sandbox_permissions',
+      parameters: { command: { type: 'string', required: true } },
+      output: { schema: { type: 'object', additionalProperties: true, properties: {} }, render: () => [{ type: 'text', text: 'unused' }] },
+      async execute() { return {} },
+    }))
+  }
   await ctx.plugin(AgentRegistry)
   await ctx.plugin(MemorySettings, { doc: { autoreport: {} } })
   await ctx.plugin(AgentLoop, { agents: [] })
@@ -177,7 +188,7 @@ async function boot(options: {
   } as never)
   ctx.provide('commands', { register: () => () => {} } as never)
   ctx.provide('shellEnv', { register: () => () => {} } as never)
-  ctx.provide('shell', { sandboxMode: undefined } as never)
+  ctx.provide('shell', { sandboxMode: 'workspace-write' } as never)
   ctx.provide('skills', {
     register: () => () => {},
     registerProvider: () => () => {},
@@ -244,8 +255,48 @@ async function boot(options: {
 }
 
 describe('integration: resident subagent through the real agent loop', () => {
+  for (const role of ['DATA_ANALYSIS', 'PLOTTING', 'REPORT'] as const) {
+    it(`${role} receives only its execution capability in the final model request`, { timeout: 30_000 }, async () => {
+      const booted = await boot({
+        probeBash: true,
+        mainCalls: [{ name: 'send_to_agent', args: { role, subject: 'capability audit', prompt: 'Complete the assigned stage', wait: true } }],
+        mainTexts: ['done'],
+        specialistCalls: [{
+          name: 'report_workflow',
+          args: { task_id: 'task-1', delegation_revision: 1, status: 'success', response: 'stage complete', produced_files: [] },
+        }],
+        specialistTexts: ['done'],
+      })
+      sendUser(booted.mainAgent, 'audit capabilities')
+      await until(() => booted.mainAgent.status === 'idle', 'MAIN capability audit idle')
+      const request = booted.specialistAdapter.requests[0]
+      expect(request).toBeDefined()
+      const names = requestedToolNames(request!)
+      expect(names).not.toContain('send_to_agent')
+      expect(names).not.toContain('workflow_task')
+      expect(names).not.toContain('reference_extract')
+      expect(names).not.toContain('install_python_package')
+      expect(names.includes('bash')).toBe(role !== 'REPORT')
+      expect(names.includes('compile_report')).toBe(role === 'REPORT')
+      expect(names.includes('render_report_page')).toBe(role === 'REPORT')
+      const prompt = request!.messages.filter(message => message.role === 'system')
+        .flatMap(message => message.content)
+        .filter(block => block.type === 'text').map(block => block.text).join('\n')
+      expect(prompt).toContain('## Other roles')
+      expect(prompt).not.toContain('Use `send_to_agent` for all subagent delegation')
+      expect(prompt).not.toContain('The workflow task board')
+      expect(prompt).not.toContain('sandbox_permissions')
+      if (role !== 'REPORT') {
+        const bash = request!.tools?.find(tool => tool.name === 'bash')
+        expect(JSON.stringify(bash?.parameters)).not.toContain('sandbox_permissions')
+        expect(bash?.description).toContain('no sandbox escalation')
+      }
+    })
+  }
+
   it('wait=true: MAIN dispatches, the child runs its first turn on the routed provider, and the report settles the delegation', { timeout: 30_000 }, async () => {
     const booted = await boot({
+      probeBash: true,
       mainCalls: [{
         name: 'send_to_agent',
         args: {
@@ -291,7 +342,7 @@ describe('integration: resident subagent through the real agent loop', () => {
     expect(descriptor?.['agentProvider']).toBe(SPECIALIST_PROVIDER)
     expect(descriptor?.['agentModel']).toBe(SPECIALIST_MODEL)
     // …and the role denial list rode the descriptor too.
-    expect(descriptor?.['toolFilter']).toMatchObject({ deny: ['send_to_agent', 'ask_user_question', 'reference_extract', 'install_python_package'] })
+    expect(descriptor?.['toolFilter']).toMatchObject({ deny: ['send_to_agent', 'workflow_task', 'ask_user_question', 'reference_extract', 'install_python_package'] })
 
     // Child session lineage: a real child of THIS main under the preset.
     expect(child!.header.parentSession?.toString()).toBe(booted.mainSession.id.toString())
@@ -307,9 +358,23 @@ describe('integration: resident subagent through the real agent loop', () => {
     }
     // The routed tool surface: the structured report protocol, NOT delegation.
     const childTools = requestedToolNames(booted.specialistAdapter.requests[0]!)
+    const mainTools = requestedToolNames(booted.mainAdapter.requests[0]!)
+    expect(mainTools).toContain('send_to_agent')
+    expect(mainTools).toContain('workflow_task')
+    expect(mainTools).not.toContain('bash')
     expect(childTools).toContain('report_workflow')
     expect(childTools).toContain('manifest')
     expect(childTools).not.toContain('send_to_agent')
+    expect(childTools).not.toContain('workflow_task')
+    expect(childTools).not.toContain('bash')
+    const childPrompt = booted.specialistAdapter.requests[0]!.messages
+      .filter(message => message.role === 'system')
+      .flatMap(message => message.content)
+      .filter(block => block.type === 'text').map(block => block.text).join('\n')
+    expect(childPrompt).toContain('## Other roles')
+    expect(childPrompt).toContain('DATA_ANALYSIS: processes measurements')
+    expect(childPrompt).not.toContain('Use `send_to_agent` for all subagent delegation')
+    expect(childPrompt).not.toContain('The workflow task board')
 
     // The child's own turn ended completed — no UNKNOWN turn error.
     expect(lastTurnEndReason(child!)?.kind).toBe('completed')

@@ -17,5 +17,3 @@ beside this file:
 | Pages, headings, figures, layout | [styling.md](styling.md) |
 | Tables and measured data | [tables.md](tables.md) |
 | Citations, theorems, equations | [academic.md](academic.md) |
-
-Compile `Report/main.typ` with `compile_report`; read its full log when needed.

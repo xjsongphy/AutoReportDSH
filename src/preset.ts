@@ -9,7 +9,6 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
-import { registerMainSkills } from './skills-preset.js'
 import { installReferencesSkills } from './skills-references.js'
 import { installManifestTool } from './tools/manifest.js'
 import { createSendToAgentTool, installSendToAgentGuidance } from './tools/send-to-agent.js'
@@ -33,8 +32,12 @@ export const inject = ['tools', 'skills', 'subagents', 'autoreportWorkflow', 'sy
  * @param ctx - The `autoreport` preset scope.
  */
 export function apply(ctx: Context): void {
+  // The base DSH bundle mounts generic bash/pwsh guidance. AutoReport's
+  // process access is role-scoped and its usable contract lives on the
+  // compute-role tool description, so hide the inherited generic guidance.
+  ctx.systemPrompt.section({ name: 'tool:bash', order: ctx.systemPrompt.getSectionOrder('TOOL_BASH'), text: '' })
+  ctx.systemPrompt.section({ name: 'tool:pwsh', order: ctx.systemPrompt.getSectionOrder('TOOL_PWSH'), text: '' })
   installReferencesSkills(ctx)
-  registerMainSkills(ctx)
   installSendToAgentGuidance(ctx)
   installManifestTool(ctx, ctx, 'MAIN')
   installReferenceExtractTool(ctx)

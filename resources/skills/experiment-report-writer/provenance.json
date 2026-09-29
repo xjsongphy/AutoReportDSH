@@ -38,7 +38,6 @@
     "selected only the report-relevant writer modules",
     "flattened the selected modules into one bundled skill",
     "replaced internal module-path references with local section references",
-    "replaced the retired LaTeX compile skill pointer with compile_report",
     "restored and re-set Bad/Good example pairs in experiment-report scenarios: two pairs restored verbatim from the legacy AutoReportCLI experiment-report-writer skill (narrative-to-element LaTeX pair, define-before-formula F=kx pair); the remaining upstream pairs were re-set from algorithm/technical-documentation topics to measurement scenarios"
   ]
 }
