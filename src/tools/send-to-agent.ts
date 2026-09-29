@@ -9,7 +9,7 @@ import { SubagentError } from '@deepseek-ai/dsh-subagent'
 import { defineTool, type ToolDefinition } from '@deepseek-ai/dsh-tools'
 import type AutoReportWorkflowRuntime from '../runtime.js'
 import type { Config } from '../config.js'
-import { isSpecialistRole, rolePolicy, type SpecialistRole } from '../roles.js'
+import { DSH_ROLE_ESCAPE_TOOL_NAMES, isSpecialistRole, rolePolicy, type SpecialistRole } from '../roles.js'
 import { loadSpecialistPersona } from '../personas.js'
 import {
   AUTOREPORT_SCHEMA_VERSION,
@@ -21,6 +21,7 @@ import type { WorkflowSettingsSnapshot } from '../settings.js'
 import { roleHandoffText } from '../workflow/file-notes.js'
 import { delegationKey } from '../workflow/protocol.js'
 import type { WaiterOutcome } from '../workflow/waiters.js'
+import { residentToolFilter } from '../subagent-descriptor.js'
 import { SEND_TO_AGENT_SECTION, SEND_TO_AGENT_SYSTEM_PROMPT } from './prompt.js'
 import { genericCall } from './presentation.js'
 
@@ -93,15 +94,19 @@ function taskBriefing(
   handoff: string | undefined,
 ): string {
   const policy = rolePolicy(task.role)
+  const readableRoots = policy.readableRoots.map(root => `${root}/`).join(', ')
+  const writableRoots = policy.writableRoots.map(root => `${root}/`).join(', ')
   const checklist = task.steps.length === 0
     ? '(no checklist supplied)'
     : task.steps.map(step => `${step.done ? '[x]' : '[ ]'} ${step.description}`).join('\n')
   return [
     `AutoReport task ${task.taskId}, delegation revision ${revision}`,
     `Role: ${task.role}`,
+    `Readable roots: ${readableRoots}`,
+    `Writable roots: ${writableRoots}`,
+    'Paths outside the readable roots are outside this role\'s workspace scope.',
     `Task subject: ${task.subject}`,
-    `Writable roots: ${policy.writableRoots.join(', ')}`,
-    'All other workspace paths are read-only. Network access is allowed; writes remain confined to the writable roots above.',
+    `Output artifacts: ${roleToScope(task.role)}/`,
     `Checklist:\n${checklist}`,
     `Goal:\n${prompt}`,
     ...(context === undefined ? [] : [`Explicit user constraints:\n${context}`]),
@@ -417,7 +422,8 @@ export function createSendToAgentTool(deps: SendToAgentDependencies): ToolDefini
                 ...(agentOptions === undefined ? {} : { agentOptions }),
                 maxDepth: 1,
                 persona: persona(role),
-                toolFilter: { deny: ['send_to_agent', 'ask_user_question'] },
+                toolFilter: residentToolFilter(role, new Set(DSH_ROLE_ESCAPE_TOOL_NAMES.filter(name =>
+                  parent.ctx?.tools.get(name, parent) !== undefined))),
               },
               signal: exec.signal,
             })

@@ -32,6 +32,15 @@ describe('listWorkspaceDirectory', () => {
     expect(JSON.stringify(theory)).not.toContain('derivation body')
   })
 
+  it('keeps shallow workspace inventory while recursing only into discoverable roots', () => {
+    const root = workspace()
+    const theory = listWorkspaceDirectory(root, 'Theory', 4, ['References', 'Outline', 'Theory'])
+    expect(theory.directories).toEqual(['Derivations'])
+    expect(theory.files).toEqual(['Derivations/model.md', 'formulas.md'])
+    expect(() => listWorkspaceDirectory(root, 'Data', 1, ['References', 'Outline', 'Theory']))
+      .toThrow(/discoverable roots/u)
+  })
+
   it('refuses traversal outside the workspace and non-directory paths', () => {
     const root = workspace()
     expect(() => listWorkspaceDirectory(root, '..')).toThrow(/outside/)
@@ -46,7 +55,15 @@ describe('listWorkspaceDirectory', () => {
     roots.push(outside)
     symlinkSync(outside, join(root, 'Theory', 'external'))
     expect(listWorkspaceDirectory(root, 'Theory').links).toEqual(['external'])
-    expect(() => listWorkspaceDirectory(root, 'Theory/external')).toThrow(/outside/)
+    expect(() => listWorkspaceDirectory(root, 'Theory/external')).toThrow(/does not follow symbolic links/u)
+  })
+
+  it.skipIf(process.platform === 'win32')('does not follow an in-workspace symlink into a different discoverable root', () => {
+    const root = workspace()
+    mkdirSync(join(root, 'Data', 'Processed'), { recursive: true })
+    symlinkSync(join(root, 'Data', 'Processed'), join(root, 'Theory', 'processed-link'))
+    expect(() => listWorkspaceDirectory(root, 'Theory/processed-link', 1, ['Theory', 'Data/Processed']))
+      .toThrow(/does not follow symbolic links/u)
   })
 
   it('uses DSH fs metadata and containment for provider-neutral listings', async () => {
@@ -100,6 +117,11 @@ describe('listWorkspaceDirectory', () => {
     expect(listing.links).toEqual(['Data/external'])
     expect(listingSignals.length).toBeGreaterThan(0)
     expect(listingSignals.every(signal => signal === controller.signal)).toBe(true)
+    const theoryOnly = await listWorkspaceDirectoryFromFs(fs, root, 'References', 2, controller.signal, ['References'])
+    expect(theoryOnly.directories).toEqual([])
+    expect(theoryOnly.files).toEqual(['guide.md'])
+    await expect(listWorkspaceDirectoryFromFs(fs, root, 'Data', 1, controller.signal, ['References']))
+      .rejects.toThrow(/discoverable roots/u)
     await expect(listWorkspaceDirectoryFromFs(fs, root, '../outside', 1)).rejects.toThrow(/outside/)
     await expect(listWorkspaceDirectoryFromFs(fs, root, root, 1)).rejects.toThrow(/workspace-relative/)
     await expect(listWorkspaceDirectoryFromFs(fs, root, 'mem://virtual/secret', 1)).rejects.toThrow(/workspace-relative/)

@@ -108,23 +108,47 @@ function settlementNotice(childId: SessionId, summary: string): ReturnType<typeo
   })
 }
 
-/**
- * Whether the route a resident Plotting Agent will use is declared image-capable
- * and its scoped tool surface contains `read_image`. Unknown capability is a
- * conservative false: visual review must never become a requirement the route
- * cannot satisfy.
- */
-async function plotterCanReviewImages(ctx: Context, child: Agent, signal: AbortSignal): Promise<boolean> {
-  const tools = ctx.get('tools') as { get?: (name: string, scope?: Agent) => unknown } | undefined
-  if (tools?.get?.('read_image', child) === undefined) return false
+interface PlotterModelRoute {
+  readonly provider: string
+  readonly model: string
+}
 
-  // Match DSH's read_image route resolution: the latest persisted request
-  // config wins, then the Agent's creation route supplies the initial value.
+/** Resolve the route selected for this exact prompt/request assembly. */
+function plotterModelRoute(
+  ctx: Context,
+  child: Agent,
+  variables: Readonly<Record<string, string | undefined>>,
+): PlotterModelRoute | undefined {
+  // DSH's model-selection assembly hook snapshots the selected route into
+  // these variables before the request config is built. Prefer that snapshot
+  // so a picker change cannot race the route metadata lookup.
+  if (typeof variables['provider'] === 'string' && typeof variables['model'] === 'string') {
+    return { provider: variables['provider'], model: variables['model'] }
+  }
+
+  // The Session projection covers a pending selection when no assembly hook
+  // supplies the route. The request header and Agent options are fallbacks.
+  const projections = ctx.get('sessionProjections') as {
+    stateOf?: (session: Session, key: string) => unknown
+  } | undefined
+  const selectionState = projections?.stateOf?.(child.session, 'modelSelection') as {
+    pending?: { provider?: unknown; model?: unknown } | null
+  } | undefined
+  const pending = selectionState?.pending
+  if (typeof pending?.provider === 'string' && typeof pending.model === 'string') {
+    return { provider: pending.provider, model: pending.model }
+  }
+
+  // Match DSH's read_image route resolution when no new selection is pending.
   const requestRoute = child.session.requestHeader()?.config
   const provider = requestRoute?.provider ?? child.options.provider
   const model = requestRoute?.model ?? child.options.model
-  if (provider === undefined || model === undefined) return false
+  return provider === undefined || model === undefined ? undefined : { provider, model }
+}
 
+/** Add or remove the visual-review section for the route entering each step. */
+function installPlotterImageReviewPrompt(ctx: Context, child: Agent): void {
+  const tools = ctx.get('tools') as { get?: (name: string, scope?: Agent) => unknown } | undefined
   const llm = ctx.get('llm') as {
     resolveModelInfo?: (
       provider: string,
@@ -132,18 +156,45 @@ async function plotterCanReviewImages(ctx: Context, child: Agent, signal: AbortS
       signal?: AbortSignal,
     ) => Promise<{ inputModalities?: readonly string[] }>
   } | undefined
-  if (llm?.resolveModelInfo === undefined) return false
+  if (tools?.get?.('read_image', child) === undefined || llm?.resolveModelInfo === undefined) return
 
-  try {
-    const modelInfo = await llm.resolveModelInfo(provider, model, signal)
-    signal.throwIfAborted()
-    return modelInfo.inputModalities?.includes('image') === true
-  } catch {
-    // Capability discovery is prompt personalization, never a reason to fail
-    // provisioning. read_image owns the actionable rejection if later called.
-    signal.throwIfAborted()
-    return false
-  }
+  // Capabilities are stable for one exact provider/model pair. A model picker
+  // route change gets a fresh lookup; unknown metadata stays non-mandatory.
+  const imageCapability = new Map<string, boolean>()
+  const sectionName = 'autoreport:plot-image-review'
+  const sectionText = '## Visual review of final figures\n\nBefore reporting success, use read_image to inspect each final figure at its rendered size. Use your judgment to correct any visible problems.'
+
+  ctx.on('system-prompt/assemble', async (_assembly, assemblyContext, next) => {
+    const assembly = await next()
+    const signal = assemblyContext.signal
+    signal?.throwIfAborted()
+    const route = plotterModelRoute(ctx, child, assembly.variables)
+    let canReview = false
+    if (route !== undefined) {
+      const key = `${route.provider}\u0000${route.model}`
+      const cached = imageCapability.get(key)
+      if (cached !== undefined) {
+        canReview = cached
+      } else {
+        try {
+          const info = await llm.resolveModelInfo!(route.provider, route.model, signal)
+          signal?.throwIfAborted()
+          canReview = info.inputModalities?.includes('image') === true
+          imageCapability.set(key, canReview)
+        } catch {
+          signal?.throwIfAborted()
+          imageCapability.set(key, false)
+        }
+      }
+    }
+    return {
+      ...assembly,
+      sections: [
+        ...assembly.sections.filter(section => section.name !== sectionName),
+        ...(canReview ? [{ name: sectionName, text: sectionText }] : []),
+      ],
+    }
+  })
 }
 
 /** Construction options beyond configuration (host wiring / tests). */
@@ -521,6 +572,7 @@ export default class AutoReportWorkflowRuntime extends Service {
     const childDepth = resolveChildDepth(parent, 1)
     const agentOptions: Agent['options'] = resolveChildAgentOptions(parent, route, childDepth)
     const persona = loadSpecialistPersona(role)
+    let descriptorToolFilter: ReturnType<typeof residentToolFilter> | undefined
     const setup = async (childCtx: Context, child: Agent): Promise<void> => {
       if (child === undefined) throw new Error(`resident ${role} setup has no child agent`)
       // Master dsh moved persona/tool-filter composition into the continuation
@@ -538,17 +590,20 @@ export default class AutoReportWorkflowRuntime extends Service {
         order: childCtx.systemPrompt.getSectionOrder('DEPLOYMENT_PERSONA_PREFIX'),
         text: persona,
       })
-      if (joined !== undefined) childCtx.tools?.restrict(residentToolFilter(role))
-      if (role === 'PLOTTING' && await plotterCanReviewImages(childCtx, child, signal)) {
-        childCtx.systemPrompt.section({
-          name: 'autoreport:plot-image-review',
-          order: childCtx.systemPrompt.getSectionOrder('TOOL_REPORT'),
-          text: [
-            '## Visual review of final figures',
-            'Before reporting success, use read_image to inspect each final figure at its rendered size. Use your judgment to correct any visible problems.',
-          ].join('\n\n'),
-        })
+      if (joined !== undefined) {
+        const denied = residentToolFilter(role)
+        const getScopedTool = (childCtx.tools as unknown as {
+          get?: (name: string, scope?: Agent) => unknown
+        }).get
+        const visibleDeniedNames = new Set((denied.deny ?? []).filter(name =>
+          getScopedTool === undefined || getScopedTool.call(childCtx.tools, name, child) !== undefined))
+        const roleFilter = residentToolFilter(role, visibleDeniedNames)
+        if ((roleFilter.deny?.length ?? 0) > 0) {
+          childCtx.tools.restrict(roleFilter)
+          descriptorToolFilter = roleFilter
+        }
       }
+      if (role === 'PLOTTING') installPlotterImageReviewPrompt(childCtx, child)
       // The parent preset is joined synchronously above, but its scoped skill
       // service is exposed through Cordis injection. Wait for that capability
       // before publishing the child so REPORT skills and the role report tool
@@ -592,7 +647,12 @@ export default class AutoReportWorkflowRuntime extends Service {
       // carries one keeps it.
       ensureSubagentDescriptor(
         handle.agent.session,
-        residentDescriptor({ role, route: agentOptions, persona }),
+        residentDescriptor({
+          role,
+          route: agentOptions,
+          persona,
+          ...(descriptorToolFilter === undefined ? {} : { toolFilter: descriptorToolFilter }),
+        }),
       )
       return handle.agent
     } catch (error: unknown) {

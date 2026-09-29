@@ -6,13 +6,14 @@ unfinished items below are already enforced.
 
 ## Guiding boundary
 
-AutoReport restricts known model-facing file tools by role. That policy does
-not restrict what an arbitrary shell, Python process, compiler, or descendant
-process can read. Command-text checks may explain or reject common calls, but
-they are not a filesystem security boundary. Any workspace-only read guarantee
-for arbitrary processes requires a separately verified OS-level isolation
-backend; unsupported platforms must not silently fall back to unrestricted
-execution.
+AutoReport derives each role's visible model-tool roster and workspace roots
+from `rolePolicy()`. Known filesystem tools are guarded by role; DATA_ANALYSIS,
+PLOTTING, and REPORT run foreground Bash inside a second OS filesystem view on
+Linux/macOS. The view masks sibling workspaces and re-exposes only the role's
+readable and writable workspace roots. If bubblewrap or Seatbelt cannot start,
+the shell call fails closed. On Windows, those roles get foreground `pwsh`
+with role-root workdirs, command/path preflight, and DSH's partial ACL write
+sandbox. Windows process reads are not confined by readable roots.
 
 ## Decisions
 
@@ -41,39 +42,43 @@ Provider details to preserve:
 - Use the resolved child targets returned by `ctx.fs.listDir()` for containment and
   recursion. Treat target keys as opaque.
 
-### Known filesystem tools use role-readable roots
+### Discovery, reads, and writes use separate role roots
 
-`read`, `read_image`, `list`, and editor view operations are limited by
-`readableRoots`. Writes continue to use each role's `writableRoots`. Tests must
-cover role matrices, traversal, symlink escapes, missing paths, and unaffected
-stock DSH sessions.
+`list` is bounded names-only discovery governed by `discoverableRoots`;
+`read`, `read_image`, `grep`, and editor view are governed by `readableRoots`;
+writes use `writableRoots`. MAIN can inventory the workspace and review
+`Data/Processed/`, plots, and reports, while `Data/Raw/` remains names-only by
+default. Tests cover role matrices, traversal, symlink escapes, missing paths,
+and unaffected stock DSH sessions.
 
-MAIN's `Report/` read permission supports the post-compilation editorial audit
-described in its persona. The role guard grants this root without a workflow-
-phase check; MAIN's writable root remains `Outline/`.
+MAIN's broad read permission supports routing-level coverage and editorial
+review, not technical reanalysis. The role guard grants these roots without a
+workflow-phase check; MAIN's writable root remains `Outline/`.
 
-This is a capability restriction for these known tool calls. It does not imply
-that `bash`, Python, compilers, or other subprocesses can read only those roots.
-Keep that limitation visible in tool guidance and documentation.
+This policy covers known DSH tools. The separate process wrapper carries the
+same readable and writable roots into Python, compilers, and their descendants;
+the shell parser remains defense in depth and is not the isolation boundary.
 
 ### Plotting visual review follows declared route capability
 
-At resident Plotting setup, resolve the exact provider/model route using the
-latest Session request config, falling back to the Agent's options, and query
-`ctx.llm.resolveModelInfo()`. Add a prompt requirement to inspect each final
-figure with `read_image` only when the resolved model metadata explicitly
-declares `image` input and the scoped `read_image` tool is available. An absent
-modality declaration is unknown, not proof of image support; this metadata is
-the adapter's declared capability, not a live probe of the remote endpoint.
+At each resident Plotting prompt assembly, use the provider/model snapshot that
+the model-selection hook placed in the assembled prompt variables. If it is
+absent, fall back to pending Session model selection, the latest request header,
+then Agent options. Query `ctx.llm.resolveModelInfo()` for that exact route. Add
+a prompt requirement to inspect each final figure with `read_image` only when
+the model metadata explicitly declares `image` input and the scoped `read_image`
+tool is available. An absent modality declaration is unknown, not proof of
+image support; this metadata is the adapter's declared capability, not a live
+probe of the remote endpoint. Cache results by provider/model and look up again
+when the route changes.
 
 When image input is unsupported or unknown, do not add a visual-review
 requirement or a report to MAIN. The DSH `read_image` error itself identifies a
 model that does not declare image input; rely on that tool feedback instead of
 adding a persona fallback. Visual review supplements the numeric and script
-checks; it does not replace them. The condition is resolved when the resident
-Agent is created or resumed. If a future route picker can change a resident's
-model without rebuilding its Agent, refresh the prompt condition after the
-route change; the `read_image` tool continues to enforce the current route
+checks; it does not replace them. The prompt condition is refreshed at each
+assembly, so a route picker change affects the request whose prompt is being
+assembled. The `read_image` tool continues to enforce the current route
 independently.
 
 ### MAIN presents final deliverables
@@ -107,27 +112,30 @@ request is cooperative and may take time to reach quiescence.
 
 Do not mount DSH's generic `glob`/`grep` tools directly for role-scoped search:
 they execute packaged ripgrep through `ctx.subprocess`, outside `ctx.fs` path
-authorization. If search becomes necessary, implement AutoReport-owned search
-through DSH filesystem operations, with explicit path, byte, result, and time
-bounds. Use streaming reads for content search where available. Defer this work
-until there is a demonstrated need.
+authorization. AutoReport's `grep` uses `ctx.fs` streaming reads, checks each
+file against role `readableRoots`, skips symlinks and internal metadata, and
+caps depth, files, bytes, line previews, and matches. The generic DSH `glob` is
+denied to AutoReport sessions; use role-scoped `list` for names-only discovery.
 
 ## Work order
 
 | Priority | Work | Completion condition |
 |---|---|---|
-| P0 | Finish provider-backed `list` | DSH provider only in production; bounds, symlink behavior, abort propagation, and output paths work for supported providers. |
-| P0 | Enforce readable roots on known file tools | Role tests cover `read`, `read_image`, `list`, and editor view; no claim is made about subprocess reads. |
+| P0 | Finish provider-backed `list` | DSH provider only in production; role `discoverableRoots`, bounds, symlink behavior, abort propagation, and output paths work for supported providers. |
+| P0 | Enforce role read roots on known tools | Role tests cover `read`, `read_image`, `grep`, `list`, and editor view. |
 | P1 | Gate Plotting visual review on declared image input | Prompt requires `read_image` only for a route that declares image input and has the tool; unsupported/unknown routes continue without a MAIN limitation report. |
 | P1 | Add MAIN-only, workspace-contained `present` | A successful REPORT result can make the final PDF a Web deliverable; out-of-workspace and unapproved files are rejected. |
 | P1 | Wire `workflow_task(cancel)` to the exact resident activation | The turn stops, the task settles as cancelled, and the same child Session remains resumable. |
-| P2 | Add bounded provider-backed `glob`/`grep` if users need them | Search stays inside readable roots and obeys resource/output caps without unconfined subprocess access. |
-| Separate security track | Arbitrary-process read isolation | Supported OS backends enforce and verify the boundary; unsupported platforms fail closed when this guarantee is required. |
+| P1 | Verify role process integration | `tests/process-sandbox.live.test.ts` probes allowed/denied workspace reads and writes through the Unix wrapper. Add DSH host-chain coverage for Bash/Python and Windows coverage for the `pwsh` roster, preflight, and ACL writes. Windows arbitrary-process reads remain an explicit limitation until a read-capable sandbox is available. |
 
 ## Explicit non-claims
 
 - Shell command screening does not provide workspace-only read isolation.
 - DSH's write-oriented `workspaceRoot` sandbox does not by itself confine
-  subprocess reads.
+  subprocess reads. AutoReport adds a bwrap/Seatbelt workspace view for
+  role-aware Bash on Linux/macOS, but that wrapper is not yet covered by a
+  dedicated live test. This is workspace isolation, not complete host
+  filesystem isolation; other user-readable paths and explicitly exposed runtime
+  paths may remain accessible.
 - A `present` declaration is not a copied or versioned artifact.
 - A cancelled turn does not destroy or replace its resident specialist Session.

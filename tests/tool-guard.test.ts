@@ -80,14 +80,15 @@ describe('AutoReport role tool guard', () => {
     else expect(denial).toContain(deniedText)
   })
 
-  it('gives Main only Outline writes and allows bash', () => {
+  it('gives Main Outline-only writes and no general process execution', () => {
     const root = workspace()
     const main = agent('main', root)
     const guard = createRoleToolGuard({ registry: new RoleRegistry(), mainSessionId: main.id })
     expect(guard(execution('edit', { file_path: 'main.tex' }, main))).toBeUndefined()
     expect(guard(execution('edit', { file_path: join(root, 'Outline/main.tex') }, main))).toBeUndefined()
     expect(guard(execution('write', { file_path: join(root, 'Report/main.tex') }, main))).toContain('Outline')
-    expect(guard(execution('bash', { command: 'true' }, main))).toBeUndefined()
+    expect(guard(execution('bash', { command: 'uv --version' }, main))).toContain('no general process execution')
+    expect(guard(execution('bash', { command: 'python inspect.py' }, main))).toContain('no general process execution')
   })
 
   it('creates only the authorized mutation parent on demand', () => {
@@ -108,7 +109,7 @@ describe('AutoReport role tool guard', () => {
     const guard = createRoleToolGuard({ registry: new RoleRegistry() })
     expect(guard(execution('edit', { file_path: 'report.md' }, main))).toBeUndefined()
     expect(guard(execution('write', { file_path: join(root, 'Theory/notes.md') }, main))).toContain('Outline')
-    expect(guard(execution('bash', { command: 'true' }, main))).toBeUndefined()
+    expect(guard(execution('bash', { command: 'uv --version' }, main))).toContain('no general process execution')
   })
 
   it('identifies Main through isMainSession for multiple parent sessions', () => {
@@ -133,7 +134,7 @@ describe('AutoReport role tool guard', () => {
     expect(guard(execution('edit', { file_path: join(root, 'Plots/result.csv') }, analyst))).toContain('Data/Processed')
   })
 
-  it('passes MAIN escalation to the approval flow but denies it for specialists', () => {
+  it('denies generic process escalation for MAIN and specialists', () => {
     const root = workspace()
     const registry = new RoleRegistry()
     const main = agent('main', root)
@@ -141,13 +142,11 @@ describe('AutoReport role tool guard', () => {
     registry.registerReserved(binding('THEORY', theory.id))
     const guard = createRoleToolGuard({ registry, mainSessionId: main.id })
     const escalation = { sandbox_permissions: 'danger-full-access' }
-    // MAIN escalates through to DSH's user-approval flow; the guard steps aside.
-    expect(guard(execution('bash', { command: 'true', ...escalation }, main))).toBeUndefined()
-    // Specialists get the hard denial: they report missing_dependency instead.
+    // Package changes use a dedicated environment capability, not generic shell escalation.
+    expect(guard(execution('bash', { command: 'uv --version', ...escalation }, main)))
+      .toContain('dedicated MAIN environment capability')
     expect(guard(execution('bash', { command: 'true', ...escalation }, theory)))
-      .toContain('sandbox_permissions')
-    expect(guard(execution('bash', { command: 'true', ...escalation }, theory)))
-      .toContain('MAIN')
+      .toContain('generic sandbox escalation')
   })
 
   it('handles current str_replace_editor schema and strict future delete/patch schemas', () => {
@@ -197,23 +196,25 @@ describe('AutoReport role tool guard', () => {
   it('enforces role-specific model-facing reads while preserving tool membership', () => {
     const root = workspace()
     const registry = new RoleRegistry()
+    const main = agent('main-read-roots', root)
     const theory = agent('theory', root)
     const analyst = agent('analyst', root)
     registry.registerReserved(binding('THEORY', theory.id))
     registry.registerReserved(binding('DATA_ANALYSIS', analyst.id))
-    const guard = createRoleToolGuard({ registry })
+    const guard = createRoleToolGuard({ registry, mainSessionId: main.id })
 
     expect(guard(execution('read', { file_path: 'References/handout.md' }, theory))).toBeUndefined()
     expect(guard(execution('read', { file_path: 'Outline/report_outline.md' }, theory))).toBeUndefined()
     expect(guard(execution('read', { file_path: 'Theory/formulas.md' }, theory))).toBeUndefined()
     expect(guard(execution('read', { file_path: 'Data/raw.txt' }, theory))).toContain('allowed read directories')
     expect(guard(execution('read_image', { file_path: 'Data/scan.png' }, theory))).toContain('allowed read directories')
-    expect(guard(execution('bash', { command: 'cat Data/raw.txt' }, theory))).toContain('no shell execution')
+    expect(guard(execution('bash', { command: 'cat Data/raw.txt' }, theory))).toContain('no general process execution')
     expect(guard(execution('str_replace_editor', { command: 'view', path: 'Data/raw.txt' }, theory))).toContain('allowed read directories')
     expect(guard(execution('list', { path: '.', depth: 1 }, theory))).toBeUndefined()
     expect(guard(execution('list', { path: './', depth: 1 }, theory))).toBeUndefined()
+    expect(guard(execution('list', { path: 'Theory', depth: 1 }, theory))).toBeUndefined()
     expect(guard(execution('list', { path: join(root, 'Theory'), depth: 1 }, theory))).toContain('workspace-relative')
-    expect(guard(execution('list', { path: 'Data', depth: 2 }, theory))).toContain('allowed read directories')
+    expect(guard(execution('list', { path: 'Data', depth: 2 }, theory))).toContain('discoverable roots')
     expect(guard(execution('skill', { name: 'arbitrary' }, theory))).toBeUndefined()
     expect(guard(execution('manifest', { action: 'read' }, theory))).toBeUndefined()
     // Manifests are small coordination metadata (file handoff summaries), so
@@ -222,6 +223,12 @@ describe('AutoReport role tool guard', () => {
     expect(guard(execution('report_workflow', {}, theory))).toBeUndefined()
     expect(guard(execution('read', { file_path: 'Data/raw.txt' }, analyst))).toBeUndefined()
     expect(guard(execution('bash', { command: 'python analyze.py' }, analyst))).toBeUndefined()
+    expect(guard(execution('list', { path: '.', depth: 4 }, theory))).toBeUndefined()
+    expect(guard(execution('list', { path: 'Data/Raw', depth: 1 }, main))).toBeUndefined()
+    expect(guard(execution('grep', { pattern: 'result', path: '.' }, main))).toBeUndefined()
+    expect(guard(execution('grep', { pattern: 'voltage', path: 'Data/Raw' }, main))).toContain('readable roots')
+    expect(guard(execution('grep', { pattern: 'raw' }, theory))).toBeUndefined()
+    expect(guard(execution('glob', { pattern: '**/*.csv' }, main))).toContain('process-backed glob')
     expect(guard(execution('read', { file_path: 'Plots/fit.png' }, analyst))).toContain('allowed read directories')
     expect(guard(execution('read', { file_path: '../outside.txt' }, analyst))).toContain('outside the experiment workspace')
   })
@@ -237,6 +244,23 @@ describe('AutoReport role tool guard', () => {
     expect(guard(execution('write', { file_path: 'Outline/report_outline.md', content: 'scope' }, main))).toBeUndefined()
   })
 
+  it('denies DSH-created agents and workflow delegation for MAIN and specialists', () => {
+    const root = workspace()
+    const main = agent('main-no-stock-delegation', root)
+    const analyst = agent('analyst-no-stock-delegation', root)
+    const registry = new RoleRegistry()
+    registry.registerReserved(binding('DATA_ANALYSIS', analyst.id))
+    const guard = createRoleToolGuard({ registry, mainSessionId: main.id })
+    for (const roleAgent of [main, analyst]) {
+      for (const name of ['workflow', 'subagent', 'subagent_fork', 'send_message', 'interrupt_agent', 'list_agents', 'todo_write']) {
+        expect(guard(execution(name, {}, roleAgent))).toContain('fixed AutoReport role workflow')
+      }
+    }
+    expect(guard(execution('send_to_agent', {}, main))).toBeUndefined()
+    expect(guard(execution('send_to_agent', {}, analyst))).toContain('fixed AutoReport role workflow')
+    expect(guard(execution('future_search_tool', { path: 'Data' }, analyst))).toContain('no declared capability')
+  })
+
   it('gives bash preflight denials actionable command and directory context', () => {
     const root = workspace()
     const registry = new RoleRegistry()
@@ -246,7 +270,7 @@ describe('AutoReport role tool guard', () => {
 
     const dangerous = guard(execution('bash', { command: 'rm -rf Data' }, analyst))
     expect(dangerous).toContain('recursive rm is blocked')
-    expect(dangerous).toContain('advisory supported commands for this role:')
+    expect(dangerous).toContain('role-aware bash commands:')
     expect(dangerous).toContain('allowed read directories: References/, Outline/, Theory/, Data/')
     expect(dangerous).toContain('allowed write directories: Data/Processed/')
     expect(guard(execution('bash', { command: 'invented-command file' }, analyst))).toContain('unsupported command "invented-command"')
@@ -260,7 +284,7 @@ describe('AutoReport role tool guard', () => {
     expect(guard(execution('bash', { command: 'python analyze.py' }, analyst))).toBeUndefined()
   })
 
-  it('applies role command, path, cwd, and escalation preflight to PowerShell', () => {
+  it('fails closed for PowerShell until a role-aware Windows filesystem backend is available', () => {
     const root = workspace()
     const registry = new RoleRegistry()
     const main = agent('main-pwsh-policy', root)
@@ -272,25 +296,13 @@ describe('AutoReport role tool guard', () => {
     registry.registerReserved(binding('THEORY', theory.id))
     const guard = createRoleToolGuard({ registry, mainSessionId: main.id })
 
-    expect(guard(execution('pwsh', { command: 'Get-Content ../Data/raw.csv' }, main))).toContain('cannot read ../Data/raw.csv with cat')
-    expect(guard(execution('pwsh', { command: 'Set-Content -Path ../Theory/blocked.txt -Value x' }, reporter)))
-      .toContain('allowed write directories: Report/')
-    expect(guard(execution('pwsh', { command: 'Copy-Item -Path ../Data/raw.csv -Destination ../Theory/raw.csv' }, reporter)))
-      .toContain('cannot write ../Theory/raw.csv with cp')
-    expect(guard(execution('pwsh', { command: 'Remove-Item -Path temp.txt -Recurse' }, reporter)))
-      .toContain('recursive rm is blocked')
-    expect(guard(execution('pwsh', { command: 'python analysis.py' }, analyst))).toBeUndefined()
-    expect(guard(execution('pwsh', { command: 'Invoke-WebRequest https://example.com' }, analyst)))
-      .toContain('unsupported command "invoke-webrequest"')
-    expect(guard(execution('pwsh', { command: 'Get-Location', workdir: '../Data' }, main)))
-      .toContain('cannot use PowerShell workdir ../Data')
-    expect(guard(execution('pwsh', { command: 'Get-Location', sandbox_permissions: 'danger-full-access' }, analyst)))
-      .toContain('sandbox_permissions')
-    expect(guard(execution('pwsh', { command: 'Get-Content Theory/formulas.md' }, theory)))
-      .toContain('no shell execution')
+    for (const owner of [main, analyst, reporter, theory]) {
+      expect(guard(execution('pwsh', { command: 'Get-Location' }, owner)))
+        .toContain('PowerShell process execution is disabled')
+    }
   })
 
-  it('advertises shell commands by role without offering other specialists’ tools', () => {
+  it('disables MAIN process execution and applies specialist process command policies', () => {
     const root = workspace()
     const registry = new RoleRegistry()
     const main = agent('main-command-policy', root)
@@ -300,10 +312,12 @@ describe('AutoReport role tool guard', () => {
     registry.registerReserved(binding('REPORT', reporter.id))
     const guard = createRoleToolGuard({ registry, mainSessionId: main.id })
 
-    expect(guard(execution('bash', { command: 'pdftotext input.pdf -' }, main))).toBeUndefined()
-    expect(guard(execution('bash', { command: 'latexmk -xelatex main.tex' }, main))).toContain('unsupported command "latexmk"')
-    expect(guard(execution('bash', { command: 'python fit.py' }, main))).toContain('unsupported command "python"')
+    expect(guard(execution('bash', { command: 'pdftotext input.pdf -' }, main))).toContain('no general process execution')
+    expect(guard(execution('bash', { command: 'latexmk -xelatex main.tex' }, main))).toContain('no general process execution')
+    expect(guard(execution('bash', { command: 'python fit.py' }, main))).toContain('no general process execution')
     expect(guard(execution('bash', { command: 'gnuplot plot.gp' }, plotter))).toBeUndefined()
+    expect(guard(execution('bash', { command: 'uv pip install numpy' }, plotter)))
+      .toContain('dedicated MAIN environment capability')
     expect(guard(execution('bash', { command: 'python plot.py' }, plotter))).toBeUndefined()
     expect(guard(execution('bash', { command: 'pdflatex main.tex' }, plotter))).toContain('unsupported command "pdflatex"')
     expect(guard(execution('bash', { command: 'latexmk -xelatex main.tex' }, reporter))).toBeUndefined()
@@ -311,14 +325,14 @@ describe('AutoReport role tool guard', () => {
     expect(guard(execution('bash', { command: 'gnuplot plot.gp' }, reporter))).toContain('unsupported command "gnuplot"')
     expect(guard(execution('bash', { command: `cd ${root}/Report; rm -f preview.pdf` }, reporter))).toBeUndefined()
     expect(guard(execution('bash', { command: 'rm -f preview.pdf', workdir: `${root}/Report` }, reporter))).toBeUndefined()
-    expect(guard(execution('bash', { command: 'rm -f raw.csv', workdir: `${root}/Data` }, reporter)))
+    expect(guard(execution('bash', { command: 'rm -f raw.csv', workdir: `${root}/Data/Processed` }, reporter)))
       .toContain('only inside this role\'s writable directories')
     expect(guard(execution('bash', { command: 'cd /tmp; rm -f preview.pdf', workdir: `${root}/Report` }, reporter)))
       .toContain('cannot cd to /tmp')
     expect(guard(execution('bash', { command: 'python -c "open(\"Data/raw.csv\").read()"' }, reporter))).toBeUndefined()
   })
 
-  it('preflights obvious bash read paths while leaving the interpreter limitation explicit', () => {
+  it('preflights shell paths for process roles and keeps MAIN process-free', () => {
     const root = workspace()
     const main = agent('main-bash-paths', root)
     const analyst = agent('analyst-bash-paths', root)
@@ -328,39 +342,29 @@ describe('AutoReport role tool guard', () => {
     registry.registerReserved(binding('REPORT', reporter.id))
     const guard = createRoleToolGuard({ registry, mainSessionId: main.id })
 
-    const catDenied = guard(execution('bash', { command: 'cat ../Data/raw.csv' }, main))
-    expect(catDenied).toContain('cannot read ../Data/raw.csv with cat')
-    expect(catDenied).toContain('allowed read directories: References/, Outline/, Report/')
-    expect(guard(execution('bash', { command: 'cat ../References/procedure.md' }, main))).toBeUndefined()
-    expect(guard(execution('bash', { command: 'cd ../Data && pwd' }, main))).toContain('cannot cd to ../Data')
-    expect(guard(execution('bash', { command: 'pwd', workdir: '../Data' }, main))).toContain('cannot use bash workdir ../Data')
-    expect(guard(execution('bash', { command: 'cp ../Data/raw.csv raw.csv' }, main))).toContain('cannot read ../Data/raw.csv with cp')
-    expect(guard(execution('bash', { command: 'ls ../Data' }, main))).toContain('cannot read ../Data with ls')
-    expect(guard(execution('bash', { command: 'rg raw ../Data' }, main))).toContain('cannot read ../Data with rg')
-    expect(guard(execution('bash', { command: 'find ../Data -type f' }, main))).toContain('cannot read ../Data with find')
-    expect(guard(execution('bash', { command: 'du ../Data' }, main))).toContain('cannot read ../Data with du')
+    expect(guard(execution('bash', { command: 'pdfinfo ../Data/Raw/raw.pdf' }, main)))
+      .toContain('no general process execution')
     expect(guard(execution('bash', { command: 'ls ..' }, analyst))).toBeUndefined()
     expect(guard(execution('bash', { command: 'rg raw ..' }, analyst))).toBeUndefined()
     expect(guard(execution('bash', { command: 'cp ../raw.csv raw.csv' }, analyst))).toBeUndefined()
-    expect(guard(execution('bash', { command: 'cp ../Data/raw.csv raw.csv' }, reporter))).toBeUndefined()
-    expect(guard(execution('bash', { command: 'cp ../Data/raw.csv ../Theory/raw.csv' }, reporter)))
+    expect(guard(execution('bash', { command: 'cp ../Data/Processed/result.csv raw.csv' }, reporter))).toBeUndefined()
+    expect(guard(execution('bash', { command: 'cp ../Data/Processed/result.csv ../Theory/raw.csv' }, reporter)))
       .toContain('cannot write ../Theory/raw.csv with cp')
-    expect(guard(execution('bash', { command: 'cp -t . ../Data/raw.csv' }, reporter))).toBeUndefined()
+    expect(guard(execution('bash', { command: 'cp -t . ../Data/Processed/result.csv' }, reporter))).toBeUndefined()
     expect(guard(execution('bash', { command: 'mkdir -p tmp' }, reporter))).toBeUndefined()
     expect(guard(execution('bash', { command: 'mkdir -p ../Data/tmp' }, reporter))).toContain('allowed write directories: Report/')
     expect(guard(execution('bash', { command: 'printf x > output.txt' }, reporter))).toBeUndefined()
     expect(guard(execution('bash', { command: 'printf x > ../Theory/output.txt' }, reporter))).toContain('allowed write directories: Report/')
     expect(guard(execution('bash', { command: 'mv old.tex new.tex' }, reporter))).toBeUndefined()
-    expect(guard(execution('bash', { command: 'mv ../Data/raw.csv raw.csv' }, reporter)))
-      .toContain('cannot move source ../Data/raw.csv')
+    expect(guard(execution('bash', { command: 'mv ../Data/Processed/result.csv raw.csv' }, reporter)))
+      .toContain('cannot move source ../Data/Processed/result.csv')
     expect(guard(execution('bash', { command: 'cat analysis.md' }, analyst))).toBeUndefined()
     expect(guard(execution('bash', { command: 'cat analysis.md', workdir: 'nested' }, analyst))).toBeUndefined()
     expect(guard(execution('bash', { command: 'printf x > output.csv' }, analyst))).toBeUndefined()
     expect(guard(execution('bash', { command: 'typst compile main.typ main.pdf' }, reporter))).toBeUndefined()
     expect(guard(execution('bash', { command: 'typst compile main.typ main.pdf', workdir: 'compile' }, reporter))).toBeUndefined()
-    // The preflight catches common path operands; Python can still read files
-    // from an allowed command, so this is not process-level read confinement.
-    expect(guard(execution('bash', { command: 'python -c "open(\"../Data/raw.csv\").read()"' }, main))).toContain('unsupported command "python"')
+    // The process-role wrapper confines reads on supported Unix backends.
+    expect(guard(execution('bash', { command: 'python -c "open(\"../Data/raw.csv\").read()"' }, reporter))).toBeUndefined()
   })
 
   it('denies model read paths whose symlink resolves outside their allowed roots', () => {
@@ -374,6 +378,23 @@ describe('AutoReport role tool guard', () => {
     registry.registerReserved(binding('THEORY', theory.id))
     expect(createRoleToolGuard({ registry })(execution('read', { file_path: 'References/escape/secret.txt' }, theory)))
       .toContain('outside the experiment workspace')
+  })
+
+  it('does not let a policy root symlink point at a sibling workspace subtree', () => {
+    const root = workspace()
+    const processed = join(root, 'Data/Processed')
+    rmSync(processed, { recursive: true, force: true })
+    mkdirSync(join(root, 'Data/Raw'), { recursive: true })
+    symlinkSync(join(root, 'Data/Raw'), processed)
+    const registry = new RoleRegistry()
+    const plotter = agent('plotter-symlink-root', root)
+    registry.registerReserved(binding('PLOTTING', plotter.id))
+    const guard = createRoleToolGuard({ registry })
+
+    expect(guard(execution('read', { file_path: 'Data/Processed/readings.csv' }, plotter)))
+      .toContain('not readable')
+    expect(guard(execution('list', { path: 'Data/Processed', depth: 1 }, plotter)))
+      .toContain('discoverable roots')
   })
 
   it('allows only the current role’s registered skill bundle resource root', () => {
@@ -407,7 +428,7 @@ describe('AutoReport role tool guard', () => {
     const theory = agent('theory', root)
     registry.registerReserved(binding('THEORY', theory.id))
     const guard = createRoleToolGuard({ registry })
-    expect(guard(execution('bash', { command: 'true' }, theory))).toContain('no shell execution')
+    expect(guard(execution('bash', { command: 'true' }, theory))).toContain('no general process execution')
     expect(guard(execution('write', { file_path: '../../escape' }, theory))).toContain('outside')
     const outside = mkdtempSync(join(tmpdir(), 'autoreport-outside-'))
     roots.push(outside)

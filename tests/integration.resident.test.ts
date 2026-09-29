@@ -177,6 +177,11 @@ async function boot(options: {
   } as never)
   ctx.provide('commands', { register: () => () => {} } as never)
   ctx.provide('shellEnv', { register: () => () => {} } as never)
+  ctx.provide('fs', {} as never)
+  ctx.provide('subprocess', {
+    resolveExecutable: async (command: string) => command,
+    spawn: () => { throw new Error('subprocess spawning is unused in resident roster tests') },
+  } as never)
   ctx.provide('skills', {
     register: () => () => {},
     registerProvider: () => () => {},
@@ -212,6 +217,24 @@ async function boot(options: {
     output: { schema: { type: 'object', additionalProperties: true, properties: {} }, render: () => [{ type: 'text', text: 'stub' }] },
     async execute() { return {} },
   }))
+  for (const name of ['read', 'read_image', 'write', 'edit', 'str_replace_editor', 'skill', 'grep']) {
+    ctx.tools.register(defineTool({
+      name,
+      description: `test stub for base DSH tool ${name}`,
+      parameters: {},
+      output: { schema: { type: 'object', additionalProperties: true, properties: {} }, render: () => [{ type: 'text', text: 'stub' }] },
+      async execute() { return {} },
+    }))
+  }
+  for (const name of ['workflow', 'subagent', 'subagent_fork', 'send_message', 'interrupt_agent', 'list_agents', 'todo_write', 'glob']) {
+    ctx.tools.register(defineTool({
+      name,
+      description: `test stub for denied DSH capability ${name}`,
+      parameters: {},
+      output: { schema: { type: 'object', additionalProperties: true, properties: {} }, render: () => [{ type: 'text', text: 'stub' }] },
+      async execute() { return {} },
+    }))
+  }
 
   const mainAdapter = new ScriptedAdapter([
     ...options.mainCalls.map(call => toolCallResponse(`main-${call.name}`, call.name, call.args)),
@@ -286,7 +309,14 @@ describe('integration: resident subagent through the real agent loop', () => {
 
     // The MAIN turn itself completed without a turn-level error.
     expect(lastTurnEndReason(booted.mainSession)?.kind).toBe('completed')
-    expect(requestedToolNames(booted.mainAdapter.requests[0]!)).toContain('list')
+    const mainTools = requestedToolNames(booted.mainAdapter.requests[0]!)
+    expect(mainTools).toEqual(expect.arrayContaining([
+      'read', 'read_image', 'list', 'grep', 'skill', 'manifest', 'workflow_task',
+      'send_to_agent', 'python_environment', 'reference_extract',
+    ]))
+    for (const name of ['bash', 'pwsh', 'glob', 'workflow', 'subagent', 'subagent_fork', 'send_message', 'interrupt_agent', 'list_agents', 'todo_write']) {
+      expect(mainTools).not.toContain(name)
+    }
 
     // The send_to_agent tool resolved with the child's report (wait=true path).
     const workflow = booted.runtime.forSession(booted.mainSession)
@@ -306,7 +336,10 @@ describe('integration: resident subagent through the real agent loop', () => {
     expect(descriptor?.['agentModel']).toBe(SPECIALIST_MODEL)
     // …and the role denial list rode the descriptor too.
     expect(descriptor?.['toolFilter']).toMatchObject({
-      deny: ['send_to_agent', 'ask_user_question', 'bash', 'pwsh'],
+      deny: [
+        'send_to_agent', 'ask_user_question', 'workflow', 'subagent', 'subagent_fork',
+        'send_message', 'interrupt_agent', 'list_agents', 'todo_write', 'glob', 'pwsh', 'bash',
+      ],
     })
 
     // Child session lineage: a real child of THIS main under the preset.
@@ -326,9 +359,14 @@ describe('integration: resident subagent through the real agent loop', () => {
     expect(childTools).toContain('report_workflow')
     expect(childTools).toContain('manifest')
     expect(childTools).toContain('list')
+    expect(childTools).toContain('grep')
+    expect(childTools).toContain('skill')
     expect(childTools).not.toContain('bash')
     expect(childTools).not.toContain('pwsh')
     expect(childTools).not.toContain('send_to_agent')
+    for (const name of ['workflow', 'subagent', 'subagent_fork', 'send_message', 'interrupt_agent', 'list_agents', 'todo_write', 'glob']) {
+      expect(childTools).not.toContain(name)
+    }
 
     // The child's own turn ended completed — no UNKNOWN turn error.
     expect(lastTurnEndReason(child!)?.kind).toBe('completed')

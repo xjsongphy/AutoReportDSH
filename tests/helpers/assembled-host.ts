@@ -7,7 +7,7 @@
 
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { dirname, join, resolve } from 'node:path'
+import { dirname, join, relative, resolve, sep } from 'node:path'
 import { expect } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
@@ -85,6 +85,7 @@ export interface ChildRecorder {
   readonly registeredTools: Map<string, { execute?: (args: unknown, execution: unknown) => Promise<unknown> }>
   readonly toolDescriptions: Map<string, string>
   readonly toolLookupScopes: Map<string, Agent[]>
+  readonly toolRestrictions: Array<{ readonly allow?: readonly string[]; readonly deny?: readonly string[] }>
   readonly skillNames: string[]
   readonly sections: RecordedSection[]
   readonly contexts: RecordedSection[]
@@ -104,6 +105,7 @@ export function makeChildRecorder(
   const registeredTools = new Map<string, { execute?: (args: unknown, execution: unknown) => Promise<unknown> }>()
   const toolDescriptions = new Map<string, string>()
   const toolLookupScopes = new Map<string, Agent[]>()
+  const toolRestrictions: Array<{ readonly allow?: readonly string[]; readonly deny?: readonly string[] }> = []
   const skillNames: string[] = []
   const sections: RecordedSection[] = []
   const contexts: RecordedSection[] = []
@@ -158,7 +160,10 @@ export function makeChildRecorder(
         registeredTools.set(tool.name, tool)
         return () => {}
       },
-      restrict: () => () => {},
+      restrict: (filter: { readonly allow?: readonly string[]; readonly deny?: readonly string[] }) => {
+        toolRestrictions.push(filter)
+        return () => {}
+      },
     },
     systemPrompt: {
       section: (section: { name: string; text: string }) => {
@@ -184,7 +189,7 @@ export function makeChildRecorder(
   return {
     agent, ctx: ctx as ChildRecorder['ctx'], toolNames, bashDescriptions, bashLookupScopes,
     pwshDescriptions, pwshLookupScopes, shellCalls, registeredTools,
-    toolDescriptions, toolLookupScopes, skillNames, sections, contexts,
+    toolDescriptions, toolLookupScopes, toolRestrictions, skillNames, sections, contexts,
   }
 }
 
@@ -335,12 +340,28 @@ export async function assemble(options: AssembleOptions = {}): Promise<Assembled
       pythonResolver = contributor.resolve
       return () => {}
     },
+    collect: (execution: { agent?: { session: Session } }) => pythonResolver(execution),
   } as never)
   ctx.provide('subprocess', {
     resolveExecutable: async (command: string) => command,
     spawn: () => {
       throw new Error('process spawning is unused in assembled host tests')
     },
+  } as never)
+  // Production DSH mounts its provider-backed filesystem service. This minimal
+  // local provider supports path containment and editor file/directory checks;
+  // directory inventory and content search have their own focused fixtures.
+  ctx.provide('fs', {
+    resolve: async (path: string, opts?: { cwd?: string }) => ({
+      displayPath: resolve(opts?.cwd ?? workspaceRoot, path),
+    }),
+    contains: (parent: { displayPath: string }, child: { displayPath: string }) => {
+      const rel = relative(parent.displayPath, child.displayPath)
+      return rel === '' || (rel !== '..' && !rel.startsWith(`..${sep}`))
+    },
+    stat: async (target: { displayPath: string }) => ({
+      type: target.displayPath === resolve(workspaceRoot, 'Report') ? 'directory' : 'file',
+    }),
   } as never)
   if (options.roleSandbox === true) {
     ctx.provide('sandboxPolicy', {

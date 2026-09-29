@@ -9,10 +9,13 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { SessionId } from '@deepseek-ai/dsh-session'
-import { isAbsolute, resolve } from 'node:path'
+import type { ToolDefinition, ToolExecution } from '@deepseek-ai/dsh-tools'
+import { isAbsolute, resolve, relative, sep } from 'node:path'
 import type { Config } from './config.js'
 import { isAutoReportMainSession } from './membership.js'
-import { rolePolicy, type AutoReportRole } from './roles.js'
+import { DSH_ROLE_ESCAPE_TOOL_NAMES, rolePolicy, type AutoReportRole } from './roles.js'
+import { installFilesystemScopeContext } from './filesystem-scope.js'
+import { roleProcessCommand } from './policy/process-sandbox.js'
 import { installSandboxOverride } from './policy/sandbox-override.js'
 import { roleWritableRoot } from './policy/sandbox-roots.js'
 import { createRoleToolGuard } from './policy/tool-guard.js'
@@ -25,6 +28,7 @@ import { createReportResetCommand, parseReportResetInput } from './workspace/res
 import { describeDshVersionSupport, readRunningDshVersion } from './dsh-version.js'
 import { installTurnGuards } from './workflow/turn-guard.js'
 import { createListDirectoryTool, type DirectoryFileSystem } from './tools/list-directory.js'
+import { createGrepTool, type SearchFileSystem } from './tools/grep.js'
 import { MAIN_SKILL_NAMES, skillNamesForRole } from './skills-preset.js'
 import { loadBundledSkills } from './workspace/skill-loader.js'
 
@@ -37,10 +41,79 @@ export const inject = ['tools', 'commands', 'shellEnv']
 const DEFAULT_WAIT_MS = 600_000
 const DEFAULT_IDLE_TIMEOUT_MS = 60_000
 const FILE_PATH_TOOLS = ['read', 'read_image', 'write', 'edit'] as const
-const SHELL_TOOLS = ['bash', 'pwsh'] as const
 
 function hasUriScheme(path: string): boolean {
   return /^[A-Za-z][A-Za-z0-9+.-]*:\/\//u.test(path) && !/^[A-Za-z]:[\\/]/u.test(path)
+}
+
+function pathIsInside(parent: string, child: string): boolean {
+  const rel = relative(parent, child)
+  return rel === '' || (rel !== '..' && !rel.startsWith(`..${sep}`) && !isAbsolute(rel))
+}
+
+function wrapRoleAwareBash(
+  shell: ToolDefinition,
+  role: AutoReportRole,
+  workspaceRoot: string,
+  roleRoot: string,
+  collectDshEnv: (execution: ToolExecution) => Readonly<Record<string, string>>,
+): ToolDefinition {
+  const baseParameters = (shell as unknown as { parameters?: Readonly<Record<string, unknown>> }).parameters ?? {}
+  const parameters: Record<string, unknown> = { ...baseParameters }
+  delete parameters['run_in_background']
+  delete parameters['sandbox_permissions']
+  delete parameters['justification']
+  const execute = shell.execute.bind(shell)
+  return {
+    ...shell,
+    parameters: parameters as ToolDefinition['parameters'],
+    description: `AutoReport ${role} foreground Bash execution uses the role-aware filesystem sandbox. DSH manages timeout, cancellation, and output. Background execution and generic sandbox escalation are unavailable.`,
+    async execute(args, execution) {
+      if (typeof args !== 'object' || args === null || Array.isArray(args)) {
+        throw new Error('role-aware bash requires an argument object')
+      }
+      const fields = args as Record<string, unknown>
+      if (typeof fields['command'] !== 'string' || fields['command'].length === 0) {
+        throw new Error('role-aware bash requires a non-empty command')
+      }
+      if (fields['run_in_background'] === true || fields['sandbox_permissions'] !== undefined) {
+        throw new Error('role-aware bash does not support background execution or generic sandbox escalation')
+      }
+      const requestedWorkdir = fields['workdir']
+      if (requestedWorkdir !== undefined && typeof requestedWorkdir !== 'string') {
+        throw new Error('role-aware bash workdir must be a string')
+      }
+      const cwd = requestedWorkdir === undefined
+        ? roleRoot
+        : isAbsolute(requestedWorkdir)
+          ? resolve(requestedWorkdir)
+          : resolve(roleRoot, requestedWorkdir)
+      if (!rolePolicy(role).readableRoots.some(root => pathIsInside(
+        resolve(workspaceRoot, root === '.' ? '' : root), cwd,
+      )) && !rolePolicy(role).writableRoots.some(root => pathIsInside(resolve(workspaceRoot, root), cwd))) {
+        throw new Error(`role-aware bash workdir is outside ${role}'s readable roots`)
+      }
+      const sandboxedCommand = roleProcessCommand(role, workspaceRoot, cwd, fields['command'], collectDshEnv(execution))
+      return execute({ ...fields, command: sandboxedCommand, workdir: roleRoot }, execution)
+    },
+  }
+}
+
+function restrictRoleToolSurface(agent: Agent, role: AutoReportRole, processToolAvailable: boolean): void {
+  const policy = rolePolicy(role)
+  // list/grep are role-local everywhere. Specialist manifest/report tools are
+  // also local; MAIN's manifest is inherited from the preset and can be named.
+  const scopedTools = role === 'MAIN'
+    ? new Set(['list', 'grep'])
+    : new Set(['list', 'grep', 'manifest', 'report_workflow'])
+  const allowed = policy.tools.filter(name => {
+    if (scopedTools.has(name)) return false
+    if (name === 'bash' && !processToolAvailable) return false
+    return agent.ctx.tools.get(name, agent) !== undefined
+  })
+  const deny = DSH_ROLE_ESCAPE_TOOL_NAMES.filter(name =>
+    !policy.tools.includes(name) && agent.ctx.tools.get(name, agent) !== undefined)
+  agent.ctx.tools.restrict({ allow: allowed, ...(deny.length === 0 ? {} : { deny }) })
 }
 
 function initializeWorkflowIfOwnWorkspace(
@@ -119,9 +192,9 @@ export async function apply(ctx: Context, config: Partial<Config> = {}, options:
   const bundledSkillRoots = new Map(
     loadBundledSkills().flatMap(skill => skill.directory === undefined ? [] : [[skill.name, skill.directory] as const]),
   )
-  // DSH tools are inherited through agent scopes. Register same-name variants
-  // in each AutoReport agent's own scope so the model sees role-specific shell
-  // and path guidance while execution still uses the stock implementations.
+  // DSH tools are inherited through agent scopes. Register role-local list and
+  // grep tools, plus same-name shell/path variants, so content search stays on
+  // ctx.fs and process/workdir guidance follows each AutoReport role.
   ctx.on('agent/created', async ({ agent }) => {
     const session = agent.session
     const role: AutoReportRole | undefined = runtime.roleFor(String(agent.id))
@@ -143,46 +216,36 @@ export async function apply(ctx: Context, config: Partial<Config> = {}, options:
     const relativeMutationRoot = sandboxPolicy !== undefined && mutationRoot !== undefined
       ? roleWritableRoot(mutationRoot, role)
       : sessionRoot ?? workspaceRoot
-    if (workspaceRoot !== undefined && (role === 'MAIN' || role === 'THEORY')) {
+    if (workspaceRoot !== undefined) {
       const fileSystem = ctx.get('fs') as DirectoryFileSystem | undefined
-      agent.ctx.tools.register(createListDirectoryTool(workspaceRoot, agent, fileSystem))
+      const searchFileSystem = ctx.get('fs') as SearchFileSystem | undefined
+      agent.ctx.tools.register(createListDirectoryTool(
+        workspaceRoot,
+        agent,
+        fileSystem,
+        rolePolicy(role).discoverableRoots,
+      ))
+      agent.ctx.tools.register(createGrepTool(
+        workspaceRoot,
+        agent,
+        rolePolicy(role).readableRoots,
+        searchFileSystem,
+      ))
     }
-    if (role !== 'THEORY') {
-      for (const shellName of SHELL_TOOLS) {
-        const shell = agent.ctx.tools.get(shellName, agent)
-        if (shell === undefined) continue
-        const shellLabel = shellName === 'bash' ? 'Bash' : 'PowerShell'
-        const writable = rolePolicy(role).writableRoots.map(root => `${root}/`).join(', ')
-        const readable = rolePolicy(role).readableRoots.map(root => `${root}/`).join(', ')
-        const shellCwd = relativeMutationRoot
-        const canonicalOutputNote = `Paths such as Report/main.typ in personas, manifests, and report_workflow are workspace-canonical. ${shellLabel} paths and relative workdir use its current directory; do not repeat a role-directory prefix when ${shellLabel} is already in that directory.`
-        const guidance = role === 'MAIN'
-          ? ` AutoReport MAIN: use list for workspace inventory. File reads are allowed under ${readable}; ${shellLabel} starts in ${shellCwd ?? 'the session workspace'}${sandboxPolicy === undefined ? '' : ' (Outline/)'} and relative workdir/command paths use that directory as their base. Writes are allowed only under Outline/. ${canonicalOutputNote} `
-            + `Do not use ${shellLabel} for theory, analysis, plotting, report writing, or compilation. Process reads are not path-restricted by the current DSH sandbox, so use file tools for role-scoped reads.`
-          : ` AutoReport ${role}: use ${shellLabel} only for commands needed by your assigned specialist task. ${shellLabel} starts in ${shellCwd ?? 'the session workspace'}${sandboxPolicy === undefined ? '' : ` (${rolePolicy(role).writableRoots[0]}/)`}; relative workdir and command paths resolve from there. File reads are allowed under ${readable}; writes are confined to ${writable}. ${canonicalOutputNote} Process reads are not path-restricted by the current DSH sandbox, so use file tools for role-scoped reads.`
-        const execute = shell.execute
-        agent.ctx.tools.register({
-          ...shell,
-          description: `${shell.description}${guidance}`,
-          async execute(args, execution) {
-            // Bash already resolves its default and relative workdir from the
-            // overridden DSH sandbox root. Pwsh resolves both from session.cwd,
-            // so pin its explicit workdir to keep the same role-root semantics.
-            if (shellName !== 'pwsh' || shellCwd === undefined
-              || typeof args !== 'object' || args === null || Array.isArray(args)) {
-              return execute(args, execution)
-            }
-            const fields = args as Record<string, unknown>
-            const workdir = fields['workdir']
-            if (workdir !== undefined && typeof workdir !== 'string') return execute(args, execution)
-            const absoluteWorkdir = typeof workdir !== 'string'
-              ? shellCwd
-              : isAbsolute(workdir)
-                ? workdir
-                : resolve(shellCwd, workdir)
-            return execute({ ...fields, workdir: absoluteWorkdir }, execution)
-          },
-        })
+    let processToolAvailable = false
+    if (rolePolicy(role).process === 'role-aware' && process.platform !== 'win32' && workspaceRoot !== undefined) {
+      const shell = agent.ctx.tools.get('bash', agent)
+      const roleRoot = roleWritableRoot(workspaceRoot, role)
+      const shellEnv = ctx.get('shellEnv') as { collect(execution: ToolExecution): Readonly<Record<string, string>> } | undefined
+      if (shell !== undefined && shellEnv !== undefined) {
+        agent.ctx.tools.register(wrapRoleAwareBash(
+          shell,
+          role,
+          workspaceRoot,
+          roleRoot,
+          execution => shellEnv.collect(execution),
+        ))
+        processToolAvailable = true
       }
     }
     // The stock filesystem schemas leave the path base implicit. Make the
@@ -197,8 +260,8 @@ export async function apply(ctx: Context, config: Partial<Config> = {}, options:
         ? 'The absolute path base for relative paths is unavailable in this session; use an absolute path when the base is uncertain.'
         : `Relative paths resolve from ${relativeRoot}.`
       const filePathGuidance = isMutation
-        ? `AutoReport file paths: workspace-canonical output identifiers (for manifests and handoffs) include the role directory, e.g. \`Report/main.typ\`. This tool's relative paths resolve from ${relativeRoot ?? 'the DSH session workspace'}; if that is the role root, write \`main.typ\` without repeating \`Report/\`. ${relativePathGuidance} Absolute workspace paths are accepted when they remain inside this role's writable directory.`
-        : `AutoReport file paths: reads use workspace-root-relative paths such as \`Theory/formulas.md\`, allowed under ${rolePolicy(role).readableRoots.join(', ')}. ${relativePathGuidance} The \`list\` path, manifest paths, and report_workflow produced_files are also workspace-relative. Skill resources use the absolute resourceBase shown when the skill is loaded.`
+        ? `AutoReport path semantics: this tool's relative paths resolve from ${relativeRoot ?? 'the DSH session workspace'}; write/edit paths are relative to the role root when sandboxed. Workspace-canonical output identifiers in manifests and handoffs include their role directory, e.g. \`Report/main.typ\`. ${relativePathGuidance} Absolute paths remain workspace-canonical.`
+        : `AutoReport path semantics: read paths are workspace-root-relative. ${relativePathGuidance} The \`list\` and \`grep\` paths, manifest paths, and report_workflow produced_files are also workspace-relative. Skill resources use the absolute resourceBase shown when the skill is loaded.`
       if ((name === 'read' || name === 'read_image') && workspaceRoot !== undefined) {
         const execute = tool.execute
         agent.ctx.tools.register({
@@ -222,11 +285,29 @@ export async function apply(ctx: Context, config: Partial<Config> = {}, options:
     }
     const strReplaceEditor = agent.ctx.tools.get('str_replace_editor', agent)
     if (strReplaceEditor !== undefined && workspaceRoot !== undefined) {
+      const fileSystem = ctx.get('fs') as DirectoryFileSystem | undefined
+      const execute = strReplaceEditor.execute.bind(strReplaceEditor)
       agent.ctx.tools.register({
         ...strReplaceEditor,
         description: `${strReplaceEditor.description} AutoReport path context: the absolute workspace root for this agent is ${workspaceRoot}. This tool requires absolute paths; use that directory as the base for workspace files.`,
+        async execute(args, execution) {
+          const fields = typeof args === 'object' && args !== null && !Array.isArray(args)
+            ? args as Record<string, unknown>
+            : undefined
+          if (fields?.['command'] === 'view') {
+            if (fileSystem === undefined || typeof fields['path'] !== 'string') {
+              throw new Error('AutoReport cannot verify editor view targets in this session; use read for files and list for directories')
+            }
+            const target = await fileSystem.resolve(fields['path'], { signal: execution.signal })
+            if ((await fileSystem.stat(target, execution.signal))?.type === 'directory') {
+              throw new Error('str_replace_editor cannot view directories in AutoReport; use the bounded list tool')
+            }
+          }
+          return execute(args, execution)
+        },
       })
     }
+    restrictRoleToolSurface(agent, role, processToolAvailable)
     // Rehydrate resident activations only after Main's scoped tools are ready,
     // so resumed specialists inherit the same composed workspace as before.
     if (role === 'MAIN') await runtime.restoreResidentRoles(agent)
@@ -299,6 +380,15 @@ export async function apply(ctx: Context, config: Partial<Config> = {}, options:
           runtime.projectionFor(String(session.id))?.meta?.settings?.pythonExecutable,
       }),
       'autoreport.pythonContext()',
+    )
+    promptCtx.effect(
+      () => installFilesystemScopeContext(promptCtx, {
+        roleOf: session => runtime.roleFor(String(session.id))
+          ?? (isAutoReportMainSession(session) ? 'MAIN' : undefined),
+        workspaceRootOf: session => resolved.workspaceRoot
+          ?? (typeof session.header?.cwd === 'string' ? resolve(session.header.cwd) : undefined),
+      }),
+      'autoreport.filesystemScopeContext()',
     )
   })
   const commands = ctx.get('commands')

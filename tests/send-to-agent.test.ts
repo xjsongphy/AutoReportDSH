@@ -13,6 +13,7 @@ import {
 } from '../src/workflow/events.js'
 import { resolveWorkflowSettings, type WorkflowSettingsSnapshot } from '../src/settings.js'
 import { createSendToAgentTool, type SendToAgentWorkflow } from '../src/tools/send-to-agent.js'
+import { DSH_ROLE_ESCAPE_TOOL_NAMES } from '../src/roles.js'
 import { workflowState } from './helpers/workflow-log.js'
 import { sessionIn, workspaceForTests, workflowState } from './helpers/workflow-log.js'
 
@@ -83,7 +84,11 @@ function harness() {
     persona: () => 'persona-text',
   })
   const exec = {
-    agent: { id: session.id, session },
+    agent: {
+      id: session.id,
+      session,
+      ctx: { tools: { get: (name: string) => DSH_ROLE_ESCAPE_TOOL_NAMES.includes(name as typeof DSH_ROLE_ESCAPE_TOOL_NAMES[number]) ? {} : undefined } },
+    },
     signal: new AbortController().signal,
   }
   const call = (args: Record<string, unknown>) =>
@@ -313,7 +318,10 @@ describe('send_to_agent', () => {
     // DSH applies this inherited-tool restriction in the child's creation
     // window; the role guard remains the execution authority.
     expect(startSpec.request?.toolFilter).toEqual({
-      deny: ['send_to_agent', 'ask_user_question'],
+      deny: [
+        'send_to_agent', 'ask_user_question', 'workflow', 'subagent', 'subagent_fork',
+        'send_message', 'interrupt_agent', 'list_agents', 'todo_write', 'glob', 'pwsh', 'bash',
+      ],
     })
     expect(roleRegistry.lookup('child-theory')?.binding.provisioning).toBe('active')
     expect(state.currentDelegation('task-1')?.phase).toBe('waiting_for_child')
