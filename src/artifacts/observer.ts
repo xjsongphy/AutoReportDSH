@@ -148,15 +148,14 @@ function diskBaseline(absolute: string): Pick<ArtifactSnapshot, 'sizeBytes' | 'm
   }
 }
 
-/** Absolute writable root for one caller role (first policy entry). */
+/** Absolute writable root for one caller role. */
 function writableRoot(caller: ArtifactCaller): string {
-  const relativeRoot = rolePolicy(caller.role).writableRoots[0] ?? '.'
-  return resolve(caller.workspaceRoot, relativeRoot)
+  return resolve(caller.workspaceRoot, rolePolicy(caller.role).writableRoot)
 }
 
 /** Workspace-relative path for one entry returned by {@link snapshotDir}. */
 function processArtifactPath(caller: ArtifactCaller, relativeToWritableRoot: string): string {
-  const relRoot = rolePolicy(caller.role).writableRoots[0] ?? '.'
+  const relRoot = rolePolicy(caller.role).writableRoot
   if (relRoot === '.') return relativeToWritableRoot.split('\\').join('/')
   return `${relRoot}/${relativeToWritableRoot}`.split('\\').join('/')
 }

@@ -18,9 +18,7 @@ import { rolePolicy, type AutoReportRole } from '../roles.js'
  * @returns canonical-enough absolute path of the role's first writable root.
  */
 export function roleWritableRoot(workspaceRoot: string, role: AutoReportRole): string {
-  const relative = rolePolicy(role).writableRoots[0]
-  if (relative === undefined) throw new Error(`AutoReport ${role} has no writable root`)
-  return resolve(workspaceRoot, relative)
+  return resolve(workspaceRoot, rolePolicy(role).writableRoot)
 }
 
 /**
