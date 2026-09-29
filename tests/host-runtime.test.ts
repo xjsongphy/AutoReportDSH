@@ -420,7 +420,7 @@ describe('host workflow runtime', () => {
     // The persona section shadows the deployment persona and the deny-list
     // lands on the coordinator tools — but only after the join succeeded.
     expect(section).toHaveBeenCalledWith(expect.objectContaining({ name: 'deployment:persona-prefix' }))
-    expect(restrict).toHaveBeenCalledWith({ deny: ['send_to_agent', 'ask_user_question'] })
+    expect(restrict).toHaveBeenCalledWith({ deny: ['send_to_agent', 'ask_user_question', 'reference_extract', 'install_python_package'] })
 
     // Unjoined parent: nothing preset-plane is restrictable, so the deny-list
     // is skipped rather than rejected.
@@ -485,7 +485,7 @@ describe('host workflow runtime', () => {
       label: 'AutoReport THEORY',
       agentProvider: 'deepseek-official',
       agentModel: 'deepseek-flash',
-      toolFilter: { deny: ['send_to_agent', 'ask_user_question'] },
+      toolFilter: { deny: ['send_to_agent', 'ask_user_question', 'reference_extract', 'install_python_package'] },
     })
   })
 
@@ -623,8 +623,8 @@ describe('host workflow runtime', () => {
     const write = { file_path: join(root, 'Report', 'main.tex'), content: 'x' }
     expect(decision('write', write)).toMatch(/experiment-report-writer/)
     // A shell command that only mentions a compiler is not a compilation.
-    expect(decision('bash', { command: 'rg latexmk Report/build.log' })).toBeUndefined()
-    expect(decision('bash', { command: 'latexmk -xelatex main.tex' })).toMatch(/latex-compile/)
+    expect(decision('bash', { command: 'rg latexmk Report/build.log' })).toContain('no general shell')
+    expect(decision('compile_report', { path: 'Report/main.tex' })).toBeUndefined()
 
     // The model loads one writing skill through dsh's own `skill` tool. The
     // gate reads the durable stream, so the load must be observed there.

@@ -46,6 +46,7 @@ const IGNORED_FILE_SUFFIXES = [
   '.blg',
   '.bcf',
   '.dvi',
+  '.xdv',
   '.ps',
   '.idx',
   '.ilg',

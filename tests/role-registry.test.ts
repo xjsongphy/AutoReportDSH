@@ -20,7 +20,7 @@ describe('RoleRegistry (PLAN 2.3 first-call authorization)', () => {
     const registry = new RoleRegistry()
     registry.registerReserved(binding())
     expect(registry.lookup('child-1')?.binding.role).toBe('THEORY')
-    expect(registry.lookup('child-1')?.policy.writableRoots).toEqual(['Theory'])
+    expect(registry.lookup('child-1')?.policy.writableRoot).toBe('Theory')
   })
 
   it('fails closed on unknown children', () => {

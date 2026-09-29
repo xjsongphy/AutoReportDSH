@@ -66,7 +66,6 @@ const REQUIRED_REFERENCES: Readonly<Record<string, readonly string[]>> = {
 const FORBIDDEN_PERSONA_PATTERNS: readonly { pattern: RegExp; reason: string }[] = [
   { pattern: /DSH_AUTOREPORT_PYTHON/u, reason: 'python-env PATH overlay makes the env-var recipe obsolete' },
   { pattern: /report_exec/u, reason: 'retired tool; do not tell the model what not to call' },
-  { pattern: /compile_report/u, reason: 'retired tool; do not tell the model what not to call' },
   { pattern: /delegation_revision/u, reason: 'delegation mechanics belong to the report_workflow tool description' },
   { pattern: /block_type(?=="|:|\s)/u, reason: 'delegation mechanics belong to the report_workflow tool description; the missing_dependency policy names the blocker itself' },
   { pattern: /mineru-open-api/u, reason: 'MinerU CLI lives in the pdf-reference-reader skill, not personas' },
@@ -89,7 +88,7 @@ describe('persona slimming', () => {
     expect(text).toContain('send_to_agent')
     expect(text).not.toContain('report_task')
     expect(text).toContain('pdf-reference-reader')
-    expect(text).toContain('bash')
+    expect(text).toContain('reference_extract')
     expect(text).toContain('No tables by default')
     expect(text).not.toContain('subagent_fork')
     expect(text).not.toContain('`respond`')

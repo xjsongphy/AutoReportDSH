@@ -3,20 +3,11 @@ import { allSpecialistRoles, isAutoReportRole, isSpecialistRole, rolePolicy } fr
 
 describe('fixed role table (PLAN 2.2)', () => {
   it('matches the plan policy matrix', () => {
-    expect(rolePolicy('MAIN')).toEqual({
-      cwd: '.', readableRoots: ['.'], writableRoots: ['Outline'], network: 'allow', temp: 'private',
-    })
-    expect(rolePolicy('THEORY').writableRoots).toEqual(['Theory'])
-    expect(rolePolicy('DATA_ANALYSIS').writableRoots).toEqual(['Data/Processed'])
-    expect(rolePolicy('DATA_ANALYSIS').cwd).toBe('.')
-    expect(rolePolicy('PLOTTING').writableRoots).toEqual(['Plots'])
-    expect(rolePolicy('REPORT').writableRoots).toEqual(['Report'])
-    for (const role of ['MAIN', 'THEORY', 'DATA_ANALYSIS', 'PLOTTING', 'REPORT'] as const) {
-      expect(rolePolicy(role).network).toBe('allow')
-      expect(rolePolicy(role).temp).toBe('private')
-      expect(rolePolicy(role).readableRoots).toEqual(['.'])
-      expect(rolePolicy(role).cwd).toBe('.')
-    }
+    expect(rolePolicy('MAIN')).toEqual({ writableRoot: 'Outline', execution: 'none' })
+    expect(rolePolicy('THEORY')).toEqual({ writableRoot: 'Theory', execution: 'none' })
+    expect(rolePolicy('DATA_ANALYSIS')).toEqual({ writableRoot: 'Data/Processed', execution: 'shell' })
+    expect(rolePolicy('PLOTTING')).toEqual({ writableRoot: 'Plots', execution: 'shell' })
+    expect(rolePolicy('REPORT')).toEqual({ writableRoot: 'Report', execution: 'compile' })
   })
 
   it('narrows specialists and excludes MAIN', () => {

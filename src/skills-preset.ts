@@ -30,13 +30,12 @@ export const MAIN_SKILL_NAMES: readonly string[] = ['pdf-reference-reader']
 export const REPORT_WRITER_SKILL = 'experiment-report-writer'
 
 /**
- * Bundled skills a REPORT child must hold before it may act, split by the
- * action each governs.
+ * Bundled skills a REPORT child must hold before writing.
  *
  * Registering a skill only publishes a catalog line; its body arrives when the
  * model loads it. Two actions therefore gate on a body that must already be
- * present: authoring report content (`writing`) and running the compiler
- * (`compile`). `references` are consulted on demand and gate nothing.
+ * present: authoring report content (`writing`). `references` are consulted
+ * on demand and gate nothing. Compilation is a Report-only tool.
  *
  * The active language's own layout rules are NOT here. They ship as fixed
  * prompt prose (`resources/report-languages/<language>.md`, appended by the
@@ -46,24 +45,21 @@ export const REPORT_WRITER_SKILL = 'experiment-report-writer'
 export interface ReportSkillRequirements {
   /** Required before a mutation in the report workspace. */
   readonly writing: readonly string[]
-  /** Required before the active language's compiler runs under bash/pwsh. */
-  readonly compile: string
   /** Registered for the role but never a precondition for acting. */
   readonly references: readonly string[]
 }
 
 interface ReportSkillVariants {
-  readonly compile: string
   readonly references: readonly string[]
 }
 
 const REPORT_SKILL_VARIANTS: Readonly<Record<ReportSkillLanguage, ReportSkillVariants>> = {
-  latex: { compile: 'latex-compile', references: [] },
-  typst: { compile: 'typst-compile', references: ['typst'] },
+  latex: { references: [] },
+  typst: { references: ['typst'] },
 }
 
 /**
- * The skills a REPORT child must load before writing or compiling.
+ * The skills a REPORT child must load before writing.
  * @param language - frozen workflow report language.
  * @returns the gated and reference-only skill names.
  */
@@ -71,7 +67,6 @@ export function reportSkillRequirements(language: ReportSkillLanguage): ReportSk
   const variant = REPORT_SKILL_VARIANTS[language]
   return {
     writing: [REPORT_WRITER_SKILL],
-    compile: variant.compile,
     references: variant.references,
   }
 }
@@ -85,7 +80,7 @@ export function skillNamesForRole(role: SpecialistRole, language: ReportSkillLan
       return []
     case 'REPORT': {
       const required = reportSkillRequirements(language)
-      return [...required.writing, ...required.references, required.compile]
+      return [...required.writing, ...required.references]
     }
   }
 }

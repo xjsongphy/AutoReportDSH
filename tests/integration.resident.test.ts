@@ -177,6 +177,7 @@ async function boot(options: {
   } as never)
   ctx.provide('commands', { register: () => () => {} } as never)
   ctx.provide('shellEnv', { register: () => () => {} } as never)
+  ctx.provide('shell', { sandboxMode: undefined } as never)
   ctx.provide('skills', {
     register: () => () => {},
     registerProvider: () => () => {},
@@ -290,7 +291,7 @@ describe('integration: resident subagent through the real agent loop', () => {
     expect(descriptor?.['agentProvider']).toBe(SPECIALIST_PROVIDER)
     expect(descriptor?.['agentModel']).toBe(SPECIALIST_MODEL)
     // …and the role denial list rode the descriptor too.
-    expect(descriptor?.['toolFilter']).toMatchObject({ deny: ['send_to_agent', 'ask_user_question'] })
+    expect(descriptor?.['toolFilter']).toMatchObject({ deny: ['send_to_agent', 'ask_user_question', 'reference_extract', 'install_python_package'] })
 
     // Child session lineage: a real child of THIS main under the preset.
     expect(child!.header.parentSession?.toString()).toBe(booted.mainSession.id.toString())

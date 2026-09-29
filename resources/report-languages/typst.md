@@ -1,8 +1,8 @@
 # Active report language: Typst
 
 Write the report entry point as `Report/main.typ`. Import the local `mplts.typ`
-theme. Load `typst` for authoring and `typst-compile` before compiling or
-diagnosing a PDF. Do not load `latex-compile`.
+theme. Load `typst` for authoring and compile with
+`compile_report({path: "Report/main.typ"})`; read the returned full log if needed.
 
 ## Typst layout rules
 

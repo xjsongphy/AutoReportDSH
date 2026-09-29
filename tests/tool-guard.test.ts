@@ -75,13 +75,31 @@ describe('AutoReport role tool guard', () => {
     else expect(denial).toContain(deniedText)
   })
 
-  it('gives Main only Outline writes and allows bash', () => {
+  it('gives Main only Outline writes and no shell', () => {
     const root = workspace()
     const main = agent('main', root)
     const guard = createRoleToolGuard({ registry: new RoleRegistry(), mainSessionId: main.id })
     expect(guard(execution('edit', { file_path: 'Outline/report.md' }, main))).toBeUndefined()
     expect(guard(execution('write', { file_path: 'Report/main.tex' }, main))).toContain('Outline')
-    expect(guard(execution('bash', { command: 'true' }, main))).toBeUndefined()
+    expect(guard(execution('bash', { command: 'true' }, main))).toContain('no general shell')
+    expect(guard(execution('reference_extract', { path: 'References/a.pdf' }, main))).toBeUndefined()
+    expect(guard(execution('install_python_package', { package: 'pandas' }, main))).toBeUndefined()
+    expect(guard(execution('compile_report', { path: 'Report/main.tex' }, main))).toContain('REPORT')
+  })
+
+  it('keeps compile_report on REPORT and shell on compute roles', () => {
+    const root = workspace()
+    const registry = new RoleRegistry()
+    const report = agent('report', root)
+    const data = agent('data', root)
+    registry.registerReserved(binding('REPORT', report.id))
+    registry.registerReserved(binding('DATA_ANALYSIS', data.id))
+    const guard = createRoleToolGuard({ registry })
+    expect(guard(execution('compile_report', { path: 'Report/main.tex' }, report))).toBeUndefined()
+    expect(guard(execution('bash', { command: 'true' }, report))).toContain('no general shell')
+    expect(guard(execution('bash', { command: 'true' }, data))).toBeUndefined()
+    expect(guard(execution('reference_extract', { path: 'References/a.pdf' }, data))).toContain('MAIN')
+    expect(guard(execution('install_python_package', { package: 'pandas' }, data))).toContain('MAIN')
   })
 
   it('creates only the authorized mutation parent on demand', () => {
@@ -102,7 +120,7 @@ describe('AutoReport role tool guard', () => {
     const guard = createRoleToolGuard({ registry: new RoleRegistry() })
     expect(guard(execution('edit', { file_path: 'Outline/report.md' }, main))).toBeUndefined()
     expect(guard(execution('write', { file_path: 'Theory/notes.md' }, main))).toContain('Outline')
-    expect(guard(execution('bash', { command: 'true' }, main))).toBeUndefined()
+    expect(guard(execution('bash', { command: 'true' }, main))).toContain('no general shell')
   })
 
   it('identifies Main through isMainSession for multiple parent sessions', () => {
@@ -116,21 +134,22 @@ describe('AutoReport role tool guard', () => {
     expect(guard(execution('write', { file_path: 'Theory/notes.md' }, main))).toContain('Outline')
   })
 
-  it('passes MAIN escalation to the approval flow but denies it for specialists', () => {
+  it('denies shell escalation for roles without shell and for compute specialists', () => {
     const root = workspace()
     const registry = new RoleRegistry()
     const main = agent('main', root)
     const theory = agent('theory', root)
+    const data = agent('data', root)
     registry.registerReserved(binding('THEORY', theory.id))
+    registry.registerReserved(binding('DATA_ANALYSIS', data.id))
     const guard = createRoleToolGuard({ registry, mainSessionId: main.id })
     const escalation = { sandbox_permissions: 'danger-full-access' }
-    // MAIN escalates through to DSH's user-approval flow; the guard steps aside.
-    expect(guard(execution('bash', { command: 'true', ...escalation }, main))).toBeUndefined()
-    // Specialists get the hard denial: they report missing_dependency instead.
-    expect(guard(execution('bash', { command: 'true', ...escalation }, theory)))
+    expect(guard(execution('bash', { command: 'true', ...escalation }, main))).toContain('no general shell')
+    expect(guard(execution('bash', { command: 'true', ...escalation }, theory))).toContain('no general shell')
+    expect(guard(execution('bash', { command: 'true', ...escalation }, data)))
       .toContain('sandbox_permissions')
-    expect(guard(execution('bash', { command: 'true', ...escalation }, theory)))
-      .toContain('MAIN')
+    expect(guard(execution('bash', { command: 'true', ...escalation }, data)))
+      .toContain('workflow')
   })
 
   it('handles current str_replace_editor schema and strict future delete/patch schemas', () => {
@@ -175,13 +194,13 @@ describe('AutoReport role tool guard', () => {
     )).toBeUndefined()
   })
 
-  it('denies bound specialists write escapes and allows bash', () => {
+  it('denies bound specialists write escapes and Theory shell', () => {
     const root = workspace()
     const registry = new RoleRegistry()
     const theory = agent('theory', root)
     registry.registerReserved(binding('THEORY', theory.id))
     const guard = createRoleToolGuard({ registry })
-    expect(guard(execution('bash', { command: 'true' }, theory))).toBeUndefined()
+    expect(guard(execution('bash', { command: 'true' }, theory))).toContain('no general shell')
     expect(guard(execution('write', { file_path: '../escape' }, theory))).toContain('outside')
     const outside = mkdtempSync(join(tmpdir(), 'autoreport-outside-'))
     roots.push(outside)

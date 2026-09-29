@@ -23,6 +23,7 @@ import { delegationKey } from '../workflow/protocol.js'
 import type { WaiterOutcome } from '../workflow/waiters.js'
 import { SEND_TO_AGENT_SECTION, SEND_TO_AGENT_SYSTEM_PROMPT } from './prompt.js'
 import { genericCall } from './presentation.js'
+import { RESIDENT_TOOL_FILTER } from '../subagent-descriptor.js'
 
 const MAX_PROMPT = 16_384
 const MAX_CONTEXT = 8_192
@@ -100,7 +101,7 @@ function taskBriefing(
     `AutoReport task ${task.taskId}, delegation revision ${revision}`,
     `Role: ${task.role}`,
     `Task subject: ${task.subject}`,
-    `Writable roots: ${policy.writableRoots.join(', ')}`,
+    `Writable root: ${policy.writableRoot}`,
     'All other workspace paths are read-only. Network access is allowed; writes remain confined to the writable roots above.',
     `Checklist:\n${checklist}`,
     `Goal:\n${prompt}`,
@@ -416,7 +417,7 @@ export function createSendToAgentTool(deps: SendToAgentDependencies): ToolDefini
                 ...(agentOptions === undefined ? {} : { agentOptions }),
                 maxDepth: 1,
                 persona: persona(role),
-                toolFilter: { deny: ['send_to_agent', 'ask_user_question'] },
+                toolFilter: RESIDENT_TOOL_FILTER,
               },
               signal: exec.signal,
             })

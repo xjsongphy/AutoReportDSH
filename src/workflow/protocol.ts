@@ -7,6 +7,7 @@
  */
 
 import type { WorkflowReportEnvelope } from './events.js'
+import { normalizeWorkspaceRelativePath as normalizeProducedPath } from '../workspace/path.js'
 
 /** Upper bound for report response text (chars, UTF-16 code units). */
 export const MAX_RESPONSE_LENGTH = 16_384
@@ -47,19 +48,7 @@ export function delegationKey(taskId: string, revision: number): string {
  * @param raw - model-supplied path candidate.
  * @returns the normalized path, or null when the path is not admissible.
  */
-export function normalizeProducedPath(raw: unknown): string | null {
-  if (typeof raw !== 'string') return null
-  const slashed = raw.replaceAll('\\', '/')
-  if (slashed.startsWith('/') || /^[A-Za-z]:/.test(slashed)) return null
-  const segments: string[] = []
-  for (const segment of slashed.split('/')) {
-    if (segment === '' || segment === '.') continue
-    if (segment === '..') return null
-    segments.push(segment)
-  }
-  if (segments.length === 0) return null
-  return segments.join('/')
-}
+export { normalizeProducedPath }
 
 /**
  * Parse a workflow envelope that may be preceded by a human-readable relay

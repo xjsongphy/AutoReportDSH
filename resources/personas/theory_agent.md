@@ -21,8 +21,7 @@ Workflow is conditional on the requested outcome, not automatic for every messag
 
 ## Execution
 
-- Run analysis, plotting scripts, and one-off checks via bash.
-- Network is available for package installs and remote resources when needed.
+- Use read/list and write/edit for theory work. Ask MAIN about missing dependencies.
 - Writes stay confined to your role directory (`Theory/`).
 
 ## Core

@@ -1,8 +1,7 @@
 # Typst Language Fundamentals
 
-For data types, operators, and built-in functions, use the language reference
-shipped with your Typst installation (`typst --help`, or the online reference);
-the essentials appear inline below.
+For data types, operators, and built-in functions, use these bundled reference
+notes or the official Typst reference; the essentials appear inline below.
 
 ## Modes
 
@@ -32,13 +31,13 @@ The answer is #(1 + 2).
 | Root-relative | `"/src/lib.typ"`     | Project root                   |
 | Package       | `"@preview/pkg:1.0"` | Typst Universe / local package |
 
-`--root` sets the project root: where `/`-prefixed paths resolve from, and the security boundary (files outside it cannot be read). For multi-file projects, run from the repo root: `typst compile src/main.typ --root .`
+`compile_report` sets the Typst project root to the experiment workspace. Root-relative imports resolve from that workspace; ordinary relative paths resolve from the current source file.
 
 | Error                           | Cause                     | Fix                                                          |
 | ------------------------------- | ------------------------- | ------------------------------------------------------------ |
 | "file not found"                | Wrong relative path       | Check path relative to **current file**, not project root    |
-| "file not found" with `/` path  | Root not set correctly    | Use `--root .` or adjust path                                |
-| "would escape the project root" | File outside project root | Move file inside root or raise `--root` to a common ancestor |
+| "file not found" with `/` path  | Root not set correctly    | Adjust the path under the experiment workspace                                |
+| "would escape the project root" | File outside project root | Use a file inside the experiment workspace |
 
 `include` inserts a file's content inline; `import` brings symbols into scope. Bindings from an *included* file do **not** leak into the parent scope — share functions/variables via `import`:
 

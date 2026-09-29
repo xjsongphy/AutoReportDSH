@@ -313,7 +313,7 @@ describe('send_to_agent', () => {
     // DSH applies this inherited-tool restriction in the child's creation
     // window; the role guard remains the execution authority.
     expect(startSpec.request?.toolFilter).toEqual({
-      deny: ['send_to_agent', 'ask_user_question'],
+      deny: ['send_to_agent', 'ask_user_question', 'reference_extract', 'install_python_package'],
     })
     expect(roleRegistry.lookup('child-theory')?.binding.provisioning).toBe('active')
     expect(state.currentDelegation('task-1')?.phase).toBe('waiting_for_child')

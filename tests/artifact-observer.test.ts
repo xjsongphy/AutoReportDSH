@@ -229,6 +229,25 @@ describe('foldArtifact', () => {
     })])
   })
 
+  it('observes a compiled PDF but ignores temporary LaTeX output', () => {
+    const root = mkdtempSync(join(tmpdir(), 'autoreport-compile-artifact-'))
+    const report = join(root, 'Report')
+    mkdirSync(report)
+    const state = emptyArtifactFoldState()
+    const committed: ArtifactSnapshot[] = []
+    const deps = {
+      sessionId: 'report-1',
+      currentDelegationKey: undefined,
+      commit: (_s: string, snapshot: ArtifactSnapshot) => committed.push(snapshot),
+    }
+    const call = callEvent('compile_report', { path: 'Report/main.tex' })
+    foldArtifact(call, { role: 'REPORT', workspaceRoot: root }, state, deps)
+    writeFileSync(join(report, 'main.pdf'), '%PDF')
+    writeFileSync(join(report, 'main.xdv'), 'temporary')
+    foldArtifact(resultEvent(call.seq, false), { role: 'REPORT', workspaceRoot: root }, state, deps)
+    expect(committed.map(item => item.path)).toEqual(['Report/main.pdf'])
+  })
+
   it('observes bash modifications to existing files via snapshot diff', () => {
     const root = mkdtempSync(join(tmpdir(), 'autoreport-bash-mod-'))
     const outline = join(root, 'Outline')

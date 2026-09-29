@@ -1,17 +1,20 @@
 import type { Context } from '@deepseek-ai/cordis'
+import { apply as installBashTool } from '@deepseek-ai/dsh-tool-bash'
 import { installModelSelection, type Agent, type ModelSelection } from '@deepseek-ai/dsh-agent'
 import { ReasoningEffortId } from '@deepseek-ai/dsh-llm'
 import type AutoReportWorkflowRuntime from '../runtime.js'
 import { applyRoleSandbox } from '../policy/sandbox-roots.js'
 import { installWorkflowReportTool } from './report-workflow.js'
 import { installManifestTool } from './manifest.js'
-import { registerRoleSkills, reportSkillRequirements, type ReportSkillLanguage } from '../skills-preset.js'
+import { registerRoleSkills, type ReportSkillLanguage } from '../skills-preset.js'
+import { installCompileReportTool } from './compile-report.js'
 import { installReferencesSkills } from '../skills-references.js'
 import { loadReportLanguageGuidance } from '../workspace/skill-loader.js'
 import { CHILD_REPORT_CONTEXT, CHILD_REPORT_PROTOCOL_CONTEXT } from './prompt.js'
 import { skillLoadTracker } from '../policy/skill-gate.js'
+import { rolePolicy } from '../roles.js'
 
-/** Entry file and theme per report language; skill names come from the requirements table. */
+/** Entry file and theme per report language. */
 const REPORT_ENVIRONMENTS: Readonly<Record<ReportSkillLanguage, { entry: string; theme: string }>> = {
   latex: { entry: 'Report/main.tex', theme: 'Report/mpltx.cls' },
   typst: { entry: 'Report/main.typ', theme: 'Report/mplts.typ' },
@@ -19,12 +22,11 @@ const REPORT_ENVIRONMENTS: Readonly<Record<ReportSkillLanguage, { entry: string;
 
 /**
  * Inject the session-specific Report Environment facts the REPORT persona
- * references: active language, entry file, theme, and compile skill name.
+ * references: active language, entry file, and theme.
  * Dynamic facts live here, not in the immutable persona text.
  */
 function installReportEnvironmentSection(childCtx: Context, language: ReportSkillLanguage): () => void {
   const environment = REPORT_ENVIRONMENTS[language]
-  const required = reportSkillRequirements(language)
   return childCtx.systemPrompt.section({
     name: 'tool:report-environment',
     order: childCtx.systemPrompt.getSectionOrder('TOOL_REPORT'),
@@ -33,7 +35,7 @@ function installReportEnvironmentSection(childCtx: Context, language: ReportSkil
       `language: ${language}`,
       `entry: ${environment.entry}`,
       `theme: ${environment.theme}`,
-      `compile skill: ${required.compile}`,
+      'compiler tool: compile_report',
     ].join('\n'),
   })
 }
@@ -56,7 +58,7 @@ function installReportLanguageGuidanceSection(childCtx: Context, language: Repor
 }
 
 export const name = 'autoreport-report-router'
-export const inject = ['subagents', 'tools', 'systemPrompt', 'skills', 'autoreportWorkflow']
+export const inject = ['subagents', 'tools', 'systemPrompt', 'skills', 'shell', 'shellEnv', 'autoreportWorkflow']
 
 /** Router inputs shared by every specialist branch. */
 export type RoutedWorkflow = Pick<
@@ -137,12 +139,18 @@ export function installRoutedReportTool(
     const disposeModelSelection = installSpecialistModelSelection(childCtx, child, workflow)
     if (disposeModelSelection !== undefined) disposers.push(disposeModelSelection)
     const language = workflow.reportLanguageForChild(child.id)
-    if (entry.binding.role === 'REPORT') {
+    const execution = rolePolicy(entry.binding.role).execution
+    if (execution === 'compile') {
       disposers.push(installReportEnvironmentSection(childCtx, language))
       disposers.push(installReportLanguageGuidanceSection(childCtx, language))
+      disposers.push(installCompileReportTool(childCtx, language, workflow.config.workspaceRoot))
       // Release the gate's per-session state with the scope it belonged to. A
       // surviving session self-heals: the next guard call re-seeds from the log.
       disposers.push(() => { skillLoadTracker.forget(String(child.id)) })
+    } else if (child.session !== undefined && execution === 'shell') {
+      // Scoped registration gives only these roles a shell. DSH owns its
+      // registration lifetime together with the child context.
+      installBashTool(childCtx, { enableRunInBackground: false })
     }
     disposers.push(registerRoleSkills(childCtx, entry.binding.role, language))
     disposers.push(installReferencesSkills(childCtx))
@@ -192,7 +200,7 @@ export function apply(ctx: Context): void {
   ctx.on('agent/created', ({ agent }) => {
     if (routedChildren.has(agent)) return undefined
     // The injected fiber rides the agent's own scope and is disposed with it.
-    agent.ctx.inject(['tools', 'subagents', 'systemPrompt', 'skills', 'autoreportWorkflow'], childCtx => {
+    agent.ctx.inject(['tools', 'subagents', 'systemPrompt', 'skills', 'shell', 'shellEnv', 'autoreportWorkflow'], childCtx => {
       installRoutedReportTool(childCtx, agent, ctx, childCtx.autoreportWorkflow)
     })
     return undefined

@@ -60,13 +60,13 @@ subagent's work yourself when a task comes back blocked.
 When a subagent reports a blocker, reschedule the relevant upstream agent, pause
 dependent work when needed, or escalate to the user.
 
-**Environment changes are yours alone**: you are the only role allowed to install
-or change Python packages in the selected environment. When a task comes back
-with \`block_type="missing_dependency"\`, install the reported package(s) into the
-selected environment yourself (the package manager reported by the Python
-environment context — \`uv pip install --python\` for the managed venv), then
-re-dispatch the same task. Never ask a subagent to install packages; specialists
-report dependency needs instead of acting on them.`
+**Environment blockers**: when a task comes back with
+\`block_type="missing_dependency"\`, check the selected Python environment.
+If another configured environment already has the dependency, select it and
+re-dispatch the task. Otherwise call \`install_python_package\` with one named
+requirement; the tool asks for user approval before changing the environment.
+After a successful install, re-dispatch the same task. Specialists report
+dependency needs instead of changing the environment themselves.`
 
 /**
  * MAIN's `tool:workflow_task` policy: when the durable board is worth writing

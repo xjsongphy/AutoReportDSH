@@ -528,8 +528,8 @@ do not force presentation choices into prose.
   keep paths portable and references resolvable.
 
 For XeLaTeX compilation, errors, reference resolution, or warnings, invoke the
-separate `latex-compile` skill. Compile until cross-references stabilize and
-inspect the rendered output when layout matters.
+`compile_report` tool. It compiles until cross-references stabilize. Inspect
+the rendered output when layout matters.
 
 ## Document release gates (upstream `checks/document.md`)
 

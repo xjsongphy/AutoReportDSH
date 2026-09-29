@@ -25,7 +25,7 @@ The workflow ports the report pipeline of
 ### Core capabilities
 - **Multi-agent collaboration** — Main plans and coordinates; Theory, Data Analysis, Plotting, and Report carry out the specialized work
 - **Directory permission isolation** — every role is pinned to its own writable root by DSH's `workspace-write` sandbox (table below)
-- **LaTeX and Typst reports** — per-project language with bundled templates, themes, bibliography assets, and compile skills; Python for data processing and plotting
+- **LaTeX and Typst reports** — per-project language with bundled templates, themes, bibliography assets, and a Report-only compiler tool; Python for data processing and plotting
 - **Your DSH providers** — model routes and credentials come from DSH's own configuration
 - **Deterministic bundled resources** — templates, themes, skills, and their reference documents are committed in `resources/` and read from there; a session never fetches or replaces a prompt over the network
 - **Everything bundled** — personas, templates, and skills ship with the plugin, so a fresh workspace runs immediately
@@ -179,13 +179,23 @@ $DSH_HOME/
 
 ### Role permissions
 
-| Role | Writes | Reads |
-|---|---|---|
-| Main | `Outline/` | the whole workspace |
-| Theory | `Theory/` | the whole workspace |
-| Data Analysis | `Data/Processed/` | the whole workspace |
-| Plotting | `Plots/` | the whole workspace |
-| Report | `Report/` | the whole workspace |
+| Role | Writes | Reads | Execution |
+|---|---|---|---|
+| Main | `Outline/` | the whole workspace | `reference_extract`; approval-backed `install_python_package` |
+| Theory | `Theory/` | the whole workspace | none |
+| Data Analysis | `Data/Processed/` | the whole workspace | `bash` |
+| Plotting | `Plots/` | the whole workspace | `bash` |
+| Report | `Report/` | the whole workspace | `compile_report` |
+
+The write column describes workspace artifacts; DSH's process sandbox also
+provides its backend-defined temporary area. Package installation is a separate
+user-approved environment change.
+
+Structured tool paths use the experiment workspace as their base, such as
+`Report/main.tex` and `References/handout.pdf`. `compile_report` selects the
+LaTeX or Typst backend from the frozen report language. It returns this run's
+status, PDF path, bounded diagnostics, and a complete log under `Report/.build/`.
+The Report agent can read that log when the summary lacks context.
 
 ## Development
 
@@ -257,7 +267,7 @@ license file travels with its copy.
 | [lucifer1004/claude-skill-typst](https://github.com/lucifer1004/claude-skill-typst) | MIT | the `typst` skill and its four reference documents (`resources/typst/skills/typst/`) |
 | [xjsongphy/pkumpl-typst](https://github.com/xjsongphy/pkumpl-typst) | CC BY-SA 4.0 | the Typst theme, template, and bibliography assets (`resources/typst/`) |
 | [CastleStar14654/PKUMpLtX](https://github.com/CastleStar14654/PKUMpLtX) | CC BY-SA 4.0 | `mpltx.cls`, the PKU Modern Physics Laboratory LaTeX class built on `revtex4-2`, which the Typst theme ports |
-| [xjsongphy/skills](https://github.com/xjsongphy/skills) | none declared | the `latex-compile` skill, and the `experiment-report-writer` projection whose upstream commit and per-module blob hashes are recorded in its `provenance.json` |
+| [xjsongphy/skills](https://github.com/xjsongphy/skills) | none declared | the `experiment-report-writer` projection whose upstream commit and per-module blob hashes are recorded in its `provenance.json` |
 | [citation-style-language/styles](https://github.com/citation-style-language/styles) | CC BY-SA 3.0 | `american-physics-society.csl`, authored by Richard Karnesky |
 
 Where a license file exists upstream, it is committed beside the copy, so the
@@ -266,7 +276,7 @@ license, so its two vendored documents carry none.
 
 Referenced at runtime rather than vendored:
 
-- [MinerU](https://github.com/opendatalab/MinerU) — the `mineru-open-api` CLI that `pdf-reference-reader` drives to extract `References/` PDFs into `Outline/.cache/mineru/`
+- [MinerU](https://github.com/opendatalab/MinerU) — the `mineru-open-api` CLI called by `reference_extract` to extract `References/` PDFs into `Outline/.cache/mineru/`
 
 ## License
 

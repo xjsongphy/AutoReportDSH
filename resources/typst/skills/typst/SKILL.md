@@ -18,5 +18,4 @@ beside this file:
 | Tables and measured data | [tables.md](tables.md) |
 | Citations, theorems, equations | [academic.md](academic.md) |
 
-Compiling is `typst-compile`'s job; that skill carries the command, the
-workspace entry file, and the diagnostics workflow.
+Compile `Report/main.typ` with `compile_report`; read its full log when needed.
