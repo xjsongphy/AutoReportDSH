@@ -111,9 +111,7 @@ Provider、凭证和 Main 模型路由由 DSH 负责。本插件按以下顺序�
 工作区语言          DSH 用户设置 namespace: autoreport，
                    按工作区根路径为键（权威）
         ↓
-legacy 项目设置     <dshHome>/autoreport/<workspaceId>/project.json
-        ↓
-DSH 用户设置        namespace: autoreport（默认值、超时、Python）
+DSH 用户设置        namespace: autoreport（默认值、超时、Python、路由）
         ↓
 composition 默认值
         ↓
@@ -124,7 +122,7 @@ schema 默认值
   页面：**插件 → 已安装 → dsh-autoreport**。同一页按语言列出项目，一个控件即可把
   项目换到另一种语言并切换它的模板。
 - **specialist 模型** —— 新建的 specialist 默认继承 Main 的模型，除非在 cordis 或
-  项目设置中指定 `specialistModel`；运行中的 specialist 可在对话窗口切换模型。
+  AutoReport 设置中指定 `specialistModel`；运行中的 specialist 可在对话窗口切换模型。
 - **Python** —— 三选一：由插件用 `uv` 在 `$DSH_HOME/autoreport/venv` 创建的托管环境
   （仅在你选中时创建，含 numpy、scipy、pandas、matplotlib；删除该目录即回收磁盘）、
   本机已有的解释器（conda、virtualenv、pyenv 或 `PATH`，包括存在时的
@@ -155,7 +153,6 @@ $DSH_HOME/
 └── autoreport/
     ├── venv/                      AutoReport 托管的 Python（可选）
     └── <workspaceId>/
-        ├── project.json           语言、Python、subagent 路由
         └── workflow/<session id>/ session.jsonl — 工作流状态记录
 ```
 
@@ -231,7 +228,7 @@ CI（`.github/workflows/ci.yml`）在 Linux、macOS、Windows 上针对固定的
 | 上游 | 许可证 | 贡献内容 |
 | --- | --- | --- |
 | [lucifer1004/claude-skill-typst](https://github.com/lucifer1004/claude-skill-typst) | MIT | `typst` skill 及其四篇参考文档（`resources/typst/skills/typst/`） |
-| [xjsongphy/pkumpl-typst](https://github.com/xjsongphy/pkumpl-typst) | CC BY-SA 4.0 | Typst 主题、模板与参考文献资源（`resources/typst/`） |
+| [xjsongphy/pkumpl-typst](https://github.com/xjsongphy/pkumpl-typst) | CC BY-SA 4.0 | Typst 主题，以及完整的 `demo.typ` 报告示例（连同示例图片和完整参考文献打包为 `Report/main.typ`），来源提交 `fa3afe997fdc390ea0b15d41df32c7750cf68858` |
 | [CastleStar14654/PKUMpLtX](https://github.com/CastleStar14654/PKUMpLtX) | CC BY-SA 4.0 | `mpltx.cls`，北大近代物理实验 LaTeX 文档类（基于 `revtex4-2`），Typst 主题即其移植 |
 | [xjsongphy/skills](https://github.com/xjsongphy/skills) | 上游未声明 | `latex-compile` skill，以及 `experiment-report-writer` 投影——其上游 commit 与逐模块 blob 哈希记录在同目录的 `provenance.json` |
 | [citation-style-language/styles](https://github.com/citation-style-language/styles) | CC BY-SA 3.0 | `american-physics-society.csl`，作者 Richard Karnesky |

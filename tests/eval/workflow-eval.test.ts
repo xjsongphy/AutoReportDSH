@@ -18,7 +18,6 @@ import {
 } from '@deepseek-ai/dsh-sandbox-policy/src/session-mode.ts'
 import { validateStoredEvents } from '@deepseek-ai/dsh-session-persistence/src/storage-contract.ts'
 import { REQUIRED_DIRS } from '../../src/workspace/init.js'
-import { saveProjectSettings, workspaceIdForRoot } from '../../src/settings.js'
 import { resetAcknowledgedBlockedKeys } from '../../src/workflow/turn-guard.js'
 import {
   MAIN_STEER_SUMMARY,
@@ -167,8 +166,8 @@ describe('workflow eval', () => {
     ))).toBe(true)
   })
 
-  it('2. completes a Typst report pipeline with language snapshot and REPORT compiler tool', async () => {
-    const assembled = await boot({ projectLanguage: 'typst' })
+  it('2. completes a Typst report pipeline with language snapshot and REPORT compile skills', async () => {
+    const assembled = await boot({ workspaceLanguage: 'typst' })
     admitFirstTurn(assembled)
     expect(tasks(assembled).projection().meta?.language).toBe('typst')
     expect(tasks(assembled).projection().meta?.settings?.reportLanguage).toBe('typst')
@@ -179,6 +178,7 @@ describe('workflow eval', () => {
       'experiment-report-writer',
       'typst',
     ])
+    expect(specialistSkills(assembled, report.childId).skillNames).not.toContain('latex-compile')
     await specialistWrite(assembled, report, 'Report/main.typ', '#set page(paper: "a4")\nHello\n')
     await specialistWrite(assembled, report, 'Report/main.pdf', '%PDF-typst-eval\n')
     expect((await updateManifest(assembled, report, [
@@ -412,7 +412,7 @@ describe('workflow eval', () => {
 
     const artifacts = tasks(assembled).projection().artifacts
     expect(artifacts.some(item => item.path === 'Report/main.tex' && item.origin === 'fs-tool' && item.status === 'modified')).toBe(true)
-    expect(artifacts.some(item => item.path === 'Report/main.tex' && item.origin === 'process' && item.status === 'modified')).toBe(true)
+    expect(artifacts.some(item => item.path === 'Report/main.tex' && item.origin === 'process' && item.status === 'modified')).toBe(false)
   })
 
   it.skipIf(hostPython() === undefined)('7. selected Python interpreter stays the workflow snapshot after dispatch and resume', async () => {
@@ -432,16 +432,13 @@ describe('workflow eval', () => {
     const decoy = join(other, 'bin', 'python')
     writeFileSync(decoy, '#!/bin/sh\necho Python 3.99.0-decoy\n')
     chmodSync(decoy, 0o755)
-    saveProjectSettings(assembled.home, workspaceIdForRoot(assembled.workspaceRoot), {
-      pythonExecutable: decoy,
-    })
-
     const dirs = assembled.ownedDirs.splice(0)
     await assembled.ctx.fiber?.dispose()
     const resumed = await assemble({
       workspaceRoot: assembled.workspaceRoot,
       home: assembled.home,
       mainSession: assembled.mainSession,
+      pythonExecutable: decoy,
     })
     resumed.ownedDirs.push(...dirs)
     live.push(resumed)

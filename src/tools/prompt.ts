@@ -32,6 +32,7 @@ explicit user constraints.
 - **No hidden context dumping**: Do not attach internal plans, previous agent reasoning, or unrelated file contents to subagent messages.
 - **No prompt expansion**: Do not turn a task into a mini-spec. If a subagent can infer the method from its own prompt and the referenced files, stop there.
 - **Default to under-specifying**: When unsure whether to include a technical detail, omit it unless it is a user constraint or a routing dependency.
+- **Keep Theory upstream of data reduction**: Brief THEORY on the model and formulas. Route calibration, fitting, and conclusions from measured records to DATA_ANALYSIS. If model choice depends on a condition found only in measurement files, ask DATA_ANALYSIS for that condition and pass only the minimum necessary fact as a task constraint; THEORY must not inspect measurement files.
 
 When dispatching, include only:
 
@@ -60,13 +61,13 @@ subagent's work yourself when a task comes back blocked.
 When a subagent reports a blocker, reschedule the relevant upstream agent, pause
 dependent work when needed, or escalate to the user.
 
-**Environment blockers**: when a task comes back with
-\`block_type="missing_dependency"\`, check the selected Python environment.
-If another configured environment already has the dependency, select it and
-re-dispatch the task. Otherwise call \`install_python_package\` with one named
-requirement; the tool asks for user approval before changing the environment.
-After a successful install, re-dispatch the same task. Specialists report
-dependency needs instead of changing the environment themselves.`
+**Environment changes are yours alone**: you are the only role allowed to install
+or change Python packages in the selected environment. When a task comes back
+with \`block_type="missing_dependency"\`, use the
+\`python_environment(action="install")\` capability for the reported package names, approve the
+installation if requested, then re-dispatch the same task.
+Never ask a subagent to install packages; specialists
+report dependency needs instead of acting on them.`
 
 /**
  * MAIN's `tool:workflow_task` policy: when the durable board is worth writing

@@ -7,9 +7,6 @@
  * ```text
  * explicit workflow override (internal only; no v1 user surface)
  *         ↓
- * project settings        (<dshHome>/autoreport/<workspaceId>/project.json —
- *                          external, never inside the experiment workspace)
- *         ↓
  * AutoReport user settings (DSH settings namespace 'autoreport')
  *         ↓
  * Cordis composition Config (plugin defaults)
@@ -30,9 +27,7 @@
  */
 
 import { createHash } from 'node:crypto'
-import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
-import { randomUUID } from 'node:crypto'
-import { dirname, join, resolve } from 'node:path'
+import { resolve } from 'node:path'
 import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
 import type { SettingsNamespace } from '@deepseek-ai/dsh-settings'
 import z from '@deepseek-ai/schemastery'
@@ -62,17 +57,11 @@ export const AUTOREPORT_SETTINGS_NAMESPACE = 'autoreport' as SettingsNamespace
 export interface AutoReportUserSettings {
   /** Default report source language (schema default `latex`). */
   defaultReportLanguage: ReportLanguage
-  /**
-   * Per-workspace report language keyed by the absolute workspace root, the
-   * authoritative layer: a workspace present here never consults the legacy
-   * `project.json` value or the user default. Keyed by path rather than by
-   * `workspaceIdForRoot` because the settings card writes this map from the
-   * browser, where the hash cannot be derived.
-   */
+  /** Per-workspace report language keyed by the absolute workspace root. */
   workspaceLanguages: Readonly<Record<string, ReportLanguage>>
   /** No-progress timeout while a `wait: true` child is idle (schema default one minute). */
   delegationIdleTimeoutMs: number
-  /** Absolute `wait: true` cap (schema default ten minutes; legacy key retained for compatibility). */
+  /** Absolute `wait: true` cap (schema default ten minutes). */
   delegationWaitTimeoutMs: number
   /** Optional specialist route; absent inherits the Main route. */
   specialistModel?: SpecialistRoute
@@ -218,51 +207,13 @@ function asEnvironmentOption(candidate: PythonCandidate): PythonEnvironmentOptio
 }
 
 /**
- * Per-workspace policy persisted OUTSIDE the experiment workspace at
- * `<dshHome>/autoreport/<workspaceId>/project.json`. Every field is optional:
- * absence defers to lower layers.
- */
-export interface AutoReportProjectSettings {
-  /** Authoritative report language for this workspace once set. */
-  reportLanguage?: ReportLanguage
-  /** Workspace no-progress timeout while a delegated child is idle. */
-  delegationIdleTimeoutMs?: number
-  /** Workspace absolute delegation-wait cap. */
-  delegationWaitTimeoutMs?: number
-  /** Workspace specialist route; absent inherits lower layers. */
-  specialistModel?: SpecialistRoute
-  /** Workspace Python interpreter override. */
-  pythonExecutable?: string
-}
-
-/** Schemastery schema validating the external project-settings document. */
-export const AUTO_REPORT_PROJECT_SETTINGS_SCHEMA: z<AutoReportProjectSettings> = z.object({
-  reportLanguage: z.union(['latex', 'typst'] as const),
-  specialistModel: SPECIALIST_ROUTE_SCHEMA,
-  delegationIdleTimeoutMs: z.number(),
-  delegationWaitTimeoutMs: z.number(),
-  pythonExecutable: z.string(),
-}) as unknown as z<AutoReportProjectSettings>
-
-/**
  * Schemastery materializes nested object fields as `{}` even when the input
  * omits them. An empty route object means ABSENT everywhere it can enter:
- * document storage compacts it away and {@link routeField} reads it as no
+ * settings schemas may materialize it and {@link routeField} reads it as no
  * configuration, so the artifact never becomes a phantom route.
  */
 function isEmptyRoute(value: unknown): boolean {
   return typeof value === 'object' && value !== null && !Array.isArray(value) && Object.keys(value).length === 0
-}
-
-/** Strip undefined entries and empty-route artifacts from one validated section. */
-function compactSection<S extends Record<string, unknown>>(section: S): S {
-  const kept: Record<string, unknown> = {}
-  for (const [key, value] of Object.entries(section)) {
-    if (value === undefined || (key === 'specialistModel' && isEmptyRoute(value))) continue
-    if (key === 'pythonEnvironments') continue
-    kept[key] = value
-  }
-  return kept as S
 }
 
 /** Composition-layer fields that act as plugin DEFAULTS (see {@link Config}). */
@@ -316,8 +267,6 @@ export interface WorkflowSettingsSnapshot {
 export interface WorkflowSettingsLayers {
   /** User namespace section (`'autoreport'`); sparse patches are fine. */
   readonly user?: Partial<AutoReportUserSettings> | undefined
-  /** Loaded project settings; sparse patches are fine. */
-  readonly project?: Partial<AutoReportProjectSettings> | undefined
   /** Plugin composition defaults ({@link Config} minus `workspaceRoot`). */
   readonly composition?: Partial<WorkflowCompositionDefaults> | undefined
   /** Explicit workflow inputs; beats everything. */
@@ -383,6 +332,13 @@ function routeField(
 
 const REPORT_LANGUAGES: readonly ReportLanguage[] = ['latex', 'typst']
 
+/** Stable opaque workspace key used by the separate workflow-log store. */
+export function workspaceIdForRoot(workspaceRoot: string): string {
+  const root = resolve(workspaceRoot)
+  if (root.length === 0) throw new Error('autoreport workspace id requires a non-empty workspace root')
+  return createHash('sha256').update(root).digest('hex').slice(0, 16)
+}
+
 function firstDefined<T>(...values: readonly T[]): T | undefined {
   return values.find(value => value !== undefined)
 }
@@ -408,11 +364,11 @@ function materializePythonExecutable(
  * Resolve the full precedence chain into one immutable snapshot. Fields are
  * independent: a higher layer that omits a field defers to lower layers for
  * that field only.
- * @param layers - user/project/composition/override inputs, all optional.
+ * @param layers - user/composition/override inputs, all optional.
  * @returns deep-frozen {@link WorkflowSettingsSnapshot}.
  */
 export function resolveWorkflowSettings(layers: WorkflowSettingsLayers): WorkflowSettingsSnapshot {
-  const { user, project, composition, override } = layers
+  const { user, composition, override } = layers
   // The per-workspace layer is skipped when the caller has no root: a
   // resolution that cannot name its workspace cannot consult the map, and
   // silently matching a different workspace's entry would be worse than
@@ -429,7 +385,6 @@ export function resolveWorkflowSettings(layers: WorkflowSettingsLayers): Workflo
     firstDefined(
       override?.reportLanguage,
       workspaceLanguage,
-      project?.reportLanguage,
       user?.defaultReportLanguage,
       composition?.defaultReportLanguage,
     ),
@@ -439,7 +394,6 @@ export function resolveWorkflowSettings(layers: WorkflowSettingsLayers): Workflo
     'delegationIdleTimeoutMs',
     firstDefined(
       override?.delegationIdleTimeoutMs,
-      project?.delegationIdleTimeoutMs,
       user?.delegationIdleTimeoutMs,
       composition?.delegationIdleTimeoutMs,
     ),
@@ -448,7 +402,6 @@ export function resolveWorkflowSettings(layers: WorkflowSettingsLayers): Workflo
     'delegationWaitTimeoutMs',
     firstDefined(
       override?.delegationWaitTimeoutMs,
-      project?.delegationWaitTimeoutMs,
       user?.delegationWaitTimeoutMs,
       composition?.delegationWaitTimeoutMs,
     ),
@@ -456,7 +409,6 @@ export function resolveWorkflowSettings(layers: WorkflowSettingsLayers): Workflo
   const pythonExecutable = materializePythonExecutable(
     firstDefined(
       override?.pythonExecutable,
-      project?.pythonExecutable,
       user?.pythonExecutable,
       composition?.pythonExecutable,
     ),
@@ -465,7 +417,6 @@ export function resolveWorkflowSettings(layers: WorkflowSettingsLayers): Workflo
   )
   const specialistModel = firstDefined(
     routeField('override.specialistModel', override?.specialistModel),
-    routeField('project.specialistModel', project?.specialistModel),
     routeField('user.specialistModel', user?.specialistModel),
     routeField('composition.specialistModel', composition?.specialistModel),
   ) ?? deepFreeze({ inheritMain: true }) satisfies SpecialistModelSelection
@@ -476,89 +427,4 @@ export function resolveWorkflowSettings(layers: WorkflowSettingsLayers): Workflo
     delegationWaitTimeoutMs,
     ...(pythonExecutable === undefined ? {} : { pythonExecutable }),
   })
-}
-
-/** Workspace-id alphabet; ids are hash digests, never filesystem paths. */
-const WORKSPACE_ID_PATTERN = /^[a-z0-9]{16}$/u
-
-/**
- * Derive the stable per-workspace settings key from the ABSOLUTE experiment
- * workspace root: sha256 over the resolved path, first 16 hex chars. Same
- * workspace location ⇒ same id across sessions and processes, and the id
- * never leaks a path fragment nor lives inside the workspace itself.
- * @param workspaceRoot - absolute experiment workspace root.
- * @returns the 16-char workspace id.
- */
-export function workspaceIdForRoot(workspaceRoot: string): string {
-  const resolved = resolve(workspaceRoot)
-  if (resolved.length === 0) throw new Error('autoreport workspace id requires a non-empty workspace root')
-  return createHash('sha256').update(resolved).digest('hex').slice(0, 16)
-}
-
-/**
- * Absolute path of one workspace's external project settings document.
- * @param settingsHome - harness home override; absent resolves `$DSH_HOME`/`~/.dsh`.
- * @param workspaceId - id from {@link workspaceIdForRoot}.
- * @returns `<home>/autoreport/<workspaceId>/project.json`.
- */
-export function projectSettingsPath(settingsHome: string | undefined, workspaceId: string): string {
-  if (!WORKSPACE_ID_PATTERN.test(workspaceId)) {
-    throw new Error(`autoreport workspace id must match ${String(WORKSPACE_ID_PATTERN)}: ${workspaceId}`)
-  }
-  return join(settingsHome === undefined ? resolveDshHome() : settingsHome, 'autoreport', workspaceId, 'project.json')
-}
-
-/**
- * Load one workspace's project settings. A missing file is the empty patch
- * ({}); malformed JSON or a non-object document fails loud with the path.
- * @param settingsHome - harness home override; absent resolves the DSH home.
- * @param workspaceId - id from {@link workspaceIdForRoot}.
- * @returns the stored patch, validated; `{}` when nothing was stored yet.
- */
-export function loadProjectSettings(settingsHome: string | undefined, workspaceId: string): AutoReportProjectSettings {
-  const file = projectSettingsPath(settingsHome, workspaceId)
-  if (!existsSync(file)) return {}
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(readFileSync(file, 'utf8'))
-  } catch (error: unknown) {
-    throw new Error(`autoreport project settings ${file} is not valid JSON: ${error instanceof Error ? error.message : String(error)}`)
-  }
-  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    throw new Error(`autoreport project settings ${file} must contain one JSON object`)
-  }
-  return compactSection(AUTO_REPORT_PROJECT_SETTINGS_SCHEMA(parsed) as Record<string, unknown>) as AutoReportProjectSettings
-}
-
-/**
- * Atomically persist one workspace's project settings: validate, write a
- * unique temporary file in the destination directory, then rename over the
- * target so readers observe either the old or the new document, never a torn
- * write.
- * @param settingsHome - harness home override; absent resolves the DSH home.
- * @param workspaceId - id from {@link workspaceIdForRoot}.
- * @param settings - complete next patch; invalid fields fail loud.
- */
-export function saveProjectSettings(
-  settingsHome: string | undefined,
-  workspaceId: string,
-  settings: AutoReportProjectSettings,
-): void {
-  const validated = AUTO_REPORT_PROJECT_SETTINGS_SCHEMA(settings) as Record<string, unknown>
-  const file = projectSettingsPath(settingsHome, workspaceId)
-  const directory = dirname(file)
-  mkdirSync(directory, { recursive: true })
-  const temporary = join(directory, `.project.${process.pid}.${randomUUID()}.tmp`)
-  try {
-    writeFileSync(temporary, `${JSON.stringify(compactSection(validated), null, 2)}\n`)
-    renameSync(temporary, file)
-  } catch (error: unknown) {
-    try {
-      unlinkSync(temporary)
-    } catch {
-      // The rename target is authoritative; a stuck temporary file must not
-      // mask the original write failure.
-    }
-    throw error
-  }
 }

@@ -1,7 +1,7 @@
 /**
  * Runtime artifact observation over the durable tool pipeline (PLAN.md
  * §2.11). Successful mutations made by model-facing filesystem tools and
- * process tools (`bash`, `pwsh`, `compile_report`, `reference_extract`) produce `autoreport/artifact` facts; agents
+ * process tools (`bash` / `pwsh`) produce `autoreport/artifact` facts; agents
  * never report their own files.
  *
  * The observer folds BOTH halves of a tool call from the session log: the
@@ -148,10 +148,9 @@ function diskBaseline(absolute: string): Pick<ArtifactSnapshot, 'sizeBytes' | 'm
   }
 }
 
-/** Absolute writable root for one caller role (first policy entry). */
+/** Absolute writable root for one caller role. */
 function writableRoot(caller: ArtifactCaller): string {
-  const relativeRoot = rolePolicy(caller.role).writableRoot
-  return resolve(caller.workspaceRoot, relativeRoot)
+  return resolve(caller.workspaceRoot, rolePolicy(caller.role).writableRoot)
 }
 
 /** Workspace-relative path for one entry returned by {@link snapshotDir}. */

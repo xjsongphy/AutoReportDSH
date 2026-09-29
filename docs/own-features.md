@@ -35,17 +35,30 @@ platform.
   [Prompt-attached language guidance](#prompt-attached-language-guidance).
   Referenced skill documents are addressed through DSH's own resource anchor —
   see [Skill resource anchoring](#skill-resource-anchoring).
-- **Write isolation:** Main may write `Outline/`; Theory `Theory/`; Data
-  Analysis `Data/Processed/`; Plotting `Plots/`; Report `Report/`. The plugin
-  adds both a synchronous tool guard and a DSH workspace-write sandbox-root
-  override. Only writes are confined: every sandbox runner DSH ships grants the
-  resolved root write access and leaves reads unrestricted, so a role reads the
-  whole experiment tree — and the rest of the filesystem — without gaining a
-  write anywhere outside its own directory. `tests/bash-confinement.live.test.ts`
-  asserts both halves in one session.
+- **Role filesystem policy (three facts per role):** read permission never
+  expresses role boundaries — every role reads the whole experiment workspace
+  through `read`, `read_image`, workspace-wide `grep`, and names-only `list`;
+  whether a role "should" touch data is persona guidance, not an ACL. The
+  single writable root is the real sandbox boundary: Main `Outline/`, Theory
+  `Theory/`, Data Analysis `Data/Processed/`, Plotting `Plots/`, Report
+  `Report/` — enforced by DSH's `workspace-write` sandbox (rooted at the
+  writable root via the sandbox-policy override) plus one write-path check in
+  the role guard. Tools differ only by "does this role need to execute code":
+  MAIN and Theory have no shell; Data Analysis, Plotting, and Report get the
+  platform shell (`bash` on Linux/macOS, `pwsh` on Windows) with the session
+  starting at the workspace root — navigation only, no command parsing; the OS
+  sandbox owns every write effect. All model-facing paths are
+  experiment-workspace-relative, including shell arguments and
+  `write`/`edit` targets; the host adapter rewrites relative paths to absolute
+  workspace paths before the stock DSH tools run.
+  MAIN uses `python_environment` for approved package changes and
+  `reference_extract` for MinerU PDF extraction; it has no general shell.
+  The `list` tool rename, provider-backed filesystem contract, MAIN deliverables,
+  task cancellation, and search limits are tracked
+  in [Role filesystem, delivery, and cancellation decisions](role-filesystem-decisions.md).
 - **Settings integration:** report language, wait limits, Python interpreter,
-  and specialist-model selection are stored through DSH settings/project state;
-  DSH retains ownership of provider credentials and model execution.
+  and specialist-model selection are stored in DSH's `autoreport` user-settings
+  namespace; DSH retains ownership of provider credentials and model execution.
 - **Web settings UI:** the plugin contributes only its own configuration page,
   on its bundle's page in the Plugins page, and does not replace the DSH
   application UI. That page lists each language's projects (derived from the
@@ -69,7 +82,7 @@ close that window:
 | Action | Gate | Refused until loaded |
 | --- | --- | --- |
 | Any file mutation in the report workspace (`write`, `edit`, `str_replace_editor`, `apply_patch`, `delete`) | writing | `experiment-report-writer` |
-| `bash`/`pwsh` invoking the active language's compiler (`latexmk`, `tectonic`, `xelatex`, `pdflatex`, `lualatex`; `typst compile`) | compile | the active language's compile skill (`latex-compile` / `typst-compile`) |
+| Role-aware Bash invoking the active language's compiler (`latexmk`, `tectonic`, `xelatex`, `pdflatex`, `lualatex`; `typst compile`) | compile | the active language's compile skill (`latex-compile` / `typst-compile`) |
 
 The call is refused with an error that names the missing skills, says how to
 load them (the `skill` tool, one call per name), and states that nothing else
@@ -100,7 +113,7 @@ Boundaries:
   view is a read.
 - Only AutoReport-bound REPORT sessions are gated. MAIN, every other role, and
   every stock DSH session pass through untouched.
-- A refused child is never stuck: it keeps `read`, non-compiler `bash`,
+- A refused child is never stuck: it keeps `read`, non-compiler shell tools,
   `manifest`, and `report_workflow(blocked)`, so it can report the blockage
   instead of stalling silently.
 - The gates live in `src/policy/skill-gate.ts`; registration and enforcement
@@ -145,6 +158,12 @@ prose, not only links. A skill whose body names the experiment workspace
 base, or the model would be told to look for `Report/main.tex` under
 `resources/`. Today `experiment-report-writer` and `typst` are bundles; the
 compile and PDF-extraction skills are flat.
+
+Bundle resources live outside the experiment workspace, so the role guard adds
+only the exact registered bundle directories available to that role (and the
+active report language) as read-only roots. The skill prompt's absolute
+`resourceBase` is the path the agent uses for those resources; ordinary
+`read`/`list` inputs, manifests, and handoffs stay workspace-root-relative.
 
 ## Resources are vendored, never fetched
 
@@ -242,22 +261,25 @@ refusing. The wiring, the retired seams, and the nightly upstream canary are in
 
 Open, and deliberately not claimed as done:
 
-- **Restart/rebind acceptance.** `tests/store.test.ts` covers record-log
-  read/write and torn-line tolerance; `tests/workflow-fold.test.ts` compares
-  batch against stepwise replay *in memory*. Neither proves that unfinished
-  task/delegation/manifest state survives a process restart and drives the same
-  next action. Until one does, the AutoReportCLI comparison above claims no
-  recovery equivalence.
-- **Windows role isolation end-to-end.** `tests/bash-confinement.live.test.ts`
-  no longer skips win32 wholesale: it gates on sandbox usability, which on win32
-  already requires both a working `bash -lc` and the windows-acl runner probe.
-  What is missing is evidence, not code — one green Windows CI run that resolves
-  a real role writable root through the ACL runner.
-- **`workflow_task` transition coverage.** The board has no test file of its own,
-  and redispatch-after-reopen is named by no case.
-- **Live provider smoke.** `tests/e2e/configured-route.e2e.test.ts` is opt-in
-  against a maintained DSH home; it has to be run on purpose after a
-  compatibility change.
+- **DSH restart/rebind acceptance.** `tests/workflow-task.test.ts` now clears
+  the process-local log sequence cache, constructs a fresh runtime and Session,
+  restores a blocked task, delegation, role binding, artifact, and manifest
+  note, then reopens and redispatches the task. This proves plugin-log replay
+  and redispatch in a cold runtime. It does not yet exercise DSH's own persisted
+  Session load, compaction, or a full process restart, so the AutoReportCLI
+  comparison above still claims no recovery equivalence.
+- **Windows PowerShell role verification.** AutoReport exposes `pwsh` only to
+  DATA_ANALYSIS, PLOTTING, and REPORT, with the DSH partial ACL write sandbox
+  rooted at each role's writable root. End-to-end AutoReport verification is
+  still open; the existing live `pwsh` probe exercises DSH's sandbox executor
+  directly.
+- **Live provider compatibility.** The opt-in
+  `tests/e2e/configured-route.e2e.test.ts` passed on 2026-09-24 against the
+  configured DSH home. Repeat it after a DSH compatibility change.
+
+`tests/workflow-task.test.ts` also covers update, cancel, reopen, redispatch of
+the same task at the next delegation revision, completion, and refusal to reopen
+a completed task.
 
 ### Durable state lives in the plugin's own log
 
@@ -269,9 +291,7 @@ log the plugin owns, under the harness home, keyed by workspace:
 ```
 
 That is where AutoReportCLI kept its per-workspace state
-(`~/.autoreport/workspaces/<id>/{manifests,taskboard.json,project.toml}`), and
-it sits beside this plugin's external project settings
-(`<home>/autoreport/<workspaceId>/project.json`). It is deliberately **not**
+(`~/.autoreport/workspaces/<id>/{manifests,taskboard.json,project.toml}`). It is deliberately **not**
 inside the experiment workspace: `.autoreport` is a name the ported policy
 reserves as a *non-writable* workspace directory
 (`autoreport-rs/tools/src/file_tools.rs`, asserted by its isolation test), so it
@@ -299,10 +319,8 @@ Properties this buys and costs:
   it, and nothing new for a user's `git status`. The log is keyed by a hash of
   the workspace path (`workspaceIdForRoot`), so it never leaks a path fragment.
 - Moving the workspace to another machine does **not** carry the workflow state:
-  same-workspace-path on a different home is a different log. The experiment
-  `project.json` settings behave the same way; the per-workspace report
-  language, which lives in the user settings namespace keyed by workspace root,
-  is keyed by that same path.
+  same-workspace-path on a different home is a different log. Per-workspace
+  report language lives in the user settings namespace keyed by workspace root.
 - `autoreport/*` no longer appears in the WebUI Trajectory event ledger. Reading
   the workflow means opening the log above, or the manifest tool.
 - We own durability: synchronous append-only writes, no session write lease and

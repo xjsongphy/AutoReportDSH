@@ -6,9 +6,8 @@
  */
 
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
-import { spawnSync } from 'node:child_process'
 import { tmpdir } from 'node:os'
-import { dirname, join } from 'node:path'
+import { dirname, join, relative, resolve, sep } from 'node:path'
 import { expect } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
@@ -20,7 +19,6 @@ import type { Config } from '../../src/config.js'
 import { apply as applyHost } from '../../src/host.js'
 import { AUTOREPORT_MAIN_PRESET } from '../../src/membership.js'
 import AutoReportWorkflowRuntime from '../../src/runtime.js'
-import { saveProjectSettings, workspaceIdForRoot } from '../../src/settings.js'
 import { installWorkflowReportTool } from '../../src/tools/report-workflow.js'
 import { TURN_GUARD_PLUGIN } from '../../src/workflow/display.js'
 import * as presetModule from '../../src/preset.js'
@@ -57,7 +55,6 @@ const FAKE_SECTION_ORDERS: Readonly<Record<string, number>> = {
   DEPLOYMENT_PERSONA_PREFIX: 0,
   TOOL_SUBAGENT: 2800,
   TOOL_REPORT: 2900,
-  TOOL_BASH: 2700,
 }
 
 const FAKE_CONTEXT_ORDERS: Readonly<Record<string, number>> = {
@@ -80,6 +77,15 @@ export interface ChildRecorder {
   readonly agent: Agent
   readonly ctx: Parameters<typeof reportRouterModule.installRoutedReportTool>[0]
   readonly toolNames: string[]
+  readonly bashDescriptions: string[]
+  readonly bashLookupScopes: Agent[]
+  readonly pwshDescriptions: string[]
+  readonly pwshLookupScopes: Agent[]
+  readonly shellCalls: Map<string, unknown[]>
+  readonly registeredTools: Map<string, { execute?: (args: unknown, execution: unknown) => Promise<unknown> }>
+  readonly toolDescriptions: Map<string, string>
+  readonly toolLookupScopes: Map<string, Agent[]>
+  readonly toolRestrictions: Array<{ readonly allow?: readonly string[]; readonly deny?: readonly string[] }>
   readonly skillNames: string[]
   readonly sections: RecordedSection[]
   readonly contexts: RecordedSection[]
@@ -91,6 +97,15 @@ export function makeChildRecorder(
   cwd?: string,
 ): ChildRecorder {
   const toolNames: string[] = []
+  const bashDescriptions: string[] = []
+  const bashLookupScopes: Agent[] = []
+  const pwshDescriptions: string[] = []
+  const pwshLookupScopes: Agent[] = []
+  const shellCalls = new Map<string, unknown[]>()
+  const registeredTools = new Map<string, { execute?: (args: unknown, execution: unknown) => Promise<unknown> }>()
+  const toolDescriptions = new Map<string, string>()
+  const toolLookupScopes = new Map<string, Agent[]>()
+  const toolRestrictions: Array<{ readonly allow?: readonly string[]; readonly deny?: readonly string[] }> = []
   const skillNames: string[] = []
   const sections: RecordedSection[] = []
   const contexts: RecordedSection[] = []
@@ -115,14 +130,40 @@ export function makeChildRecorder(
   const agent = { id: sessionId, session } as Agent
   const ctx = {
     get: (name: string) => name === 'skills' ? skillsService : undefined,
-    shell: { sandboxMode: undefined },
-    shellEnv: { collect: () => ({}) },
     tools: {
-      register: (tool: { name: string }) => {
+      get: (name: string, scope?: Agent) => {
+        if (scope !== agent) return undefined
+        if (name === 'bash') bashLookupScopes.push(scope)
+        if (name === 'pwsh') pwshLookupScopes.push(scope)
+        if (!['bash', 'pwsh', 'read', 'read_image', 'write', 'edit', 'str_replace_editor'].includes(name)) {
+          return undefined
+        }
+        const scopes = toolLookupScopes.get(name) ?? []
+        scopes.push(scope)
+        toolLookupScopes.set(name, scopes)
+        return {
+          name,
+          description: `fixture ${name} tool`,
+          async execute(args: unknown) {
+            const calls = shellCalls.get(name) ?? []
+            calls.push(args)
+            shellCalls.set(name, calls)
+            return args
+          },
+        }
+      },
+      register: (tool: { name: string; description?: string; execute?: (args: unknown, execution: unknown) => Promise<unknown> }) => {
         toolNames.push(tool.name)
+        if (tool.description !== undefined) toolDescriptions.set(tool.name, tool.description)
+        if (tool.name === 'bash' && tool.description !== undefined) bashDescriptions.push(tool.description)
+        if (tool.name === 'pwsh' && tool.description !== undefined) pwshDescriptions.push(tool.description)
+        registeredTools.set(tool.name, tool)
         return () => {}
       },
-      restrict: () => () => {},
+      restrict: (filter: { readonly allow?: readonly string[]; readonly deny?: readonly string[] }) => {
+        toolRestrictions.push(filter)
+        return () => {}
+      },
     },
     systemPrompt: {
       section: (section: { name: string; text: string }) => {
@@ -145,7 +186,11 @@ export function makeChildRecorder(
     autoreportWorkflow: workflow,
   }
   ;(agent as { ctx?: unknown }).ctx = ctx
-  return { agent, ctx: ctx as ChildRecorder['ctx'], toolNames, skillNames, sections, contexts }
+  return {
+    agent, ctx: ctx as ChildRecorder['ctx'], toolNames, bashDescriptions, bashLookupScopes,
+    pwshDescriptions, pwshLookupScopes, shellCalls, registeredTools,
+    toolDescriptions, toolLookupScopes, toolRestrictions, skillNames, sections, contexts,
+  }
 }
 
 export interface Assembled {
@@ -170,7 +215,7 @@ export interface Assembled {
 }
 
 export interface AssembleOptions {
-  projectLanguage?: 'latex' | 'typst'
+  workspaceLanguage?: 'latex' | 'typst'
   pythonExecutable?: string
   workspaceRoot?: string
   home?: string
@@ -178,6 +223,8 @@ export interface AssembleOptions {
   mainSessionId?: string
   /** Provider ids the fake LLM registry serves; empty means none is installed. */
   llmProviders?: readonly string[]
+  /** Install a minimal wrapped sandbox-policy service for role-root prompt tests. */
+  roleSandbox?: boolean
   followup?: () => Promise<string>
 }
 
@@ -293,26 +340,7 @@ export async function assemble(options: AssembleOptions = {}): Promise<Assembled
       pythonResolver = contributor.resolve
       return () => {}
     },
-    collect: () => ({}),
-  } as never)
-  ctx.provide('shell', {
-    sandboxMode: undefined,
-    resolve: (request: { command: string; workdir?: string }) => request,
-    run: async (spec: { command: string; workdir?: string }) => {
-      const result = spawnSync('bash', ['-c', spec.command], {
-        cwd: spec.workdir ?? workspaceRoot,
-        encoding: 'utf8',
-      })
-      return {
-        exitCode: result.status,
-        signal: result.signal,
-        timedOut: false,
-        aborted: false,
-        timeoutMs: 60_000,
-        stdout: { text: result.stdout ?? '', truncated: false },
-        stderr: { text: result.stderr ?? '', truncated: false },
-      }
-    },
+    collect: (execution: { agent?: { session: Session } }) => pythonResolver(execution),
   } as never)
   ctx.provide('subprocess', {
     resolveExecutable: async (command: string) => command,
@@ -320,20 +348,43 @@ export async function assemble(options: AssembleOptions = {}): Promise<Assembled
       throw new Error('process spawning is unused in assembled host tests')
     },
   } as never)
+  // Production DSH mounts its provider-backed filesystem service. This minimal
+  // local provider supports path containment and editor file/directory checks;
+  // directory inventory and content search have their own focused fixtures.
+  ctx.provide('fs', {
+    resolve: async (path: string, opts?: { cwd?: string }) => ({
+      displayPath: resolve(opts?.cwd ?? workspaceRoot, path),
+    }),
+    contains: (parent: { displayPath: string }, child: { displayPath: string }) => {
+      const rel = relative(parent.displayPath, child.displayPath)
+      return rel === '' || (rel !== '..' && !rel.startsWith(`..${sep}`))
+    },
+    stat: async (target: { displayPath: string }) => ({
+      type: target.displayPath === resolve(workspaceRoot, 'Report') ? 'directory' : 'file',
+    }),
+  } as never)
+  if (options.roleSandbox === true) {
+    ctx.provide('sandboxPolicy', {
+      resolve: () => ({ workspaceRoot }),
+    } as never)
+  }
 
   await ctx.plugin(ToolRuntime)
   // A live host always serves the settings namespace; mounting one here keeps
   // the assembled path honest for `/init` (which records the choice) and for
   // every settings-driven behavior, without touching a developer's document.
-  await ctx.plugin(MemorySettings, { doc: { autoreport: {} } })
-
-  const projectPatch: { reportLanguage?: 'latex' | 'typst'; pythonExecutable?: string } = {
-    ...(options.projectLanguage === undefined ? {} : { reportLanguage: options.projectLanguage }),
-    ...(options.pythonExecutable === undefined ? {} : { pythonExecutable: options.pythonExecutable }),
-  }
-  if (Object.keys(projectPatch).length > 0) {
-    saveProjectSettings(home, workspaceIdForRoot(workspaceRoot), projectPatch)
-  }
+  await ctx.plugin(MemorySettings, { doc: { autoreport: {
+    ...(options.workspaceLanguage === undefined ? {} : { workspaceLanguages: { [resolve(workspaceRoot)]: options.workspaceLanguage } }),
+    ...(options.pythonExecutable === undefined ? {} : {
+      pythonExecutable: options.pythonExecutable,
+      pythonEnvironments: [{
+        label: 'Test Python',
+        executable: options.pythonExecutable,
+        source: 'path',
+        version: 'Python test fixture',
+      }],
+    }),
+  } } })
 
   await applyHost(ctx, { ...ASSEMBLED_CONFIG, workspaceRoot }, {
     settingsHome: home,
@@ -397,6 +448,7 @@ export async function assemble(options: AssembleOptions = {}): Promise<Assembled
     routeChild: (recorder: ChildRecorder) => {
       recorders.set(String(recorder.agent.id), recorder)
       ctx.emit('agent/created', { agent: recorder.agent, source: 'fresh' } as never)
+      reportRouterModule.installRoutedReportTool(recorder.ctx, recorder.agent, ctx, ctx.autoreportWorkflow)
     },
     recorderFor: (sessionId: SessionId) => recorders.get(String(sessionId)),
     startedSpecs,
@@ -635,7 +687,7 @@ export async function specialistWrite(
   if (!first.isError) return
   if (!first.text.includes(SKILL_GATE_REFUSAL)) throw new Error(first.text)
   const required = reportSkillRequirements(assembled.runtime.reportLanguageForChild(child.childSession.id))
-  for (const name of [...required.writing]) loadSkill(assembled, child, name)
+  for (const name of required.writing) loadSkill(assembled, child, name)
   const retry = await execute(assembled.ctx, 'write', args, child.childAgent, child.childSession)
   expect(retry.isError).toBe(false)
 }

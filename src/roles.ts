@@ -1,12 +1,19 @@
 /**
- * The fixed five-role AutoReport table and each role's explicit execution
- * policy dimensions (PLAN.md §2.2). Role identity is independent of DSH
- * Session identity; this table is the domain source for authorization and
- * process isolation.
+ * The fixed five-role AutoReport table. The permission model is deliberately
+ * minimal (three facts per role):
  *
- * Every role reads the experiment workspace. Each role's output root is
- * enforced by DSH's file sandbox and the AutoReport write guard. Execution
- * names the general process capability the role receives.
+ * 1. Read permission does not express role boundaries — every role can read
+ *    the whole experiment workspace. Whether a role "should" analyze data or
+ *    write the report is persona guidance, not an ACL.
+ * 2. The single writable root is the real sandbox boundary. DSH's native
+ *    `workspace-write` sandbox (rooted at the writable root) enforces it for
+ *    processes and file tools; `write`/`edit` re-check the target once.
+ * 3. Tools differ only by "does this role need to execute code": THEORY and
+ *    MAIN get no process tool; the other specialists get the platform shell.
+ *
+ * All model-facing paths are experiment-workspace-relative, including shell
+ * CWD, which starts at the workspace root. The writable root is enforcement,
+ * not navigation.
  * @module
  */
 
@@ -16,37 +23,68 @@ export type AutoReportRole = 'MAIN' | 'THEORY' | 'DATA_ANALYSIS' | 'PLOTTING' | 
 /** Roles that run as continuable specialist children (every role except MAIN). */
 export type SpecialistRole = Exclude<AutoReportRole, 'MAIN'>
 
-/** Explicit execution policy for one role (PLAN.md §2.2, execution-layer rev). */
+/** DSH orchestration/control names that AutoReport role policy classifies explicitly. */
+export const DSH_ROLE_CONTROL_TOOL_NAMES = [
+  'send_to_agent', 'ask_user_question', 'workflow', 'subagent', 'subagent_fork',
+  'send_message', 'interrupt_agent', 'list_agents', 'todo_write',
+] as const
+
+/** Additional DSH execution/search names whose visibility must follow role policy. */
+export const DSH_ROLE_ESCAPE_TOOL_NAMES = [...DSH_ROLE_CONTROL_TOOL_NAMES, 'glob', 'pwsh', 'bash'] as const
+
+/** DSH's base composition mounts Bash on Unix and PowerShell on Windows. */
+export const ROLE_PROCESS_TOOL = process.platform === 'win32' ? 'pwsh' : 'bash'
+
+/** File tools every role receives; paths are workspace-relative. */
+export const BASE_TOOLS = ['read', 'list', 'grep', 'read_image', 'write', 'edit', 'skill'] as const
+
+/** Coordination/protocol tools MAIN uses to orchestrate the workflow. */
+const MAIN_COORDINATOR_TOOLS = [
+  'manifest', 'workflow_task', 'send_to_agent', 'ask_user_question',
+  'reference_extract', 'python_environment',
+] as const
+
+/** Shared handoff-protocol tools for specialist roles. */
+const SPECIALIST_PROTOCOL_TOOLS = ['manifest', 'report_workflow'] as const
+
+/** Explicit policy for one role: the whole authorization surface. */
 export interface ReportRolePolicy {
-  /** Workspace-relative role output directory. */
+  /** The role's only writable directory (workspace-relative); the DSH sandbox root. */
   readonly writableRoot: string
-  /** General process capability; Main also has narrow coordination tools. */
-  readonly execution: 'none' | 'shell' | 'compile'
+  /** Whether this role may execute code through the platform shell. */
+  readonly hasProcessTool: boolean
+  /** DSH tool names exposed to this role after AutoReport compositions are joined. */
+  readonly tools: readonly string[]
 }
 
 const MAIN_POLICY: ReportRolePolicy = {
   writableRoot: 'Outline',
-  execution: 'none',
+  hasProcessTool: false,
+  tools: [...BASE_TOOLS, ...MAIN_COORDINATOR_TOOLS],
 }
 
 const THEORY_POLICY: ReportRolePolicy = {
   writableRoot: 'Theory',
-  execution: 'none',
+  hasProcessTool: false,
+  tools: [...BASE_TOOLS, ...SPECIALIST_PROTOCOL_TOOLS],
 }
 
 const DATA_ANALYSIS_POLICY: ReportRolePolicy = {
   writableRoot: 'Data/Processed',
-  execution: 'shell',
+  hasProcessTool: true,
+  tools: [...BASE_TOOLS, ...SPECIALIST_PROTOCOL_TOOLS, ROLE_PROCESS_TOOL],
 }
 
 const PLOTTING_POLICY: ReportRolePolicy = {
   writableRoot: 'Plots',
-  execution: 'shell',
+  hasProcessTool: true,
+  tools: [...BASE_TOOLS, ...SPECIALIST_PROTOCOL_TOOLS, ROLE_PROCESS_TOOL],
 }
 
 const REPORT_POLICY: ReportRolePolicy = {
   writableRoot: 'Report',
-  execution: 'compile',
+  hasProcessTool: false,
+  tools: [...BASE_TOOLS, ...SPECIALIST_PROTOCOL_TOOLS, 'compile_report'],
 }
 
 const POLICIES: Readonly<Record<AutoReportRole, ReportRolePolicy>> = {

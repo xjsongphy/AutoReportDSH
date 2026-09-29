@@ -8,19 +8,21 @@
  * Proven end to end: single role-routed continuable setup, reservation before
  * `startContinuable`, first-call authorization through the assembled guard,
  * cross-role write denial, the full delegation round trip with artifact
- * facts, `/init` language coexistence against external project
- * settings, and agent-facing manifest projection.
+ * facts, `/init` language selection from DSH settings, and agent-facing
+ * manifest projection.
  * @module tests/integration.host
  */
 
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { isAbsolute, join, resolve } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import { SESSION_FORMAT_VERSION, Session, SessionId } from '@deepseek-ai/dsh-session'
+import { roleWritableRoot } from '../src/policy/sandbox-roots.js'
+import { AUTOREPORT_MAIN_PRESET } from '../src/membership.js'
 import { REQUIRED_DIRS } from '../src/workspace/init.js'
 import { resolveWorkflowSettings, workspaceIdForRoot } from '../src/settings.js'
 import { AUTOREPORT_SCHEMA_VERSION, type RoleBindingSnapshot } from '../src/workflow/events.js'
@@ -58,8 +60,134 @@ async function boot(options: Parameters<typeof assemble>[0] = {}): Promise<Assem
 }
 
 describe('integration: assembled host (real context)', () => {
+  it('enforces workspace-wide reads and the write boundary through the assembled tool runtime', async () => {
+    const assembled = await boot({ roleSandbox: true })
+    const stockRoot = makeTemp('autoreport-it-stock-read-root-')
+    mkdirSync(join(assembled.workspaceRoot, 'References'), { recursive: true })
+    mkdirSync(join(assembled.workspaceRoot, 'Data'), { recursive: true })
+    mkdirSync(join(stockRoot, 'Data'), { recursive: true })
+    writeFileSync(join(assembled.workspaceRoot, 'References', 'method.md'), 'allowed theory input')
+    writeFileSync(join(assembled.workspaceRoot, 'Data', 'raw.csv'), '1,2\n')
+    writeFileSync(join(stockRoot, 'Data', 'raw.csv'), 'stock session file\n')
+    const observedPaths: string[] = []
+    assembled.runtime.roleRegistry.registerReserved({
+      version: AUTOREPORT_SCHEMA_VERSION,
+      role: 'THEORY',
+      childSessionId: SessionId('it-theory-read-guard'),
+      parentSessionId: assembled.mainSession.id,
+      workflowId: 'wf-read-guard',
+      provisioning: 'reserved',
+    })
+    const childSession = Session.create(SessionId('it-theory-read-guard'), undefined, {
+      version: SESSION_FORMAT_VERSION,
+      isSeeded: false,
+      id: SessionId('it-theory-read-guard'),
+      createdAt: Date.now(),
+      cwd: stockRoot,
+      parentSession: assembled.mainSession.id,
+    })
+    const scopedTools = new Map<string, { name: string; description?: string; execute?: (...args: never[]) => unknown }>()
+    const childAgent = {
+      id: childSession.id,
+      session: childSession,
+      ctx: {
+        // The report router normally mounts its child tool plane through this
+        // scope injection; this test exercises only the host filesystem path
+        // wrapper, so leave that separate child plane inert.
+        inject: () => ({ dispose: async () => {} }),
+        tools: {
+          get: (name: string, scope?: Agent) => assembled.ctx.tools.get(name, scope),
+          register: (tool: { name: string; description?: string; execute?: (...args: never[]) => unknown }) => {
+            scopedTools.set(tool.name, tool)
+            return () => {}
+          },
+          restrict: () => () => {},
+        },
+      },
+    } as unknown as Agent
+    const stockSession = Session.create(SessionId('it-stock-read'), undefined, {
+      version: SESSION_FORMAT_VERSION,
+      isSeeded: false,
+      id: SessionId('it-stock-read'),
+      createdAt: Date.now(),
+      cwd: stockRoot,
+    })
+    const stockAgent = { id: stockSession.id, session: stockSession } as Agent
+    assembled.ctx.tools.register(defineTool({
+      name: 'read',
+      description: 'fixture file read',
+      parameters: { file_path: { type: 'string', required: true } },
+      output: {
+        schema: { type: 'object', additionalProperties: true, properties: {} },
+        render: (_args, value) => [{ type: 'text', text: String((value as { text: string }).text) }],
+      },
+      execute(args, execution) {
+        const filePath = isAbsolute(String(args.file_path))
+          ? String(args.file_path)
+          : join(execution.agent?.session.header.cwd ?? process.cwd(), String(args.file_path))
+        observedPaths.push(filePath)
+        return { text: readFileSync(filePath, 'utf8') }
+      },
+    }))
+    await assembled.ctx.parallel('agent/created', { agent: childAgent, source: 'fresh' })
+
+    const readOverride = scopedTools.get('read') as unknown as {
+      execute(args: { file_path: string }, execution: { agent: Agent }): Promise<{ text: string }>
+    }
+    const allowed = await readOverride.execute({
+      file_path: 'References/method.md',
+    }, { agent: childAgent })
+    expect(allowed.text).toContain('allowed theory input')
+    expect(observedPaths.at(-1)).toBe(join(assembled.workspaceRoot, 'References', 'method.md'))
+
+    // Read scope is the whole workspace for every role: Data is context, not duty.
+    const rawRead = await execute(assembled.ctx, 'read', {
+      file_path: 'Data/raw.csv',
+    }, childAgent, childSession)
+    expect(rawRead.isError, rawRead.text).toBe(false)
+    expect(observedPaths.at(-1)).toBe(join(stockRoot, 'Data', 'raw.csv'))
+
+    // Reads outside the experiment workspace boundary stay denied.
+    const outsideDir = makeTemp('autoreport-it-outside-read-')
+    const outsideRead = await execute(assembled.ctx, 'read', {
+      file_path: join(outsideDir, 'secret.txt'),
+    }, childAgent, childSession)
+    expect(outsideRead.isError).toBe(true)
+    expect(outsideRead.text).toContain('can read only the experiment workspace')
+
+    const stockRead = await execute(assembled.ctx, 'read', {
+      file_path: 'Data/raw.csv',
+    }, stockAgent, stockSession)
+    expect(stockRead.isError, stockRead.text).toBe(false)
+    expect(stockRead.text).toContain('stock session file')
+    expect(observedPaths.at(-1)).toBe(join(stockRoot, 'Data', 'raw.csv'))
+  })
+
+  it('fails fast when no sandbox can reconcile configured workspaceRoot with session cwd', async () => {
+    const configuredRoot = makeTemp('autoreport-configured-root-')
+    const sessionRoot = makeTemp('autoreport-session-root-')
+    const mainSession = Session.create(SessionId('it-anchor-mismatch'), undefined, {
+      version: SESSION_FORMAT_VERSION,
+      isSeeded: false,
+      id: SessionId('it-anchor-mismatch'),
+      createdAt: Date.now(),
+      cwd: sessionRoot,
+      agentPreset: AUTOREPORT_MAIN_PRESET,
+    })
+    const assembled = await boot({ workspaceRoot: configuredRoot, mainSession })
+    await expect(assembled.ctx.parallel('agent/created', {
+      agent: assembled.mainAgent,
+      source: 'fresh',
+    })).rejects.toMatchObject({
+      errors: expect.arrayContaining([
+        expect.objectContaining({ message: expect.stringMatching(/requires DSH sandboxPolicy.*differs from session cwd/u) }),
+      ]),
+    })
+  })
+
   it('registers exactly ONE continuable setup and routes it by RoleRegistry', async () => {
-    const assembled = await boot()
+    const assembled = await boot({ roleSandbox: true })
+    const roleTools = ['list', 'grep', 'bash', 'read', 'read_image', 'write', 'edit', 'str_replace_editor', 'manifest', 'report_workflow']
 
     // Ordinary DSH child: the router installs nothing — stock messaging comes
     // from the base bundle since the standalone report tool was removed upstream.
@@ -77,9 +205,21 @@ describe('integration: assembled host (real context)', () => {
       provisioning: 'reserved',
     }
     assembled.runtime.roleRegistry.registerReserved(binding)
-    const theory = makeChildRecorder('it-theory', assembled.runtime)
+    const theory = makeChildRecorder('it-theory', assembled.runtime, assembled.workspaceRoot)
     assembled.routeChild(theory)
-    expect(theory.toolNames).toEqual(['manifest', 'report_workflow'])
+    expect(theory.toolNames.slice().sort()).toEqual(roleTools.filter(name => name !== 'bash').sort())
+    expect(theory.bashDescriptions).toEqual([])
+    expect(theory.pwshDescriptions).toEqual([])
+    expect(theory.toolDescriptions.get('read')).toContain(`Relative paths resolve from ${assembled.workspaceRoot}.`)
+    expect(theory.toolDescriptions.get('write')).toContain(
+      `Relative paths resolve from ${assembled.workspaceRoot}.`,
+    )
+    expect(theory.toolDescriptions.get('str_replace_editor')).toContain(
+      `the absolute workspace root for this agent is ${assembled.workspaceRoot}`,
+    )
+    expect(theory.toolRestrictions.at(-1)?.allow).not.toContain('bash')
+    expect(theory.toolRestrictions.at(-1)?.allow).not.toContain('workflow')
+    expect(theory.toolRestrictions.at(-1)?.deny).toContain('pwsh')
     expect(theory.skillNames).toEqual([])
     expect(theory.toolNames).not.toContain('report')
     expect(theory.sections.some(section => section.name === 'tool:report-workflow')).toBe(false)
@@ -89,26 +229,39 @@ describe('integration: assembled host (real context)', () => {
 
     const reportBinding: RoleBindingSnapshot = { ...binding, role: 'REPORT', childSessionId: SessionId('it-report') }
     assembled.runtime.roleRegistry.registerReserved(reportBinding)
-    const reporter = makeChildRecorder('it-report', assembled.runtime)
+    const reporter = makeChildRecorder('it-report', assembled.runtime, assembled.workspaceRoot)
     assembled.routeChild(reporter)
-    expect(reporter.toolNames).toEqual(['manifest', 'report_workflow', 'compile_report'])
-    expect(reporter.skillNames).toEqual([
-      'experiment-report-writer',
-    ])
+    expect(reporter.toolNames.slice().sort()).toEqual([...roleTools.filter(name => name !== 'bash'), 'compile_report'].sort())
+    expect(reporter.bashDescriptions).toEqual([])
+    expect(reporter.pwshDescriptions).toEqual([])
+    expect(reporter.toolRestrictions.at(-1)?.allow).not.toContain('bash')
+    expect(reporter.toolRestrictions.at(-1)?.allow).not.toContain('workflow')
+    expect(reporter.toolRestrictions.at(-1)?.deny).toContain('pwsh')
+    const editor = reporter.registeredTools.get('str_replace_editor')
+    const editorExecution = { agent: reporter.agent, signal: new AbortController().signal }
+    expect(editor?.execute).toBeTypeOf('function')
+    await expect(editor!.execute!({ command: 'view', path: resolve(assembled.workspaceRoot, 'Report') }, editorExecution))
+      .rejects.toThrow(/use the bounded list tool/u)
+    await expect(editor!.execute!({ command: 'view', path: resolve(assembled.workspaceRoot, 'Report/main.tex') }, editorExecution))
+      .resolves.toMatchObject({ command: 'view' })
+    expect(reporter.skillNames).toEqual(['experiment-report-writer'])
     expect(reporter.sections.map(section => section.name)).not.toEqual(expect.arrayContaining([
       'autoreport:skill:experiment-report-writer',
+      'autoreport:skill:latex-compile',
     ]))
-    const plotter = makeChildRecorder('it-plotting-bound', assembled.runtime)
+    const plotter = makeChildRecorder('it-plotting-bound', assembled.runtime, assembled.workspaceRoot)
     assembled.runtime.roleRegistry.registerReserved({
       ...binding, role: 'PLOTTING', childSessionId: SessionId('it-plotting-bound'),
     })
     assembled.routeChild(plotter)
-    expect(plotter.toolNames).toEqual(['manifest', 'report_workflow', 'bash'])
-    expect(plotter.skillNames).toEqual([])
+    expect(plotter.toolNames.slice().sort()).toEqual(roleTools.slice().sort())
+    expect(plotter.bashDescriptions[0]).toContain('AutoReport PLOTTING')
+    expect(plotter.pwshDescriptions).toEqual([])
+    expect(plotter.skillNames).toEqual(['plotting-quality'])
   })
 
   it('initializes the workspace once with the frozen settings snapshot on the workflow event', async () => {
-    const assembled = await boot({ projectLanguage: 'typst' })
+    const assembled = await boot({ workspaceLanguage: 'typst' })
     expect(assembled.presetSkillNames).toEqual(['pdf-reference-reader'])
     admitFirstTurn(assembled)
     for (const dir of REQUIRED_DIRS) expect(existsSync(join(assembled.workspaceRoot, dir))).toBe(true)
@@ -116,8 +269,9 @@ describe('integration: assembled host (real context)', () => {
     expect(meta?.initialized).toBe(true)
     expect(meta?.settings?.reportLanguage).toBe('typst')
     expect(meta?.settings).toEqual(resolveWorkflowSettings({
-      project: { reportLanguage: 'typst' },
-      composition: { ...CONFIG, workspaceRoot: assembled.workspaceRoot },
+      user: { workspaceLanguages: { [resolve(assembled.workspaceRoot)]: 'typst' } },
+      workspaceRoot: assembled.workspaceRoot,
+      composition: CONFIG,
     }))
   })
 
@@ -149,6 +303,35 @@ describe('integration: assembled host (real context)', () => {
     }, assembled.mainAgent, assembled.mainSession)
     expect(reopened.isError, reopened.text).toBe(false)
     expect(assembled.runtime.forSession(assembled.mainSession).state.getTask('task-1')?.status).toBe('pending')
+  })
+
+  it('runs explicit /init and /reset targets without initializing the caller workspace', async () => {
+    const callerRoot = makeTemp('autoreport-command-caller-')
+    const targetRoot = makeTemp('autoreport-command-target-')
+    const assembled = await boot({ workspaceRoot: callerRoot })
+    const invocation = (rawInput: string) => ({ agent: assembled.mainAgent, rawInput })
+
+    expect(assembled.reportInitCommand).toBeDefined()
+    const initialized = await assembled.reportInitCommand!.handler(invocation(targetRoot))
+    expect(initialized.kind).toBe('success')
+    for (const dir of REQUIRED_DIRS) {
+      expect(existsSync(join(targetRoot, dir))).toBe(true)
+      expect(existsSync(join(callerRoot, dir))).toBe(false)
+    }
+    expect(assembled.runtime.forSession(assembled.mainSession).state.projection().meta).toBeUndefined()
+
+    mkdirSync(join(targetRoot, 'Data', 'Raw'), { recursive: true })
+    writeFileSync(join(targetRoot, 'Data', 'Raw', 'measurements.csv'), 'x,y\n1,2\n')
+    writeFileSync(join(targetRoot, 'References', 'procedure.md'), 'keep this input')
+    writeFileSync(join(targetRoot, 'Outline', 'generated.md'), 'clear this output')
+    expect(assembled.reportResetCommand).toBeDefined()
+    const reset = await assembled.reportResetCommand!.handler(invocation(targetRoot))
+    expect(reset.kind).toBe('success')
+    expect(existsSync(join(targetRoot, 'Data', 'Raw', 'measurements.csv'))).toBe(true)
+    expect(existsSync(join(targetRoot, 'References', 'procedure.md'))).toBe(true)
+    expect(existsSync(join(targetRoot, 'Outline', 'generated.md'))).toBe(false)
+    for (const dir of REQUIRED_DIRS) expect(existsSync(join(callerRoot, dir))).toBe(false)
+    expect(assembled.runtime.forSession(assembled.mainSession).state.projection().meta).toBeUndefined()
   })
 
   it('runs the whole delegation round trip: reserve -> authorized first call -> denial -> report -> artifacts -> manifest', async () => {
@@ -207,7 +390,7 @@ describe('integration: assembled host (real context)', () => {
       content: 'forbidden',
     }, childAgent, childSession)
     expect(denied.isError).toBe(true)
-    expect(denied.text).toMatch(/may write only/)
+    expect(denied.text).toMatch(/writes only inside Data\/Processed/)
     expect(existsSync(join(assembled.workspaceRoot, 'Data', 'raw.csv'))).toBe(false)
 
     // The AUTHORIZED first child tool call lands while still waiting_for_child.
@@ -230,7 +413,6 @@ describe('integration: assembled host (real context)', () => {
     const writeCommand = `printf 'bash wrote this' > "${scriptPath.replaceAll('\\', '/')}"`
     const bash = await execute(assembled.ctx, 'bash', {
       command: writeCommand,
-      description: 'Write a processed dataset',
     }, childAgent, childSession)
     expect(bash.isError, bash.text).toBe(false)
     expect(existsSync(scriptPath)).toBe(true)
@@ -326,7 +508,6 @@ describe('integration: assembled host (real context)', () => {
     expect(rejected.kind).toBe('error')
     expect(rejected.text).toContain("only in an 'autoreport' session")
     for (const dir of REQUIRED_DIRS) expect(existsSync(join(stockCwd, dir))).toBe(false)
-    expect(existsSync(join(assembled.home, 'autoreport', workspaceIdForRoot(stockCwd), 'project.json'))).toBe(false)
 
     admitFirstTurn(assembled)
     const invoke = (rawInput: string) => command.handler({

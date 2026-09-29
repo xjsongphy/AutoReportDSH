@@ -73,7 +73,7 @@ describe.skipIf(skipReason !== undefined)('integration: installer CLI against a 
 
     // Preset composition: persona substituted, absolute tool paths, no tokens.
     const composed = readFileSync(join(home, '.agent-presets', 'autoreport', 'agent.cordis.yml'), 'utf8')
-    expect(composed).toContain('You coordinate automated physics experiment report writing')
+    expect(composed).toContain('Coordinate a physics experiment report from scope through completion.')
     expect(composed).not.toMatch(/__AUTOREPORT_[A-Z_]+__/)
     expect(composed).toContain(join(REPO_ROOT, 'dist', 'src', 'preset.js'))
 

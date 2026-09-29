@@ -33,7 +33,8 @@ export function existingWorkspacePath(workspaceRoot: string, input: string): Wor
   const normalized = isAbsolute(input) ? input : normalizeWorkspaceRelativePath(input)
   if (normalized === null) throw new Error(`invalid workspace-relative path: ${input}`)
   const lexical = resolve(root, normalized)
-  if (!within(root, lexical)) throw new Error(`path escapes the workspace: ${input}`)
+  const inputWithinWorkspace = isAbsolute(input) && within(resolve(workspaceRoot), resolve(input))
+  if (!within(root, lexical) && !inputWithinWorkspace) throw new Error(`path escapes the workspace: ${input}`)
   const absolute = realpathSync(lexical)
   if (!within(root, absolute)) throw new Error(`path resolves outside the workspace: ${input}`)
   return { absolute, relative: relative(root, absolute).split(sep).join('/') }

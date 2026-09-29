@@ -7,11 +7,12 @@ description: Frozen projection of the upstream writer rules for physics and engi
 
 ## Snapshot and scope
 
-This is a **vendored, frozen projection** of the report-relevant modules from
+This skill contains a **vendored, frozen projection** of the report-relevant modules from
 [`xjsongphy/skills`](https://github.com/xjsongphy/skills) commit
 `38085aededa0` (2026-08-22). It makes **no runtime network request**. The
 selected upstream modules and their blob hashes are recorded in
-[`provenance.json`](provenance.json).
+[`provenance.json`](provenance.json). The AutoReport-specific experiment-report
+guidance immediately below is a local addition; the frozen projection follows it.
 
 Use this skill to draft, revise, or audit the reader-facing body of a physics
 or engineering experiment report. Apply a user-provided course, laboratory,
@@ -23,6 +24,110 @@ layout, data-analysis or plotting procedures, or compiler invocation. Those
 concerns belong to the calling environment, subagent prompts, and dedicated
 compilation skills. Do not invent measurements, experimental conditions,
 figure paths, citations, bibliography metadata, or other unsupported facts.
+
+## AutoReport experiment-report editorial contract
+
+Write for a reader who knows the field but did not attend the experiment. Use
+the course or user template to decide required sections and deliverables. Treat
+upstream derivations, processed datasets, and figures as evidence and working
+materials; select from them rather than reproducing their full contents. Cover
+every required measurement while keeping the body centered on the experimental
+question, observed behavior, analysis choice, and supported conclusion.
+
+For AutoReport experiment reports, this editorial contract takes precedence
+over the generic rules below when they conflict on level of detail, repetition,
+or document structure.
+
+### Default editorial selection pass
+
+Before finalizing every report, make one selection pass even when the user has
+not asked for a shorter report or set a page limit. For each paragraph, figure,
+table, and derivation, ask whether it is needed to establish the experimental
+question or necessary background, make the measurement reproducible, establish
+a reported result, interpret a result or its uncertainty/limitation, or satisfy
+an explicit template or course requirement. Remove material from the body when
+it serves none of these purposes. Keep verification detail in an appendix or a
+linked artifact when it remains useful and the template permits it. This is an
+information-selection pass, not a word-count target.
+
+Completeness applies to experimental coverage, not prose volume. Account for
+every required measurement, but do not give every dataset, fit, or generated
+figure equal space or its own subsection by default. Organize the report around
+the experimental question and results; do not mirror the upstream artifact tree.
+
+### Applying generic rules in AutoReport
+
+Define each variable and unit in narrative before its first substantive use.
+When a later equation reuses an unchanged variable, do not redefine it. A
+single lead-in and interpretation may cover a tightly connected equation
+sequence, figure group, or table group; do not wrap each element in repetitive
+prose. Keep enough local context for readers to understand what the grouped
+elements establish.
+
+### Across the whole report
+
+- **Introduction:** name the sample or system, what was measured, the question
+  the measurement answers, and the approach. Include only background needed to
+  understand that question. Do not retell the handout's history or list every
+  later subsection.
+- **Theory:** present the measurement chain and the few relations used to turn
+  readings into reported quantities. State assumptions, sign conventions, and
+  applicability before using a relation. Keep a derivation step when it explains
+  an analysis choice, a limiting condition, or a comparison in Results; place
+  independent, lengthy derivations in an appendix or a linked theory artifact
+  when the template permits. A complete Theory-agent derivation is not by itself
+  a reason to print every intermediate equation in the report.
+- **Apparatus and method:** describe what was connected or controlled, the
+  settings that affect interpretation, how readings were acquired and
+  calibrated, and any observed deviation from the intended procedure. Give
+  enough detail to reproduce the measurement without transcribing an operating
+  manual or inventing unrecorded conditions.
+- **Results and discussion:** for each measurement, state the observation, show
+  the decisive figure or table, explain the reduction or fit needed to obtain
+  the reported quantity, then compare it with the relevant model and its
+  uncertainty. If an unexpected result changes the method or conclusion,
+  establish its reliability before offering a mechanism. Separate measured
+  facts from possible explanations.
+- **Conclusion and abstract:** report the principal measured results and what
+  they support. Keep the conclusion narrower than the full discussion; draft
+  the abstract after the body and give the method, result, and conclusion in one
+  compact account. Avoid repeating every fit, caveat, and subsection.
+- **Appendices:** include required question answers and detailed grids where
+  useful for verification. A requirement to tabulate a quantity at each bias
+  point is satisfied by a clearly referenced appendix table when the template
+  allows it; do not also reproduce the same grid in the body and a raw-data
+  appendix. Preserve links to the full source data when the table is sampled.
+
+### Human-report examples (adapted; illustrative values are not report data)
+
+These examples paraphrase the local modern-physics reports on the electro-optic
+effect and the Hall coefficient of silicon. Reuse the *reasoning pattern*, never
+their measurements, apparatus settings, or conclusions in another experiment.
+
+**A measurement problem changes the analysis.** An electro-optic report noted
+that laser power drift left one bias sweep incomplete and that fitted extrema
+disagreed with directly read extrema. It then used the directly read values for
+the half-wave voltage. In a new report, give the actual observation and its
+effect on the chosen estimator instead of adding a generic paragraph on all
+possible sources of error.
+
+**A condition explains why a reading is usable.** A silicon Hall report
+recorded voltage only after the sample temperature settled, and rejected a run
+if temperature changed substantially during current and field reversal. State
+the analogous recorded control condition when it determines whether data may
+be compared or fitted; omit routine switch-by-switch instructions.
+
+**Theory stops at the reported inference.** In the electro-optic report, the
+half-wave voltage relation connected the measured voltage to the electro-optic
+coefficient used later. The report did not need every algebraic expansion again
+at the point of fitting. In an experiment report, retain the equation, its
+assumptions, and the step the reader needs to understand the reported value;
+keep the full independent derivation in the theory working file.
+
+**A conclusion selects.** A Hall report summarized the observed temperature
+regimes and the derived quantities in two paragraphs. A conclusion should not
+repeat every figure caption, fitting window, alternate model, and uncertainty
+component after those have been discussed where they affect a result.
 
 ## Report contract (upstream `types/report.md`)
 

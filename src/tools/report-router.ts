@@ -139,15 +139,15 @@ export function installRoutedReportTool(
     const disposeModelSelection = installSpecialistModelSelection(childCtx, child, workflow)
     if (disposeModelSelection !== undefined) disposers.push(disposeModelSelection)
     const language = workflow.reportLanguageForChild(child.id)
-    const execution = rolePolicy(entry.binding.role).execution
-    if (execution === 'compile') {
+    if (entry.binding.role === 'REPORT') {
       disposers.push(installReportEnvironmentSection(childCtx, language))
       disposers.push(installReportLanguageGuidanceSection(childCtx, language))
       disposers.push(installCompileReportTool(childCtx, language, workflow.config.workspaceRoot))
       // Release the gate's per-session state with the scope it belonged to. A
       // surviving session self-heals: the next guard call re-seeds from the log.
       disposers.push(() => { skillLoadTracker.forget(String(child.id)) })
-    } else if (child.session !== undefined && execution === 'shell') {
+    }
+    if (child.session !== undefined && rolePolicy(entry.binding.role).hasProcessTool && childCtx.get('shell') !== undefined) {
       // Scoped registration gives only these roles a shell. DSH owns its
       // registration lifetime together with the child context.
       installBashTool(childCtx, { enableRunInBackground: false })
@@ -200,7 +200,7 @@ export function apply(ctx: Context): void {
   ctx.on('agent/created', ({ agent }) => {
     if (routedChildren.has(agent)) return undefined
     // The injected fiber rides the agent's own scope and is disposed with it.
-    agent.ctx.inject(['tools', 'subagents', 'systemPrompt', 'skills', 'shell', 'shellEnv', 'autoreportWorkflow'], childCtx => {
+    agent.ctx.inject(['tools', 'subagents', 'systemPrompt', 'skills', 'autoreportWorkflow'], childCtx => {
       installRoutedReportTool(childCtx, agent, ctx, childCtx.autoreportWorkflow)
     })
     return undefined

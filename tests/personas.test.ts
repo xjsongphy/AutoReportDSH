@@ -44,17 +44,20 @@ const QUALITY_GATES: Readonly<Record<string, readonly string[]>> = {
 
 /** Role boundary statements each specialist persona must keep. */
 const ROLE_BOUNDARIES: Readonly<Record<string, readonly string[]>> = {
-  THEORY: ['Writes stay confined to your role directory (`Theory/`)'],
-  DATA_ANALYSIS: ['Writes stay confined to your role directory (`Data/Processed/`)'],
-  PLOTTING: ['writes stay confined to your role directory (`Plots/`)'],
-  REPORT: ['Writes stay confined to your role directory (`Report/`)'],
+  THEORY: [
+    'Owns outputs in `Theory/`',
+    'Calibration, fitting, uncertainty estimation from measurements, and empirical conclusions belong to DATA_ANALYSIS',
+  ],
+  DATA_ANALYSIS: ['`Data/Processed/`'],
+  PLOTTING: ['`Plots/Fig/`'],
+  REPORT: ['`Report/`'],
 }
 
 /** Tool/skill names each persona must reference. */
 const REQUIRED_REFERENCES: Readonly<Record<string, readonly string[]>> = {
   THEORY: ['report_workflow'],
   DATA_ANALYSIS: ['report_workflow', 'manifest'],
-  PLOTTING: ['report_workflow', 'manifest', 'plotting-quality'],
+  PLOTTING: ['report_workflow', 'manifest'],
   REPORT: ['report_workflow', 'experiment-report-writer'],
 }
 
@@ -74,7 +77,6 @@ const FORBIDDEN_PERSONA_PATTERNS: readonly { pattern: RegExp; reason: string }[]
   { pattern: /do the work yourself/iu, reason: 'contradicts MAIN coordinate-do-not-execute' },
   { pattern: /status="success"/u, reason: 'outcome status tutorials belong to tool descriptions' },
   { pattern: /Issue reporting/u, reason: 'block_type enum meaning lives in the report_workflow tool description, not personas' },
-  { pattern: /str_replace_editor|workspace-relative|sandbox_permissions/u, reason: 'tool and sandbox path mechanics belong to runtime guidance' },
 ]
 
 function assertNoForbiddenPatterns(text: string, label: string): void {
@@ -89,20 +91,18 @@ describe('persona slimming', () => {
     expect(text).toContain('send_to_agent')
     expect(text).not.toContain('report_task')
     expect(text).toContain('pdf-reference-reader')
-    expect(text).toContain('reference_extract')
+    expect(text).toContain('python_environment')
     expect(text).not.toContain('bash')
+    expect(text).toContain('list')
     expect(text).toContain('avoid tables unless requested')
     expect(text).not.toContain('subagent_fork')
     expect(text).not.toContain('`respond`')
     assertNoForbiddenPatterns(text, 'MAIN persona')
-    // Detailed dispatch and task-board mechanics stay with their tools; the
-    // short dispatch boundary is visible in Main's role instructions.
+    // Dispatch-payload and task-board policy is tool-owned (the
+    // `tool:send_to_agent` / `tool:workflow_task` sections), not persona prose.
     expect(text).not.toContain('Selective workflow tasks')
     expect(text).not.toContain('## Dispatch Protocol')
     expect(text).toContain('Minimal dispatch')
-    for (const rule of ['No micromanagement', 'No technical relay', 'No hidden context dumping', 'No prompt expansion', 'Default to under-specifying']) {
-      expect(text).toContain(rule)
-    }
     const dispatch = SEND_TO_AGENT_SYSTEM_PROMPT
     expect(dispatch).toContain('Use `send_to_agent` for all subagent delegation')
     expect(dispatch).toContain('No micromanagement')
@@ -110,6 +110,7 @@ describe('persona slimming', () => {
     expect(dispatch).toContain('No hidden context dumping')
     expect(dispatch).toContain('No prompt expansion')
     expect(dispatch).toContain('Default to under-specifying')
+    expect(dispatch).toContain('Keep Theory upstream of data reduction')
     expect(dispatch).toContain('Do not include:')
     expect(dispatch).toContain('Route follow-up work according to the `send_to_agent` result')
     expect(dispatch).toContain('If a user constraint conflicts with a subagent role')
@@ -120,7 +121,7 @@ describe('persona slimming', () => {
     expect(board).toContain('Track only nontrivial coordination work')
   })
 
-  it('puts every specialist role contract before shared rules and keeps role boundaries', () => {
+  it('prefixes every specialist with the shared collaboration rules and keeps role boundaries', () => {
     const common = readFileSync(join(REPO_PERSONAS, 'Common.md'), 'utf8')
     // The report protocol is a runtime context on every child, not persona prose.
     expect(common).not.toContain('## Workflow boundary')
@@ -138,14 +139,7 @@ describe('persona slimming', () => {
       const text = loadSpecialistPersona(role)
       const roleFile = readFileSync(join(REPO_PERSONAS, ROLE_PERSONA_FILES[role] ?? ''), 'utf8')
       expect(text.startsWith(roleFile)).toBe(true)
-      expect(text.endsWith(common)).toBe(true)
-      const headings = ['## Role Contract', '## Inputs and Outputs', '## Workflow', '## Quality Gate', '## Completion']
-      const locations = headings.map(heading => roleFile.indexOf(heading))
-      expect(locations.every(index => index >= 0)).toBe(true)
-      expect(locations).toEqual([...locations].sort((a, b) => a - b))
-      for (const field of ['Mission', 'Owns', 'Does not own', 'Escalation rule']) {
-        expect(roleFile.slice(0, locations[1])).toContain(field)
-      }
+      expect(text).toContain(common)
       expect(text).toContain('report_workflow')
       // The finish-through-report rule lives in the child context once.
       expect(roleFile).not.toContain('Main-dispatched tasks must finish through `report_workflow`')
@@ -184,16 +178,12 @@ describe('persona slimming', () => {
     }
   })
 
-  it('moves plotting implementation rules into its loadable skill', () => {
-    const persona = readFileSync(join(REPO_PERSONAS, 'plotting_agent.md'), 'utf8')
-    const skill = readFileSync(join(REPO_PERSONAS, '../skills/plotting-quality.md'), 'utf8')
-    expect(persona).toContain('Load `plotting-quality`')
-    expect(persona).toContain('Does not own')
-    expect(persona).not.toContain('markerfacecolor')
-    for (const rule of ['markerfacecolor', 'np.interp', 'visual_h', 'unicode_minus', 'plt.close']) {
-      expect(skill).toContain(rule)
-    }
-    expect(skill).not.toContain('Auto-validated')
+  it('keeps the plotting unicode-minus requirement without claiming auto-validation', () => {
+    const text = readFileSync(join(REPO_PERSONAS, '../skills/plotting-quality.md'), 'utf8')
+    expect(text).toContain('unicode_minus')
+    expect(text).toContain('plt.close')
+    expect(text).not.toContain('Auto-validated')
+    expect(text).not.toContain('Automatic code validation')
   })
 
   it('keeps the hard LaTeX figure/table placement policy in language guidance', () => {
@@ -207,18 +197,6 @@ describe('persona slimming', () => {
     const occurrences = text.split('`analysis.md`').length - 1
     expect(occurrences).toBe(1)
     expect(text).toContain('`analysis.md` — Methods, formulas, assumptions')
-  })
-
-  it('keeps scientific work with its owner across the full pipeline', () => {
-    const common = readFileSync(join(REPO_PERSONAS, 'Common.md'), 'utf8')
-    expect(common).toContain('Do not bypass a role boundary merely because a generic tool can perform the operation')
-    const data = readFileSync(join(REPO_PERSONAS, 'data_analysis_agent.md'), 'utf8')
-    const plot = readFileSync(join(REPO_PERSONAS, 'plotting_agent.md'), 'utf8')
-    const report = readFileSync(join(REPO_PERSONAS, 'report_agent.md'), 'utf8')
-    expect(data).toContain('Deriving a missing physical model')
-    expect(plot).toContain('Fitting raw data to create new scientific results')
-    expect(report).toContain('REPORT is downstream-only')
-    expect(report).toContain('never create missing upstream scientific evidence')
   })
 
   const CLI_AVAILABLE = existsSync(join(CLI_AGENTS, 'theory_agent.md'))

@@ -49,7 +49,9 @@ describe('autoreport preset contribution', () => {
 
     apply(context)
 
-    expect(tools.sort()).toEqual(['install_python_package', 'manifest', 'reference_extract', 'send_to_agent', 'workflow_task'])
+    expect(tools.sort()).toEqual([
+      'manifest', 'python_environment', 'reference_extract', 'send_to_agent', 'workflow_task',
+    ])
     expect(skills).toEqual(['pdf-reference-reader'])
     expect(referencesProvider).toBe(1)
     // Tool-owned policy ships with the tools (master dsh convention): the two

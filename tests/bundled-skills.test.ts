@@ -27,9 +27,11 @@ describe('loadBundledSkills', () => {
   it('loads every bundled skill document and nothing else', () => {
     expect(skills.map(skill => skill.name)).toEqual([
       'experiment-report-writer',
+      'latex-compile',
       'pdf-reference-reader',
       'plotting-quality',
       'typst',
+      'typst-compile',
     ])
   })
 
@@ -71,7 +73,7 @@ describe('loadBundledSkills', () => {
   })
 
   it('omits the base for skills whose prose addresses the experiment workspace', () => {
-    for (const name of ['pdf-reference-reader', 'plotting-quality']) {
+    for (const name of ['latex-compile', 'typst-compile', 'pdf-reference-reader']) {
       expect(skills.find(skill => skill.name === name)?.directory).toBeUndefined()
     }
   })
@@ -95,11 +97,20 @@ describe('loadBundledSkills', () => {
     expect(writer?.content).toContain('[`provenance.json`](provenance.json)')
   })
 
+  it('documents role-shell LaTeX compilation without compile_report', () => {
+    const latex = skills.find(skill => skill.name === 'latex-compile')
+    expect(latex?.content).toContain('latexmk')
+    expect(latex?.content).toContain('Compile `main.tex` directly')
+  })
+
   it('keeps the typst bundle free of workspace paths its base would mis-resolve', () => {
     const typst = skills.find(skill => skill.name === 'typst')
     expect(typst?.content).toContain('[basics.md](basics.md)')
+    // The compile command was a second, redundant copy of `typst-compile`'s job,
+    // and it was the one workspace path the DSH resource anchor would have
+    // resolved against the skill directory.
     expect(typst?.content).not.toContain('typst compile Report/main.typ')
-    expect(typst?.content).toContain('compile_report')
+    expect(typst?.content).toContain('typst-compile')
   })
 
   it('leaves no dangling link inside the typst reference bundle', () => {
@@ -136,7 +147,7 @@ describe('loadReportLanguageGuidance', () => {
   it('selects the text for the requested language and names its skills', () => {
     expect(loadReportLanguageGuidance('typst')).toContain('# Active report language: Typst')
     expect(loadReportLanguageGuidance('typst')).toContain('do not use LaTeX commands')
-    expect(loadReportLanguageGuidance('typst')).toContain('`compile_report({path:')
+    expect(loadReportLanguageGuidance('typst')).toContain('compile_report')
     expect(loadReportLanguageGuidance('typst')).not.toContain('LaTeX layout rules')
   })
 })

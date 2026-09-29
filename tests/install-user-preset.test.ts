@@ -51,7 +51,7 @@ describe('install-user-preset', () => {
 
     expect(result.presetDir).toBe(join(home, '.agent-presets', 'autoreport'))
     const composed = readFileSync(join(result.presetDir, 'agent.cordis.yml'), 'utf8')
-    expect(composed).toContain('You coordinate automated physics experiment report writing')
+    expect(composed).toContain('Coordinate a physics experiment report from scope through completion.')
     expect(composed).not.toContain('__AUTOREPORT_MAIN_PERSONA__')
     expect(composed).not.toContain('PLACEHOLDER_MAIN_PERSONA')
     expect(composed).toContain(join(ROOT, 'dist', 'src', 'preset.js'))
@@ -94,7 +94,7 @@ describe('install-user-preset', () => {
     writeFileSync(join(presetDir, 'agent.cordis.yml'), 'user edited this')
     install({ home, repoRoot: ROOT, entry: builtEntry() })
 
-    expect(readFileSync(join(presetDir, 'agent.cordis.yml'), 'utf8')).toContain('You coordinate automated physics experiment report writing')
+    expect(readFileSync(join(presetDir, 'agent.cordis.yml'), 'utf8')).toContain('Coordinate a physics experiment report from scope through completion.')
     expect(existsSync(foreign)).toBe(true)
     expect(readFileSync(foreign, 'utf8')).toBe('keep me')
   })
@@ -113,7 +113,7 @@ describe('install-user-preset', () => {
     expect(existsSync(legacyDir)).toBe(false)
     expect(existsSync(join(result.presetDir, 'user-notes.md'))).toBe(true)
     expect(readFileSync(join(result.presetDir, 'user-notes.md'), 'utf8')).toBe('keep me')
-    expect(readFileSync(join(result.presetDir, 'agent.cordis.yml'), 'utf8')).toContain('You coordinate automated physics experiment report writing')
+    expect(readFileSync(join(result.presetDir, 'agent.cordis.yml'), 'utf8')).toContain('Coordinate a physics experiment report from scope through completion.')
   })
 
   it('fails loud when the built entry is missing', () => {

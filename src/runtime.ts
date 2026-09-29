@@ -18,7 +18,7 @@ import { deliverSubagentPrompt, type HostPromptDeliverer } from '@deepseek-ai/ds
 import {
   ensureSubagentDescriptor,
   residentDescriptor,
-  RESIDENT_TOOL_FILTER,
+  residentToolFilter,
 } from './subagent-descriptor.js'
 import type { Config, ReportLanguage } from './config.js'
 import type { CoordinatorMessageSource, SubagentReportMessageSource } from './messages.js'
@@ -57,11 +57,8 @@ import {
   AUTOREPORT_SETTINGS_NAMESPACE,
   autoReportUserSettingsBase,
   childAgentOptions,
-  loadProjectSettings,
   resolveWorkflowSettings,
   validatePythonExecutableSetting,
-  workspaceIdForRoot,
-  type AutoReportProjectSettings,
   type AutoReportUserSettings,
   type WorkflowSettingsSnapshot,
 } from './settings.js'
@@ -111,9 +108,98 @@ function settlementNotice(childId: SessionId, summary: string): ReturnType<typeo
   })
 }
 
+interface PlotterModelRoute {
+  readonly provider: string
+  readonly model: string
+}
+
+/** Resolve the route selected for this exact prompt/request assembly. */
+function plotterModelRoute(
+  ctx: Context,
+  child: Agent,
+  variables: Readonly<Record<string, string | undefined>>,
+): PlotterModelRoute | undefined {
+  // DSH's model-selection assembly hook snapshots the selected route into
+  // these variables before the request config is built. Prefer that snapshot
+  // so a picker change cannot race the route metadata lookup.
+  if (typeof variables['provider'] === 'string' && typeof variables['model'] === 'string') {
+    return { provider: variables['provider'], model: variables['model'] }
+  }
+
+  // The Session projection covers a pending selection when no assembly hook
+  // supplies the route. The request header and Agent options are fallbacks.
+  const projections = ctx.get('sessionProjections') as {
+    stateOf?: (session: Session, key: string) => unknown
+  } | undefined
+  const selectionState = projections?.stateOf?.(child.session, 'modelSelection') as {
+    pending?: { provider?: unknown; model?: unknown } | null
+  } | undefined
+  const pending = selectionState?.pending
+  if (typeof pending?.provider === 'string' && typeof pending.model === 'string') {
+    return { provider: pending.provider, model: pending.model }
+  }
+
+  // Match DSH's read_image route resolution when no new selection is pending.
+  const requestRoute = child.session.requestHeader()?.config
+  const provider = requestRoute?.provider ?? child.options.provider
+  const model = requestRoute?.model ?? child.options.model
+  return provider === undefined || model === undefined ? undefined : { provider, model }
+}
+
+/** Add or remove the visual-review section for the route entering each step. */
+function installPlotterImageReviewPrompt(ctx: Context, child: Agent): void {
+  const tools = ctx.get('tools') as { get?: (name: string, scope?: Agent) => unknown } | undefined
+  const llm = ctx.get('llm') as {
+    resolveModelInfo?: (
+      provider: string,
+      model: string,
+      signal?: AbortSignal,
+    ) => Promise<{ inputModalities?: readonly string[] }>
+  } | undefined
+  if (tools?.get?.('read_image', child) === undefined || llm?.resolveModelInfo === undefined) return
+
+  // Capabilities are stable for one exact provider/model pair. A model picker
+  // route change gets a fresh lookup; unknown metadata stays non-mandatory.
+  const imageCapability = new Map<string, boolean>()
+  const sectionName = 'autoreport:plot-image-review'
+  const sectionText = '## Visual review of final figures\n\nBefore reporting success, use read_image to inspect each final figure at its rendered size. Use your judgment to correct any visible problems.'
+
+  ctx.on('system-prompt/assemble', async (_assembly, assemblyContext, next) => {
+    const assembly = await next()
+    const signal = assemblyContext.signal
+    signal?.throwIfAborted()
+    const route = plotterModelRoute(ctx, child, assembly.variables)
+    let canReview = false
+    if (route !== undefined) {
+      const key = `${route.provider}\u0000${route.model}`
+      const cached = imageCapability.get(key)
+      if (cached !== undefined) {
+        canReview = cached
+      } else {
+        try {
+          const info = await llm.resolveModelInfo!(route.provider, route.model, signal)
+          signal?.throwIfAborted()
+          canReview = info.inputModalities?.includes('image') === true
+          imageCapability.set(key, canReview)
+        } catch {
+          signal?.throwIfAborted()
+          imageCapability.set(key, false)
+        }
+      }
+    }
+    return {
+      ...assembly,
+      sections: [
+        ...assembly.sections.filter(section => section.name !== sectionName),
+        ...(canReview ? [{ name: sectionName, text: sectionText }] : []),
+      ],
+    }
+  })
+}
+
 /** Construction options beyond configuration (host wiring / tests). */
 export interface RuntimeOptions {
-  /** Harness home override for external project settings; absent resolves the DSH home. */
+  /** Harness home override for AutoReport-managed environment files. */
   readonly settingsHome?: string
   /** Interpreter discovery overlay; tests disable conda/PATH scans. */
   readonly pythonDetect?: PythonDetectOptions
@@ -131,7 +217,7 @@ export default class AutoReportWorkflowRuntime extends Service {
   readonly roleRegistry = new RoleRegistry()
   /** Validated plugin configuration used by tools and first-turn initialization. */
   readonly config: Config
-  /** Harness home override for external project settings; absent resolves the DSH home. */
+  /** Harness home override for AutoReport-managed environment files. */
   readonly settingsHome: string | undefined
   private readonly parents = new Map<string, ParentWorkflowRuntime>()
   // Retain admitted parent sessions for workflow/artifact ownership, but do
@@ -158,7 +244,7 @@ export default class AutoReportWorkflowRuntime extends Service {
    * Create the host runtime and observe committed report messages.
    * @param ctx - host context carrying Session events.
    * @param config - resolved plugin configuration.
-   * @param options - `settingsHome` overrides `<dshHome>` for project settings (tests).
+   * @param options - host wiring and test overrides.
    */
   constructor(ctx: Context, config: Config = DEFAULT_CONFIG, options: RuntimeOptions = {}) {
     super(ctx, 'autoreportWorkflow')
@@ -244,22 +330,25 @@ export default class AutoReportWorkflowRuntime extends Service {
       owner.runtime.waiters.noteChildActivity(String(agent.id), status)
     }, { global: true })
     ctx.on('agent/created', ({ agent }) => {
-      // Keep a reference only. Resident children are created lazily by the
-      // first role dispatch, so a new MAIN does not accumulate blank child
-      // sessions that the UI renders as the global empty hero.
       this.liveAgents.set(String(agent.id), agent)
+      // Load Main's durable role bindings before later created listeners (or
+      // child session events) need to resolve the resident identities. The
+      // host finishes role-specific tool composition before it asks us to
+      // materialize those bindings as live Agents.
+      if (isAutoReportMainSession(agent.session)) this.forSession(agent.session)
       return undefined
     }, { global: true })
     ctx.on('agent/disposed', ({ agent }) => {
       this.liveAgents.delete(String(agent.id))
-      if (isAutoReportMainSession(agent.session)) void this.disposeResidentFor(agent.id)
+      this.forgetResidentAgent(agent)
     }, { global: true })
-    ctx.effect(() => () => {
-      void this.disposeResidentRoles()
+    ctx.effect(() => async () => {
+      await this.disposeResidentRoles()
     }, 'autoreport.residentRoles()')
     const existingAgents = ctx.get('agents') as { list?: () => Agent[] } | undefined
     for (const agent of existingAgents?.list?.() ?? []) {
       this.liveAgents.set(String(agent.id), agent)
+      if (isAutoReportMainSession(agent.session)) this.forSession(agent.session)
     }
   }
 
@@ -300,6 +389,26 @@ export default class AutoReportWorkflowRuntime extends Service {
   /** Ensure all four fixed subagents exist after an explicit activation. */
   async ensureResidentRoles(parent: Agent, signal?: AbortSignal): Promise<void> {
     await Promise.all(allSpecialistRoles().map(role => this.ensureResidentRole(parent, role, signal)))
+  }
+
+  /** Restore only the specialist roles that already have durable bindings. */
+  async restoreResidentRoles(parent: Agent): Promise<void> {
+    if (!isAutoReportMainSession(parent.session)) return
+    const bindings = [...this.forSession(parent.session).state.projection().bindingsByRole.values()]
+      .filter(binding => binding.provisioning !== 'failed')
+    await Promise.all(bindings.map(async binding => {
+      try {
+        await this.ensureResidentRole(parent, binding.role)
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error)
+        this.ctx.logger.warn(
+          'AutoReportDSH: could not restore resident %s for MAIN %s: %s',
+          binding.role,
+          parent.id,
+          message,
+        )
+      }
+    }))
   }
 
   /**
@@ -359,7 +468,6 @@ export default class AutoReportWorkflowRuntime extends Service {
     const parentId = entry.binding.parentSessionId
     const agents = this.ctx.get('agents') as { get?: (id: SessionId) => Agent | undefined } | undefined
     const parent = agents?.get?.(parentId)
-    if (parent === undefined) throw new Error('direct parent is not live; report was not delivered')
     const message = createUserMessage({
       content: [
         { type: 'text', text: `Background subagent ${child.id} reported:` },
@@ -371,7 +479,18 @@ export default class AutoReportWorkflowRuntime extends Service {
         senderSessionId: child.id,
       } satisfies SubagentReportMessageSource,
     })
-    parent.steer(message)
+    if (parent !== undefined) {
+      parent.steer(message)
+    } else {
+      const parentSession = this.mainSessions.get(String(parentId))
+      if (parentSession === undefined) {
+        throw new Error('direct parent session is unavailable; report was not delivered')
+      }
+      // A durable resident can finish while Main has no live Activation.
+      // Append the same relay message to Main's Session so its normal observer
+      // folds the report and the next Main activation sees it in history.
+      parentSession.append('user/message', message, { surfaceOp: 'append' })
+    }
     return String(message.id)
   }
 
@@ -453,6 +572,7 @@ export default class AutoReportWorkflowRuntime extends Service {
     const childDepth = resolveChildDepth(parent, 1)
     const agentOptions: Agent['options'] = resolveChildAgentOptions(parent, route, childDepth)
     const persona = loadSpecialistPersona(role)
+    let descriptorToolFilter: ReturnType<typeof residentToolFilter> | undefined
     const setup = async (childCtx: Context, child: Agent): Promise<void> => {
       if (child === undefined) throw new Error(`resident ${role} setup has no child agent`)
       // Master dsh moved persona/tool-filter composition into the continuation
@@ -470,12 +590,25 @@ export default class AutoReportWorkflowRuntime extends Service {
         order: childCtx.systemPrompt.getSectionOrder('DEPLOYMENT_PERSONA_PREFIX'),
         text: persona,
       })
-      if (joined !== undefined) childCtx.tools?.restrict(RESIDENT_TOOL_FILTER)
+      if (joined !== undefined) {
+        const denied = residentToolFilter(role)
+        const getScopedTool = (childCtx.tools as unknown as {
+          get?: (name: string, scope?: Agent) => unknown
+        }).get
+        const visibleDeniedNames = new Set((denied.deny ?? []).filter(name =>
+          getScopedTool === undefined || getScopedTool.call(childCtx.tools, name, child) !== undefined))
+        const roleFilter = residentToolFilter(role, visibleDeniedNames)
+        if ((roleFilter.deny?.length ?? 0) > 0) {
+          childCtx.tools.restrict(roleFilter)
+          descriptorToolFilter = roleFilter
+        }
+      }
+      if (role === 'PLOTTING') installPlotterImageReviewPrompt(childCtx, child)
       // The parent preset is joined synchronously above, but its scoped skill
       // service is exposed through Cordis injection. Wait for that capability
       // before publishing the child so REPORT skills and the role report tool
       // are present from the first resident request.
-      await childCtx.inject(['skills', 'shell', 'shellEnv'], (skillCtx) => {
+      await childCtx.inject(['skills'], (skillCtx) => {
         skillCtx.effect(
           () => installRoutedReportTool(skillCtx, child, this.ctx, this),
           `autoreport.resident.${role}()`,
@@ -514,7 +647,12 @@ export default class AutoReportWorkflowRuntime extends Service {
       // carries one keeps it.
       ensureSubagentDescriptor(
         handle.agent.session,
-        residentDescriptor({ role, route: agentOptions, persona }),
+        residentDescriptor({
+          role,
+          route: agentOptions,
+          persona,
+          ...(descriptorToolFilter === undefined ? {} : { toolFilter: descriptorToolFilter }),
+        }),
       )
       return handle.agent
     } catch (error: unknown) {
@@ -540,6 +678,18 @@ export default class AutoReportWorkflowRuntime extends Service {
       this.residentHandles.set(String(parent.id), byRole)
     }
     if (!byRole.has(role)) byRole.set(role, handle)
+  }
+
+  /** Remove the exact disposed activation while preserving its durable binding. */
+  private forgetResidentAgent(agent: Agent): void {
+    for (const [parentId, byRole] of this.residentHandles) {
+      for (const [role, handle] of byRole) {
+        if (handle.agent !== agent) continue
+        byRole.delete(role)
+        if (byRole.size === 0) this.residentHandles.delete(parentId)
+        return
+      }
+    }
   }
 
   private async disposeResidentRoles(): Promise<void> {
@@ -937,8 +1087,8 @@ export default class AutoReportWorkflowRuntime extends Service {
 
   /**
    * Idempotent first-turn workspace initialization for one Main session:
-   * resolves the settings chain (override > workspace language > project >
-   * user > composition > defaults), materializes missing resources for the
+   * resolves the settings chain (override > workspace language > user >
+   * composition > defaults), materializes missing resources for the
    * resolved language, then records the workflow once via
    * {@link createWorkflow}.
    * @param session - Main session whose cwd (or configured root) is the experiment workspace.
@@ -952,19 +1102,14 @@ export default class AutoReportWorkflowRuntime extends Service {
     if (root === undefined || root.length === 0) return
     let settings: WorkflowSettingsSnapshot
     try {
-      const project = loadProjectSettings(this.settingsHome, workspaceIdForRoot(root))
       settings = resolveWorkflowSettings({
         user: this.userSettingsSource(),
-        project,
         workspaceRoot: root,
         composition: this.config,
         dshHome: this.settingsHome ?? resolveDshHome(),
       })
-      this.adoptLegacyLanguage(root, project)
       ensureInitialized(root, settings.reportLanguage)
     } catch (error: unknown) {
-      // A broken external settings document must not wedge the first turn;
-      // the explicit /init path surfaces the same failure loudly for repair.
       const message = error instanceof Error ? error.message : String(error)
       try {
         this.ctx.logger.warn('AutoReportDSH: skipped workflow initialization: %s', message)
@@ -979,8 +1124,7 @@ export default class AutoReportWorkflowRuntime extends Service {
 
   /**
    * Language currently in effect for one workspace root under the live user
-   * settings: the authoritative map entry, else the legacy project setting,
-   * else the user default.
+   * settings: the authoritative map entry, else the user default.
    * @param root - absolute workspace root.
    * @returns the language a workflow created now would resolve.
    */
@@ -1002,31 +1146,13 @@ export default class AutoReportWorkflowRuntime extends Service {
   }
 
   /**
-   * Record a legacy `project.json` language in the authoritative map, once.
-   *
-   * Before this revision the only per-workspace language lived in that file, so
-   * a workspace configured by an older build would otherwise keep resolving
-   * from a layer the settings page can neither see nor set. Adopting it on the
-   * first initialization is idempotent: once the map carries the entry, later
-   * resolutions read it directly and never re-adopt.
-   * @param root - absolute workspace root.
-   * @param project - project settings already loaded for that root.
-   */
-  private adoptLegacyLanguage(root: string, project: AutoReportProjectSettings): void {
-    const key = resolve(root)
-    if (project.reportLanguage === undefined) return
-    if (this.userSettingsSource().workspaceLanguages?.[key] !== undefined) return
-    void this.writeWorkspaceLanguage(key, project.reportLanguage)
-  }
-
-  /**
    * React to one user-settings change by switching the templates of every
    * workspace whose resolved language moved.
    *
    * The first observation is not a change: it records the baseline. Later
    * observations compare each key either snapshot carries, so a move recorded
    * as a fresh map entry is diffed against the language in effect just before
-   * it (the legacy project setting, then the user default). A default-only
+   * it (the user default). A default-only
    * change therefore switches nothing, because no key moves.
    */
   private observeUserSettingsChange(): void {
@@ -1063,8 +1189,7 @@ export default class AutoReportWorkflowRuntime extends Service {
   private effectiveLanguageFor(root: string, settings: AutoReportUserSettings): ReportLanguage {
     const explicit = settings.workspaceLanguages?.[resolve(root)]
     if (explicit !== undefined) return explicit
-    const legacy = loadProjectSettings(this.settingsHome, workspaceIdForRoot(root)).reportLanguage
-    return legacy ?? settings.defaultReportLanguage
+    return settings.defaultReportLanguage
   }
 
   /**

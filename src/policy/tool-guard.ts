@@ -1,11 +1,20 @@
 /**
  * Synchronous AutoReport role guard over DSH's immutable ToolExecution.
  *
- * The guard is authorization, not visibility. Domain invariants DSH cannot
- * represent: role membership, sandbox_permissions escalation denial, and
- * defense-in-depth write-path checks against role writable roots. Filesystem
- * targets are canonicalized through the closest existing ancestor so a
- * workspace symlink cannot escape a role's writable roots.
+ * The guard is an execution backstop in addition to role-scoped tool rosters,
+ * and it stays deliberately small because the permission model is small:
+ *
+ * 1. Read scope is the whole experiment workspace for every role — the guard
+ *    enforces only the workspace boundary, never role boundaries.
+ * 2. The single writable root per role is the real boundary. `write`/`edit`
+ *    targets are resolved against the experiment root (all model paths are
+ *    workspace-relative) and must land inside the role's writable root;
+ *    DSH's native sandbox re-checks the same property at process level.
+ * 3. Process tools exist only for roles with `hasProcessTool`, and shell
+ *    calls are never parsed — the OS sandbox owns their write effects.
+ *
+ * Filesystem targets are canonicalized through the closest existing ancestor
+ * so a workspace symlink cannot escape a role's writable roots.
  *
  * Coexistence: only AutoReport-owned sessions are restricted — a MAIN root is
  * one actually running the `autoreport` preset, or explicitly wired as Main, and
@@ -20,7 +29,7 @@ import { basename, dirname, isAbsolute, relative, resolve, sep } from 'node:path
 import type { SessionId } from '@deepseek-ai/dsh-session'
 import type { ToolExecution, ToolGuard } from '@deepseek-ai/dsh-tools'
 import { isAutoReportPreset, resolveAgentPreset } from '../membership.js'
-import { rolePolicy, type AutoReportRole, type ReportRolePolicy } from '../roles.js'
+import { DSH_ROLE_CONTROL_TOOL_NAMES, ROLE_PROCESS_TOOL, rolePolicy, type AutoReportRole, type ReportRolePolicy } from '../roles.js'
 import type { RoleRegistry } from '../workflow/role-registry.js'
 
 /** Inputs needed by the role guard. */
@@ -33,12 +42,15 @@ export interface RoleGuardOptions {
   readonly isMainSession?: ((sessionId: SessionId) => boolean) | undefined
   /** Optional explicit workspace root, otherwise each session's immutable cwd. */
   readonly workspaceRoot?: string | undefined
+  /** Exact registered skill bundle roots the current role may read. */
+  readonly readableResourceRootsOf?: ((sessionId: SessionId, role: AutoReportRole) => readonly string[]) | undefined
 }
 
 interface ResolvedRole {
   readonly role: AutoReportRole
   readonly policy: ReportRolePolicy
   readonly workspaceRoot: string
+  readonly readableResourceRoots: readonly string[]
 }
 
 type Mutation =
@@ -46,14 +58,14 @@ type Mutation =
   | { readonly kind: 'paths'; readonly paths: readonly string[] }
   | { readonly kind: 'malformed'; readonly reason: string }
 
+type ReadTarget =
+  | { readonly kind: 'none' }
+  | { readonly kind: 'path'; readonly path: string }
+  | { readonly kind: 'malformed'; readonly reason: string }
+
 /** Model-facing tools whose success mutates workspace files; observed by the artifact observer. */
 export const MUTATION_TOOL_NAMES = new Set([
-  'write',
-  'edit',
-  'str_replace_editor',
-  'delete',
-  'delete_file',
-  'apply_patch',
+  'write', 'edit', 'delete', 'delete_file', 'apply_patch', 'str_replace_editor',
 ])
 
 function record(value: unknown): Readonly<Record<string, unknown>> | undefined {
@@ -70,18 +82,28 @@ function stringField(args: Readonly<Record<string, unknown>>, ...names: readonly
   return undefined
 }
 
+function hasUriScheme(path: string): boolean {
+  return /^[A-Za-z][A-Za-z0-9+.-]*:\/\//u.test(path) && !/^[A-Za-z]:[\\/]/u.test(path)
+}
+
 /** Extract Codex-style patch targets without interpreting patch content. */
 function patchTargets(args: Readonly<Record<string, unknown>>): Mutation {
-  const patch = stringField(args, 'patch', 'input')
-  if (patch === undefined) return { kind: 'malformed', reason: 'apply_patch requires string patch input' }
-  const paths: string[] = []
-  for (const line of patch.split(/\r?\n/u)) {
-    const match = /^\*\*\* (?:Add|Update|Delete) File: (.+)$/u.exec(line)
-    if (match?.[1] !== undefined) paths.push(match[1])
+  const paths = new Set<string>()
+  const patch = typeof args['patch'] === 'string' ? args['patch'] : undefined
+  if (patch !== undefined) {
+    for (const line of patch.split('\n')) {
+      for (const prefix of ['*** Update File: ', '*** Delete File: ', '*** Add File: ']) {
+        if (line.startsWith(prefix)) {
+          const target = line.slice(prefix.length).trim()
+          if (target.length > 0) paths.add(target)
+        }
+      }
+    }
+    if (paths.size === 0) return { kind: 'malformed', reason: 'apply_patch names no file targets' }
   }
-  return paths.length > 0
-    ? { kind: 'paths', paths }
-    : { kind: 'malformed', reason: 'apply_patch contains no recognized file headers' }
+  return paths.size === 0
+    ? { kind: 'none' }
+    : { kind: 'paths', paths: [...paths] }
 }
 
 /** Describe a mutation call using current DSH tool schemas. */
@@ -102,8 +124,9 @@ function mutation(exec: Readonly<ToolExecution>): Mutation {
         return { kind: 'malformed', reason: 'str_replace_editor carries an unknown command' }
       }
       const path = stringField(args, 'path')
-      return path === undefined
-        ? { kind: 'malformed', reason: 'str_replace_editor mutation requires path' }
+      if (path === undefined) return { kind: 'malformed', reason: 'str_replace_editor mutation requires path' }
+      return !isAbsolute(path)
+        ? { kind: 'malformed', reason: 'str_replace_editor path must be absolute' }
         : { kind: 'paths', paths: [path] }
     }
     // DSH currently mounts no delete/apply-patch tool. These strict adapters
@@ -122,6 +145,51 @@ function mutation(exec: Readonly<ToolExecution>): Mutation {
     default:
       return { kind: 'none' }
   }
+}
+
+/** Extract paths from the model-facing read tools without trusting their spelling. */
+function readTarget(exec: Readonly<ToolExecution>): ReadTarget {
+  const args = record(exec.arguments)
+  if (args === undefined) return { kind: 'none' }
+  if (exec.name === 'read' || exec.name === 'read_image') {
+    const path = stringField(args, 'file_path')
+    if (path !== undefined && hasUriScheme(path)) {
+      return { kind: 'malformed', reason: 'remote URI paths are not supported by the AutoReport workspace policy' }
+    }
+    return path === undefined
+      ? { kind: 'malformed', reason: `${exec.name} requires file_path` }
+      : { kind: 'path', path }
+  }
+  if (exec.name === 'str_replace_editor' && args['command'] === 'view') {
+    const path = stringField(args, 'path')
+    if (path === undefined) return { kind: 'malformed', reason: 'str_replace_editor view requires path' }
+    return !isAbsolute(path)
+      ? { kind: 'malformed', reason: 'str_replace_editor path must be absolute' }
+      : { kind: 'path', path }
+  }
+  if (exec.name === 'list') {
+    const path = stringField(args, 'path') ?? '.'
+    const depth = args['depth'] ?? 1
+    if (isAbsolute(path) || hasUriScheme(path)) {
+      return { kind: 'malformed', reason: 'list path must be workspace-relative' }
+    }
+    if (typeof depth !== 'number' || !Number.isInteger(depth) || depth < 1 || depth > 4) {
+      return { kind: 'malformed', reason: 'list depth must be an integer from 1 through 4' }
+    }
+    return { kind: 'none' }
+  }
+  if (exec.name === 'grep') {
+    const path = stringField(args, 'path') ?? '.'
+    const pattern = stringField(args, 'pattern')
+    if (pattern === undefined || pattern.length > 256) {
+      return { kind: 'malformed', reason: 'grep requires a literal pattern from 1 through 256 characters' }
+    }
+    if (isAbsolute(path) || hasUriScheme(path)) {
+      return { kind: 'malformed', reason: 'grep path must be workspace-relative' }
+    }
+    return { kind: 'none' }
+  }
+  return { kind: 'none' }
 }
 
 /** Canonicalize a path through its closest existing ancestor. */
@@ -149,12 +217,6 @@ function contained(root: string, candidate: string): boolean {
   return rel === '' || (rel !== '..' && !rel.startsWith(`..${sep}`) && !isAbsolute(rel))
 }
 
-/**
- * Sentinel resolution: the calling session never selected AutoReport (an
- * ordinary root, an ordinary DSH continuable child, or an agentless call).
- * The guard must NOT restrict it — "unknown to AutoReport" means "not our
- * session", not "invalid AutoReport session".
- */
 const FOREIGN = 'foreign'
 
 function resolveRole(
@@ -171,7 +233,12 @@ function resolveRole(
   const entry = options.registry.lookup(session.id)
   if (entry !== undefined) {
     if (configuredRoot === undefined) return undefined
-    return { role: entry.binding.role, policy: entry.policy, workspaceRoot: canonicalPath(configuredRoot) }
+    return {
+      role: entry.binding.role,
+      policy: entry.policy,
+      workspaceRoot: canonicalPath(configuredRoot),
+      readableResourceRoots: (options.readableResourceRootsOf?.(session.id, entry.binding.role) ?? []).map(canonicalPath),
+    }
   }
   // Unbound continuable child: an ordinary DSH child (stock report tool,
   // stock write policy) that this global overlay must leave untouched.
@@ -185,37 +252,65 @@ function resolveRole(
     || options.isMainSession?.(session.id) === true
   if (!explicitMain && !isAutoReportPreset(resolveAgentPreset(session))) return FOREIGN
   if (configuredRoot === undefined) return undefined
-  return { role: 'MAIN', policy: rolePolicy('MAIN'), workspaceRoot: canonicalPath(configuredRoot) }
-}
-
-function targetDenial(target: string, resolved: ResolvedRole): string | undefined {
-  if (target.includes('\0')) return 'AutoReport write target contains a NUL byte'
-  const absolute = canonicalPath(isAbsolute(target) ? target : resolve(resolved.workspaceRoot, target))
-  if (!contained(resolved.workspaceRoot, absolute)) {
-    return `AutoReport ${resolved.role} cannot write outside the experiment workspace: ${target}`
+  return {
+    role: 'MAIN',
+    policy: rolePolicy('MAIN'),
+    workspaceRoot: canonicalPath(configuredRoot),
+    readableResourceRoots: (options.readableResourceRootsOf?.(session.id, 'MAIN') ?? []).map(canonicalPath),
   }
-  const allowed = contained(canonicalPath(resolve(resolved.workspaceRoot, resolved.policy.writableRoot)), absolute)
-  return allowed
-    ? undefined
-    : `AutoReport ${resolved.role} may write only ${resolved.policy.writableRoot}: ${target}`
 }
 
-/** Create the parent for an authorized file mutation, without repairing the workspace. */
+function writableHelp(resolved: ResolvedRole): string {
+  return `the role writable root is ${resolved.policy.writableRoot}/`
+}
+
+/** Workspace-boundary denial for a read target; role boundaries never apply to reads. */
+function readBoundaryDenial(target: string, resolved: ResolvedRole): string | undefined {
+  if (hasUriScheme(target) || target.includes('\0')) {
+    return `AutoReport does not support URI or NUL read paths: ${target}`
+  }
+  const absolute = canonicalPath(isAbsolute(target) ? target : resolve(resolved.workspaceRoot, target))
+  const withinWorkspace = contained(resolved.workspaceRoot, absolute)
+  const withinSkillResource = resolved.readableResourceRoots.some(root => contained(root, absolute))
+  if (!withinWorkspace && !withinSkillResource) {
+    return `AutoReport ${resolved.role} can read only the experiment workspace and its skill resources: ${target}`
+  }
+  return undefined
+}
+
+/** Single writable-root check for a mutation target; all paths are workspace-relative. */
+function targetDenial(target: string, resolved: ResolvedRole): string | undefined {
+  if (hasUriScheme(target)) return `AutoReport does not support URI write paths: ${target}; ${writableHelp(resolved)}`
+  if (target.includes('\0')) return `AutoReport write target contains a NUL byte; ${writableHelp(resolved)}`
+  const absolute = canonicalPath(isAbsolute(target)
+    ? target
+    : resolve(resolved.workspaceRoot, target))
+  if (!contained(resolved.workspaceRoot, absolute)) {
+    return `AutoReport ${resolved.role} cannot write outside the experiment workspace: ${target}; ${writableHelp(resolved)}`
+  }
+  const writableRoot = canonicalPath(resolve(resolved.workspaceRoot, resolved.policy.writableRoot))
+  if (!contained(writableRoot, absolute)) {
+    return `AutoReport ${resolved.role} writes only inside ${resolved.policy.writableRoot}/: ${target}`
+  }
+  return undefined
+}
+
 function prepareMutationParent(
   exec: Readonly<ToolExecution>,
   target: string,
   resolved: ResolvedRole,
 ): string | undefined {
   if (exec.name === 'delete' || exec.name === 'delete_file') return undefined
-  const absolute = resolve(resolved.workspaceRoot, target)
+  const absolute = isAbsolute(target)
+    ? resolve(target)
+    : resolve(resolved.workspaceRoot, target)
   try {
     mkdirSync(dirname(absolute), { recursive: true })
     return undefined
   } catch (error: unknown) {
-    const writable = resolved.policy.writableRoot
     const detail = error instanceof Error ? error.message : String(error)
     return 'AutoReport ' + resolved.role
-      + ' could not create its writable directory (' + writable + ') for ' + target
+      + ' could not create its writable directory (' + resolved.policy.writableRoot + ') for ' + target
       + '; run /init to repair the workspace (' + detail + ')'
   }
 }
@@ -227,34 +322,54 @@ function sandboxPermissionsEscalation(exec: Readonly<ToolExecution>): boolean {
 
 /**
  * Create the monotonic role guard registered through `ctx.tools.guard()`.
- * No AutoReport role may widen the experiment's file sandbox.
+ * Generic process escalation is never permitted. MAIN uses its dedicated
+ * environment tool for package changes; specialists report `missing_dependency`.
  * @param options - registry and Main/workspace identity inputs.
  * @returns synchronous fail-closed DSH guard.
  */
 export function createRoleToolGuard(options: RoleGuardOptions): ToolGuard {
   return exec => {
     const call = mutation(exec)
+    const read = readTarget(exec)
     const shellCall = exec.name === 'bash' || exec.name === 'pwsh'
-    const specializedCall = exec.name === 'compile_report' || exec.name === 'reference_extract' || exec.name === 'install_python_package'
-    const protectedCall = call.kind !== 'none' || sandboxPermissionsEscalation(exec) || shellCall || specializedCall
-    if (!protectedCall) return undefined
-
+    const protectedCall = call.kind !== 'none' || read.kind !== 'none' || sandboxPermissionsEscalation(exec)
+      || shellCall || exec.name === 'glob'
+      || DSH_ROLE_CONTROL_TOOL_NAMES.includes(exec.name as typeof DSH_ROLE_CONTROL_TOOL_NAMES[number])
     const resolved = resolveRole(exec, options)
     // Not an AutoReport-owned session: preserve stock DSH policy untouched.
     if (resolved === FOREIGN) return undefined
-    if (resolved === undefined) return `AutoReport denied ${exec.name}: calling agent has no valid role binding`
+    if (resolved === undefined) return protectedCall
+      ? `AutoReport denied ${exec.name}: calling agent has no valid role binding`
+      : undefined
 
-    if (shellCall && resolved.policy.execution !== 'shell') {
-      return `AutoReport ${resolved.role} has no general shell capability`
+    if (DSH_ROLE_CONTROL_TOOL_NAMES.includes(exec.name as typeof DSH_ROLE_CONTROL_TOOL_NAMES[number])
+      && !resolved.policy.tools.includes(exec.name)) {
+      return `AutoReport ${resolved.role} cannot use ${exec.name}; delegate through the fixed AutoReport role workflow`
     }
-    if (exec.name === 'compile_report' && resolved.policy.execution !== 'compile') return 'compile_report belongs to REPORT'
-    if (exec.name === 'reference_extract' && resolved.role !== 'MAIN') return 'reference_extract belongs to MAIN'
-    if (exec.name === 'install_python_package' && resolved.role !== 'MAIN') return 'install_python_package belongs to MAIN'
-
+    if (exec.name === 'glob') {
+      return 'AutoReport disables process-backed glob; use list for names or the workspace grep tool for file contents'
+    }
     if (sandboxPermissionsEscalation(exec)) {
-      return 'AutoReport denies sandbox_permissions escalation; report missing dependencies through the workflow'
+      return 'AutoReport denies generic sandbox escalation; use the dedicated MAIN environment capability for package changes'
     }
+    if (shellCall) {
+      if (exec.name !== ROLE_PROCESS_TOOL) {
+        return `AutoReport process execution on ${process.platform} uses the ${ROLE_PROCESS_TOOL} tool; ${exec.name} is unavailable`
+      }
+      if (!resolved.policy.hasProcessTool) {
+        return `AutoReport ${resolved.role} has no process tool; use its dedicated tools and assigned specialists`
+      }
+    }
+    if (!resolved.policy.tools.includes(exec.name)) {
+      return `AutoReport ${resolved.role} has no declared capability for ${exec.name}; use its role-scoped tools`
+    }
+    if (!protectedCall) return undefined
     if (call.kind === 'malformed') return `AutoReport denied ${exec.name}: ${call.reason}`
+    if (read.kind === 'malformed') return `AutoReport denied ${exec.name}: ${read.reason}`
+    if (read.kind === 'path') {
+      const denial = readBoundaryDenial(read.path, resolved)
+      if (denial !== undefined) return `AutoReport denied ${exec.name} read: ${denial}`
+    }
     if (call.kind === 'paths') {
       for (const path of call.paths) {
         const denied = targetDenial(path, resolved)

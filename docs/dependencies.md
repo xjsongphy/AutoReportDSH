@@ -128,6 +128,9 @@ use explicit `.ts` specifiers and cross-package internals).
 | `@deepseek-ai/dsh-tool-bash` | `../deepseek-harness/packages/shell/tool-bash` |
 | `@deepseek-ai/dsh-bash-local` | `../deepseek-harness/packages/shell/bash-local` |
 | `@deepseek-ai/dsh-bash-sandbox` | `../deepseek-harness/packages/shell/bash-sandbox` |
+| `@deepseek-ai/dsh-tool-pwsh` | `../deepseek-harness/packages/shell/tool-pwsh` (development/live test) |
+| `@deepseek-ai/dsh-pwsh-local` | `../deepseek-harness/packages/shell/pwsh-local` (development/live test) |
+| `@deepseek-ai/dsh-pwsh-sandbox` | `../deepseek-harness/packages/shell/pwsh-sandbox` (development/live test) |
 | `@deepseek-ai/dsh-shell` | `../deepseek-harness/packages/shell/shell` |
 | `@deepseek-ai/dsh-subprocess-local` | `../deepseek-harness/packages/subprocess/subprocess-local` |
 | `@deepseek-ai/dsh-sandbox` | `../deepseek-harness/packages/sandbox/sandbox` |

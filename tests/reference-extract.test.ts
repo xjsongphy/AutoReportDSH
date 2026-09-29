@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, realpathSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
@@ -31,6 +31,6 @@ describe('reference_extract', () => {
     expect(result).toMatchObject({ status: 'success', outputDir: 'Outline/.cache/mineru/handout' })
     expect(argv.slice(0, 2)).toEqual(['mineru-open-api', 'extract'])
     expect(argv.at(-2)).toBe('-o')
-    expect(argv.at(-1)).toBe(join(root, 'Outline', '.cache', 'mineru', 'handout'))
+    expect(argv.at(-1)).toBe(realpathSync(join(root, 'Outline', '.cache', 'mineru', 'handout')))
   })
 })

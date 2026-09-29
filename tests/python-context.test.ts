@@ -27,21 +27,11 @@ function baseDeps(overrides: Partial<AutoReportPythonContextDeps> = {}): AutoRep
 }
 
 describe('packageManagerGuidance', () => {
-  it('routes the managed venv through uv with --python', () => {
-    const guidance = packageManagerGuidance('/home/.dsh/autoreport/venv/bin/python', true)
-    expect(guidance).toContain('uv pip install --python /home/.dsh/autoreport/venv/bin/python')
-  })
-
-  it('prefers conda install for conda interpreters', () => {
-    const guidance = packageManagerGuidance('/opt/miniconda3/envs/lab/bin/python', false)
-    expect(guidance).toContain('conda install')
-  })
-
-  it('uses interpreter -m pip for plain venvs and PATH pythons', () => {
-    const venv = packageManagerGuidance('/work/.venv/bin/python', false)
-    expect(venv).toContain('/work/.venv/bin/python -m pip install')
-    const path = packageManagerGuidance('python3', false)
-    expect(path).toContain('python3 -m pip install')
+  it('routes package changes through the approval-gated MAIN capability', () => {
+    const guidance = packageManagerGuidance()
+    expect(guidance).toContain('python_environment(action=inspect|list)')
+    expect(guidance).toContain('python_environment(action=install, packages=[...])')
+    expect(guidance).toContain('approved package changes')
   })
 })
 
@@ -52,7 +42,7 @@ describe('renderPythonContext', () => {
     expect(first).toBe(second)
     expect(first).toContain('# Python environment')
     expect(first).toContain('/opt/miniconda3/envs/lab/bin/python')
-    expect(first).toContain('conda install')
+    expect(first).toContain('python_environment(action=install')
     expect(first).toContain('missing_dependency')
     expect(first).toContain('Only MAIN may install')
   })

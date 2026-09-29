@@ -13,21 +13,14 @@
  * language; the host switches the workspace's templates from that record, so a
  * template this command never deleted is deleted there instead. A bare
  * `latex`/`typst` token means the same flag, because the command is typed by
- * hand. Without a language the recorded map wins, then the legacy project
- * setting, then the resolved defaults — never filesystem inference.
+ * hand. Without a language the recorded map wins, then user/plugin defaults —
+ * never filesystem inference.
  * @module workspace/command
  */
 
 import type { CommandDefinition, CommandInvocation, CommandResult } from '@deepseek-ai/dsh-commands'
 import { isAbsolute, resolve } from 'node:path'
-import type { AutoReportProjectSettings } from '../settings.js'
 import { ensureInitialized, type InitializationResult, type ReportLanguage } from './init.js'
-
-/** Read-only seam over one workspace's legacy external project-settings document. */
-export interface LegacyProjectSettingsSource {
-  /** Read the current patch (missing file ⇒ `{}`); may throw loud on corruption. */
-  load(): AutoReportProjectSettings
-}
 
 /**
  * Authoritative per-workspace language seam over the `autoreport` settings
@@ -43,24 +36,19 @@ export interface WorkspaceLanguageStore {
 
 /**
  * Where one workspace's report language comes from, in precedence order: the
- * authoritative per-workspace record, the legacy external project document,
- * the DSH user default, then the composition default. `/init` and `/reset`
- * both resolve through this chain, so a workspace can never be re-initialized
+ * authoritative per-workspace record, the DSH user default, then the
+ * composition default. `/init` and `/reset` both resolve through this chain,
+ * so a workspace can never be re-initialized
  * under a language its record does not name.
  */
 export interface ReportLanguageSources {
   /**
    * Resolved fallback language used when neither the invocation flag, the
-   * recorded map, nor the legacy project settings choose one.
+   * recorded map chooses one.
    */
   readonly reportLanguage: ReportLanguage
   /** Current DSH user default; read at invocation time when no record/flag wins. */
   readonly currentDefaultReportLanguage?: () => ReportLanguage
-  /**
-   * Builds the legacy project-settings reader for the invoked workspace root;
-   * absent (factory-only tests) reads no legacy value.
-   */
-  readonly legacyProject?: (root: string) => LegacyProjectSettingsSource
   /**
    * Authoritative language seam; absent (factory-only tests) keeps the command
    * from recording anything, so it only materializes resources.
@@ -81,11 +69,6 @@ export interface ReportInitCommandOptions extends ReportLanguageSources {
 export interface ResolvedReportLanguage {
   /** The language to use for this workspace. */
   readonly language: ReportLanguage
-  /**
-   * Non-fatal warnings encountered during resolution (e.g. corrupt legacy
-   * project settings). Empty when every consulted layer was readable.
-   */
-  readonly warnings: readonly string[]
 }
 
 /**
@@ -95,31 +78,15 @@ export interface ResolvedReportLanguage {
  * never recorded keeps materializing the composition default until someone
  * chooses.
  *
- * The legacy project-settings layer is best-effort: a corrupt or unreadable
- * legacy document is treated as absent rather than failing the whole
- * resolution, and the condition is reported in `warnings` so callers can
- * surface it to the user. The authoritative language lives in the DSH
- * settings namespace; the legacy file is only consulted as a migration aid.
  * @param root - absolute workspace root.
  * @param sources - the seam options carrying the chain's inputs.
- * @returns the resolved language plus any non-fatal warnings.
+ * @returns the resolved language.
  */
 export function resolveReportLanguage(root: string, sources: ReportLanguageSources): ResolvedReportLanguage {
-  const warnings: string[] = []
-  let legacy: AutoReportProjectSettings = {}
-  if (sources.legacyProject !== undefined) {
-    try {
-      legacy = sources.legacyProject(root).load()
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : String(error)
-      warnings.push(`legacy project settings unreadable (ignored): ${message}`)
-    }
-  }
   const language = sources.languageStore?.read(root)
-    ?? legacy.reportLanguage
     ?? sources.currentDefaultReportLanguage?.()
     ?? sources.reportLanguage
-  return { language, warnings }
+  return { language }
 }
 
 /** One-line summary of one initialization pass, rendered by the command. */
@@ -220,8 +187,7 @@ export function resolveWorkspaceRoot(
 
 /**
  * Build the `/init` command definition.
- * @param options - defaults for workspace root and report language, plus the
- *   optional external project-settings seam.
+ * @param options - defaults for workspace root and report language.
  * @returns the definition for `ctx.commands.register()`.
  */
 export function createReportInitCommand(options: ReportInitCommandOptions): CommandDefinition {
@@ -240,10 +206,6 @@ export function createReportInitCommand(options: ReportInitCommandOptions): Comm
         }
       }
       try {
-        // Read the chain even when the flag wins: a corrupt legacy document is
-        // reported as a warning so the user knows something is off, but it no
-        // longer blocks initialization — the authoritative layer is the DSH
-        // settings namespace.
         const resolved = resolveReportLanguage(root, options)
         const language = parsed.language ?? resolved.language
         let saved = ''
@@ -256,12 +218,9 @@ export function createReportInitCommand(options: ReportInitCommandOptions): Comm
           saved = ' (saved to settings)'
         }
         const initialization = ensureInitialized(root, language)
-        const warningLines = resolved.warnings.length > 0
-          ? '\n' + resolved.warnings.map(w => `warning: ${w}`).join('\n')
-          : ''
         return {
           kind: 'success',
-          text: `${renderInitialization(initialization)}\nreport language: ${language}${saved}${warningLines}`,
+          text: `${renderInitialization(initialization)}\nreport language: ${language}${saved}`,
         }
       } catch (error: unknown) {
         return {

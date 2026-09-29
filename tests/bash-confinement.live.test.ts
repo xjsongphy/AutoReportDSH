@@ -10,6 +10,7 @@ import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import AgentRegistry from '@deepseek-ai/dsh-agent'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { SandboxBashExecutor } from '@deepseek-ai/dsh-bash-sandbox'
+import { SandboxPwshExecutor } from '@deepseek-ai/dsh-pwsh-sandbox'
 import { LocalSandboxProvider } from '@deepseek-ai/dsh-sandbox-local'
 import { bwrapProfileArgs, seatbeltProfileArgs } from '@deepseek-ai/dsh-sandbox-local/src/profiles.ts'
 import SandboxPolicyService from '@deepseek-ai/dsh-sandbox-policy'
@@ -20,6 +21,7 @@ import LocalSubprocessRuntime from '@deepseek-ai/dsh-subprocess-local'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
 import * as ToolBash from '@deepseek-ai/dsh-tool-bash'
+import * as ToolPwsh from '@deepseek-ai/dsh-tool-pwsh'
 import { installSandboxOverride } from '../src/policy/sandbox-override.js'
 import { applyRoleSandbox, roleWritableRoot } from '../src/policy/sandbox-roots.js'
 import type { AutoReportRole } from '../src/roles.js'
@@ -96,6 +98,15 @@ function sandboxUsable(): boolean {
   return false
 }
 
+function pwshSandboxUsable(): boolean {
+  if (process.platform !== 'win32') return false
+  const shell = spawnSync('pwsh', ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', 'exit 0'], {
+    timeout: 5_000,
+    stdio: 'ignore',
+  })
+  return shell.status === 0 && probeWindowsAcl()
+}
+
 const cleanup: string[] = []
 let ctx: Context | undefined
 let spillDir: string | undefined
@@ -115,7 +126,7 @@ function expectsSandboxDenial(output: string): void {
   expect(output).toMatch(SANDBOX_DENIAL)
 }
 
-async function setupHarness(experimentRoot: string): Promise<Context> {
+async function setupHarness(experimentRoot: string, shell: 'bash' | 'pwsh' = 'bash'): Promise<Context> {
   const next = new Context()
   await next.plugin(SystemPrompt)
   await next.plugin(ToolRuntime)
@@ -159,8 +170,13 @@ async function setupHarness(experimentRoot: string): Promise<Context> {
     },
   )
   await next.plugin(BashEnvPlugin)
-  await next.plugin(SandboxBashExecutor, { cwd: experimentRoot, timeoutMs: 30_000, graceMs: 200 })
-  await next.plugin(ToolBash)
+  if (shell === 'pwsh') {
+    await next.plugin(SandboxPwshExecutor, { cwd: experimentRoot, timeoutMs: 30_000, graceMs: 200 })
+    await next.plugin(ToolPwsh)
+  } else {
+    await next.plugin(SandboxBashExecutor, { cwd: experimentRoot, timeoutMs: 30_000, graceMs: 200 })
+    await next.plugin(ToolBash)
+  }
   ctx = next
   return next
 }
@@ -219,7 +235,36 @@ function callBash(harness: Context, command: string, agent: Agent) {
   })
 }
 
+function callBashAt(harness: Context, command: string, agent: Agent, workdir?: string) {
+  return harness.tools.execute({
+    signal: testToolSignal,
+    callId: ToolCallId(`call-${++callCounter}`),
+    name: 'bash',
+    arguments: {
+      command,
+      description: 'check role-relative working directory',
+      ...(workdir === undefined ? {} : { workdir }),
+    },
+    agent,
+  })
+}
+
+function callPwshAt(harness: Context, command: string, agent: Agent, workdir: string) {
+  return harness.tools.execute({
+    signal: testToolSignal,
+    callId: ToolCallId(`call-${++callCounter}`),
+    name: 'pwsh',
+    arguments: {
+      command,
+      description: 'check role-relative PowerShell working directory',
+      workdir,
+    },
+    agent,
+  })
+}
+
 const SANDBOX_USABLE = sandboxUsable()
+const PWSH_SANDBOX_USABLE = pwshSandboxUsable()
 const CURL_AVAILABLE = spawnSync('curl', ['--version'], { timeout: 5_000, stdio: 'ignore' }).status === 0
 
 /**
@@ -257,6 +302,31 @@ describe('bash role write confinement (live)', () => {
   // (`Bash/Service/CreateInstance/E_ACCESSDENIED`), so the suite's own shell
   // never runs and the cases cannot pass yet — see `confinementTest`.
   describe.skipIf(!SANDBOX_USABLE)('role writable roots', () => {
+  confinementTest('DSH bash defaults and relative workdir use the role sandbox root', async () => {
+    const experimentRoot = experimentWorkspace()
+    const dataRoot = roleWritableRoot(experimentRoot, 'DATA_ANALYSIS')
+    const reportRoot = roleWritableRoot(experimentRoot, 'REPORT')
+    mkdirSync(join(dataRoot, 'nested'), { recursive: true })
+    mkdirSync(join(reportRoot, 'compile'), { recursive: true })
+    const harness = await setupHarness(experimentRoot)
+    const analyst = registerAgent(harness, sessionForRole(experimentRoot, 'DATA_ANALYSIS', 'cwd-data'))
+    const reporter = registerAgent(harness, sessionForRole(experimentRoot, 'REPORT', 'cwd-report'))
+
+    const analystDefault = await callBashAt(harness, 'pwd', analyst)
+    expect(analystDefault.isError, text(analystDefault)).toBe(false)
+    expect(text(analystDefault)).toContain(dataRoot)
+    const analystRelativeWorkdir = await callBashAt(harness, 'pwd', analyst, 'nested')
+    expect(analystRelativeWorkdir.isError, text(analystRelativeWorkdir)).toBe(false)
+    expect(text(analystRelativeWorkdir)).toContain(join(dataRoot, 'nested'))
+
+    const reportDefault = await callBashAt(harness, 'pwd', reporter)
+    expect(reportDefault.isError, text(reportDefault)).toBe(false)
+    expect(text(reportDefault)).toContain(reportRoot)
+    const reportCompileWorkdir = await callBashAt(harness, 'pwd', reporter, 'compile')
+    expect(reportCompileWorkdir.isError, text(reportCompileWorkdir)).toBe(false)
+    expect(text(reportCompileWorkdir)).toContain(join(reportRoot, 'compile'))
+  }, 30_000)
+
   confinementTest('DATA_ANALYSIS writes inside Data/Processed and denies Report', async () => {
     const experimentRoot = experimentWorkspace()
     const harness = await setupHarness(experimentRoot)
@@ -369,5 +439,46 @@ describe('bash role write confinement (live)', () => {
     expectsSandboxDenial(text(denied))
     expect(existsSync(join(experimentRoot, 'Theory/read-probe.txt'))).toBe(false)
   }, 30_000)
+  })
+})
+
+describe('PowerShell role write confinement (live, Windows)', () => {
+  it.skipIf(process.platform !== 'win32' || process.env.CI !== 'true')(
+    'CI provides a working pwsh and Windows ACL sandbox runner',
+    () => expect(PWSH_SANDBOX_USABLE).toBe(true),
+  )
+
+  describe.skipIf(!PWSH_SANDBOX_USABLE)('role writable roots', () => {
+    it('uses the explicit role root for workdir and confines writes there', { timeout: 30_000 }, async () => {
+      const experimentRoot = experimentWorkspace()
+      const dataRoot = roleWritableRoot(experimentRoot, 'DATA_ANALYSIS')
+      const nestedRoot = join(dataRoot, 'nested')
+      mkdirSync(nestedRoot, { recursive: true })
+      const harness = await setupHarness(experimentRoot, 'pwsh')
+      const agent = registerAgent(harness, sessionForRole(experimentRoot, 'DATA_ANALYSIS', 'pwsh-data'))
+
+      const location = await callPwshAt(harness, 'Get-Location | Select-Object -ExpandProperty Path', agent, dataRoot)
+      expect(location.isError, text(location)).toBe(false)
+      expect(text(location).toLowerCase()).toContain(dataRoot.toLowerCase())
+
+      const nested = await callPwshAt(harness, 'Get-Location | Select-Object -ExpandProperty Path', agent, nestedRoot)
+      expect(nested.isError, text(nested)).toBe(false)
+      expect(text(nested).toLowerCase()).toContain(nestedRoot.toLowerCase())
+
+      const allowed = await callPwshAt(harness, "Set-Content -LiteralPath 'allowed.txt' -Value 'ok'", agent, dataRoot)
+      expect(allowed.isError, text(allowed)).toBe(false)
+      expect(text(allowed)).not.toMatch(SANDBOX_DENIAL)
+      expect(existsSync(join(dataRoot, 'allowed.txt'))).toBe(true)
+
+      const deniedPath = join(experimentRoot, 'Report', 'pwsh-denied.txt').replaceAll("'", "''")
+      const denied = await callPwshAt(
+        harness,
+        `Set-Content -LiteralPath '${deniedPath}' -Value 'blocked'`,
+        agent,
+        dataRoot,
+      )
+      expectsSandboxDenial(text(denied))
+      expect(existsSync(join(experimentRoot, 'Report', 'pwsh-denied.txt'))).toBe(false)
+    })
   })
 })

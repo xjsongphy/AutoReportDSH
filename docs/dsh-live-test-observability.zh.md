@@ -6,8 +6,8 @@
 
 - DSH 管理 provider、模型、凭据、会话、子会话、Web UI、工具执行和日志持久化。
 - AutoReportDSH 仅管理报告工作流：MAIN 与 THEORY、DATA_ANALYSIS、PLOTTING、REPORT 四个固定 subagents、目录权限、任务/委派状态、报告资源和产物 manifest。
-- MAIN 的模型由 DSH 的 `agent-default-model` 决定；每个 subagent 可继承 MAIN，或由 AutoReport 项目设置的 `specialistModel` 独立指定。此次测试将两者均固定为 `openai-codex / gpt-5.6-luna`。
-- 专项目录外的设置文件为：`$DSH_HOME/autoreport/<workspace-id>/project.json`。`workspace-id` 是工作区绝对路径 SHA-256 的前 16 位，避免把配置或机密写进实验目录。
+- MAIN 的模型由 DSH 的 `agent-default-model` 决定；每个 subagent 可继承 MAIN，或由 AutoReport 用户设置的 `specialistModel` 独立指定。
+- 报告策略设置位于 DSH `settings.yaml` 的 `autoreport` namespace；每工作区语言由设置页中的 workspace map 管理。
 - 工作流建立时会冻结模型和语言等设置快照；随后修改默认设置不会改变该工作流。
 
 ## 2. 本次模型配置
@@ -38,7 +38,7 @@ agent-default-model:
 
 ## 3. 启动与工作区初始化
 
-先写入 CV 的外部项目设置、构建并安装 preset。此流程使用已有 DSH OAuth 凭据；不复制、导出或写入任何 token：
+构建并安装 preset。此流程使用已有 DSH OAuth 凭据；不复制、导出或写入任何 token：
 
 ```sh
 cd ~/Develop/AutoReportDSH
@@ -57,7 +57,7 @@ cd ~/Develop/AutoReportDSH
 /init --language typst
 ```
 
-初始化只创建缺失目录和资源；已存在的 `Report/main.typ`、`Report/mplts.typ` 等文件不会覆盖。API 测试脚本不再先队列该命令，以免将 slash-command turn 与后续报告 turn 混淆。
+初始化只创建缺失目录和资源；已存在的 `Report/main.typ`、`Report/mplts.typ` 等文件不会覆盖。首次建立工作流后，可在 AutoReport 设置页把 CV 工作区切换到 Typst。API 测试脚本不再先队列该命令，以免将 slash-command turn 与后续报告 turn 混淆。
 
 ## 4. 在页面中观察什么
 
@@ -83,7 +83,7 @@ DSH session 是追加事件日志。每条 MAIN/child session 都记录：
 <home>/autoreport/<workspaceId>/workflow/<main session id>/session.jsonl
 ```
 
-（`<workspaceId>` 是工作区绝对路径 SHA-256 的前 16 位；与该工作区的 `project.json` 同级。）
+（`<workspaceId>` 是工作区绝对路径 SHA-256 的前 16 位。）
 
 每行一条记录（`autoreport/workflow`、`autoreport/task`、`autoreport/delegation`、`autoreport/role-binding`、`autoreport/artifact`、`autoreport/file-note`、`autoreport/role-note`），带 `seq` 与 epoch 毫秒 `time`；文件首行是 header。命名沿用 DSH 自己的 session 文件规则。这样 session log 只含 DSH 自身的词汇，任何 dsh 版本都能直接加载，不需要注册或标记。
 

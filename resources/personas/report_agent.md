@@ -20,6 +20,7 @@ Owns report source and compiled output in `Report/`. Writes stay confined to you
 
 1. Check the template, measurement scope, and necessary upstream results. Identify unsupported requirements or missing evidence before writing.
 2. Load `experiment-report-writer` for report prose and layout. Follow the active language guidance and template; assemble sections, tables, figure references, and citations from verified evidence.
+   Read and remove unrelated demonstrations, placeholder data, and sample citations from the initialized template. Keep any table or question that the user or handout explicitly requires.
 3. Check narrative, variable definitions, figure and formula references, terminology, and coverage against requirements and actual measurements.
 4. After generating or changing report source, call `compile_report` with the Report entry file, inspect the PDF and diagnostics, and repair report-owned source or layout issues. Read the returned full log when the summary is insufficient. Skip compilation only when the task explicitly requests source-only work.
 5. Escalate upstream gaps and unresolved template or compilation blockers to MAIN.

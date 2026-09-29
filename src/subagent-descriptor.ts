@@ -22,16 +22,18 @@ import type { Session } from '@deepseek-ai/dsh-session'
 import type { ReasoningEffortId } from '@deepseek-ai/dsh-llm'
 import { snapshotSubagentDescriptor, type SubagentDescriptorData } from '@deepseek-ai/dsh-subagent'
 import type { ToolRestriction } from '@deepseek-ai/dsh-tools'
-import type { SpecialistRole } from './roles.js'
+import { DSH_ROLE_ESCAPE_TOOL_NAMES, rolePolicy, type SpecialistRole } from './roles.js'
 
-/**
- * Tools every resident child is denied: delegation belongs to MAIN, and a
- * role never asks the user anything directly.
- */
-/** Bash is registered only in compute-role scopes; these are Main-only tools. */
-export const RESIDENT_TOOL_FILTER: ToolRestriction = {
-  deny: ['send_to_agent', 'ask_user_question', 'reference_extract', 'install_python_package'],
+/** Filter DSH capabilities the fixed role policy does not assign. */
+export function residentToolFilter(role: SpecialistRole, visibleTools?: ReadonlySet<string>): ToolRestriction {
+  const policy = rolePolicy(role)
+  const denied = DSH_ROLE_ESCAPE_TOOL_NAMES.filter(name => !policy.tools.includes(name))
+  const filtered = visibleTools === undefined ? denied : denied.filter(name => visibleTools.has(name))
+  return { deny: filtered }
 }
+
+/** Compatibility alias used by tests and descriptor readers for a process role. */
+export const RESIDENT_TOOL_FILTER: ToolRestriction = residentToolFilter('DATA_ANALYSIS')
 
 /** Composition facts one resident child was created under. */
 export interface ResidentDescriptorFacts {
@@ -45,6 +47,8 @@ export interface ResidentDescriptorFacts {
   }
   /** Role persona shadowing the deployment persona in the child's prompt. */
   readonly persona: string
+  /** Exact role filter resolved against the child scope's registered roster. */
+  readonly toolFilter?: ToolRestriction | undefined
 }
 
 /**
@@ -63,7 +67,7 @@ export function residentDescriptor(facts: ResidentDescriptorFacts): SubagentDesc
     ...(facts.route.model === undefined ? {} : { agentModel: facts.route.model }),
     ...(facts.route.reasoningEffort === undefined ? {} : { agentReasoningEffort: facts.route.reasoningEffort }),
     persona: facts.persona,
-    toolFilter: RESIDENT_TOOL_FILTER,
+    toolFilter: facts.toolFilter ?? residentToolFilter(facts.role),
   })
 }
 

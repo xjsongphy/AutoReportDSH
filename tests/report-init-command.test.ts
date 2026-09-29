@@ -131,7 +131,6 @@ describe('init command', () => {
     const written: Array<[string, string]> = []
     const store = createReportInitCommand({
       reportLanguage: 'latex',
-      legacyProject: () => ({ load: () => ({}) }),
       languageStore: {
         read: () => undefined,
         write: (workspaceRoot, language) => { written.push([workspaceRoot, language]) },
@@ -144,29 +143,17 @@ describe('init command', () => {
     expect(existsSync(join(root, 'Report/main.typ'))).toBe(true)
   })
 
-  it('prefers a recorded workspace language over the legacy project setting', async () => {
+  it('prefers a recorded workspace language over the user default', async () => {
     const root = tempRoot()
     const store = createReportInitCommand({
       reportLanguage: 'latex',
-      legacyProject: () => ({ load: () => ({ reportLanguage: 'latex' }) }),
+      currentDefaultReportLanguage: () => 'latex',
       languageStore: { read: () => 'typst', write: () => undefined },
     })
     const implicit = await store.handler(invocation(root))
     if (implicit.kind !== 'success') throw new Error('expected success')
     expect(implicit.text).toContain('report language: typst')
     expect(implicit.text).not.toContain('(saved')
-  })
-
-  it('falls back to the legacy project language when nothing is recorded', async () => {
-    const root = tempRoot()
-    const store = createReportInitCommand({
-      reportLanguage: 'latex',
-      legacyProject: () => ({ load: () => ({ reportLanguage: 'typst' }) }),
-      languageStore: { read: () => undefined, write: () => undefined },
-    })
-    const implicit = await store.handler(invocation(root))
-    if (implicit.kind !== 'success') throw new Error('expected success')
-    expect(implicit.text).toContain('report language: typst')
   })
 
   it('resolves a relative directory so the record and the files name one workspace', async () => {
@@ -184,19 +171,4 @@ describe('init command', () => {
     expect(existsSync(join(root, 'Report/main.typ'))).toBe(true)
   })
 
-  it('treats a corrupt legacy settings file as absent and warns, still initializing', async () => {
-    const root = tempRoot()
-    const failing = createReportInitCommand({
-      reportLanguage: 'latex',
-      legacyProject: () => ({ load: () => { throw new Error('corrupt document') } }),
-    })
-    const result = await failing.handler(invocation(root))
-    expect(result.kind).toBe('success')
-    if (result.kind === 'success') {
-      expect(result.text).toContain('warning:')
-      expect(result.text).toContain('corrupt document')
-      expect(result.text).toContain('report language: latex')
-    }
-    expect(existsSync(join(root, 'Data'))).toBe(true)
-  })
 })
