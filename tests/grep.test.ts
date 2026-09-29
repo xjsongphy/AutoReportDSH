@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { isAbsolute, relative, resolve, sep } from 'node:path'
 import { createGrepTool, type GrepOutput, type SearchFileSystem } from '../src/tools/grep.js'
-import { rolePolicy } from '../src/roles.js'
 
 function fakeWorkspaceFs(files: Readonly<Record<string, string>>): SearchFileSystem & { readonly streamed: string[] } {
   const root = '/grep-workspace'
@@ -62,7 +61,7 @@ function fakeWorkspaceFs(files: Readonly<Record<string, string>>): SearchFileSys
 }
 
 describe('AutoReport provider-backed grep', () => {
-  it('searches only readable files while traversing from the workspace root', async () => {
+  it('searches the whole workspace from the workspace root — read scope is not a role boundary', async () => {
     const fs = fakeWorkspaceFs({
       'References/handout.md': 'fit theory follows',
       'Outline/report_outline.md': 'fit coverage',
@@ -73,7 +72,7 @@ describe('AutoReport provider-backed grep', () => {
       'Report/main.tex': 'fit report',
     })
     const owner = { id: 'main' } as Agent
-    const tool = createGrepTool('/grep-workspace', owner, rolePolicy('MAIN').readableRoots, fs)
+    const tool = createGrepTool('/grep-workspace', owner, fs)
     const result = await tool.execute({ pattern: 'fit' }, {
       agent: owner,
       signal: new AbortController().signal,
@@ -81,40 +80,40 @@ describe('AutoReport provider-backed grep', () => {
 
     expect(result.matches.map(match => match.path)).toEqual([
       'Data/Processed/result.csv',
+      'Data/Raw/source.csv',
       'Outline/report_outline.md',
       'Plots/Fig/plot.md',
       'References/handout.md',
       'Report/main.tex',
       'Theory/formulas.md',
     ])
-    expect(fs.streamed.some(path => path.includes('Data/Raw'))).toBe(false)
-    expect(JSON.stringify(result)).not.toContain('raw secret')
   })
 
-  it('denies a direct search path into MAIN-unreadable raw data and honors include globs', async () => {
+  it('honors include globs and direct paths anywhere in the workspace', async () => {
     const fs = fakeWorkspaceFs({
       'Data/Processed/result.csv': 'Fit,uncertainty\n',
       'Data/Raw/source.csv': 'Fit raw value\n',
       'Report/main.tex': 'fit report\n',
     })
     const owner = { id: 'main' } as Agent
-    const tool = createGrepTool('/grep-workspace', owner, rolePolicy('MAIN').readableRoots, fs)
+    const tool = createGrepTool('/grep-workspace', owner, fs)
 
-    await expect(tool.execute({ pattern: 'fit', path: 'Data/Raw' }, {
+    const raw = await tool.execute({ pattern: 'fit', path: 'Data/Raw' }, {
       agent: owner,
       signal: new AbortController().signal,
-    } as never)).rejects.toThrow(/readable roots/u)
+    } as never) as unknown as GrepOutput
+    expect(raw.matches.map(match => match.path)).toEqual(['Data/Raw/source.csv'])
 
     const csv = await tool.execute({ pattern: 'fit', include: '**/*.csv' }, {
       agent: owner,
       signal: new AbortController().signal,
     } as never) as unknown as GrepOutput
-    expect(csv.matches.map(match => match.path)).toEqual(['Data/Processed/result.csv'])
+    expect(csv.matches.map(match => match.path)).toEqual(['Data/Processed/result.csv', 'Data/Raw/source.csv'])
   })
 
   it('returns bounded-search metadata and rejects access when no DSH fs provider exists', async () => {
     const owner = { id: 'main' } as Agent
-    const tool = createGrepTool('/grep-workspace', owner, rolePolicy('MAIN').readableRoots)
+    const tool = createGrepTool('/grep-workspace', owner)
     await expect(tool.execute({ pattern: 'fit' }, {
       agent: owner,
       signal: new AbortController().signal,

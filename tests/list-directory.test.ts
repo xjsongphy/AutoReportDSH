@@ -32,13 +32,13 @@ describe('listWorkspaceDirectory', () => {
     expect(JSON.stringify(theory)).not.toContain('derivation body')
   })
 
-  it('keeps shallow workspace inventory while recursing only into discoverable roots', () => {
+  it('keeps shallow workspace inventory over the whole workspace', () => {
     const root = workspace()
-    const theory = listWorkspaceDirectory(root, 'Theory', 4, ['References', 'Outline', 'Theory'])
+    const theory = listWorkspaceDirectory(root, 'Theory', 4)
     expect(theory.directories).toEqual(['Derivations'])
     expect(theory.files).toEqual(['Derivations/model.md', 'formulas.md'])
-    expect(() => listWorkspaceDirectory(root, 'Data', 1, ['References', 'Outline', 'Theory']))
-      .toThrow(/discoverable roots/u)
+    const data = listWorkspaceDirectory(root, 'Data', 1)
+    expect(data.files).toEqual(['raw.csv'])
   })
 
   it('refuses traversal outside the workspace and non-directory paths', () => {
@@ -117,11 +117,11 @@ describe('listWorkspaceDirectory', () => {
     expect(listing.links).toEqual(['Data/external'])
     expect(listingSignals.length).toBeGreaterThan(0)
     expect(listingSignals.every(signal => signal === controller.signal)).toBe(true)
-    const theoryOnly = await listWorkspaceDirectoryFromFs(fs, root, 'References', 2, controller.signal, ['References'])
+    const theoryOnly = await listWorkspaceDirectoryFromFs(fs, root, 'References', 2, controller.signal)
     expect(theoryOnly.directories).toEqual([])
     expect(theoryOnly.files).toEqual(['guide.md'])
-    await expect(listWorkspaceDirectoryFromFs(fs, root, 'Data', 1, controller.signal, ['References']))
-      .rejects.toThrow(/discoverable roots/u)
+    const data = await listWorkspaceDirectoryFromFs(fs, root, 'Data', 1, controller.signal)
+    expect(data.files).toEqual(['raw.csv'])
     await expect(listWorkspaceDirectoryFromFs(fs, root, '../outside', 1)).rejects.toThrow(/outside/)
     await expect(listWorkspaceDirectoryFromFs(fs, root, root, 1)).rejects.toThrow(/workspace-relative/)
     await expect(listWorkspaceDirectoryFromFs(fs, root, 'mem://virtual/secret', 1)).rejects.toThrow(/workspace-relative/)

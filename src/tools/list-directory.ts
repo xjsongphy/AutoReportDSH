@@ -40,7 +40,6 @@ export function listWorkspaceDirectory(
   workspaceRoot: string,
   path = '.',
   depth = 1,
-  discoverableRoots: readonly string[] = ['.'],
 ): DirectoryListing {
   if (typeof path !== 'string' || path.length === 0 || path.includes('\0')) {
     throw new Error('path must be a non-empty directory path')
@@ -58,9 +57,6 @@ export function listWorkspaceDirectory(
   }
   const target = realpathSync.native(requested)
   if (!contained(root, target)) throw new Error('directory is outside the experiment workspace')
-  const roots = discoverableRoots.map(entry => resolve(root, normalizeWorkspaceRelativePath(entry)))
-  const canTraverse = (directory: string): boolean => roots.some(allowed => contained(allowed, directory))
-  if (!canTraverse(target)) throw new Error('directory names are outside this role\'s discoverable roots')
   if (!statSync(target).isDirectory()) throw new Error('path is not a directory')
 
   const listing: DirectoryListing = {
@@ -73,20 +69,19 @@ export function listWorkspaceDirectory(
       if (HIDDEN_INTERNAL.has(entry.name)) continue
       const absolute = resolve(directory, entry.name)
       const name = relative(target, absolute).split(sep).join('/')
-      const insideRoot = roots.some(allowed => contained(allowed, absolute))
-      const leadsToRoot = roots.some(allowed => contained(absolute, allowed))
-      if (!insideRoot && !leadsToRoot) continue
       if (count >= MAX_ENTRIES) {
         listing.truncated = true
         return
       }
       count += 1
       if (entry.isSymbolicLink()) {
-        if (insideRoot) listing.links.push(name)
+        listing.links.push(name)
       } else if (entry.isDirectory()) {
         listing.directories.push(name)
-        if (level < depth && canTraverse(absolute)) walk(absolute, level + 1)
-      } else if (insideRoot) listing.files.push(name)
+        if (level < depth) walk(absolute, level + 1)
+      } else {
+        listing.files.push(name)
+      }
       if (listing.truncated) return
     }
   }
@@ -137,7 +132,6 @@ export async function listWorkspaceDirectoryFromFs(
   path = '.',
   depth = 1,
   signal?: AbortSignal,
-  discoverableRoots: readonly string[] = ['.'],
 ): Promise<DirectoryListing> {
   if (typeof path !== 'string' || path.length === 0 || path.includes('\0')) {
     throw new Error('path must be a non-empty directory path')
@@ -149,17 +143,6 @@ export async function listWorkspaceDirectoryFromFs(
   const root = await fs.resolve(workspaceRoot, signal === undefined ? {} : { signal })
   const target = await resolveWithoutSymlinks(fs, root, logicalPath, signal)
   if (!fs.contains(root, target)) throw new Error('directory is outside the experiment workspace')
-  const roots = await Promise.all(discoverableRoots.map(entry => resolveWithoutSymlinks(
-    fs,
-    root,
-    normalizeWorkspaceRelativePath(entry),
-    signal,
-  )))
-  if (roots.some(allowed => !fs.contains(root, allowed))) {
-    throw new Error('discoverable root resolves outside the experiment workspace')
-  }
-  const canTraverse = (directory: { displayPath: string }): boolean => roots.some(allowed => fs.contains(allowed, directory))
-  if (!canTraverse(target)) throw new Error('directory names are outside this role\'s discoverable roots')
   const info = await fs.stat(target, signal)
   if (info?.type !== 'directory') throw new Error('path is not a directory')
 
@@ -178,32 +161,28 @@ export async function listWorkspaceDirectoryFromFs(
         { cwd: directory.displayPath },
         signal,
       )
-      const parentDiscoverable = roots.some(allowed => fs.contains(allowed, directory))
       if (pathInfo?.type === 'symlink') {
-        if (parentDiscoverable) {
-          if (count >= MAX_ENTRIES) {
-            listing.truncated = true
-            return
-          }
-          count += 1
-          listing.links.push(name)
+        if (count >= MAX_ENTRIES) {
+          listing.truncated = true
+          return
         }
+        count += 1
+        listing.links.push(name)
         continue
       }
-      const insideRoot = roots.some(allowed => fs.contains(allowed, entry.target))
-      const leadsToRoot = roots.some(allowed => fs.contains(entry.target, allowed))
-      if (!insideRoot && !leadsToRoot) continue
       if (count >= MAX_ENTRIES) {
         listing.truncated = true
         return
       }
       count += 1
       if (!fs.contains(root, entry.target)) {
-        if (insideRoot) listing.links.push(name)
+        listing.links.push(name)
       } else if (entry.type === 'directory') {
         listing.directories.push(name)
-        if (level < depth && canTraverse(entry.target)) await walk(entry.target, level + 1, name)
-      } else if (insideRoot) listing.files.push(name)
+        if (level < depth) await walk(entry.target, level + 1, name)
+      } else {
+        listing.files.push(name)
+      }
       if (listing.truncated) return
     }
   }
@@ -216,7 +195,6 @@ export function createListDirectoryTool(
   workspaceRoot: string,
   owner: Agent,
   fs?: DirectoryFileSystem,
-  discoverableRoots: readonly string[] = ['.'],
 ) {
   return defineTool({
     name: 'list',
@@ -233,8 +211,8 @@ export function createListDirectoryTool(
       if (exec.agent?.id !== owner.id) throw new Error('list requires its owning AutoReport agent')
       const logicalPath = normalizeWorkspaceRelativePath(args.path ?? '.')
       const listing = fs === undefined
-        ? listWorkspaceDirectory(workspaceRoot, logicalPath, args.depth, discoverableRoots)
-        : await listWorkspaceDirectoryFromFs(fs, workspaceRoot, logicalPath, args.depth, exec.signal, discoverableRoots)
+        ? listWorkspaceDirectory(workspaceRoot, logicalPath, args.depth)
+        : await listWorkspaceDirectoryFromFs(fs, workspaceRoot, logicalPath, args.depth, exec.signal)
       return { ...listing }
     },
   })

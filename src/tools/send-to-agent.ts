@@ -94,17 +94,15 @@ function taskBriefing(
   handoff: string | undefined,
 ): string {
   const policy = rolePolicy(task.role)
-  const readableRoots = policy.readableRoots.map(root => `${root}/`).join(', ')
-  const writableRoots = policy.writableRoots.map(root => `${root}/`).join(', ')
   const checklist = task.steps.length === 0
     ? '(no checklist supplied)'
-    : task.steps.map(step => `${step.done ? '[x]' : '[ ]'} ${step.description}`).join('\n')
+    : task.steps.map(step => `${step.done ? '[x]' : '[ ]' } ${step.description}`).join('\n')
   return [
     `AutoReport task ${task.taskId}, delegation revision ${revision}`,
     `Role: ${task.role}`,
-    `Readable roots: ${readableRoots}`,
-    `Writable roots: ${writableRoots}`,
-    'Paths outside the readable roots are outside this role\'s workspace scope.',
+    'Read scope: the whole experiment workspace (read-only context; duty boundaries live in your persona, not in read ACLs).',
+    `Writable root: ${policy.writableRoot}/ (the only directory you may mutate).`,
+    'All paths you exchange with tools are experiment-workspace-relative, e.g. Report/main.typ.',
     `Task subject: ${task.subject}`,
     `Output artifacts: ${roleToScope(task.role)}/`,
     `Checklist:\n${checklist}`,

@@ -71,14 +71,6 @@ function normalizeInclude(glob: string | undefined): RegExp | undefined {
   return new RegExp(anchored, 'iu')
 }
 
-function insideAny(fs: SearchFileSystem, roots: readonly FsTargetLike[], target: FsTargetLike): boolean {
-  return roots.some(root => fs.contains(root, target))
-}
-
-function canTraverse(fs: SearchFileSystem, roots: readonly FsTargetLike[], directory: FsTargetLike): boolean {
-  return roots.some(root => fs.contains(root, directory) || fs.contains(directory, root))
-}
-
 async function resolveWithoutSymlinks(
   fs: SearchFileSystem,
   workspace: FsTargetLike,
@@ -227,7 +219,6 @@ async function scanFile(
 async function searchWorkspace(
   fs: SearchFileSystem,
   workspaceRoot: string,
-  readableRoots: readonly string[],
   input: { pattern: string; path: string; include?: string; caseSensitive: boolean },
   signal: AbortSignal,
 ): Promise<GrepOutput> {
@@ -239,17 +230,9 @@ async function searchWorkspace(
   const workspace = await fs.resolve(workspaceRoot, { signal })
   const query = await resolveWithoutSymlinks(fs, workspace, logicalPath, signal)
   if (!fs.contains(workspace, query)) throw new Error('grep path is outside the experiment workspace')
-  const roots = await Promise.all(readableRoots.map(async root =>
-    resolveWithoutSymlinks(fs, workspace, normalizeWorkspaceRelativePath(root), signal)))
   const queryInfo = await fs.stat(query, signal)
   if (queryInfo === undefined) throw new Error('grep path does not exist: ' + logicalPath)
   if (queryInfo.type !== 'file' && queryInfo.type !== 'directory') throw new Error('grep path is not a regular file or directory')
-  if (queryInfo.type === 'file' && !insideAny(fs, roots, query)) {
-    throw new Error('grep file is outside this role\'s readable roots')
-  }
-  if (queryInfo.type === 'directory' && !canTraverse(fs, roots, query)) {
-    throw new Error('grep directory is outside this role\'s readable roots and contains none of them')
-  }
 
   const state: SearchState = { matches: [], bytesScanned: 0, filesScanned: 0, skippedFiles: 0, truncated: false, stop: false }
   const matchesInclude = (path: string): boolean => include === undefined || include.test(path)
@@ -275,11 +258,11 @@ async function searchWorkspace(
         if (pathInfo?.type === 'symlink' || !fs.contains(workspace, entry.target)) continue
         if (entry.type === 'directory') {
           if (level >= MAX_DEPTH) {
-            if (canTraverse(fs, roots, entry.target)) state.truncated = true
+            state.truncated = true
             continue
           }
-          if (canTraverse(fs, roots, entry.target)) await walk(entry.target, entryPath, level + 1)
-        } else if (entry.type === 'file' && insideAny(fs, roots, entry.target) && matchesInclude(entryPath)) {
+          await walk(entry.target, entryPath, level + 1)
+        } else if (entry.type === 'file' && matchesInclude(entryPath)) {
           await scanFile(fs, entry.target, entryPath, input.pattern, input.caseSensitive, signal, state)
         }
       }
@@ -300,7 +283,6 @@ async function searchWorkspace(
 export function createGrepTool(
   workspaceRoot: string,
   owner: Agent,
-  readableRoots: readonly string[],
   fs?: SearchFileSystem,
 ) {
   return defineTool({
@@ -308,7 +290,7 @@ export function createGrepTool(
     description: 'Search workspace files for a literal text string through the DSH filesystem provider, not a subprocess. Results are capped by file count, bytes, line length, and match count; use the workspace-relative path/include arguments to narrow the search. Role scope comes from the AutoReport filesystem context.',
     parameters: {
       pattern: { type: 'string', required: true, description: 'Literal text to find; case-insensitive unless case_sensitive is true.' },
-      path: { type: 'string', description: 'Workspace-relative file or directory to search; defaults to the workspace root. Only files in this role\'s readable roots are searched.' },
+      path: { type: 'string', description: 'Workspace-relative file or directory to search; defaults to the workspace root. Every experiment-workspace file is searchable; narrow with path/include.' },
       include: { type: 'string', description: 'Optional workspace-relative glob, such as **/*.md or *.csv.' },
       case_sensitive: { type: 'boolean', description: 'Match letter case exactly; defaults to false.' },
     },
@@ -319,7 +301,7 @@ export function createGrepTool(
     async execute(args, exec) {
       if (exec.agent?.id !== owner.id) throw new Error('grep requires its owning AutoReport agent')
       if (fs === undefined) throw new Error('safe grep requires the DSH filesystem provider; no process-backed fallback is available')
-      const result = await searchWorkspace(fs, workspaceRoot, readableRoots, {
+      const result = await searchWorkspace(fs, workspaceRoot, {
         pattern: args.pattern,
         path: args.path ?? '.',
         ...(args.include === undefined ? {} : { include: args.include }),
