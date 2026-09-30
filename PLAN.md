@@ -4,58 +4,53 @@ Migrate the AutoReportCLI physics-report workflow into a DeepSeek Harness (`dsh`
 The scope contract is `../autoreportcli/docs/own-features.md`: preserve AutoReport-owned
 domain semantics while reusing DSH infrastructure wherever its contract is equivalent.
 
+**Current merge amendment.** `project.json` is retired. Per-workspace report
+language and workflow defaults live in the `autoreport` DSH user-settings
+namespace. Data Analysis and Plotting receive a foreground platform shell:
+confined Bash on Linux/macOS and the DSH PowerShell tool on Windows. MAIN uses
+`install_python_package` for approved package installation. PDF extraction is
+documented by the `reference_extract` tool itself; REPORT also has
+`render_report_page` for visual review.
+
+**Rev 12 context and capability amendment.** A shared code-owned role roster
+briefly names every other role's work in each agent's prompt. Main-only tool
+sections render only where their tools are visible; specialist scopes hide
+`workflow_task` and the other Main tools. The base DSH bash/pwsh prompt is
+shadowed for AutoReport, and non-compute roles hide inherited shell tools.
+Compute roles receive a scoped shell tool without an escalation parameter and
+fail closed when DSH cannot provide full file confinement. All roles receive
+bounded `list`/`grep`; Report can render PDF pages to PNG for `read_image`.
+The PDF extraction recipe skill is removed now that `reference_extract` owns
+its invocation. Python runtime context names the selected interpreter only
+for Main and compute roles, with shell facts only for compute roles.
+
+**Rev 11 execution amendment.** All roles read the experiment workspace and write
+only their DSH-confined output root. The compute shell is registered only in
+Data Analysis and Plotting child scopes. Main and Theory have no general shell; Main has
+structured PDF extraction and approval-backed Python package installation.
+Report receives `compile_report` and `render_report_page`: compilation accepts
+one workspace-relative entry path, selects the frozen LaTeX/Typst backend,
+writes a complete log under `Report/`, and returns bounded diagnostics. Page
+rendering creates a review PNG under `Report/.cache/preview/`. Compiler
+invocation is no longer a skill or shell-command gate. The Rev 8 all-role-bash
+decision below is superseded.
+
 **Rev 10 amendment.** A workspace can be reset: `/reset` clears the generated work, keeps the
 user's inputs, and clears the invoking session's workflow with it (PLAN §2.19). The command
 carries no confirmation, because a slash command runs outside any turn and the approval panel is
 turn-enclosed.
-
-**Rev 11 amendment.** Remove the legacy external `project.json` settings layer completely.
-All report policy comes from the `autoreport` user settings namespace, plugin defaults, or
-the internal workflow override. No loader, migration, fallback, or setup script reads or writes
-`project.json`.
-
-**Rev 14 merge amendment.** REPORT compiles through the dedicated
-`compile_report` tool and has no general shell. DATA_ANALYSIS and PLOTTING
-retain the platform shell. REPORT loads `experiment-report-writer` before
-writing; PLOTTING receives `plotting-quality`. MAIN extracts reference PDFs
-through the sandboxed `reference_extract(path=...)` tool.
-
-**Rev 13 amendment.** Collapse the permission model to three facts per role:
-`writableRoot`, `hasProcessTool`, and the tool list. Read permission never
-expresses role boundaries — every role reads the whole experiment workspace
-(`discoverableRoots`/`readableRoots` are deleted). The single writable root is
-the real sandbox boundary, enforced by DSH's native `workspace-write` sandbox
-rooted at the writable root; `write`/`edit` re-check the target once. Tools
-differ only by "does this role need to execute code": MAIN and THEORY have no
-shell; DATA_ANALYSIS and PLOTTING get the platform shell rooted at the
-workspace root with no command parsing — the entire bash/pwsh command
-preflight is deleted, because DSH's OS sandbox owns write effects and shell
-parsing cannot authorize interpreter scripts anyway. All model-facing paths
-are experiment-workspace-relative, including shell CWD.
-
-**Rev 12 amendment.** Separate names-only discovery from content reads with
-`discoverableRoots`, `readableRoots`, and `writableRoots`. MAIN reviews specialist
-outputs but cannot read raw measurements or write specialist-owned files. MAIN's
-general shell is replaced by dedicated Python-environment and reference-extraction
-tools. Data Analysis, Plotting, and Report use role-aware Bash on Linux/macOS and
-role-constrained PowerShell on Windows. The Unix wrapper applies a role-specific
-workspace filesystem view; Windows uses DSH's partial write ACL sandbox and
-AutoReport command/path preflight, without arbitrary-process read isolation.
 
 **Rev 9 amendment.** Per-workspace report language gets one storage location, one display
 surface, and one switch action, and the settings card moves to the slot the Plugins page
 documents for a bundle (PLAN §2.18). §2.14 keeps the precedence chain but loses project-scoped
 language authority to the user settings namespace; §2.17 row 9 records the slot change.
 
-**Rev 8 execution-layer amendment (historical; superseded by Rev 12).** Role writable roots are independent DSH sandbox
-roots; the DSH session cwd stays the experiment root while the platform shell starts in
-the role root. MAIN, DATA_ANALYSIS, PLOTTING, and REPORT use DSH-native Bash on Unix and
-PowerShell on Windows; THEORY has no shell tool and uses `list` for directory discovery.
-Network access is allowed.
-`report_exec`, `compile_report`, and AutoReport network-denial isolation are removed.
-Python/MinerU/LaTeX/Typst are skills plus shell-env facts, not dedicated model tools.
-Sections below that still describe `report_exec` / network deny are historical;
-README.md is the current product surface.
+**Rev 8 execution-layer amendment.** Role writable roots are independent DSH sandbox
+workspace roots (cwd stays the experiment root). All five roles use DSH-native `bash`
+with network allowed. `report_exec`, `compile_report`, and AutoReport network-denial
+isolation are removed. Python/MinerU/LaTeX/Typst are skills plus shell-env facts, not
+dedicated model tools. Sections below that still describe `report_exec` / network deny
+are historical; README.md is the current product surface.
 
 Migrate the AutoReportCLI physics-report workflow into a DeepSeek Harness (`dsh`) plugin.
 The scope contract is `../autoreportcli/docs/own-features.md`: preserve AutoReport-owned
@@ -126,8 +121,8 @@ AutoReportDSH owns report semantics and policy.
   workspace-to-prompt injection at resume. A recreated subagent recovers from: task
   state + workspace state + role ownership + semantic file notes (cold-rebind handoff).
 - MinerU instructions are a vendored skill document under `resources/skills/` and are
-  registered only for MAIN. MAIN calls the fixed-argument `reference_extract` tool; it
-  never runs the MinerU CLI through a general shell.
+  registered only for MAIN. Default network denial remains unchanged, so
+  actual `mineru-open-api` API execution still needs a later explicit network-policy change.
 - Semantic file descriptions and role notes are agent-authored through `manifest(action="update")`
   and last-write-wins per path/role. Mechanical create/modify facts stay on
   `autoreport/artifact`. A description is stale when `artifact.recordedAt > descriptionUpdatedAt`.
@@ -231,46 +226,32 @@ AutoReport Delegation (task_id, revision)
 DSH MessageId
 ```
 
-Role policies use three facts (rev 13). Reads are never role-scoped, so the
-policy carries no read dimension at all:
+Role policies use separate dimensions rather than one ambiguous execution root:
 
 ```ts
-interface ReportRolePolicy {
-  writableRoot: string      // the only writable directory; DSH sandbox root
-  hasProcessTool: boolean   // platform shell (bash/pwsh) or none
-  tools: string[]           // BASE + protocol/coordinator packs
+interface ReportExecutionPolicy {
+  cwd: string
+  readableRoots: string[]
+  writableRoots: string[]
+  network: 'deny'
+  temp: 'private'
 }
 ```
 
-Tool packs: `BASE = read, list, grep, read_image, write, edit, skill` (whole
-workspace readable); specialists add `manifest, report_workflow`; MAIN instead
-adds the coordinator pack `manifest, workflow_task, send_to_agent,
-ask_user_question, reference_extract, python_environment`; the three executing
-roles add the platform shell.
+| Role | Child | `cwd` | Readable roots | Writable roots |
+|---|---|---|---|---|
+| MAIN | user session | workspace | workspace | `Outline/` |
+| THEORY | one continuable child | `Theory/` | workspace | `Theory/` |
+| DATA_ANALYSIS | one continuable child | `Data/` | workspace | `Data/Processed/` |
+| PLOTTING | one continuable child | `Plots/` | workspace | `Plots/` |
+| REPORT | one continuable child | `Report/` | workspace | `Report/` |
 
-| Role | Child | Shell | Writable root |
-|---|---|---|---|
-| MAIN | user session | — (dedicated tools; no general shell) | `Outline/` |
-| THEORY | one continuable child | — (no shell) | `Theory/` |
-| DATA_ANALYSIS | one continuable child | `bash` / `pwsh` | `Data/Processed/` |
-| PLOTTING | one continuable child | `bash` / `pwsh` | `Plots/` |
-| REPORT | one continuable child | `bash` / `pwsh` | `Report/` |
+Every report process has `network: 'deny'` and a private temporary area. `cwd` controls
+relative-command behavior only; it is not a read or write authorization boundary.
 
-Every role reads the whole experiment workspace. Duty boundaries (which role
-analyzes data, draws figures, writes prose) are persona guidance, not read
-ACLs. Writes are confined to the single writable root by DSH's native
-`workspace-write` sandbox — rooted at the writable root through the
-sandbox-policy override — plus one workspace-relative target check per
-`write`/`edit` in the role guard. No command preflight exists: shell calls are
-never parsed, because the OS sandbox owns their write effects and a shell
-parser cannot authorize what a Python script does anyway.
-
-All model-facing paths are experiment-workspace-relative, including shell
-arguments and CWD: the shell session starts at the workspace root (navigation)
-while the sandbox root stays at the writable root (enforcement). `grep` streams
-through `ctx.fs`, follows no symlinks, and bounds depth, files, bytes, matches,
-and output line size. On Windows, DSH's ACL runner confines writes to the role
-root with its documented `partial` enforcement.
+All roles can read the experiment workspace subject to the deployment’s ordinary read
+policy. A role’s writable roots are narrower than the DSH workspace root and are enforced
+independently.
 
 ### 2.3 Role binding before child execution
 
@@ -602,7 +583,7 @@ preserves that behavior at the domain boundary: the first admitted report workfl
 calls idempotent `ensureInitialized()`. `/init` remains an explicit idempotent
 recovery/reinitialization command registered through `ctx.commands`. Because that
 command registry is host-global, its handler verifies effective `autoreport`
-membership before parsing input or materializing files.
+membership before parsing input, saving project settings, or materializing files.
 
 Initialization creates AutoReportCLI’s `REQUIRED_DIRS` (`loader.rs`):
 
@@ -667,16 +648,15 @@ needed.
 
 ### 2.12 Compilation and skills
 
-`compile_report` is contributed only to the Report child and is a thin domain tool over
-`report_exec`. It invokes `latexmk` by default, optionally `tectonic` only when a local
-cache/bundle is configured and verified, or `typst` for Typst reports. It returns bounded
-structured diagnostics and artifact paths. It never widens network policy. Missing local
-compiler resources fail loudly.
+`compile_report` is contributed only to the Report child and invokes the frozen LaTeX or
+Typst backend with fixed argv under the Report sandbox. It returns bounded diagnostics and
+the complete log path. `render_report_page` renders one PDF page to PNG in
+`Report/.cache/preview/` for visual review.
 
 AutoReport-owned skills are registered in role-bound subagent child scopes rather than
-preset-wide: MAIN gets `pdf-reference-reader`; REPORT gets the report writer, the active
-language's compile skill, and (for Typst) the `typst` reference bundle; DATA_ANALYSIS,
-PLOTTING, and THEORY get none. Static bundled resources use DSH's normal skill
+preset-wide: PLOTTING gets `plotting-quality`; REPORT gets the report writer and, for
+Typst, the `typst` reference bundle; THEORY and DATA_ANALYSIS get none. MAIN uses the
+`reference_extract` tool description for PDF extraction. Static bundled resources use DSH's normal skill
 registration and publish `resourceBase` from their own layout — a skill shipped as a
 directory bundle (`skills/<name>/SKILL.md` beside its references) advertises the anchor,
 a flat document does not, so a body that talks about the experiment workspace is never
@@ -700,11 +680,11 @@ with its already configured default route; it never declares a provider, endpoin
 credential. A controlled OpenRouter benchmark may be configured through DSH settings
 separately, but it is not the deployment e2e default. Credentials are never committed.
 
-### 2.14 Settings layering (rev 11)
+### 2.14 Settings layering (rev 7)
 
 DSH continues to own providers/credentials, Main model selection, compaction,
 approvals, sandbox/shell configuration, session lifecycle, and UI preferences.
-AutoReport owns ONLY report-workflow policy, layered as:
+AutoReport owns report-workflow policy, layered as:
 
 ```text
 AutoReport user settings (DSH settings namespace 'autoreport')
@@ -717,15 +697,14 @@ schema defaults
 The resolver retains an internal explicit-workflow-override layer above this chain,
 but v1 deliberately exposes no command or UI for it. Plugin `Config` fields are
 DEFAULTS (`defaultReportLanguage`, `specialistModel` with
-inherit-from-Main default, `executionTimeoutMs`), not live workflow inputs. When a workflow is created,
+inherit-from-Main default, delegation wait and idle timeouts), not live workflow inputs. When a workflow is created,
 `resolveWorkflowSettings()` resolves the full precedence chain and persists the
 effective values as a `WorkflowSettingsSnapshot` in the durable
 `autoreport/workflow` event; execution reads the snapshot, so later settings
-changes never mutate an in-flight report. The authoritative per-workspace
-language lives in the user settings namespace keyed by workspace root;
-`/init [latex|typst]` records it there, and the host switches that workspace's
-templates from the record. The legacy `project.json` layer has been removed and
-is not read or migrated. Both `Report/main.tex` and
+changes never mutate an in-flight report. Per-workspace language lives in the
+user settings namespace keyed by workspace root. `/init [latex|typst]` records
+it there, and the host switches that workspace's templates from the record.
+Both `Report/main.tex` and
 `Report/main.typ` therefore coexist only while one of them is the user's own
 edit: an unmodified template of the other language is removed by the switch.
 
@@ -737,9 +716,7 @@ only when the user selects it: `uv venv` at `$dshHome/autoreport/venv`, then
 `uv pip install numpy scipy pandas matplotlib`. It is not created at plugin
 load. Deleting that directory reclaims space; selecting managed again recreates
 it. Custom/user interpreters are probed only: missing packages warn at first-turn
-init. MAIN manages explicit package additions through the approval-gated
-`python_environment` tool; specialists report `missing_dependency`. `uv` is
-required for the managed row.
+init and are never auto-installed. `uv` is required for the managed row.
 
 ### 2.15 Direct human conversation vs workflow delegation (rev 7)
 
@@ -790,8 +767,8 @@ and where it lives in the codebase:
 |---|---|---|
 | 1 | Opt-in preset as mode switch | **By design** — installer only adds `autoreport` to `$DSH_HOME/.agent-presets`; deployment default preset and ordinary `standard` sessions untouched; no global `enabled` flag (PLAN §2.1) |
 | 2 | DSH-owned vs AutoReport-owned settings split | **Implemented** — `src/settings.ts`; composition `Config` contains report-policy defaults only; `autoreport` is a live DSH user-settings namespace |
-| 3 | Plugin config = defaults, not live workflow inputs | **Implemented** — `defaultReportLanguage`/`specialistModel`/`executionTimeoutMs` are snapshotted; the unused Python-environment abstraction was removed |
-| 4 | Project-scoped language selection | **Revised, rev 11** — stored in the DSH `autoreport` settings map keyed by absolute workspace root; legacy file support was removed |
+| 3 | Plugin config = defaults, not live workflow inputs | **Implemented** — report language, specialist route, Python executable, and wait timeouts are snapshotted |
+| 4 | Project-scoped language selection | **Implemented** — workspace-root-keyed DSH user settings; no project-file scan or migration |
 | 5 | Persist resolved settings in workflow snapshot | **Implemented** — `WorkflowSettingsSnapshot` in `autoreport/workflow` payload (schema version 3); `resolveWorkflowSettings()` precedence chain |
 | 6 | `/init --language latex\|typst` | **Implemented, revised in rev 9** — records the choice in the user settings map (PLAN §2.18) and materializes missing resources; the other language's *unmodified* templates are deleted by the host-side switch, edited ones are kept |
 | 7 | Non-configurable authorization/execution policy | **By design** — fixed role table + immutable `network:'deny'`, no broadening knobs exposed |
@@ -805,14 +782,14 @@ and where it lives in the codebase:
 | 15 | Parent-owned continuation semantics | **Reused** — DSH continuation contract untouched; no independent subagent lifecycle |
 | 16 | Strictly scoped compatibility hooks | **Implemented** — the router installs nothing for non-AutoReport children (stock messaging comes from the base bundle) and routes bound roles through `agent/created` + child-scope injection; verified by keyless router tests |
 
-### 2.18 Per-workspace report language and the plugin settings page (rev 11)
+### 2.18 Per-workspace report language and the plugin settings page (rev 9)
 
-The workspace language is stored in one place and exposed in the AutoReport settings page.
-The legacy per-workspace `project.json` settings layer has been removed completely: no
-fallback, migration, schema, loader, writer, or command path remains.
+The current implementation stores per-workspace language in the DSH `autoreport` user
+settings namespace and exposes it through the per-workspace settings card. `/init --language`
+uses the same setting and materializes missing resources. There is no project-file fallback.
 
-**Storage and precedence.** Per-workspace language and other report settings live in the
-`autoreport` user settings namespace:
+**Storage and precedence.** Per-workspace language lives in the `autoreport` user settings
+namespace:
 
 ```text
 explicit workflow override (internal only)
@@ -830,8 +807,8 @@ The key is the workspace's absolute root path. `workspaceIdForRoot` remains the 
 AutoReport's own directories, but it cannot key a browser write: deriving it in the card would
 mean reimplementing the hash. Both sides read the same session record's `cwd`, and the host
 resolves the path before reading the map, so no path is re-derived and no fragment is guessed.
-`/init [--language latex|typst]` writes `workspaceLanguages[root]` through the settings
-service; it still materializes missing resources and still deletes nothing.
+`/init [--language latex|typst]` now writes `workspaceLanguages[root]` through the settings
+service instead of the file; it still materializes missing resources and still deletes nothing.
 
 **The project list needs no scan.** The card already holds every session in the Client's session
 store, whose rows carry `cwd`, `displayTitle`, `blank`, and the preset projection the
@@ -1068,7 +1045,7 @@ this status.
 | Execution policy | `execution-policy` | mutation guard matrix, seatbelt/bwrap isolation, `report_exec`, live macOS network-denial smoke |
 | Roles & delegation | `roles-delegation` | personas, Main preset, `send_to_agent`, `report_workflow`, global report router, observer |
 | Compile & manifests | `compile-manifests` ×3 lanes | `compile_report`, artifact policy ported from manifest.rs, observer, AutoReport manifest projection/tool |
-| Settings layering (rev 11) | `settings-layering` | precedence resolution, DSH `autoreport` user namespace, durable workflow snapshots; no external project settings file |
+| Settings layering (rev 7) | `settings-layering` | precedence resolution, DSH `autoreport` user namespace, project settings store, durable workflow snapshots |
 | Integration & e2e | `integration-e2e` | wiring fixes, assembled smokes, installer boot smoke, configured-route self-skipping e2e |
 
 Remaining optional/product work (documented in README): Windows support, MinerU network

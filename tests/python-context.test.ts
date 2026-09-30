@@ -3,7 +3,6 @@ import type { Context } from '@deepseek-ai/cordis'
 import { SESSION_FORMAT_VERSION, Session, SessionId } from '@deepseek-ai/dsh-session'
 import {
   installAutoReportPythonContext,
-  packageManagerGuidance,
   renderPythonContext,
   type AutoReportPythonContextDeps,
 } from '../src/python-context.js'
@@ -21,39 +20,29 @@ function makeSession(id: string, cwd?: string): Session {
 function baseDeps(overrides: Partial<AutoReportPythonContextDeps> = {}): AutoReportPythonContextDeps {
   return {
     ownsSession: () => false,
+    roleOf: () => 'MAIN',
     snapshotPythonExecutable: () => undefined,
     ...overrides,
   }
 }
 
-describe('packageManagerGuidance', () => {
-  it('routes package changes through the approval-gated MAIN capability', () => {
-    const guidance = packageManagerGuidance()
-    expect(guidance).toContain('python_environment(action=inspect|list)')
-    expect(guidance).toContain('python_environment(action=install, packages=[...])')
-    expect(guidance).toContain('approved package changes')
-  })
-})
-
 describe('renderPythonContext', () => {
   it('deterministically renders selection, guidance, and ownership rules', () => {
-    const first = renderPythonContext('/opt/miniconda3/envs/lab/bin/python', 'Conda · lab')
-    const second = renderPythonContext('/opt/miniconda3/envs/lab/bin/python', 'Conda · lab')
+    const first = renderPythonContext('/opt/miniconda3/envs/lab/bin/python', 'Conda · lab', 'DATA_ANALYSIS')
+    const second = renderPythonContext('/opt/miniconda3/envs/lab/bin/python', 'Conda · lab', 'DATA_ANALYSIS')
     expect(first).toBe(second)
     expect(first).toContain('# Python environment')
     expect(first).toContain('/opt/miniconda3/envs/lab/bin/python')
-    expect(first).toContain('python_environment(action=install')
-    expect(first).toContain('missing_dependency')
-    expect(first).toContain('Only MAIN may install')
+    expect(first).toContain('compute shell resolves `python` and `python3`')
   })
 
   it('is empty when nothing is known so the snapshot contributes nothing', () => {
-    expect(renderPythonContext('', undefined)).toBe('')
+    expect(renderPythonContext('', undefined, 'MAIN')).toBe('')
   })
 
   it('changes text when the environment changes (host snapshot diff then appends)', () => {
-    const before = renderPythonContext('/opt/miniconda3/envs/a/bin/python', 'Conda · a')
-    const after = renderPythonContext('/opt/miniconda3/envs/b/bin/python', 'Conda · b')
+    const before = renderPythonContext('/opt/miniconda3/envs/a/bin/python', 'Conda · a', 'MAIN')
+    const after = renderPythonContext('/opt/miniconda3/envs/b/bin/python', 'Conda · b', 'MAIN')
     expect(before).not.toBe(after)
   })
 })
@@ -81,6 +70,7 @@ describe('installAutoReportPythonContext', () => {
     } as unknown as Context
     const dispose = installAutoReportPythonContext(ctx, baseDeps({
       ownsSession: session => session === owned,
+      roleOf: () => 'DATA_ANALYSIS',
       snapshotPythonExecutable: session => session === owned ? '/work/.venv/bin/python' : undefined,
     }))
     expect(dispose).toBeTypeOf('function')

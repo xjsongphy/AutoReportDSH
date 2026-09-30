@@ -16,7 +16,7 @@ const EXTRACT_TIMEOUT_MS = 180_000
 export function installReferenceExtractTool(ctx: Context): () => void {
   return ctx.tools.register(defineTool({
     name: 'reference_extract',
-    description: 'Extract a References/ PDF into readable files under Outline/.cache/mineru/. Pass the workspace-relative PDF path. Read the produced markdown after extraction.',
+    description: 'When read cannot parse a needed References/ PDF, extract it into readable files under Outline/.cache/mineru/. Pass the workspace-relative PDF path; after success, read the produced markdown. Report missing credentials or extraction failure as a blocker without inventing PDF content.',
     parameters: { path: { type: 'string', required: true, description: 'PDF path relative to the experiment workspace, e.g. References/handout.pdf.' } },
     timeoutMs: EXTRACT_TIMEOUT_MS + 10_000,
     presentCall: args => genericCall('Extract reference PDF', args.path),

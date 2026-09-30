@@ -23,6 +23,9 @@ importers:
       '@deepseek-ai/dsh-home-paths':
         specifier: link:../deepseek-harness/packages/util/home-paths
         version: link:../deepseek-harness/packages/util/home-paths
+      '@deepseek-ai/dsh-tool-fs-search':
+        specifier: link:../deepseek-harness/packages/fs/tool-fs-search
+        version: link:../deepseek-harness/packages/fs/tool-fs-search
       '@deepseek-ai/dsh-llm':
         specifier: link:../deepseek-harness/packages/llm/llm
         version: link:../deepseek-harness/packages/llm/llm
@@ -44,6 +47,9 @@ importers:
       '@deepseek-ai/dsh-shell-env':
         specifier: link:../deepseek-harness/packages/shell/shell-env
         version: link:../deepseek-harness/packages/shell/shell-env
+      '@deepseek-ai/dsh-shell':
+        specifier: link:../deepseek-harness/packages/shell/shell
+        version: link:../deepseek-harness/packages/shell/shell
       '@deepseek-ai/dsh-skill':
         specifier: link:../deepseek-harness/packages/skill/skill
         version: link:../deepseek-harness/packages/skill/skill
@@ -120,15 +126,12 @@ importers:
       '@deepseek-ai/dsh-sandbox-local':
         specifier: link:../deepseek-harness/packages/sandbox/sandbox-local
         version: link:../deepseek-harness/packages/sandbox/sandbox-local
-      '@deepseek-ai/dsh-shell':
-        specifier: link:../deepseek-harness/packages/shell/shell
-        version: link:../deepseek-harness/packages/shell/shell
-      '@deepseek-ai/dsh-subprocess-local':
-        specifier: link:../deepseek-harness/packages/subprocess/subprocess-local
-        version: link:../deepseek-harness/packages/subprocess/subprocess-local
       '@deepseek-ai/dsh-tool-bash':
         specifier: link:../deepseek-harness/packages/shell/tool-bash
         version: link:../deepseek-harness/packages/shell/tool-bash
+      '@deepseek-ai/dsh-subprocess-local':
+        specifier: link:../deepseek-harness/packages/subprocess/subprocess-local
+        version: link:../deepseek-harness/packages/subprocess/subprocess-local
       '@deepseek-ai/dsh-tool-pwsh':
         specifier: link:../deepseek-harness/packages/shell/tool-pwsh
         version: link:../deepseek-harness/packages/shell/tool-pwsh

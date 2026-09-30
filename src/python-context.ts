@@ -1,7 +1,6 @@
 /**
- * Dynamic Python-environment context on every AutoReport session (MAIN and
- * specialists): what interpreter is selected, where it came from, and how
- * MAIN manages packages through the approval-gated tool. Registered as a `systemPrompt.context()`,
+ * Dynamic Python-environment context for MAIN and compute specialists: what
+ * interpreter is selected and where it came from. Registered as a `systemPrompt.context()`,
  * so the DSH agent loop materializes it as a durable user-role snapshot that
  * is appended ONLY when the rendered text changes — the host owns the
  * "compare with the last snapshot, append on difference" choreography, and
@@ -17,10 +16,12 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { Session } from '@deepseek-ai/dsh-session'
 import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
 import { isManagedPythonSetting, managedPythonExecutable, pythonVersion } from './python-detect.js'
+import type { AutoReportRole } from './roles.js'
 
 /** Session ownership and frozen workflow settings for Python context resolution. */
 export interface AutoReportPythonContextDeps {
   ownsSession(session: Session): boolean
+  roleOf(session: Session): AutoReportRole | undefined
   /** Frozen workflow snapshot python, or undefined when unset or not yet snapshotted. */
   snapshotPythonExecutable(session: Session): string | undefined
 }
@@ -28,15 +29,6 @@ export interface AutoReportPythonContextDeps {
 /** Structural subset of the assemble context the renderer reads. */
 interface PythonAssembleContext {
   agent?: { session?: Session }
-}
-
-/**
- * Point MAIN at the dedicated environment capability instead of exposing
- * package-manager commands in the prompt.
- * @returns the environment-tool guidance line.
- */
-export function packageManagerGuidance(): string {
-  return 'Use python_environment(action=inspect|list) to review this environment; use python_environment(action=install, packages=[...]) for approved package changes.'
 }
 
 /**
@@ -62,16 +54,14 @@ function cachedPythonVersion(executable: string): string | undefined {
  * @param sourceLabel - human-facing source line, or undefined for the fallback.
  * @returns the context text, or '' when nothing is known (contributes nothing).
  */
-export function renderPythonContext(executable: string, sourceLabel: string | undefined): string {
-  if (executable.length === 0) return ''
+export function renderPythonContext(executable: string, sourceLabel: string | undefined, role: AutoReportRole): string {
+  if (executable.length === 0 || role === 'THEORY' || role === 'REPORT') return ''
   const version = cachedPythonVersion(executable)
   const lines = [
     '# Python environment',
     `selected: ${executable}${version === undefined ? '' : ` (${version})`}`,
     ...(sourceLabel === undefined ? [] : [`source: ${sourceLabel}`]),
-    `Role-aware process tools resolve \`python\`/\`python3\` to this interpreter — never activate it or pass an explicit interpreter path unless targeting another environment`,
-    packageManagerGuidance(),
-    'Only MAIN may install or change packages; specialists report `missing_dependency` through `report_workflow` instead.',
+    ...(role === 'MAIN' ? [] : ['The compute shell resolves `python` and `python3` to this interpreter.']),
   ]
   return lines.join('\n')
 }
@@ -99,9 +89,11 @@ export function installAutoReportPythonContext(
     text: (assemble) => {
       const session = (assemble as PythonAssembleContext).agent?.session
       if (session === undefined || !deps.ownsSession(session)) return ''
+      const role = deps.roleOf(session)
+      if (role === undefined || role === 'THEORY' || role === 'REPORT') return ''
       const executable = resolvePythonExecutable(deps, session)
       if (executable === undefined) return ''
-      return renderPythonContext(executable, sourceLabel(deps, session, executable))
+      return renderPythonContext(executable, sourceLabel(deps, session, executable), role)
     },
   })
 }

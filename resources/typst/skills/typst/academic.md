@@ -114,7 +114,7 @@ whole checklist; each trap compiles without a warning, so check for it by eye.
 Digit scripts (`F_1(a)`) and paren-base scripts (`bb(E)_(nu_n)[…]`, `Phi^(-1)(x)`)
 are **safe** — don't "fix" them; see debug.md for why. These are invisible in the
 source, so **render and look**:
-compile with `compile_report` and inspect the returned PDF.
+inspect the rendered PDF.
 
 ### Equation Numbering
 

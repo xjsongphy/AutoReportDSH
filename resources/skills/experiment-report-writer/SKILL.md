@@ -632,9 +632,7 @@ do not force presentation choices into prose.
 - Keep source files modular when a project has several chapters or sections;
   keep paths portable and references resolvable.
 
-For XeLaTeX compilation, errors, reference resolution, or warnings, invoke the
-`compile_report` tool. It compiles until cross-references stabilize. Inspect
-the rendered output when layout matters.
+Inspect the rendered output when layout matters.
 
 ## Document release gates (upstream `checks/document.md`)
 

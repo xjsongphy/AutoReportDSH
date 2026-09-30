@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { SpecialistRole } from './roles.js'
 import { resourcesRoot } from './workspace/init.js'
+import { otherRoleResponsibilities } from './role-roster.js'
 
 const ROLE_FILES: Readonly<Record<SpecialistRole, string>> = {
   THEORY: 'theory_agent.md',
@@ -15,7 +16,8 @@ const ROLE_FILES: Readonly<Record<SpecialistRole, string>> = {
  * @returns Main coordination instructions.
  */
 export function loadMainPersona(): string {
-  return readFileSync(join(resourcesRoot(), 'personas', 'main_agent.md'), 'utf8')
+  const main = readFileSync(join(resourcesRoot(), 'personas', 'main_agent.md'), 'utf8')
+  return `${main.trimEnd()}\n\n${otherRoleResponsibilities('MAIN')}\n`
 }
 
 /**
@@ -27,5 +29,5 @@ export function loadSpecialistPersona(role: SpecialistRole): string {
   const directory = join(resourcesRoot(), 'personas')
   const common = readFileSync(join(directory, 'Common.md'), 'utf8')
   const roleText = readFileSync(join(directory, ROLE_FILES[role]), 'utf8')
-  return `${roleText}\n\n${common}`
+  return `${roleText.trimEnd()}\n\n${otherRoleResponsibilities(role)}\n\n${common}`
 }

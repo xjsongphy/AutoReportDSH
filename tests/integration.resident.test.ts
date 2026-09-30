@@ -312,7 +312,7 @@ describe('integration: resident subagent through the real agent loop', () => {
     const mainTools = requestedToolNames(booted.mainAdapter.requests[0]!)
     expect(mainTools).toEqual(expect.arrayContaining([
       'read', 'read_image', 'list', 'grep', 'skill', 'manifest', 'workflow_task',
-      'send_to_agent', 'python_environment', 'reference_extract',
+      'send_to_agent', 'install_python_package', 'reference_extract',
     ]))
     for (const name of ['bash', 'pwsh', 'glob', 'workflow', 'subagent', 'subagent_fork', 'send_message', 'interrupt_agent', 'list_agents', 'todo_write']) {
       expect(mainTools).not.toContain(name)
@@ -339,6 +339,7 @@ describe('integration: resident subagent through the real agent loop', () => {
       deny: [
         'send_to_agent', 'ask_user_question', 'workflow', 'subagent', 'subagent_fork',
         'send_message', 'interrupt_agent', 'list_agents', 'todo_write', 'glob', 'pwsh', 'bash',
+        'install_python_package',
       ],
     })
 

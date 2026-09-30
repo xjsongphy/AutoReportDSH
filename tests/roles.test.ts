@@ -6,7 +6,7 @@ describe('fixed role table', () => {
     expect(rolePolicy('MAIN')).toEqual({
       writableRoot: 'Outline',
       hasProcessTool: false,
-      tools: ['read', 'list', 'grep', 'read_image', 'write', 'edit', 'skill', 'manifest', 'workflow_task', 'send_to_agent', 'ask_user_question', 'reference_extract', 'python_environment'],
+      tools: ['read', 'list', 'grep', 'read_image', 'write', 'edit', 'skill', 'manifest', 'workflow_task', 'send_to_agent', 'ask_user_question', 'reference_extract', 'install_python_package'],
     })
     expect(rolePolicy('THEORY')).toEqual({
       writableRoot: 'Theory',
@@ -24,7 +24,7 @@ describe('fixed role table', () => {
     expect(rolePolicy('REPORT')).toEqual({
       writableRoot: 'Report',
       hasProcessTool: false,
-      tools: ['read', 'list', 'grep', 'read_image', 'write', 'edit', 'skill', 'manifest', 'report_workflow', 'compile_report'],
+      tools: ['read', 'list', 'grep', 'read_image', 'write', 'edit', 'skill', 'manifest', 'report_workflow', 'compile_report', 'render_report_page'],
     })
   })
 

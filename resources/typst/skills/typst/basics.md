@@ -31,7 +31,7 @@ The answer is #(1 + 2).
 | Root-relative | `"/src/lib.typ"`     | Project root                   |
 | Package       | `"@preview/pkg:1.0"` | Typst Universe / local package |
 
-`compile_report` sets the Typst project root to the experiment workspace. Root-relative imports resolve from that workspace; ordinary relative paths resolve from the current source file.
+AutoReport sets the Typst project root to the experiment workspace. Root-relative imports resolve from that workspace; ordinary relative paths resolve from the current source file.
 
 | Error                           | Cause                     | Fix                                                          |
 | ------------------------------- | ------------------------- | ------------------------------------------------------------ |

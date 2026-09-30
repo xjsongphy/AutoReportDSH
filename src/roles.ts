@@ -30,7 +30,7 @@ export const DSH_ROLE_CONTROL_TOOL_NAMES = [
 ] as const
 
 /** Additional DSH execution/search names whose visibility must follow role policy. */
-export const DSH_ROLE_ESCAPE_TOOL_NAMES = [...DSH_ROLE_CONTROL_TOOL_NAMES, 'glob', 'pwsh', 'bash'] as const
+export const DSH_ROLE_ESCAPE_TOOL_NAMES = [...DSH_ROLE_CONTROL_TOOL_NAMES, 'glob', 'pwsh', 'bash', 'install_python_package'] as const
 
 /** DSH's base composition mounts Bash on Unix and PowerShell on Windows. */
 export const ROLE_PROCESS_TOOL = process.platform === 'win32' ? 'pwsh' : 'bash'
@@ -41,7 +41,7 @@ export const BASE_TOOLS = ['read', 'list', 'grep', 'read_image', 'write', 'edit'
 /** Coordination/protocol tools MAIN uses to orchestrate the workflow. */
 const MAIN_COORDINATOR_TOOLS = [
   'manifest', 'workflow_task', 'send_to_agent', 'ask_user_question',
-  'reference_extract', 'python_environment',
+  'reference_extract', 'install_python_package',
 ] as const
 
 /** Shared handoff-protocol tools for specialist roles. */
@@ -84,7 +84,7 @@ const PLOTTING_POLICY: ReportRolePolicy = {
 const REPORT_POLICY: ReportRolePolicy = {
   writableRoot: 'Report',
   hasProcessTool: false,
-  tools: [...BASE_TOOLS, ...SPECIALIST_PROTOCOL_TOOLS, 'compile_report'],
+  tools: [...BASE_TOOLS, ...SPECIALIST_PROTOCOL_TOOLS, 'compile_report', 'render_report_page'],
 }
 
 const POLICIES: Readonly<Record<AutoReportRole, ReportRolePolicy>> = {

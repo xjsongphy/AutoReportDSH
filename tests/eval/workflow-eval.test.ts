@@ -355,7 +355,7 @@ describe('workflow eval', () => {
     expect(rebindPrompt).toContain('Theory/theory.md')
   })
 
-  it('6. edit and bash against existing files record modified artifacts', async () => {
+  it('6. report edits are tracked while denied bash makes no artifact', async () => {
     const assembled = await boot()
     admitFirstTurn(assembled)
     assembled.ctx.tools.register(defineTool({

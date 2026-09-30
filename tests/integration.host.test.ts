@@ -218,9 +218,10 @@ describe('integration: assembled host (real context)', () => {
     expect(theory.toolDescriptions.get('str_replace_editor')).toContain(
       `the absolute workspace root for this agent is ${assembled.workspaceRoot}`,
     )
-    expect(theory.toolRestrictions.at(-1)?.allow).not.toContain('bash')
-    expect(theory.toolRestrictions.at(-1)?.allow).not.toContain('workflow')
-    expect(theory.toolRestrictions.at(-1)?.deny).toContain('pwsh')
+    const theoryRoster = theory.toolRestrictions.find(restriction => restriction.allow !== undefined)
+    expect(theoryRoster?.allow).not.toContain('bash')
+    expect(theoryRoster?.allow).not.toContain('workflow')
+    expect(theory.toolRestrictions.some(restriction => restriction.deny?.includes('pwsh'))).toBe(true)
     expect(theory.skillNames).toEqual([])
     expect(theory.toolNames).not.toContain('report')
     expect(theory.sections.some(section => section.name === 'tool:report-workflow')).toBe(false)
@@ -232,12 +233,13 @@ describe('integration: assembled host (real context)', () => {
     assembled.runtime.roleRegistry.registerReserved(reportBinding)
     const reporter = makeChildRecorder('it-report', assembled.runtime, assembled.workspaceRoot)
     assembled.routeChild(reporter)
-    expect(reporter.toolNames.slice().sort()).toEqual([...roleTools.filter(name => name !== ROLE_PROCESS_TOOL), 'compile_report'].sort())
+    expect(reporter.toolNames.slice().sort()).toEqual([...roleTools.filter(name => name !== ROLE_PROCESS_TOOL), 'compile_report', 'render_report_page'].sort())
     expect(reporter.bashDescriptions).toEqual([])
     expect(reporter.pwshDescriptions).toEqual([])
-    expect(reporter.toolRestrictions.at(-1)?.allow).not.toContain('bash')
-    expect(reporter.toolRestrictions.at(-1)?.allow).not.toContain('workflow')
-    expect(reporter.toolRestrictions.at(-1)?.deny).toContain('pwsh')
+    const reportRoster = reporter.toolRestrictions.find(restriction => restriction.allow !== undefined)
+    expect(reportRoster?.allow).not.toContain('bash')
+    expect(reportRoster?.allow).not.toContain('workflow')
+    expect(reporter.toolRestrictions.some(restriction => restriction.deny?.includes('pwsh'))).toBe(true)
     const editor = reporter.registeredTools.get('str_replace_editor')
     const editorExecution = { agent: reporter.agent, signal: new AbortController().signal }
     expect(editor?.execute).toBeTypeOf('function')
@@ -263,7 +265,7 @@ describe('integration: assembled host (real context)', () => {
 
   it('initializes the workspace once with the frozen settings snapshot on the workflow event', async () => {
     const assembled = await boot({ workspaceLanguage: 'typst' })
-    expect(assembled.presetSkillNames).toEqual(['pdf-reference-reader'])
+    expect(assembled.presetSkillNames).toEqual([])
     admitFirstTurn(assembled)
     for (const dir of REQUIRED_DIRS) expect(existsSync(join(assembled.workspaceRoot, dir))).toBe(true)
     const meta = assembled.runtime.forSession(assembled.mainSession).state.projection().meta

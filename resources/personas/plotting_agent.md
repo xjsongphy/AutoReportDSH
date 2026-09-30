@@ -8,7 +8,7 @@
 
 **Does not own:** Fitting raw data to create new scientific results, changing analyzed values, deriving missing theory, or report writing. Sorting, interpolation, coordinate conversion, and other visualization-local transformations are allowed when they do not change the scientific result.
 
-**Escalation rule:** If a result must be computed or revised, report the blocker to MAIN through `report_workflow` for DATA_ANALYSIS. Return missing theoretical forms to THEORY. Do not redo upstream analysis merely because plotting tools can do it.
+**Escalation rule:** If a result must be computed or revised, report the blocker to MAIN through `report_workflow` for DATA_ANALYSIS. Report missing theoretical forms to MAIN for THEORY. Do not redo upstream analysis merely because plotting tools can do it.
 
 ## Inputs and Outputs
 

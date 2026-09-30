@@ -4,9 +4,10 @@ import type { Agent } from '@deepseek-ai/dsh-agent'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import type {} from '@deepseek-ai/dsh-subprocess'
 import { resolvePythonExecutable } from '../python-env.js'
+import { isManagedPythonSetting } from '../python-detect.js'
 import type AutoReportWorkflowRuntime from '../runtime.js'
 import { genericCall } from './presentation.js'
-import { validPackageRequirement } from './python-package-requirement.js'
+import { packageInstallArgv, validPackageRequirement } from './python-package-requirement.js'
 
 const INSTALL_TIMEOUT_MS = 300_000
 
@@ -31,6 +32,8 @@ export function installPythonPackageTool(ctx: Context): () => void {
         ownsSession: () => true,
         snapshotPythonExecutable: session => workflow.projectionFor(String(session.id))?.meta?.settings?.pythonExecutable,
       }, agent.session)
+      const selected = workflow.projectionFor(String(agent.session.id))?.meta?.settings?.pythonExecutable
+      const managed = selected !== undefined && isManagedPythonSetting(selected)
       const approver = ctx.get('approval') as { request: (request: { agent: Agent; toolName: string; callId: typeof exec.callId; reason: string; signal: AbortSignal }) => Promise<string> } | undefined
       if (approver === undefined) throw new Error('package installation requires a user approval channel')
       const decision = await approver.request({
@@ -45,7 +48,7 @@ export function installPythonPackageTool(ctx: Context): () => void {
       if (subprocess === undefined) throw new Error('package installation needs DSH subprocess')
       const deadline = AbortSignal.timeout(INSTALL_TIMEOUT_MS)
       const handle = subprocess.spawn({
-        argv: ['uv', 'pip', 'install', '--python', python, args.package],
+        argv: packageInstallArgv(python, args.package, managed),
         cwd: workflow.config.workspaceRoot ?? agent.session.header.cwd ?? process.cwd(),
         stdio: { stdin: 'ignore', stdout: { maxBytes: 32_000 }, stderr: { maxBytes: 32_000 } },
         graceMs: 5_000,

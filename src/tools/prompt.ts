@@ -63,9 +63,9 @@ dependent work when needed, or escalate to the user.
 
 **Environment changes are yours alone**: you are the only role allowed to install
 or change Python packages in the selected environment. When a task comes back
-with \`block_type="missing_dependency"\`, use the
-\`python_environment(action="install")\` capability for the reported package names, approve the
-installation if requested, then re-dispatch the same task.
+with \`block_type="missing_dependency"\`, call \`install_python_package\`
+with one named requirement for the selected environment. Approve installation, then
+re-dispatch the same task.
 Never ask a subagent to install packages; specialists
 report dependency needs instead of acting on them.`
 

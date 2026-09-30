@@ -21,7 +21,7 @@ import { ARTIFACT_SCHEMA_VERSION } from './refresh.js'
 import { MUTATION_TOOL_NAMES } from '../policy/tool-guard.js'
 
 /** Process tools whose workspace writes are observed via before/after snapshots. */
-const PROCESS_TOOL_NAMES = new Set(['bash', 'pwsh', 'compile_report', 'reference_extract'])
+const PROCESS_TOOL_NAMES = new Set(['bash', 'pwsh', 'compile_report', 'render_report_page', 'reference_extract'])
 
 /** Caller identity resolved by the same mechanism as the role guard. */
 export interface ArtifactCaller {

@@ -28,8 +28,9 @@ import { describeDshVersionSupport, readRunningDshVersion } from './dsh-version.
 import { installTurnGuards } from './workflow/turn-guard.js'
 import { createListDirectoryTool, type DirectoryFileSystem } from './tools/list-directory.js'
 import { createGrepTool, type SearchFileSystem } from './tools/grep.js'
-import { MAIN_SKILL_NAMES, skillNamesForRole } from './skills-preset.js'
+import { skillNamesForRole } from './skills-preset.js'
 import { loadBundledSkills } from './workspace/skill-loader.js'
+import { restrictInheritedShell } from './policy/role-tool-visibility.js'
 
 export const name = 'autoreport-host'
 // `apply()` registers the host-wide `/init` command through the commands
@@ -99,7 +100,7 @@ function restrictRoleToolSurface(agent: Agent, role: AutoReportRole, processTool
   // only, so these stay out of the allow list.
   const agentLocalTools = role === 'MAIN'
     ? new Set(['list', 'grep'])
-    : new Set(['list', 'grep', 'manifest', 'report_workflow', 'compile_report'])
+    : new Set(['list', 'grep', 'manifest', 'report_workflow', 'compile_report', 'render_report_page'])
   const allowed = policy.tools.filter(name => {
     if (agentLocalTools.has(name)) return false
     if (name === ROLE_PROCESS_TOOL && !processToolAvailable) return false
@@ -183,6 +184,38 @@ export async function apply(ctx: Context, config: Partial<Config> = {}, options:
     resolved.workspaceRoot = resolve(resolved.workspaceRoot)
   }
   const runtime = new AutoReportWorkflowRuntime(ctx, resolved, options)
+  const liveAgents = new Map<string, Agent>()
+  const mainShellFilters = new Map<Agent, () => void>()
+  const refreshMainShell = (agent: Agent) => {
+    const active = mainShellFilters.get(agent)
+    if (!isAutoReportMainSession(agent.session)) {
+      active?.()
+      mainShellFilters.delete(agent)
+      return
+    }
+    if (active !== undefined || agent.ctx?.tools === undefined) return
+    mainShellFilters.set(agent, restrictInheritedShell(agent.ctx, agent, 'MAIN'))
+  }
+  ctx.on('agent/created', ({ agent }) => {
+    liveAgents.set(String(agent.id), agent)
+    refreshMainShell(agent)
+    return undefined
+  }, { global: true })
+  ctx.on('agent/disposed', ({ agent }) => {
+    if (liveAgents.get(String(agent.id)) === agent) liveAgents.delete(String(agent.id))
+    mainShellFilters.get(agent)?.()
+    mainShellFilters.delete(agent)
+    return undefined
+  }, { global: true })
+  ctx.on('session/event', (session, event) => {
+    if (event.type !== 'agent-preset/selected') return
+    const agent = liveAgents.get(String(session.id))
+    if (agent !== undefined) refreshMainShell(agent)
+  }, { global: true })
+  for (const agent of (ctx.get('agents') as { list?: () => Agent[] } | undefined)?.list?.() ?? []) {
+    liveAgents.set(String(agent.id), agent)
+    refreshMainShell(agent)
+  }
   const bundledSkillRoots = new Map(
     loadBundledSkills().flatMap(skill => skill.directory === undefined ? [] : [[skill.name, skill.directory] as const]),
   )
@@ -300,13 +333,9 @@ export async function apply(ctx: Context, config: Partial<Config> = {}, options:
     isMainSession: sessionId => runtime.isMainSession(sessionId),
     ...(resolved.workspaceRoot === undefined ? {} : { workspaceRoot: resolved.workspaceRoot }),
     readableResourceRootsOf: (sessionId, role) => {
-      if (role !== 'MAIN' && role !== 'REPORT') return []
-      const language = role === 'REPORT'
-        ? runtime.reportLanguageForChild(sessionId as SessionId)
-        : undefined
-      const skillNames = role === 'MAIN'
-        ? MAIN_SKILL_NAMES
-        : skillNamesForRole('REPORT', language ?? 'latex')
+      if (role !== 'REPORT') return []
+      const language = runtime.reportLanguageForChild(sessionId as SessionId)
+      const skillNames = skillNamesForRole('REPORT', language ?? 'latex')
       return skillNames.flatMap(skillName => {
         const root = bundledSkillRoots.get(skillName)
         return root === undefined ? [] : [root]
@@ -343,6 +372,7 @@ export async function apply(ctx: Context, config: Partial<Config> = {}, options:
     promptCtx.effect(
       () => installAutoReportPythonContext(promptCtx, {
         ownsSession: session => runtime.ownsSession(session),
+        roleOf: session => runtime.roleFor(String(session.id)),
         snapshotPythonExecutable: session =>
           runtime.projectionFor(String(session.id))?.meta?.settings?.pythonExecutable,
       }),

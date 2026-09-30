@@ -50,15 +50,16 @@ describe('autoreport preset contribution', () => {
     apply(context)
 
     expect(tools.sort()).toEqual([
-      'manifest', 'python_environment', 'reference_extract', 'send_to_agent', 'workflow_task',
+      'install_python_package', 'manifest', 'reference_extract', 'send_to_agent', 'workflow_task',
     ])
-    expect(skills).toEqual(['pdf-reference-reader'])
+    expect(skills).toEqual([])
     expect(referencesProvider).toBe(1)
     // Tool-owned policy ships with the tools (master dsh convention): the two
     // sections carry the dispatch and task-board rules, not the persona.
-    expect(sections.map(section => section.name)).toEqual(['tool:send_to_agent', 'tool:workflow_task'])
-    expect(sections[0]?.text).toContain('Use `send_to_agent` for all subagent delegation')
-    expect(sections[0]?.text).toContain('Do not include:')
-    expect(sections[1]?.text).toContain('do not use generic todo tools')
+    expect(sections.map(section => section.name)).toEqual([
+      'tool:bash', 'tool:pwsh', 'tool:send_to_agent', 'tool:workflow_task',
+    ])
+    expect(sections.find(section => section.name === 'tool:send_to_agent')?.text).toBeTypeOf('function')
+    expect(sections.find(section => section.name === 'tool:workflow_task')?.text).toBeTypeOf('function')
   })
 })

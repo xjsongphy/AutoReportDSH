@@ -41,7 +41,7 @@ describe('residentDescriptor', () => {
       agentModel: 'deepseek-flash',
       agentReasoningEffort: 'low',
       persona: 'theory persona',
-      toolFilter: { deny: ['send_to_agent', 'ask_user_question', 'workflow', 'subagent', 'subagent_fork', 'send_message', 'interrupt_agent', 'list_agents', 'todo_write', 'glob', 'pwsh', 'bash'] },
+      toolFilter: { deny: ['send_to_agent', 'ask_user_question', 'workflow', 'subagent', 'subagent_fork', 'send_message', 'interrupt_agent', 'list_agents', 'todo_write', 'glob', 'pwsh', 'bash', 'install_python_package'] },
     })
   })
 
@@ -53,7 +53,7 @@ describe('residentDescriptor', () => {
 
   it('keeps the coordinator tools out of every resident child', () => {
     const otherProcessTool = ROLE_PROCESS_TOOL === 'bash' ? 'pwsh' : 'bash'
-    const delegatedTools = ['send_to_agent', 'ask_user_question', 'workflow', 'subagent', 'subagent_fork', 'send_message', 'interrupt_agent', 'list_agents', 'todo_write', 'glob', otherProcessTool]
+    const delegatedTools = ['send_to_agent', 'ask_user_question', 'workflow', 'subagent', 'subagent_fork', 'send_message', 'interrupt_agent', 'list_agents', 'todo_write', 'glob', otherProcessTool, 'install_python_package']
     expect(RESIDENT_TOOL_FILTER).toEqual({ deny: delegatedTools })
     expect(residentToolFilter('THEORY').deny?.slice().sort()).toEqual([...delegatedTools, ROLE_PROCESS_TOOL].sort())
     expect(residentToolFilter('DATA_ANALYSIS')).toEqual(RESIDENT_TOOL_FILTER)

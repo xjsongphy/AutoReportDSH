@@ -16,6 +16,12 @@
 - id: tool-fs
   name: '@deepseek-ai/dsh-tool-fs'
 
+# Read-only workspace discovery for every role. Fixed ripgrep argv, no shell.
+- id: tool-fs-search
+  name: '@deepseek-ai/dsh-tool-fs-search'
+  config:
+    sampleOverCapGlobResults: false
+
 # Do not import ambient DSH or user-agent skills into AutoReport. AutoReport's
 # bundled skills are registered by the `autoreport` row below; the preset's
 # own References/skills provider remains available for experiment-local rules.

@@ -28,7 +28,6 @@ describe('loadBundledSkills', () => {
     expect(skills.map(skill => skill.name)).toEqual([
       'experiment-report-writer',
       'latex-compile',
-      'pdf-reference-reader',
       'plotting-quality',
       'typst',
       'typst-compile',
@@ -73,7 +72,7 @@ describe('loadBundledSkills', () => {
   })
 
   it('omits the base for skills whose prose addresses the experiment workspace', () => {
-    for (const name of ['latex-compile', 'typst-compile', 'pdf-reference-reader']) {
+    for (const name of ['latex-compile', 'typst-compile']) {
       expect(skills.find(skill => skill.name === name)?.directory).toBeUndefined()
     }
   })
@@ -106,11 +105,10 @@ describe('loadBundledSkills', () => {
   it('keeps the typst bundle free of workspace paths its base would mis-resolve', () => {
     const typst = skills.find(skill => skill.name === 'typst')
     expect(typst?.content).toContain('[basics.md](basics.md)')
-    // The compile command was a second, redundant copy of `typst-compile`'s job,
-    // and it was the one workspace path the DSH resource anchor would have
-    // resolved against the skill directory.
+    // Compilation is handled by REPORT's dedicated tool, so the authoring skill
+    // carries no workspace-relative compiler command.
     expect(typst?.content).not.toContain('typst compile Report/main.typ')
-    expect(typst?.content).toContain('typst-compile')
+    expect(typst?.content).not.toContain('typst-compile')
   })
 
   it('leaves no dangling link inside the typst reference bundle', () => {
@@ -127,11 +125,6 @@ describe('loadBundledSkills', () => {
     }
   })
 
-  it('includes pdf-reference-reader for MAIN PDF extraction', () => {
-    const reader = skills.find(skill => skill.name === 'pdf-reference-reader')
-    expect(reader?.content).toContain('reference_extract')
-    expect(reader?.content).toContain('Outline/.cache/mineru/')
-  })
 })
 
 describe('loadReportLanguageGuidance', () => {
@@ -147,7 +140,7 @@ describe('loadReportLanguageGuidance', () => {
   it('selects the text for the requested language and names its skills', () => {
     expect(loadReportLanguageGuidance('typst')).toContain('# Active report language: Typst')
     expect(loadReportLanguageGuidance('typst')).toContain('do not use LaTeX commands')
-    expect(loadReportLanguageGuidance('typst')).toContain('compile_report')
+    expect(loadReportLanguageGuidance('typst')).toContain('Load `typst` for authoring')
     expect(loadReportLanguageGuidance('typst')).not.toContain('LaTeX layout rules')
   })
 })

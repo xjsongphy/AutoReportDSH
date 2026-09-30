@@ -238,7 +238,7 @@ CI（`.github/workflows/ci.yml`）在 Linux、macOS、Windows 上针对固定的
 
 仅在运行时引用、未内置：
 
-- [MinerU](https://github.com/opendatalab/MinerU) — `pdf-reference-reader` 调用的 `mineru-open-api` CLI，把 `References/` 下的 PDF 抽取到 `Outline/.cache/mineru/`
+- [MinerU](https://github.com/opendatalab/MinerU) — MAIN 的 `reference_extract` 工具使用 `mineru-open-api`，将 `References/` 下的 PDF 抽取到 `Outline/.cache/mineru/`
 
 ## 许可证
 

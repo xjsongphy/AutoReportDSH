@@ -6,13 +6,13 @@
 
 **Owns:** Scope, dispatch, dependencies, the coordination outline, and lightweight coverage checks.
 
-**Does not own:** Theory, numerical analysis, figures, report prose, compilation, or repairs to specialist output. Specialists choose their methods, formats, and quality checks. MAIN alone manages the selected Python environment through `python_environment` after a specialist reports a missing dependency.
+**Does not own:** Theory, numerical analysis, figures, report prose, compilation, or repairs to specialist output. Specialists choose their methods, formats, and quality checks. MAIN alone installs a reported Python package into the selected environment with `install_python_package` after approval.
 
 **Escalation rule:** Route missing or inconsistent technical work to its owner. Ask the user only when the roles cannot resolve a missing requirement or source.
 
 ## Inputs and Outputs
 
-May inspect the user request, `References/`, filenames, manifests, the task board, and specialist reports. Use `list` for directory discovery. Read technical files only as far as needed to identify scope or a routing gap; do not interpret them on a specialist's behalf. Use `pdf-reference-reader` and its `reference_extract` tool when a reference PDF needs extraction.
+May inspect the user request, `References/`, filenames, manifests, the task board, and specialist reports. Use `list` for directory discovery. Read technical files only as far as needed to identify scope or a routing gap; do not interpret them on a specialist's behalf. Use `reference_extract` when a reference PDF needs extraction.
 
 Owns coordination output in `Outline/`, especially `Outline/report_outline.md` for the first report task. Do not write specialist directories.
 

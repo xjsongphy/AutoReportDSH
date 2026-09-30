@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { SkillRegistration } from '@deepseek-ai/dsh-skill'
-import { skillNamesForRole, registerMainSkills, registerRoleSkills, MAIN_SKILL_NAMES } from '../src/skills-preset.js'
+import { skillNamesForRole, registerRoleSkills } from '../src/skills-preset.js'
 
 /** Capture one registration; `resourceBase` presence is part of what we assert. */
 function recorder(): { registrations: SkillRegistration[]; register: (registration: SkillRegistration) => () => void } {
@@ -83,21 +83,6 @@ describe('AutoReport role-scoped domain skills', () => {
 
   it('fails loud when the child skills service is missing', () => {
     expect(() => registerRoleSkills({} as never, 'REPORT', 'latex')).toThrow(/ctx\.skills\.register/)
-    expect(() => registerMainSkills({} as never)).toThrow(/ctx\.skills\.register/)
-  })
-
-  it('registers MAIN-only pdf skills in the preset scope', () => {
-    const skills: string[] = []
-    const context = {
-      skills: {
-        register: (registration: SkillRegistration) => {
-          skills.push(registration.name)
-          return () => {}
-        },
-      },
-    }
-    registerMainSkills(context as never)
-    expect(skills).toEqual([...MAIN_SKILL_NAMES])
   })
 
   it('invokes skills.register as a method so DSH SkillService keeps this.ctx', () => {
@@ -111,7 +96,7 @@ describe('AutoReport role-scoped domain skills', () => {
       }
     }
     const skills = new FakeSkills()
-    registerMainSkills({ skills } as never)
-    expect(skills.names).toEqual([...MAIN_SKILL_NAMES])
+    registerRoleSkills({ skills } as never, 'REPORT', 'latex')
+    expect(skills.names).toEqual(['experiment-report-writer'])
   })
 })

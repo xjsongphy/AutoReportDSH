@@ -332,8 +332,11 @@ export function createRoleToolGuard(options: RoleGuardOptions): ToolGuard {
     const call = mutation(exec)
     const read = readTarget(exec)
     const shellCall = exec.name === 'bash' || exec.name === 'pwsh'
+    const specializedCall = exec.name === 'compile_report' || exec.name === 'render_report_page'
+      || exec.name === 'reference_extract' || exec.name === 'install_python_package'
     const protectedCall = call.kind !== 'none' || read.kind !== 'none' || sandboxPermissionsEscalation(exec)
       || shellCall || exec.name === 'glob'
+      || specializedCall
       || DSH_ROLE_CONTROL_TOOL_NAMES.includes(exec.name as typeof DSH_ROLE_CONTROL_TOOL_NAMES[number])
     const resolved = resolveRole(exec, options)
     // Not an AutoReport-owned session: preserve stock DSH policy untouched.
@@ -349,6 +352,10 @@ export function createRoleToolGuard(options: RoleGuardOptions): ToolGuard {
     if (exec.name === 'glob') {
       return 'AutoReport disables process-backed glob; use list for names or the workspace grep tool for file contents'
     }
+    if (exec.name === 'compile_report' && resolved.role !== 'REPORT') return 'compile_report belongs to REPORT'
+    if (exec.name === 'render_report_page' && resolved.role !== 'REPORT') return 'render_report_page belongs to REPORT'
+    if (exec.name === 'reference_extract' && resolved.role !== 'MAIN') return 'reference_extract belongs to MAIN'
+    if (exec.name === 'install_python_package' && resolved.role !== 'MAIN') return 'install_python_package belongs to MAIN'
     if (sandboxPermissionsEscalation(exec)) {
       return 'AutoReport denies generic sandbox escalation; use the dedicated MAIN environment capability for package changes'
     }

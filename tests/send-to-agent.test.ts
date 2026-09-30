@@ -321,6 +321,7 @@ describe('send_to_agent', () => {
       deny: [
         'send_to_agent', 'ask_user_question', 'workflow', 'subagent', 'subagent_fork',
         'send_message', 'interrupt_agent', 'list_agents', 'todo_write', 'glob', 'pwsh', 'bash',
+        'install_python_package',
       ],
     })
     expect(roleRegistry.lookup('child-theory')?.binding.provisioning).toBe('active')

@@ -549,8 +549,8 @@ export const inject = ['tools', 'subagents', 'autoreportWorkflow', 'llm']
  * The master dsh convention keeps tool guidance beside the tool instead of in
  * the deployment persona, so this section ships with the tool module that owns
  * the dispatch contract. Registering it in the preset scope is this plugin's
- * equivalent of the harness's render-time visibility gate: the section and the
- * tool are mounted by the same scope, so neither can appear without the other.
+ * equivalent of the harness's render-time visibility gate: a child inherits
+ * the section registration but sees text only when its tool remains visible.
  * @param ctx - The `autoreport` preset scope.
  * @returns the exact Cordis effect disposer.
  */
@@ -558,7 +558,7 @@ export function installSendToAgentGuidance(ctx: Context): () => void {
   return ctx.systemPrompt.section({
     name: SEND_TO_AGENT_SECTION,
     order: ctx.systemPrompt.getSectionOrder('TOOL_SUBAGENT'),
-    text: SEND_TO_AGENT_SYSTEM_PROMPT,
+    text: ({ scope }) => ctx.tools.get('send_to_agent', scope) === undefined ? '' : SEND_TO_AGENT_SYSTEM_PROMPT,
   })
 }
 

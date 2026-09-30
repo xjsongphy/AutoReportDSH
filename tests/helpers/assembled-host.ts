@@ -53,6 +53,8 @@ export interface RecordedSection {
  */
 const FAKE_SECTION_ORDERS: Readonly<Record<string, number>> = {
   DEPLOYMENT_PERSONA_PREFIX: 0,
+  TOOL_BASH: 2700,
+  TOOL_PWSH: 2710,
   TOOL_SUBAGENT: 2800,
   TOOL_REPORT: 2900,
 }
