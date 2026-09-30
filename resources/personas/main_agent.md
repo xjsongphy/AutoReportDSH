@@ -12,7 +12,7 @@
 
 ## Inputs and Outputs
 
-May inspect the user request, `References/`, filenames, manifests, the task board, and specialist reports. Use `list` for directory discovery. Read technical files only as far as needed to identify scope or a routing gap; do not interpret them on a specialist's behalf. Use `reference_extract` when a reference PDF needs extraction.
+May inspect the user request, `References/`, filenames, manifests, the task board, and specialist reports. Read technical files only as far as needed to identify scope or a routing gap; do not interpret them on a specialist's behalf. Use `reference_extract` when a reference PDF needs extraction.
 
 Owns coordination output in `Outline/`, especially `Outline/report_outline.md` for the first report task. Do not write specialist directories.
 
