@@ -100,8 +100,8 @@ describe('integration: assembled host (real context)', () => {
     expect(assembled.ctx.tools.get('list', agent)).toBeUndefined()
     expect(assembled.ctx.tools.get('glob', agent)).toBeDefined()
 
-    const selected = session.append('agent-preset/selected', { agentPreset: AUTOREPORT_MAIN_PRESET })
-    await assembled.ctx.parallel('session/event', session, selected)
+    session.append('agent-preset/selected', { agentPreset: AUTOREPORT_MAIN_PRESET })
+    await assembled.ctx.parallel('agent-preset/selected', session.id, AUTOREPORT_MAIN_PRESET)
 
     const schemas = assembled.ctx.tools.schemas(agent)
     const expectedNames = [...policy.tools].sort()
@@ -119,6 +119,14 @@ describe('integration: assembled host (real context)', () => {
     const search = await execute(assembled.ctx, 'grep', { path: '.', pattern: 'synthetic workspace probe' }, agent, session)
     expect(search.isError, search.text).toBe(false)
     expect(search.text).toContain('probe.txt')
+    mkdirSync(join(root, 'References'), { recursive: true })
+    for (const path of ['References', root]) {
+      const directoryRead = await execute(assembled.ctx, 'read', { file_path: path }, agent, session)
+      expect(directoryRead.isError).toBe(true)
+      expect(directoryRead.text).toContain('read accepts a file path, not a directory')
+      expect(directoryRead.text).toContain('Use list with path')
+      expect(directoryRead.text).toContain(`Readable directories: "${root}"`)
+    }
     const unavailable = await execute(assembled.ctx, 'glob', { pattern: '**/*' }, agent, session)
     expect(unavailable.isError).toBe(true)
     expect(unavailable.text).toContain('unknown tool')

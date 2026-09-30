@@ -10,7 +10,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { SessionId } from '@deepseek-ai/dsh-session'
 import type { ToolDefinition } from '@deepseek-ai/dsh-tools'
-import { isAbsolute, resolve } from 'node:path'
+import { isAbsolute, relative, resolve, sep } from 'node:path'
 import type { Config } from './config.js'
 import { isAutoReportMainSession } from './membership.js'
 import { DSH_ROLE_ESCAPE_TOOL_NAMES, ROLE_PROCESS_TOOL, rolePolicy, type AutoReportRole } from './roles.js'
@@ -226,6 +226,14 @@ export async function apply(ctx: Context, config: Partial<Config> = {}, options:
   const bundledSkillRoots = new Map(
     loadBundledSkills().flatMap(skill => skill.directory === undefined ? [] : [[skill.name, skill.directory] as const]),
   )
+  const readableResourceRootsFor = (sessionId: string, role: AutoReportRole): string[] => {
+    if (role !== 'REPORT') return []
+    const language = runtime.reportLanguageForChild(sessionId as SessionId) ?? 'latex'
+    return skillNamesForRole('REPORT', language).flatMap(skillName => {
+      const root = bundledSkillRoots.get(skillName)
+      return root === undefined ? [] : [root]
+    })
+  }
   // DSH tools are inherited through agent scopes. Register role-local list and
   // grep tools, plus same-name shell/path variants, so content search stays on
   // ctx.fs and process/workdir guidance follows each AutoReport role.
@@ -260,6 +268,7 @@ export async function apply(ctx: Context, config: Partial<Config> = {}, options:
     const releases: Array<() => void> = []
     const register = (tool: ToolDefinition): void => { releases.push(agent.ctx.tools.register(tool)) }
     const dispose = (): void => { for (const release of releases.reverse()) release() }
+    const readableRoots = [workspaceRoot, ...readableResourceRootsFor(String(agent.id), role)]
     try {
       const fileSystem = ctx.get('fs') as DirectoryFileSystem | undefined
       const searchFileSystem = ctx.get('fs') as SearchFileSystem | undefined
@@ -285,17 +294,45 @@ export async function apply(ctx: Context, config: Partial<Config> = {}, options:
         const filePathGuidance = isMutation
           ? `AutoReport path semantics: paths are experiment-workspace-relative, e.g. \`Report/main.typ\`. ${relativePathGuidance} This role may write only inside ${rolePolicy(role).writableRoot}/.`
           : `AutoReport path semantics: paths are experiment-workspace-relative; the \`list\` and \`grep\` paths, manifest paths, and report_workflow produced_files use the same convention. ${relativePathGuidance} Skill resources use the absolute resourceBase shown when the skill is loaded.`
+        const operationGuidance = name === 'read'
+          ? 'read accepts a file path only; it does not list directory contents, does not expand wildcard characters such as `*`, and never guesses filenames. Use list to inspect a directory.'
+          : ''
         const execute = tool.execute
         register({
           ...tool,
-          description: `${tool.description} ${filePathGuidance}`,
+          description: `${tool.description} ${filePathGuidance} ${operationGuidance}`.trim(),
           async execute(args, execution) {
             const fields = typeof args === 'object' && args !== null && !Array.isArray(args)
               ? args as Record<string, unknown>
               : undefined
             const path = fields === undefined ? undefined : fields['file_path']
-            if (typeof path !== 'string' || isAbsolute(path)) return execute(args, execution)
-            return execute({ ...fields, file_path: resolve(workspaceRoot, path) }, execution)
+            if (typeof path !== 'string') return execute(args, execution)
+            if (/[*?[\]]/u.test(path)) {
+              throw new Error(
+                `${name} does not expand wildcard characters; "${path}" is not a literal file path. `
+                + 'Use list on the literal parent directory to discover actual filenames.',
+              )
+            }
+            const targetPath = isAbsolute(path) ? path : resolve(workspaceRoot, path)
+            if ((name === 'read' || name === 'read_image') && fileSystem !== undefined) {
+              const target = await fileSystem.resolve(targetPath, { signal: execution.signal })
+              const info = await fileSystem.stat(target, execution.signal)
+              if (info?.type === 'directory') {
+                const directory = relative(workspaceRoot, target.displayPath).split(sep).join('/') || '.'
+                throw new Error(
+                  `${name} accepts a file path, not a directory. Use list with path "${directory}" to inspect entries. `
+                  + `Readable directories: ${readableRoots.map(path => `"${path}"`).join(', ')}.`,
+                )
+              }
+              if (info === undefined) {
+                const directory = relative(workspaceRoot, target.displayPath).split(sep).join('/') || '.'
+                throw new Error(
+                  `file "${path}" does not exist. Do not guess additional filenames; `
+                  + `use list with path "${directory}" to discover actual names.`,
+                )
+              }
+            }
+            return isAbsolute(path) ? execute(args, execution) : execute({ ...fields, file_path: targetPath }, execution)
           },
         })
       }
@@ -350,14 +387,16 @@ export async function apply(ctx: Context, config: Partial<Config> = {}, options:
     disposeRoleAgent(agent)
     return undefined
   }, { global: true })
-  ctx.on('session/event', async (session, event) => {
-    if (event.type !== 'agent-preset/selected') return
-    const agent = liveAgents.get(String(session.id))
+  ctx.on('agent-preset/selected', async (sessionId, _agentPreset) => {
+    const key = String(sessionId)
+    const agent = liveAgents.get(key)
+      ?? (ctx.get('agents') as { list?: () => Agent[] } | undefined)?.list?.()
+        .find(candidate => String(candidate.session.id) === key)
     if (agent === undefined) return
     refreshMainShell(agent)
-    // Web creates a default Agent before the user chooses its preset. Compose
-    // AutoReport's scoped tools on the selection event as well as agent/created,
-    // before the selected preset's first model request is assembled.
+    // DSH publishes this unscoped event after committing the selected preset.
+    // Web may have created the Agent earlier under `standard`, so compose the
+    // AutoReport tools now, before its first model request is assembled.
     await configureRoleAgent(agent)
   }, { global: true })
   for (const agent of (ctx.get('agents') as { list?: () => Agent[] } | undefined)?.list?.() ?? []) {
@@ -382,13 +421,7 @@ export async function apply(ctx: Context, config: Partial<Config> = {}, options:
     isMainSession: sessionId => runtime.isMainSession(sessionId),
     ...(resolved.workspaceRoot === undefined ? {} : { workspaceRoot: resolved.workspaceRoot }),
     readableResourceRootsOf: (sessionId, role) => {
-      if (role !== 'REPORT') return []
-      const language = runtime.reportLanguageForChild(sessionId as SessionId)
-      const skillNames = skillNamesForRole('REPORT', language ?? 'latex')
-      return skillNames.flatMap(skillName => {
-        const root = bundledSkillRoots.get(skillName)
-        return root === undefined ? [] : [root]
-      })
+      return readableResourceRootsFor(String(sessionId), role)
     },
   }))
   // Report-skill gate: a REPORT child may not edit report files or run its

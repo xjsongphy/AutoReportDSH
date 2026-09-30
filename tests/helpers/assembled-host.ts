@@ -543,6 +543,9 @@ export function publish(
 ): SessionEvent {
   const event = session.append(type as never, data as never, opts as never) as SessionEvent
   ctx.emit('session/event', session, event)
+  if (event.type === 'agent-preset/selected') {
+    ctx.emit('agent-preset/selected', session.id, event.data.agentPreset)
+  }
   return event
 }
 

@@ -22,7 +22,14 @@
  * @module membership
  */
 
-import type { Session } from '@deepseek-ai/dsh-session'
+import type { Session, SessionId } from '@deepseek-ai/dsh-session'
+
+/** Preset selection notifications are emitted by DSH after the durable commit. */
+declare module '@deepseek-ai/cordis' {
+  interface Events {
+    'agent-preset/selected'(sessionId: SessionId, agentPreset: string): void
+  }
+}
 
 /** The only agent preset whose root sessions join the AutoReport runtime. */
 export const AUTOREPORT_MAIN_PRESET = 'autoreport'
