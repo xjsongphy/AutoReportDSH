@@ -11,28 +11,31 @@ describe('compute bash', () => {
     let tool: { parameters: { properties: Record<string, unknown> }; execute: (args: unknown, exec: unknown) => Promise<unknown> } | undefined
     let wrappedRoot = ''
     let command = ''
+    const shell = {
+      sandboxMode: 'workspace-write',
+      resolve: (request: unknown) => request,
+      run: async (request: { command: string }) => {
+        command = request.command
+        return {
+          exitCode: 0, signal: null, timedOut: false, aborted: false,
+          stdout: { text: 'ok', truncated: false }, stderr: { text: '', truncated: false },
+          sandbox: { mode: 'workspace-write', denied: false, enforcement: 'full' },
+        }
+      },
+    }
     const ctx = {
-      get: (name: string) => name === 'sandboxPolicy'
-        ? { resolve: () => ({ mode: 'workspace-write', workspaceRoot: join(root, 'Data', 'Processed') }) }
-        : name === 'sandbox'
-          ? { confine: async (_argv: unknown, policy: { workspaceRoot: string }) => {
+      get: (name: string) => name === 'shell' ? shell
+        : name === 'shellEnv' ? { collect: () => ({}) }
+          : name === 'sandboxPolicy'
+            ? { resolve: () => ({ mode: 'workspace-write', workspaceRoot: join(root, 'Data', 'Processed') }) }
+            : name === 'sandbox'
+              ? { confine: async (_argv: unknown, policy: { workspaceRoot: string }) => {
             wrappedRoot = policy.workspaceRoot
             return { enforcement: 'full' }
           } }
-          : undefined,
-      shell: {
-        sandboxMode: 'workspace-write',
-        resolve: (request: unknown) => request,
-        run: async (request: { command: string }) => {
-          command = request.command
-          return {
-            exitCode: 0, signal: null, timedOut: false, aborted: false,
-            stdout: { text: 'ok', truncated: false }, stderr: { text: '', truncated: false },
-            sandbox: { mode: 'workspace-write', denied: false, enforcement: 'full' },
-          }
-        },
-      },
-      shellEnv: { collect: () => ({}) },
+              : undefined,
+      get shell(): never { throw new Error('shell property read without injection') },
+      get shellEnv(): never { throw new Error('shellEnv property read without injection') },
       tools: { register: (definition: typeof tool) => { tool = definition; return () => {} } },
     }
     installComputeBashTool(ctx as never, 'DATA_ANALYSIS', root)
@@ -46,7 +49,7 @@ describe('compute bash', () => {
   })
 
   it('rejects an unsandboxed shell before registering a tool', () => {
-    expect(() => installComputeBashTool({ shell: { sandboxMode: undefined } } as never, 'PLOTTING'))
+    expect(() => installComputeBashTool({ get: (name: string) => name === 'shell' ? { sandboxMode: undefined } : undefined } as never, 'PLOTTING'))
       .toThrow(/sandboxing DSH shell/)
   })
 
@@ -56,11 +59,13 @@ describe('compute bash', () => {
     let tool: { execute: (args: unknown, exec: unknown) => Promise<unknown> } | undefined
     let ran = false
     const ctx = {
-      get: (name: string) => name === 'sandboxPolicy'
+      get: (name: string) => name === 'shell' ? { sandboxMode: 'workspace-write', resolve: (request: unknown) => request, run: async () => { ran = true; return {} } }
+        : name === 'shellEnv' ? { collect: () => ({}) }
+          : name === 'sandboxPolicy'
         ? { resolve: () => ({ mode: 'workspace-write', workspaceRoot: join(root, 'Plots') }) }
-        : name === 'sandbox' ? { confine: async () => ({ enforcement: 'partial' }) } : undefined,
-      shell: { sandboxMode: 'workspace-write', run: async () => { ran = true; return {} } },
-      shellEnv: { collect: () => ({}) },
+          : name === 'sandbox' ? { confine: async () => ({ enforcement: 'partial' }) } : undefined,
+      get shell(): never { throw new Error('shell property read without injection') },
+      get shellEnv(): never { throw new Error('shellEnv property read without injection') },
       tools: { register: (definition: typeof tool) => { tool = definition; return () => {} } },
     }
     installComputeBashTool(ctx as never, 'PLOTTING', root)

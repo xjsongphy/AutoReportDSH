@@ -15,7 +15,16 @@ import { genericCall } from './presentation.js'
 /** Install the full foreground shell capability only for Data and Plotting. */
 export function installComputeBashTool(ctx: Context, role: SpecialistRole, workspaceRootOverride?: string): () => void {
   if (role !== 'DATA_ANALYSIS' && role !== 'PLOTTING') throw new Error(`${role} has no compute shell capability`)
-  if (ctx.shell.sandboxMode === undefined) throw new Error('AutoReport compute bash requires a sandboxing DSH shell executor')
+  // This installer runs from a child scope that checks service availability
+  // with `get()`, but does not inject the `shell` property. Cordis throws when
+  // an uninjected service is read as `ctx.shell`; resolve both services through
+  // the same scope-aware lookup used by the router instead.
+  const shell = ctx.get('shell') as typeof ctx.shell | undefined
+  if (shell === undefined || shell.sandboxMode === undefined) {
+    throw new Error('AutoReport compute bash requires a sandboxing DSH shell executor')
+  }
+  const shellEnv = ctx.get('shellEnv') as typeof ctx.shellEnv | undefined
+  if (shellEnv === undefined) throw new Error('AutoReport compute bash requires the DSH shell environment service')
   return ctx.tools.register(defineTool({
     name: 'bash',
     description: 'Run a foreground bash command for data analysis or plotting. Each call has a fresh shell. Check exitCode and stderr; if sandbox denies an operation or a dependency is missing, report the blocker to MAIN. Writes are confined to your role directory. This tool has no sandbox escalation or background mode.',
@@ -63,12 +72,12 @@ export function installComputeBashTool(ctx: Context, role: SpecialistRole, works
       const request = {
         command: args.command,
         workdir,
-        dshEnv: ctx.shellEnv.collect(exec),
+        dshEnv: shellEnv.collect(exec),
         sandboxPolicy: policy,
         signal: exec.signal,
         ...(args.timeoutMs === undefined ? {} : { timeoutMs: args.timeoutMs }),
       }
-      const result = await ctx.shell.run(ctx.shell.resolve(request))
+      const result = await shell.run(shell.resolve(request))
       if (result.aborted) throw new Error('bash call was aborted')
       if (result.sandbox?.enforcement !== 'full') throw new Error('bash lost full DSH file-sandbox enforcement')
       return {
