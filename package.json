@@ -57,7 +57,6 @@
     "@deepseek-ai/dsh-brand": "link:../deepseek-harness/packages/util/brand",
     "@deepseek-ai/dsh-commands": "link:../deepseek-harness/packages/interaction/commands",
     "@deepseek-ai/dsh-home-paths": "link:../deepseek-harness/packages/util/home-paths",
-    "@deepseek-ai/dsh-tool-fs-search": "link:../deepseek-harness/packages/fs/tool-fs-search",
     "@deepseek-ai/dsh-llm": "link:../deepseek-harness/packages/llm/llm",
     "@deepseek-ai/dsh-session": "link:../deepseek-harness/packages/core/session",
     "@deepseek-ai/dsh-session-persistence": "link:../deepseek-harness/packages/session/session-persistence",

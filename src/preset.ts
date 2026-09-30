@@ -37,17 +37,6 @@ export function apply(ctx: Context): void {
   // compute-role tool description, so hide the inherited generic guidance.
   ctx.systemPrompt.section({ name: 'tool:bash', order: ctx.systemPrompt.getSectionOrder('TOOL_BASH'), text: '' })
   ctx.systemPrompt.section({ name: 'tool:pwsh', order: ctx.systemPrompt.getSectionOrder('TOOL_PWSH'), text: '' })
-  // tool-fs-search is mounted for stock presets, but AutoReport replaces its
-  // process-backed search surface with role-scoped list/grep tools. Do not let
-  // its generic glob guidance survive in this preset's model context.
-  ctx.systemPrompt.section({ name: 'tool:glob', order: ctx.systemPrompt.getSectionOrder('TOOL_GLOB'), text: '' })
-  ctx.systemPrompt.section({
-    name: 'tool:grep',
-    order: ctx.systemPrompt.getSectionOrder('TOOL_GREP'),
-    text: ({ scope }: { readonly scope?: object }) => ctx.tools.get('grep', scope) === undefined
-      ? ''
-      : 'Use grep to search experiment-workspace-relative paths through AutoReport’s role-scoped workspace filesystem. Use list for names and read for selected files.',
-  })
   installReferencesSkills(ctx)
   installSendToAgentGuidance(ctx)
   installManifestTool(ctx, ctx, 'MAIN')

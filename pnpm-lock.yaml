@@ -23,9 +23,6 @@ importers:
       '@deepseek-ai/dsh-home-paths':
         specifier: link:../deepseek-harness/packages/util/home-paths
         version: link:../deepseek-harness/packages/util/home-paths
-      '@deepseek-ai/dsh-tool-fs-search':
-        specifier: link:../deepseek-harness/packages/fs/tool-fs-search
-        version: link:../deepseek-harness/packages/fs/tool-fs-search
       '@deepseek-ai/dsh-llm':
         specifier: link:../deepseek-harness/packages/llm/llm
         version: link:../deepseek-harness/packages/llm/llm
