@@ -6,12 +6,12 @@ describe('fixed role table', () => {
     expect(rolePolicy('MAIN')).toEqual({
       writableRoot: 'Outline',
       hasProcessTool: false,
-      tools: ['read', 'list', 'grep', 'read_image', 'write', 'edit', 'skill', 'manifest', 'workflow_task', 'send_to_agent', 'ask_user_question', 'reference_extract', 'install_python_package'],
+      tools: ['read', 'list', 'grep', 'read_image', 'write', 'edit', 'str_replace_editor', 'skill', 'manifest', 'workflow_task', 'send_to_agent', 'ask_user_question', 'reference_extract', 'install_python_package'],
     })
     expect(rolePolicy('THEORY')).toEqual({
       writableRoot: 'Theory',
       hasProcessTool: false,
-      tools: ['read', 'list', 'grep', 'read_image', 'write', 'edit', 'skill', 'manifest', 'report_workflow'],
+      tools: ['read', 'list', 'grep', 'read_image', 'write', 'edit', 'str_replace_editor', 'skill', 'manifest', 'report_workflow'],
     })
     for (const role of ['DATA_ANALYSIS', 'PLOTTING'] as const) {
       expect(rolePolicy(role).writableRoot).toBe(
@@ -19,12 +19,12 @@ describe('fixed role table', () => {
           : role === 'PLOTTING' ? 'Plots' : 'Report')
       expect(rolePolicy(role).hasProcessTool).toBe(true)
       expect(rolePolicy(role).tools).toEqual(
-        ['read', 'list', 'grep', 'read_image', 'write', 'edit', 'skill', 'manifest', 'report_workflow', ROLE_PROCESS_TOOL])
+        ['read', 'list', 'grep', 'read_image', 'write', 'edit', 'str_replace_editor', 'skill', 'manifest', 'report_workflow', ROLE_PROCESS_TOOL])
     }
     expect(rolePolicy('REPORT')).toEqual({
       writableRoot: 'Report',
       hasProcessTool: false,
-      tools: ['read', 'list', 'grep', 'read_image', 'write', 'edit', 'skill', 'manifest', 'report_workflow', 'compile_report', 'render_report_page'],
+      tools: ['read', 'list', 'grep', 'read_image', 'write', 'edit', 'str_replace_editor', 'skill', 'manifest', 'report_workflow', 'compile_report', 'render_report_page'],
     })
   })
 

@@ -36,7 +36,9 @@ export const DSH_ROLE_ESCAPE_TOOL_NAMES = [...DSH_ROLE_CONTROL_TOOL_NAMES, 'glob
 export const ROLE_PROCESS_TOOL = process.platform === 'win32' ? 'pwsh' : 'bash'
 
 /** File tools every role receives; paths are workspace-relative. */
-export const BASE_TOOLS = ['read', 'list', 'grep', 'read_image', 'write', 'edit', 'skill'] as const
+export const BASE_TOOLS = [
+  'read', 'list', 'grep', 'read_image', 'write', 'edit', 'str_replace_editor', 'skill',
+] as const
 
 /** Coordination/protocol tools MAIN uses to orchestrate the workflow. */
 const MAIN_COORDINATOR_TOOLS = [

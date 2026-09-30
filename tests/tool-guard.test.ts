@@ -160,15 +160,20 @@ describe('AutoReport role tool guard', () => {
       .toContain('generic sandbox escalation')
   })
 
-  it('handles current str_replace_editor schema and strict future delete/patch schemas', () => {
+  it('guards str_replace_editor reads and mutations using the role filesystem policy', () => {
     const root = workspace()
     const registry = new RoleRegistry()
     const analyst = agent('analyst', root)
     registry.registerReserved(binding('DATA_ANALYSIS', analyst.id))
     const guard = createRoleToolGuard({ registry })
-    // str_replace_editor is not in the tool packs; if mounted it stays denied.
     expect(guard(execution('str_replace_editor', { command: 'view', path: join(root, 'Theory/formulas.md') }, analyst)))
-      .toContain('no declared capability')
+      .toBeUndefined()
+    expect(guard(execution('str_replace_editor', { command: 'view', path: '/tmp/outside.md' }, analyst)))
+      .toContain('experiment workspace')
+    expect(guard(execution('str_replace_editor', { command: 'create', path: join(root, 'Data/Processed/result.md') }, analyst)))
+      .toBeUndefined()
+    expect(guard(execution('str_replace_editor', { command: 'create', path: join(root, 'Theory/result.md') }, analyst)))
+      .toContain('Data/Processed')
     // delete/apply_patch are also unmapped; the strict schemas deny via membership.
     expect(guard(execution('delete', { file_path: 'Data/Processed/old.md' }, analyst))).toContain('no declared capability')
     expect(guard(execution('apply_patch', { patch: `*** Update File: ${join(root, 'Report/main.tex')}\n@@` }, analyst)))
