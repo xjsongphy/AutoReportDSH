@@ -93,7 +93,7 @@ function wrapRoleAwareShell(
   }
 }
 
-function restrictRoleToolSurface(agent: Agent, role: AutoReportRole, processToolAvailable: boolean): void {
+function restrictRoleToolSurface(agent: Agent, role: AutoReportRole, processToolAvailable: boolean): () => void {
   const policy = rolePolicy(role)
   // Agent-local registrations (list/grep everywhere; specialist manifest/
   // report_workflow are mounted in the child scope): restrict() names globals
@@ -108,7 +108,33 @@ function restrictRoleToolSurface(agent: Agent, role: AutoReportRole, processTool
   })
   const deny = DSH_ROLE_ESCAPE_TOOL_NAMES.filter(name =>
     !policy.tools.includes(name) && agent.ctx.tools.get(name, agent) !== undefined)
-  agent.ctx.tools.restrict({ allow: allowed, ...(deny.length === 0 ? {} : { deny }) })
+  return agent.ctx.tools.restrict({ allow: allowed, ...(deny.length === 0 ? {} : { deny }) })
+}
+
+/** Fail before a model request if prompt policy and executable capabilities diverge. */
+function assertRoleToolSurface(agent: Agent, role: AutoReportRole, processToolAvailable: boolean): void {
+  const policy = rolePolicy(role)
+  if (typeof agent.ctx.tools.schemas !== 'function') return
+  const expected = policy.tools.filter(name => name !== ROLE_PROCESS_TOOL || processToolAvailable)
+  const schemas = agent.ctx.tools.schemas(agent)
+  const actual = schemas.map(schema => schema.name).sort()
+  const expectedSorted = [...expected].sort()
+  const missing = expectedSorted.filter(name => !actual.includes(name))
+  const unexpected = actual.filter(name => !expectedSorted.includes(name))
+  const uncallable = actual.filter(name => {
+    const definition = agent.ctx.tools.get(name, agent)
+    return definition === undefined || definition.name !== name || typeof definition.execute !== 'function'
+  })
+  const descriptionMismatches = schemas.filter(schema =>
+    agent.ctx.tools.get(schema.name, agent)?.description !== schema.description,
+  ).map(schema => schema.name)
+  if (missing.length > 0 || unexpected.length > 0 || uncallable.length > 0 || descriptionMismatches.length > 0) {
+    throw new Error(
+      `AutoReport ${role} tool surface mismatch: missing=[${missing.join(', ')}], `
+      + `unexpected=[${unexpected.join(', ')}], uncallable=[${uncallable.join(', ')}], `
+      + `descriptionMismatch=[${descriptionMismatches.join(', ')}]`,
+    )
+  }
 }
 
 function initializeWorkflowIfOwnWorkspace(
@@ -186,6 +212,7 @@ export async function apply(ctx: Context, config: Partial<Config> = {}, options:
   const runtime = new AutoReportWorkflowRuntime(ctx, resolved, options)
   const liveAgents = new Map<string, Agent>()
   const mainShellFilters = new Map<Agent, () => void>()
+  const configuredRoles = new Map<Agent, { role: AutoReportRole; workspaceRoot: string; dispose: () => void }>()
   const refreshMainShell = (agent: Agent) => {
     const active = mainShellFilters.get(agent)
     if (!isAutoReportMainSession(agent.session)) {
@@ -196,78 +223,70 @@ export async function apply(ctx: Context, config: Partial<Config> = {}, options:
     if (active !== undefined || agent.ctx?.tools === undefined) return
     mainShellFilters.set(agent, restrictInheritedShell(agent.ctx, agent, 'MAIN'))
   }
-  ctx.on('agent/created', ({ agent }) => {
-    liveAgents.set(String(agent.id), agent)
-    refreshMainShell(agent)
-    return undefined
-  }, { global: true })
-  ctx.on('agent/disposed', ({ agent }) => {
-    if (liveAgents.get(String(agent.id)) === agent) liveAgents.delete(String(agent.id))
-    mainShellFilters.get(agent)?.()
-    mainShellFilters.delete(agent)
-    return undefined
-  }, { global: true })
-  ctx.on('session/event', (session, event) => {
-    if (event.type !== 'agent-preset/selected') return
-    const agent = liveAgents.get(String(session.id))
-    if (agent !== undefined) refreshMainShell(agent)
-  }, { global: true })
-  for (const agent of (ctx.get('agents') as { list?: () => Agent[] } | undefined)?.list?.() ?? []) {
-    liveAgents.set(String(agent.id), agent)
-    refreshMainShell(agent)
-  }
   const bundledSkillRoots = new Map(
     loadBundledSkills().flatMap(skill => skill.directory === undefined ? [] : [[skill.name, skill.directory] as const]),
   )
   // DSH tools are inherited through agent scopes. Register role-local list and
   // grep tools, plus same-name shell/path variants, so content search stays on
   // ctx.fs and process/workdir guidance follows each AutoReport role.
-  ctx.on('agent/created', async ({ agent }) => {
+  const configureRoleAgent = async (agent: Agent): Promise<void> => {
     const session = agent.session
     const role: AutoReportRole | undefined = runtime.roleFor(String(agent.id))
       ?? (isAutoReportMainSession(session) ? 'MAIN' : undefined)
-    if (role === undefined) return undefined
+    const existing = configuredRoles.get(agent)
+    if (role === undefined) {
+      existing?.dispose()
+      configuredRoles.delete(agent)
+      return
+    }
     const sessionRoot = typeof session.header?.cwd === 'string' && session.header.cwd.length > 0
       ? resolve(session.header.cwd)
       : undefined
     const workspaceRoot = resolved.workspaceRoot ?? sessionRoot
+    if (workspaceRoot === undefined) {
+      existing?.dispose()
+      configuredRoles.delete(agent)
+      throw new Error(`AutoReport ${role} cannot configure tools without a workspace root`)
+    }
+    if (existing?.role === role && existing.workspaceRoot === workspaceRoot) return
+    existing?.dispose()
+    configuredRoles.delete(agent)
     if (sandboxPolicy === undefined && resolved.workspaceRoot !== undefined
       && (sessionRoot === undefined || resolve(resolved.workspaceRoot) !== sessionRoot)) {
       throw new Error(
         `AutoReport ${role} requires DSH sandboxPolicy when configured workspaceRoot ${resolve(resolved.workspaceRoot)} differs from session cwd ${sessionRoot ?? '(missing)'}; without the service DSH resolves relative file and shell paths from session cwd`,
       )
     }
-    if (workspaceRoot !== undefined) {
+    const releases: Array<() => void> = []
+    const register = (tool: ToolDefinition): void => { releases.push(agent.ctx.tools.register(tool)) }
+    const dispose = (): void => { for (const release of releases.reverse()) release() }
+    try {
       const fileSystem = ctx.get('fs') as DirectoryFileSystem | undefined
       const searchFileSystem = ctx.get('fs') as SearchFileSystem | undefined
-      agent.ctx.tools.register(createListDirectoryTool(workspaceRoot, agent, fileSystem))
-      agent.ctx.tools.register(createGrepTool(workspaceRoot, agent, searchFileSystem))
-    }
-    let processToolAvailable = false
-    if (rolePolicy(role).hasProcessTool && workspaceRoot !== undefined) {
-      const shell = agent.ctx.tools.get(ROLE_PROCESS_TOOL, agent)
-      if (shell !== undefined) {
-        agent.ctx.tools.register(wrapRoleAwareShell(shell, role, workspaceRoot))
-        processToolAvailable = true
+      register(createListDirectoryTool(workspaceRoot, agent, fileSystem))
+      register(createGrepTool(workspaceRoot, agent, searchFileSystem))
+      let processToolAvailable = false
+      if (rolePolicy(role).hasProcessTool) {
+        const shell = agent.ctx.tools.get(ROLE_PROCESS_TOOL, agent)
+        if (shell !== undefined) {
+          register(wrapRoleAwareShell(shell, role, workspaceRoot))
+          processToolAvailable = true
+        }
       }
-    }
-    // The stock filesystem schemas leave the path base implicit. AutoReport
-    // unifies all model-facing paths to experiment-workspace-relative: the
-    // adapter rewrites every relative path to an absolute workspace path and
-    // the DSH sandbox (rooted at the role's writable root) enforces writes.
-    for (const name of FILE_PATH_TOOLS) {
-      const tool = agent.ctx.tools.get(name, agent)
-      if (tool === undefined) continue
-      const isMutation = name === 'write' || name === 'edit'
-      const relativePathGuidance = workspaceRoot === undefined
-        ? 'The absolute path base for relative paths is unavailable in this session; use an absolute path when the base is uncertain.'
-        : `Relative paths resolve from ${workspaceRoot}.`
-      const filePathGuidance = isMutation
-        ? `AutoReport path semantics: paths are experiment-workspace-relative, e.g. \`Report/main.typ\`. ${relativePathGuidance} This role may write only inside ${rolePolicy(role).writableRoot}/.`
-        : `AutoReport path semantics: paths are experiment-workspace-relative; the \`list\` and \`grep\` paths, manifest paths, and report_workflow produced_files use the same convention. ${relativePathGuidance} Skill resources use the absolute resourceBase shown when the skill is loaded.`
-      if (workspaceRoot !== undefined) {
+      // The stock filesystem schemas leave the path base implicit. AutoReport
+      // unifies all model-facing paths to experiment-workspace-relative: the
+      // adapter rewrites every relative path to an absolute workspace path and
+      // the DSH sandbox (rooted at the writable root) enforces writes.
+      for (const name of FILE_PATH_TOOLS) {
+        const tool = agent.ctx.tools.get(name, agent)
+        if (tool === undefined) continue
+        const isMutation = name === 'write' || name === 'edit'
+        const relativePathGuidance = `Relative paths resolve from ${workspaceRoot}.`
+        const filePathGuidance = isMutation
+          ? `AutoReport path semantics: paths are experiment-workspace-relative, e.g. \`Report/main.typ\`. ${relativePathGuidance} This role may write only inside ${rolePolicy(role).writableRoot}/.`
+          : `AutoReport path semantics: paths are experiment-workspace-relative; the \`list\` and \`grep\` paths, manifest paths, and report_workflow produced_files use the same convention. ${relativePathGuidance} Skill resources use the absolute resourceBase shown when the skill is loaded.`
         const execute = tool.execute
-        agent.ctx.tools.register({
+        register({
           ...tool,
           description: `${tool.description} ${filePathGuidance}`,
           async execute(args, execution) {
@@ -279,43 +298,73 @@ export async function apply(ctx: Context, config: Partial<Config> = {}, options:
             return execute({ ...fields, file_path: resolve(workspaceRoot, path) }, execution)
           },
         })
-      } else {
-        agent.ctx.tools.register({
-          ...tool,
-          description: `${tool.description} ${filePathGuidance}`,
+      }
+      const strReplaceEditor = agent.ctx.tools.get('str_replace_editor', agent)
+      if (strReplaceEditor !== undefined) {
+        const execute = strReplaceEditor.execute.bind(strReplaceEditor)
+        register({
+          ...strReplaceEditor,
+          description: `${strReplaceEditor.description} AutoReport path context: the absolute workspace root for this agent is ${workspaceRoot}. This tool requires absolute paths; use that directory as the base for workspace files.`,
+          async execute(args, execution) {
+            const fields = typeof args === 'object' && args !== null && !Array.isArray(args)
+              ? args as Record<string, unknown>
+              : undefined
+            if (fields?.['command'] === 'view') {
+              if (fileSystem === undefined || typeof fields['path'] !== 'string') {
+                throw new Error('AutoReport cannot verify editor view targets in this session; use read for files and list for directories')
+              }
+              const target = await fileSystem.resolve(fields['path'], { signal: execution.signal })
+              if ((await fileSystem.stat(target, execution.signal))?.type === 'directory') {
+                throw new Error('str_replace_editor cannot view directories in AutoReport; use the bounded list tool')
+              }
+            }
+            return execute(args, execution)
+          },
         })
       }
+      releases.push(restrictRoleToolSurface(agent, role, processToolAvailable))
+      assertRoleToolSurface(agent, role, processToolAvailable)
+      configuredRoles.set(agent, { role, workspaceRoot, dispose })
+      // Rehydrate resident activations only after Main's scoped tools are ready,
+      // so resumed specialists inherit the same composed workspace as before.
+      if (role === 'MAIN') await runtime.restoreResidentRoles(agent)
+    } catch (error) {
+      configuredRoles.delete(agent)
+      dispose()
+      throw error
     }
-    const strReplaceEditor = agent.ctx.tools.get('str_replace_editor', agent)
-    if (strReplaceEditor !== undefined && workspaceRoot !== undefined) {
-      const fileSystem = ctx.get('fs') as DirectoryFileSystem | undefined
-      const execute = strReplaceEditor.execute.bind(strReplaceEditor)
-      agent.ctx.tools.register({
-        ...strReplaceEditor,
-        description: `${strReplaceEditor.description} AutoReport path context: the absolute workspace root for this agent is ${workspaceRoot}. This tool requires absolute paths; use that directory as the base for workspace files.`,
-        async execute(args, execution) {
-          const fields = typeof args === 'object' && args !== null && !Array.isArray(args)
-            ? args as Record<string, unknown>
-            : undefined
-          if (fields?.['command'] === 'view') {
-            if (fileSystem === undefined || typeof fields['path'] !== 'string') {
-              throw new Error('AutoReport cannot verify editor view targets in this session; use read for files and list for directories')
-            }
-            const target = await fileSystem.resolve(fields['path'], { signal: execution.signal })
-            if ((await fileSystem.stat(target, execution.signal))?.type === 'directory') {
-              throw new Error('str_replace_editor cannot view directories in AutoReport; use the bounded list tool')
-            }
-          }
-          return execute(args, execution)
-        },
-      })
-    }
-    restrictRoleToolSurface(agent, role, processToolAvailable)
-    // Rehydrate resident activations only after Main's scoped tools are ready,
-    // so resumed specialists inherit the same composed workspace as before.
-    if (role === 'MAIN') await runtime.restoreResidentRoles(agent)
+  }
+  const disposeRoleAgent = (agent: Agent): void => {
+    configuredRoles.get(agent)?.dispose()
+    configuredRoles.delete(agent)
+  }
+  ctx.on('agent/created', async ({ agent }) => {
+    liveAgents.set(String(agent.id), agent)
+    refreshMainShell(agent)
+    await configureRoleAgent(agent)
+  }, { global: true })
+  ctx.on('agent/disposed', ({ agent }) => {
+    if (liveAgents.get(String(agent.id)) === agent) liveAgents.delete(String(agent.id))
+    mainShellFilters.get(agent)?.()
+    mainShellFilters.delete(agent)
+    disposeRoleAgent(agent)
     return undefined
-  })
+  }, { global: true })
+  ctx.on('session/event', async (session, event) => {
+    if (event.type !== 'agent-preset/selected') return
+    const agent = liveAgents.get(String(session.id))
+    if (agent === undefined) return
+    refreshMainShell(agent)
+    // Web creates a default Agent before the user chooses its preset. Compose
+    // AutoReport's scoped tools on the selection event as well as agent/created,
+    // before the selected preset's first model request is assembled.
+    await configureRoleAgent(agent)
+  }, { global: true })
+  for (const agent of (ctx.get('agents') as { list?: () => Agent[] } | undefined)?.list?.() ?? []) {
+    liveAgents.set(String(agent.id), agent)
+    refreshMainShell(agent)
+    await configureRoleAgent(agent)
+  }
   if (sandboxPolicy !== undefined) {
     installSandboxOverride(sandboxPolicy, {
       roleRootOf: session => {

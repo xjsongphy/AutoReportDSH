@@ -18,12 +18,13 @@ import { tmpdir } from 'node:os'
 import { isAbsolute, join, resolve } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { defineTool } from '@deepseek-ai/dsh-tools'
+import { createScope } from '@deepseek-ai/dsh-scope'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import { SESSION_FORMAT_VERSION, Session, SessionId } from '@deepseek-ai/dsh-session'
 import { roleWritableRoot } from '../src/policy/sandbox-roots.js'
 import { AUTOREPORT_MAIN_PRESET } from '../src/membership.js'
-import { ROLE_PROCESS_TOOL } from '../src/roles.js'
+import { rolePolicy, ROLE_PROCESS_TOOL } from '../src/roles.js'
 import { REQUIRED_DIRS } from '../src/workspace/init.js'
 import { resolveWorkflowSettings, workspaceIdForRoot } from '../src/settings.js'
 import { AUTOREPORT_SCHEMA_VERSION, type RoleBindingSnapshot } from '../src/workflow/events.js'
@@ -61,6 +62,68 @@ async function boot(options: Parameters<typeof assemble>[0] = {}): Promise<Assem
 }
 
 describe('integration: assembled host (real context)', () => {
+  it('installs one matching tool surface when Web selects AutoReport after creating the default agent', async () => {
+    const root = makeTemp('autoreport-late-preset-')
+    writeFileSync(join(root, 'probe.txt'), 'synthetic workspace probe\n')
+    const session = Session.create(SessionId('it-late-autoreport-preset'), undefined, {
+      version: SESSION_FORMAT_VERSION,
+      isSeeded: false,
+      id: SessionId('it-late-autoreport-preset'),
+      createdAt: Date.now(),
+      cwd: root,
+      agentPreset: 'standard',
+    })
+    const assembled = await boot({ mainSession: session, roleSandbox: true, workspaceRoot: root })
+    const agent = assembled.mainAgent
+    const policy = rolePolicy('MAIN')
+    const fixtureTool = (name: string) => defineTool({
+      name,
+      description: `fixture callable ${name}`,
+      parameters: {},
+      output: {
+        schema: { type: 'object', additionalProperties: true, properties: {} },
+        render: () => [{ type: 'text', text: 'ok' }],
+      },
+      async execute() { return { ok: true } },
+    })
+    for (const name of [...policy.tools, 'glob']) {
+      if (name === 'list' || name === 'grep' || assembled.ctx.tools.get(name) !== undefined) continue
+      assembled.ctx.tools.register(fixtureTool(name))
+    }
+    let scope!: ReturnType<typeof createScope>
+    await assembled.ctx.plugin(Object.assign((inner: typeof assembled.ctx) => {
+      scope = createScope(inner, agent)
+    }, { inject: ['tools'] }))
+    ;(agent as { ctx?: unknown }).ctx = scope.ctx
+    await assembled.ctx.parallel('agent/created', { agent, source: 'fresh' } as never)
+    expect(assembled.ctx.tools.get('list', agent)).toBeUndefined()
+    expect(assembled.ctx.tools.get('glob', agent)).toBeDefined()
+
+    const selected = session.append('agent-preset/selected', { agentPreset: AUTOREPORT_MAIN_PRESET })
+    await assembled.ctx.parallel('session/event', session, selected)
+
+    const schemas = assembled.ctx.tools.schemas(agent)
+    const expectedNames = [...policy.tools].sort()
+    expect(schemas.map(schema => schema.name).sort()).toEqual(expectedNames)
+    expect(assembled.ctx.tools.get('glob', agent)).toBeUndefined()
+    for (const schema of schemas) {
+      const callable = assembled.ctx.tools.get(schema.name, agent)
+      expect(callable?.execute, schema.name).toBeTypeOf('function')
+      expect(callable?.description, schema.name).toBe(schema.description)
+    }
+
+    const listing = await execute(assembled.ctx, 'list', { path: '.' }, agent, session)
+    expect(listing.isError, listing.text).toBe(false)
+    expect(listing.text).toContain('probe.txt')
+    const search = await execute(assembled.ctx, 'grep', { path: '.', pattern: 'synthetic workspace probe' }, agent, session)
+    expect(search.isError, search.text).toBe(false)
+    expect(search.text).toContain('probe.txt')
+    const unavailable = await execute(assembled.ctx, 'glob', { pattern: '**/*' }, agent, session)
+    expect(unavailable.isError).toBe(true)
+    expect(unavailable.text).toContain('AutoReport disables process-backed glob')
+    await scope.dispose()
+  })
+
   it('enforces workspace-wide reads and the write boundary through the assembled tool runtime', async () => {
     const assembled = await boot({ roleSandbox: true })
     const stockRoot = makeTemp('autoreport-it-stock-read-root-')
@@ -240,6 +303,7 @@ describe('integration: assembled host (real context)', () => {
     expect(reportRoster?.allow).not.toContain('bash')
     expect(reportRoster?.allow).not.toContain('workflow')
     expect(reporter.toolRestrictions.some(restriction => restriction.deny?.includes('pwsh'))).toBe(true)
+    mkdirSync(join(assembled.workspaceRoot, 'Report'), { recursive: true })
     const editor = reporter.registeredTools.get('str_replace_editor')
     const editorExecution = { agent: reporter.agent, signal: new AbortController().signal }
     expect(editor?.execute).toBeTypeOf('function')

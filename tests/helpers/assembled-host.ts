@@ -5,7 +5,7 @@
  * @module tests/helpers/assembled-host
  */
 
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, relative, resolve, sep } from 'node:path'
 import { expect } from 'vitest'
@@ -361,9 +361,26 @@ export async function assemble(options: AssembleOptions = {}): Promise<Assembled
       const rel = relative(parent.displayPath, child.displayPath)
       return rel === '' || (rel !== '..' && !rel.startsWith(`..${sep}`))
     },
-    stat: async (target: { displayPath: string }) => ({
-      type: target.displayPath === resolve(workspaceRoot, 'Report') ? 'directory' : 'file',
-    }),
+    stat: async (target: { displayPath: string }) => {
+      try {
+        const info = statSync(target.displayPath)
+        return { type: info.isDirectory() ? 'directory' : 'file', size: info.size }
+      } catch { return undefined }
+    },
+    lstat: async (path: string, opts?: { cwd?: string }) => {
+      try {
+        const info = lstatSync(resolve(opts?.cwd ?? workspaceRoot, path))
+        return { type: info.isSymbolicLink() ? 'symlink' : info.isDirectory() ? 'directory' : 'file' }
+      } catch { return undefined }
+    },
+    listDir: async (target: { displayPath: string }) => readdirSync(target.displayPath, { withFileTypes: true }).map(entry => ({
+      name: entry.name,
+      type: entry.isDirectory() ? 'directory' : entry.isSymbolicLink() ? 'symlink' : 'file',
+      target: { displayPath: resolve(target.displayPath, entry.name) },
+    })),
+    streamText: async function* (target: { displayPath: string }) {
+      yield readFileSync(target.displayPath, 'utf8')
+    },
   } as never)
   if (options.roleSandbox === true) {
     ctx.provide('sandboxPolicy', {

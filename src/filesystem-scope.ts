@@ -6,7 +6,12 @@ import { rolePolicy, type AutoReportRole } from './roles.js'
 interface ScopeAssembly {
   readonly agent?: {
     readonly session?: Session
-    readonly ctx?: { readonly tools?: { get(name: string, scope?: unknown): unknown } }
+    readonly ctx?: {
+      readonly tools?: {
+        get(name: string, scope?: unknown): unknown
+        schemas?(scope?: unknown): readonly { readonly name: string }[]
+      }
+    }
   }
 }
 
@@ -20,8 +25,11 @@ export function renderFilesystemScope(
   role: AutoReportRole,
   workspaceRoot: string,
   processToolVisible: boolean,
+  visibleToolNames?: readonly string[],
 ): string {
   const policy = rolePolicy(role)
+  const toolNames = visibleToolNames ?? policy.tools.filter(name =>
+    name !== (process.platform === 'win32' ? 'pwsh' : 'bash') || processToolVisible)
   const processLine = policy.hasProcessTool
     ? (processToolVisible
       ? 'The shell starts at the workspace root (navigation only); the DSH sandbox confines its writes to your writable root.'
@@ -33,7 +41,7 @@ export function renderFilesystemScope(
     `Workspace root: ${workspaceRoot}`,
     `Writable root: ${policy.writableRoot}/ (the only directory you may mutate; enforced by the DSH sandbox and tool guards)`,
     'Read scope: the entire experiment workspace. Read permission is context, not duty — your persona defines what you produce.',
-    `AutoReport tools: ${policy.tools.join(', ')}`,
+    `AutoReport tools: ${toolNames.join(', ')}`,
     'Other DSH tools are not available to this role.',
     '',
     processLine,
@@ -66,7 +74,8 @@ export function installFilesystemScopeContext(ctx: Context, deps: FilesystemScop
         : undefined
       const shellVisible = shellName !== undefined
         && assembly.agent?.ctx?.tools?.get(shellName, assembly.agent) !== undefined
-      return renderFilesystemScope(role, root, shellVisible)
+      const visibleTools = assembly.agent?.ctx?.tools?.schemas?.(assembly.agent).map(tool => tool.name)
+      return renderFilesystemScope(role, root, shellVisible, visibleTools)
     },
   })
 }

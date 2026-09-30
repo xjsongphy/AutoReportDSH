@@ -129,6 +129,9 @@ importers:
       '@deepseek-ai/dsh-tool-bash':
         specifier: link:../deepseek-harness/packages/shell/tool-bash
         version: link:../deepseek-harness/packages/shell/tool-bash
+      '@deepseek-ai/dsh-scope':
+        specifier: link:../deepseek-harness/packages/core/scope
+        version: link:../deepseek-harness/packages/core/scope
       '@deepseek-ai/dsh-subprocess-local':
         specifier: link:../deepseek-harness/packages/subprocess/subprocess-local
         version: link:../deepseek-harness/packages/subprocess/subprocess-local

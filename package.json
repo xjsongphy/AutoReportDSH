@@ -96,6 +96,7 @@
     "@deepseek-ai/dsh-tool-bash": "link:../deepseek-harness/packages/shell/tool-bash",
     "@deepseek-ai/dsh-subprocess-local": "link:../deepseek-harness/packages/subprocess/subprocess-local",
     "@deepseek-ai/dsh-tool-pwsh": "link:../deepseek-harness/packages/shell/tool-pwsh",
+    "@deepseek-ai/dsh-scope": "link:../deepseek-harness/packages/core/scope",
     "@testing-library/react": "^16.3.2",
     "@types/node": "^24.0.0",
     "@types/react": "~18.3.1",
