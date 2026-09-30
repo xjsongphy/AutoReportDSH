@@ -239,7 +239,9 @@ describe('AutoReport role tool guard', () => {
     expect(guard(execution('manifest', { action: 'read' }, theory))).toBeUndefined()
     expect(guard(execution('manifest', { action: 'read', agent: 'data_analysis' }, theory))).toBeUndefined()
     expect(guard(execution('report_workflow', {}, theory))).toBeUndefined()
-    expect(guard(execution('glob', { pattern: '**/*.csv' }, main))).toContain('process-backed glob')
+    // Hidden tools should reach DSH's normal unknown-tool path, not an
+    // AutoReport refusal that discloses their names to the model.
+    expect(guard(execution('glob', { pattern: '**/*.csv' }, main))).toBeUndefined()
     // Reads must stay inside the workspace boundary.
     expect(guard(execution('read', { file_path: '../outside.txt' }, analyst))).toContain('experiment workspace')
     // No shell parsing: a process role's shell call is never inspected.

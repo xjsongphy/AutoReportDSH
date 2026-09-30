@@ -7,7 +7,8 @@ describe('autoreport preset contribution', () => {
   it('registers only the current fixed-workflow MAIN tools', () => {
     const tools: string[] = []
     const skills: string[] = []
-    const sections: { name: string; text: string }[] = []
+    const sections: { name: string; text: string | ((assembly: { scope?: unknown }) => string) }[] = []
+    const scopedAgent = {}
     let referencesProvider = 0
     const skillsService = {
       register: (registration: { name: string }) => {
@@ -26,6 +27,8 @@ describe('autoreport preset contribution', () => {
           tools.push(definition.name)
           return () => {}
         },
+        get: (name: string, scope?: unknown) =>
+          name === 'grep' && scope === scopedAgent ? { name, description: 'fixture AutoReport grep' } : undefined,
       },
       skills: skillsService,
       systemPrompt: {
@@ -57,8 +60,15 @@ describe('autoreport preset contribution', () => {
     // Tool-owned policy ships with the tools (master dsh convention): the two
     // sections carry the dispatch and task-board rules, not the persona.
     expect(sections.map(section => section.name)).toEqual([
-      'tool:bash', 'tool:pwsh', 'tool:send_to_agent', 'tool:workflow_task',
+      'tool:bash', 'tool:pwsh', 'tool:glob', 'tool:grep', 'tool:send_to_agent', 'tool:workflow_task',
     ])
+    expect(sections.find(section => section.name === 'tool:glob')?.text).toBe('')
+    const grepGuidance = sections.find(section => section.name === 'tool:grep')?.text
+    expect(grepGuidance).toBeTypeOf('function')
+    expect((grepGuidance as (assembly: { scope?: unknown }) => string)({ scope: scopedAgent }))
+      .toContain('workspace-relative paths')
+    expect((grepGuidance as (assembly: { scope?: unknown }) => string)({ scope: {} })).toBe('')
+    expect(sections.find(section => section.name === 'tool:glob')?.text).not.toContain('glob')
     expect(sections.find(section => section.name === 'tool:send_to_agent')?.text).toBeTypeOf('function')
     expect(sections.find(section => section.name === 'tool:workflow_task')?.text).toBeTypeOf('function')
   })

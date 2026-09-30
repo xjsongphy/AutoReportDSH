@@ -335,7 +335,7 @@ export function createRoleToolGuard(options: RoleGuardOptions): ToolGuard {
     const specializedCall = exec.name === 'compile_report' || exec.name === 'render_report_page'
       || exec.name === 'reference_extract' || exec.name === 'install_python_package'
     const protectedCall = call.kind !== 'none' || read.kind !== 'none' || sandboxPermissionsEscalation(exec)
-      || shellCall || exec.name === 'glob'
+      || shellCall
       || specializedCall
       || DSH_ROLE_CONTROL_TOOL_NAMES.includes(exec.name as typeof DSH_ROLE_CONTROL_TOOL_NAMES[number])
     const resolved = resolveRole(exec, options)
@@ -348,9 +348,6 @@ export function createRoleToolGuard(options: RoleGuardOptions): ToolGuard {
     if (DSH_ROLE_CONTROL_TOOL_NAMES.includes(exec.name as typeof DSH_ROLE_CONTROL_TOOL_NAMES[number])
       && !resolved.policy.tools.includes(exec.name)) {
       return `AutoReport ${resolved.role} cannot use ${exec.name}; delegate through the fixed AutoReport role workflow`
-    }
-    if (exec.name === 'glob') {
-      return 'AutoReport disables process-backed glob; use list for names or the workspace grep tool for file contents'
     }
     if (exec.name === 'compile_report' && resolved.role !== 'REPORT') return 'compile_report belongs to REPORT'
     if (exec.name === 'render_report_page' && resolved.role !== 'REPORT') return 'render_report_page belongs to REPORT'
@@ -368,6 +365,9 @@ export function createRoleToolGuard(options: RoleGuardOptions): ToolGuard {
       }
     }
     if (!resolved.policy.tools.includes(exec.name)) {
+      // Restricted DSH tools should fall through to the registry's ordinary
+      // UNKNOWN_TOOL result instead of teaching the model about hidden tools.
+      if (exec.name === 'glob') return undefined
       return `AutoReport ${resolved.role} has no declared capability for ${exec.name}; use its role-scoped tools`
     }
     if (!protectedCall) return undefined

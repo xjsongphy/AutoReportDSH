@@ -24,7 +24,8 @@ import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import { SESSION_FORMAT_VERSION, Session, SessionId } from '@deepseek-ai/dsh-session'
 import { roleWritableRoot } from '../src/policy/sandbox-roots.js'
 import { AUTOREPORT_MAIN_PRESET } from '../src/membership.js'
-import { rolePolicy, ROLE_PROCESS_TOOL } from '../src/roles.js'
+import { allSpecialistRoles, rolePolicy, ROLE_PROCESS_TOOL } from '../src/roles.js'
+import { renderFilesystemScope } from '../src/filesystem-scope.js'
 import { REQUIRED_DIRS } from '../src/workspace/init.js'
 import { resolveWorkflowSettings, workspaceIdForRoot } from '../src/settings.js'
 import { AUTOREPORT_SCHEMA_VERSION, type RoleBindingSnapshot } from '../src/workflow/events.js'
@@ -120,8 +121,111 @@ describe('integration: assembled host (real context)', () => {
     expect(search.text).toContain('probe.txt')
     const unavailable = await execute(assembled.ctx, 'glob', { pattern: '**/*' }, agent, session)
     expect(unavailable.isError).toBe(true)
-    expect(unavailable.text).toContain('AutoReport disables process-backed glob')
+    expect(unavailable.text).toContain('unknown tool')
     await scope.dispose()
+  })
+
+  it('keeps every role prompt, request schema, and callable tool registry identical', async () => {
+    const root = makeTemp('autoreport-five-role-surface-')
+    writeFileSync(join(root, 'probe.txt'), 'synthetic workspace probe\n')
+    const mainSession = Session.create(SessionId('it-five-role-main'), undefined, {
+      version: SESSION_FORMAT_VERSION,
+      isSeeded: false,
+      id: SessionId('it-five-role-main'),
+      createdAt: Date.now(),
+      cwd: root,
+      agentPreset: AUTOREPORT_MAIN_PRESET,
+    })
+    const assembled = await boot({ mainSession, roleSandbox: true, workspaceRoot: root })
+    const fixtureTool = (name: string) => defineTool({
+      name,
+      description: `fixture callable ${name}`,
+      parameters: {},
+      output: {
+        schema: { type: 'object', additionalProperties: true, properties: {} },
+        render: () => [{ type: 'text', text: 'ok' }],
+      },
+      async execute() { return { ok: true } },
+    })
+    const toolNames = new Set<string>(['glob', 'bash', 'pwsh'])
+    for (const role of ['MAIN', ...allSpecialistRoles()] as const) {
+      for (const name of rolePolicy(role).tools) toolNames.add(name)
+    }
+    for (const name of toolNames) {
+      if (name === 'list' || name === 'grep' || assembled.ctx.tools.get(name) !== undefined) continue
+      assembled.ctx.tools.register(fixtureTool(name))
+    }
+    const scopes: Array<ReturnType<typeof createScope>> = []
+    const attach = async (role: ReturnType<typeof allSpecialistRoles>[number] | 'MAIN', agent: Agent): Promise<void> => {
+      let scope!: ReturnType<typeof createScope>
+      await assembled.ctx.plugin(Object.assign((inner: typeof assembled.ctx) => {
+        scope = createScope(inner, agent)
+      }, { inject: ['tools'] }))
+      ;(agent as { ctx?: unknown }).ctx = scope.ctx
+      scopes.push(scope)
+      if (role !== 'MAIN') {
+        const childTools = role === 'REPORT'
+          ? ['manifest', 'report_workflow', 'compile_report', 'render_report_page']
+          : ['manifest', 'report_workflow']
+        for (const name of childTools) {
+          scope.ctx.tools.register(fixtureTool(name))
+        }
+      }
+      await assembled.ctx.parallel('agent/created', { agent, source: 'fresh' } as never)
+    }
+
+    try {
+      const agents: Array<{ role: ReturnType<typeof allSpecialistRoles>[number] | 'MAIN'; agent: Agent }> = [
+        { role: 'MAIN', agent: assembled.mainAgent },
+      ]
+      for (const role of allSpecialistRoles()) {
+        const id = SessionId(`it-five-role-${role.toLowerCase()}`)
+        const session = Session.create(id, undefined, {
+          version: SESSION_FORMAT_VERSION,
+          isSeeded: false,
+          id,
+          createdAt: Date.now(),
+          cwd: root,
+          parentSession: mainSession.id,
+        })
+        assembled.runtime.roleRegistry.registerReserved({
+          version: AUTOREPORT_SCHEMA_VERSION,
+          role,
+          childSessionId: id,
+          parentSessionId: mainSession.id,
+          workflowId: 'wf-five-role-surface',
+          provisioning: 'reserved',
+        })
+        agents.push({ role, agent: { id, session } as Agent })
+      }
+
+      for (const { role, agent } of agents) {
+        await attach(role, agent)
+        const schemas = assembled.ctx.tools.schemas(agent)
+        const names = schemas.map(schema => schema.name).sort()
+        expect(names, role).toEqual([...rolePolicy(role).tools].sort())
+        expect(assembled.ctx.tools.get('glob', agent), role).toBeUndefined()
+        for (const schema of schemas) {
+          const callable = assembled.ctx.tools.get(schema.name, agent)
+          expect(callable?.execute, `${role}.${schema.name}`).toBeTypeOf('function')
+          expect(callable?.description, `${role}.${schema.name}`).toBe(schema.description)
+        }
+
+        const prompt = renderFilesystemScope(role, root, rolePolicy(role).hasProcessTool, names)
+        const toolLine = prompt.split('\n').find(line => line.startsWith('AutoReport tools:'))
+        expect(toolLine?.slice('AutoReport tools: '.length).split(', ').sort(), role).toEqual(names)
+        expect(prompt.toLowerCase(), role).not.toContain('glob')
+
+        const listing = await execute(assembled.ctx, 'list', { path: '.' }, agent)
+        expect(listing.isError, `${role}: ${listing.text}`).toBe(false)
+        expect(listing.text, role).toContain('probe.txt')
+        const search = await execute(assembled.ctx, 'grep', { path: '.', pattern: 'synthetic workspace probe' }, agent)
+        expect(search.isError, `${role}: ${search.text}`).toBe(false)
+        expect(search.text, role).toContain('probe.txt')
+      }
+    } finally {
+      for (const scope of scopes.reverse()) await scope.dispose()
+    }
   })
 
   it('enforces workspace-wide reads and the write boundary through the assembled tool runtime', async () => {

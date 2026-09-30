@@ -291,7 +291,7 @@ export function createGrepTool(
     parameters: {
       pattern: { type: 'string', required: true, description: 'Literal text to find; case-insensitive unless case_sensitive is true.' },
       path: { type: 'string', description: 'Workspace-relative file or directory to search; defaults to the workspace root. Every experiment-workspace file is searchable; narrow with path/include.' },
-      include: { type: 'string', description: 'Optional workspace-relative glob, such as **/*.md or *.csv.' },
+      include: { type: 'string', description: 'Optional workspace-relative filename pattern, such as **/*.md or *.csv.' },
       case_sensitive: { type: 'boolean', description: 'Match letter case exactly; defaults to false.' },
     },
     output: {

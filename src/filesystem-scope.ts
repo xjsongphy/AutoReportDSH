@@ -46,7 +46,7 @@ export function renderFilesystemScope(
     '',
     processLine,
     '',
-    'Path conventions: every path you exchange with any tool is experiment-workspace-relative, e.g. `Report/main.typ`, `Data/Processed/results.csv` — including `read`, `write`, `edit`, `list`, `grep`, manifest, report_workflow, and shell arguments. `glob` is disabled for AutoReport.',
+    'Path conventions: every path you exchange with any tool is experiment-workspace-relative, e.g. `Report/main.typ`, `Data/Processed/results.csv` — including `read`, `write`, `edit`, `list`, `grep`, manifest, report_workflow, and shell arguments.',
     'Cross-role manifest and workflow handoff metadata remain an explicitly permitted coordination channel; metadata does not grant access to the referenced file contents.',
     'Skill bodies delivered through this role\'s skill catalog are a separate trusted instruction channel, not experiment-workspace file access.',
   ].join('\n')
