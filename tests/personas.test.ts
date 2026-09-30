@@ -93,7 +93,7 @@ describe('persona slimming', () => {
     expect(text).toContain('reference_extract')
     expect(text).toContain('install_python_package')
     expect(text).not.toContain('bash')
-    expect(text).toContain('list')
+    expect(text).not.toContain('Use `list` for directory discovery')
     expect(text).toContain('avoid tables unless requested')
     expect(text).not.toContain('subagent_fork')
     expect(text).not.toContain('`respond`')

@@ -155,7 +155,7 @@ describe('integration: assembled host (real context)', () => {
       },
       async execute() { return { ok: true } },
     })
-    const toolNames = new Set<string>(['glob', 'bash', 'pwsh'])
+    const toolNames = new Set<string>(['glob', 'bash', 'pwsh', 'str_replace_editor'])
     for (const role of ['MAIN', ...allSpecialistRoles()] as const) {
       for (const name of rolePolicy(role).tools) toolNames.add(name)
     }
@@ -213,6 +213,7 @@ describe('integration: assembled host (real context)', () => {
         const names = schemas.map(schema => schema.name).sort()
         expect(names, role).toEqual([...rolePolicy(role).tools].sort())
         expect(assembled.ctx.tools.get('glob', agent), role).toBeUndefined()
+        expect(assembled.ctx.tools.get('str_replace_editor', agent), role).toBeUndefined()
         for (const schema of schemas) {
           const callable = assembled.ctx.tools.get(schema.name, agent)
           expect(callable?.execute, `${role}.${schema.name}`).toBeTypeOf('function')
@@ -223,6 +224,7 @@ describe('integration: assembled host (real context)', () => {
         const toolLine = prompt.split('\n').find(line => line.startsWith('AutoReport tools:'))
         expect(toolLine?.slice('AutoReport tools: '.length).split(', ').sort(), role).toEqual(names)
         expect(prompt.toLowerCase(), role).not.toContain('glob')
+        expect(prompt, role).not.toContain('str_replace_editor')
 
         const listing = await execute(assembled.ctx, 'list', { path: '.' }, agent)
         expect(listing.isError, `${role}: ${listing.text}`).toBe(false)
