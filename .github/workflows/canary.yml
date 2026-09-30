@@ -1,9 +1,5 @@
-# Nightly drift detector: run the plugin suite against upstream harness
-# master, so an API change that would break the next retarget shows up here —
-# days before a user hits it — instead of as a failed release CI run.
-#
-# This job is allowed to fail: a red canary is a signal to plan a retarget,
-# not a broken main. The pinned CI (ci.yml) remains the release gate.
+# Scheduled compatibility probe for the supported Harness version. A manual
+# run can select another tag or commit to check a candidate before retargeting.
 
 name: Canary
 
@@ -11,6 +7,12 @@ on:
   schedule:
     - cron: '0 3 * * *'
   workflow_dispatch:
+    inputs:
+      dsh_ref:
+        description: DeepSeek Harness tag or commit to verify
+        required: false
+        default: '6b1808f432adfa96ab6c2f033e158ca230422e16'
+        type: string
 
 permissions:
   contents: read
@@ -21,14 +23,15 @@ concurrency:
 
 env:
   NODE_VERSION: '22.19.0'
+  DSH_REF: '6b1808f432adfa96ab6c2f033e158ca230422e16'
 
 defaults:
   run:
     working-directory: AutoReportDSH
 
 jobs:
-  upstream-master:
-    name: upstream master (drift probe)
+  harness-compatibility:
+    name: supported Harness compatibility probe
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -38,11 +41,11 @@ jobs:
           path: AutoReportDSH
           persist-credentials: false
 
-      - name: Check out the harness at upstream master
+      - name: Check out Harness ref ${{ inputs.dsh_ref || env.DSH_REF }}
         uses: actions/checkout@v6
         with:
           repository: deepseek-ai/deepseek-harness
-          ref: master
+          ref: ${{ inputs.dsh_ref || env.DSH_REF }}
           path: deepseek-harness
           persist-credentials: false
 
@@ -87,5 +90,5 @@ jobs:
           pnpm run typecheck
           pnpm run build
 
-      - name: Run test suite against upstream master
+      - name: Run test suite against selected Harness ref
         run: pnpm test
