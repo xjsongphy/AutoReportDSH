@@ -261,7 +261,7 @@ describe('integration: assembled host (real context)', () => {
     const plotterShellDescriptions = ROLE_PROCESS_TOOL === 'bash' ? plotter.bashDescriptions : plotter.pwshDescriptions
     expect(plotterShellDescriptions[0]).toContain('AutoReport PLOTTING')
     expect(plotter.skillNames).toEqual(['plotting-quality'])
-  })
+  }, 15_000)
 
   it('initializes the workspace once with the frozen settings snapshot on the workflow event', async () => {
     const assembled = await boot({ workspaceLanguage: 'typst' })

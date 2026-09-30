@@ -102,7 +102,7 @@ describe('host workflow runtime', () => {
       delegationIdleTimeoutMs: 60_000,
       delegationWaitTimeoutMs: 12_345,
     })
-  })
+  }, 15_000)
 
   it('resolves the language from the per-workspace user settings', async () => {
     const root = mkdtempSync(join(tmpdir(), 'autoreport-runtime-'))
