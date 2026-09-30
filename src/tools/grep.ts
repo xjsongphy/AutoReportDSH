@@ -225,14 +225,23 @@ async function searchWorkspace(
   if (input.pattern.length === 0 || input.pattern.length > 256) {
     throw new Error('pattern must contain 1–256 literal characters')
   }
+  if (/[*?[\]]/u.test(input.path)) {
+    throw new Error(`grep does not expand wildcard characters; "${input.path}" is not a literal path. `
+      + 'Call grep on a literal file or directory, or put the pattern in the include argument.')
+  }
   const logicalPath = normalizeWorkspaceRelativePath(input.path)
   const include = normalizeInclude(input.include)
   const workspace = await fs.resolve(workspaceRoot, { signal })
   const query = await resolveWithoutSymlinks(fs, workspace, logicalPath, signal)
   if (!fs.contains(workspace, query)) throw new Error('grep path is outside the experiment workspace')
   const queryInfo = await fs.stat(query, signal)
-  if (queryInfo === undefined) throw new Error('grep path does not exist: ' + logicalPath)
-  if (queryInfo.type !== 'file' && queryInfo.type !== 'directory') throw new Error('grep path is not a regular file or directory')
+  if (queryInfo === undefined) {
+    throw new Error(`grep path "${logicalPath}" does not exist. `
+      + 'Call list on its existing parent directory (or on ".") to discover actual names instead of guessing further paths.')
+  }
+  if (queryInfo.type !== 'file' && queryInfo.type !== 'directory') {
+    throw new Error(`grep needs a regular file or directory; "${logicalPath}" is a ${queryInfo.type}.`)
+  }
 
   const state: SearchState = { matches: [], bytesScanned: 0, filesScanned: 0, skippedFiles: 0, truncated: false, stop: false }
   const matchesInclude = (path: string): boolean => include === undefined || include.test(path)

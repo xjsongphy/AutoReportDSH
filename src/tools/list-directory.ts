@@ -13,6 +13,9 @@ function contained(root: string, candidate: string): boolean {
   return rel === '' || (rel !== '..' && !rel.startsWith(`..${sep}`) && !isAbsolute(rel))
 }
 
+/** Wildcard characters a literal directory path must not carry. */
+const WILDCARDS = /[*?\[\]]/u
+
 export interface DirectoryListing {
   path: string
   directories: string[]
@@ -44,6 +47,10 @@ export function listWorkspaceDirectory(
   if (typeof path !== 'string' || path.length === 0 || path.includes('\0')) {
     throw new Error('path must be a non-empty directory path')
   }
+  if (WILDCARDS.test(path)) {
+    throw new Error(`list does not expand wildcard characters; "${path}" is not a literal directory path. `
+      + 'Call list on the literal parent directory instead.')
+  }
   if (!Number.isInteger(depth) || depth < 1 || depth > MAX_DEPTH) {
     throw new Error(`depth must be an integer from 1 through ${MAX_DEPTH}`)
   }
@@ -53,11 +60,21 @@ export function listWorkspaceDirectory(
   let cursor = root
   for (const part of logicalPath === '.' ? [] : logicalPath.split('/')) {
     cursor = resolve(cursor, part)
-    if (lstatSync(cursor).isSymbolicLink()) throw new Error('list does not follow symbolic links')
+    let info
+    try {
+      info = lstatSync(cursor)
+    } catch {
+      throw new Error(`directory "${logicalPath}" does not exist in the experiment workspace. `
+        + 'Call list on its existing parent directory (or on ".") to discover actual names instead of guessing further paths.')
+    }
+    if (info.isSymbolicLink()) throw new Error('list does not follow symbolic links')
   }
   const target = realpathSync.native(requested)
   if (!contained(root, target)) throw new Error('directory is outside the experiment workspace')
-  if (!statSync(target).isDirectory()) throw new Error('path is not a directory')
+  if (!statSync(target).isDirectory()) {
+    throw new Error(`"${logicalPath}" is a regular file, not a directory; list lists directories only. `
+      + 'Use read to inspect the file\'s contents.')
+  }
 
   const listing: DirectoryListing = {
     path: logicalPath,
@@ -136,6 +153,10 @@ export async function listWorkspaceDirectoryFromFs(
   if (typeof path !== 'string' || path.length === 0 || path.includes('\0')) {
     throw new Error('path must be a non-empty directory path')
   }
+  if (WILDCARDS.test(path)) {
+    throw new Error(`list does not expand wildcard characters; "${path}" is not a literal directory path. `
+      + 'Call list on the literal parent directory instead.')
+  }
   if (!Number.isInteger(depth) || depth < 1 || depth > MAX_DEPTH) {
     throw new Error(`depth must be an integer from 1 through ${MAX_DEPTH}`)
   }
@@ -144,7 +165,14 @@ export async function listWorkspaceDirectoryFromFs(
   const target = await resolveWithoutSymlinks(fs, root, logicalPath, signal)
   if (!fs.contains(root, target)) throw new Error('directory is outside the experiment workspace')
   const info = await fs.stat(target, signal)
-  if (info?.type !== 'directory') throw new Error('path is not a directory')
+  if (info === undefined) {
+    throw new Error(`directory "${logicalPath}" does not exist in the experiment workspace. `
+      + 'Call list on its existing parent directory (or on ".") to discover actual names instead of guessing further paths.')
+  }
+  if (info.type !== 'directory') {
+    throw new Error(`"${logicalPath}" is a ${info.type}, not a directory; list lists directories only. `
+      + 'Use read to inspect the file\'s contents.')
+  }
 
   const listing: DirectoryListing = {
     path: logicalPath,

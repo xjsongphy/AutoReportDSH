@@ -119,4 +119,17 @@ describe('AutoReport provider-backed grep', () => {
       signal: new AbortController().signal,
     } as never)).rejects.toThrow(/DSH filesystem provider/u)
   })
+
+  it('names the recovery for wildcard paths and missing paths', async () => {
+    const fs = fakeWorkspaceFs({ 'Data/Processed/result.csv': 'fit\n' })
+    const owner = { id: 'main' } as Agent
+    const tool = createGrepTool('/grep-workspace', owner, fs)
+    const call = (args: Record<string, unknown>) => tool.execute({ pattern: 'fit', ...args }, {
+      agent: owner,
+      signal: new AbortController().signal,
+    } as never)
+
+    await expect(call({ path: 'Data/*.csv' })).rejects.toThrow(/wildcard[\s\S]*literal path[\s\S]*include/u)
+    await expect(call({ path: 'Data/missing.csv' })).rejects.toThrow(/does not exist[\s\S]*list[\s\S]*instead of guessing/u)
+  })
 })

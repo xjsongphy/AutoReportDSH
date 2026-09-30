@@ -45,8 +45,14 @@ describe('listWorkspaceDirectory', () => {
     const root = workspace()
     expect(() => listWorkspaceDirectory(root, '..')).toThrow(/outside/)
     expect(() => listWorkspaceDirectory(root, join(root, 'Theory', 'formulas.md'))).toThrow(/workspace-relative/)
-    expect(() => listWorkspaceDirectory(root, 'Theory/formulas.md')).toThrow(/not a directory/)
+    expect(() => listWorkspaceDirectory(root, 'Theory/formulas.md')).toThrow(/regular file[\s\S]*read/u)
     expect(() => listWorkspaceDirectory(root, 'Theory', 5)).toThrow(/depth/)
+  })
+
+  it('names the recovery for wildcard paths and missing directories', () => {
+    const root = workspace()
+    expect(() => listWorkspaceDirectory(root, 'Theory/*.md')).toThrow(/wildcard[\s\S]*literal directory path/u)
+    expect(() => listWorkspaceDirectory(root, 'Missing')).toThrow(/does not exist[\s\S]*instead of guessing/u)
   })
 
   it.skipIf(process.platform === 'win32')('does not follow a symlink outside the workspace', () => {
@@ -125,5 +131,8 @@ describe('listWorkspaceDirectory', () => {
     await expect(listWorkspaceDirectoryFromFs(fs, root, '../outside', 1)).rejects.toThrow(/outside/)
     await expect(listWorkspaceDirectoryFromFs(fs, root, root, 1)).rejects.toThrow(/workspace-relative/)
     await expect(listWorkspaceDirectoryFromFs(fs, root, 'mem://virtual/secret', 1)).rejects.toThrow(/workspace-relative/)
+    await expect(listWorkspaceDirectoryFromFs(fs, root, 'Missing', 1)).rejects.toThrow(/does not exist[\s\S]*instead of guessing/u)
+    await expect(listWorkspaceDirectoryFromFs(fs, root, 'References/guide.md', 1)).rejects.toThrow(/is a file[\s\S]*read/u)
+    await expect(listWorkspaceDirectoryFromFs(fs, root, 'Data/*.csv', 1)).rejects.toThrow(/wildcard[\s\S]*literal directory path/u)
   })
 })

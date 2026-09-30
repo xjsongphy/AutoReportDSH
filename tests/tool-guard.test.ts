@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, mkdirSync, rmSync, symlinkSync } from 'node:fs'
+import { existsSync, mkdtempSync, mkdirSync, realpathSync, rmSync, symlinkSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -243,7 +243,10 @@ describe('AutoReport role tool guard', () => {
     // AutoReport refusal that discloses their names to the model.
     expect(guard(execution('glob', { pattern: '**/*.csv' }, main))).toBeUndefined()
     // Reads must stay inside the workspace boundary.
-    expect(guard(execution('read', { file_path: '../outside.txt' }, analyst))).toContain('experiment workspace')
+    const deniedRead = guard(execution('read', { file_path: '../outside.txt' }, analyst))
+    expect(deniedRead).toContain('can read only the experiment workspace')
+    expect(deniedRead).toContain('Readable directories for this role:')
+    expect(deniedRead).toContain(root.split('/').at(-1)!)
     // No shell parsing: a process role's shell call is never inspected.
     expect(guard(execution(ROLE_PROCESS_TOOL, { command: 'python analyze.py' }, analyst))).toBeUndefined()
     expect(guard(execution(ROLE_PROCESS_TOOL, { command: 'rm -rf Data' }, analyst))).toBeUndefined()
@@ -314,8 +317,10 @@ describe('AutoReport role tool guard', () => {
     })
 
     expect(guard(execution('read', { file_path: join(typstBundle, 'basics.md') }, reporter))).toBeUndefined()
-    expect(guard(execution('read', { file_path: join(neighboringBundle, 'hidden.md') }, reporter)))
-      .toContain('can read only the experiment workspace')
+    const deniedReporterRead = guard(execution('read', { file_path: join(neighboringBundle, 'hidden.md') }, reporter))
+    expect(deniedReporterRead).toContain('can read only the experiment workspace')
+    expect(deniedReporterRead).toContain(`Readable directories for this role: "${realpathSync(root)}"`)
+    expect(deniedReporterRead).toContain(`"${realpathSync(typstBundle)}"`)
     expect(guard(execution('read', { file_path: join(typstBundle, 'basics.md') }, analyst)))
       .toContain('can read only the experiment workspace')
   })

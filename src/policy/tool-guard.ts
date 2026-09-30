@@ -273,7 +273,10 @@ function readBoundaryDenial(target: string, resolved: ResolvedRole): string | un
   const withinWorkspace = contained(resolved.workspaceRoot, absolute)
   const withinSkillResource = resolved.readableResourceRoots.some(root => contained(root, absolute))
   if (!withinWorkspace && !withinSkillResource) {
-    return `AutoReport ${resolved.role} can read only the experiment workspace and its skill resources: ${target}`
+    const roots = [resolved.workspaceRoot, ...resolved.readableResourceRoots]
+      .map(root => `"${root}"`).join(', ')
+    return `AutoReport ${resolved.role} can read only the experiment workspace and its skill resources. `
+      + `Readable directories for this role: ${roots}. Requested path: ${target}`
   }
   return undefined
 }
@@ -375,7 +378,7 @@ export function createRoleToolGuard(options: RoleGuardOptions): ToolGuard {
     if (read.kind === 'malformed') return `AutoReport denied ${exec.name}: ${read.reason}`
     if (read.kind === 'path') {
       const denial = readBoundaryDenial(read.path, resolved)
-      if (denial !== undefined) return `AutoReport denied ${exec.name} read: ${denial}`
+      if (denial !== undefined) return `AutoReport denied ${exec.name}: ${denial}`
     }
     if (call.kind === 'paths') {
       for (const path of call.paths) {
