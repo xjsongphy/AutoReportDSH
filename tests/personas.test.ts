@@ -138,7 +138,8 @@ describe('persona slimming', () => {
     for (const role of allSpecialistRoles()) {
       const text = loadSpecialistPersona(role)
       const roleFile = readFileSync(join(REPO_PERSONAS, ROLE_PERSONA_FILES[role] ?? ''), 'utf8')
-      expect(text.startsWith(roleFile)).toBe(true)
+      const normalizeLines = (value: string) => value.replaceAll('\r\n', '\n')
+      expect(normalizeLines(text).startsWith(normalizeLines(roleFile).trimEnd())).toBe(true)
       expect(text).toContain(common)
       expect(text).toContain('report_workflow')
       // The finish-through-report rule lives in the child context once.

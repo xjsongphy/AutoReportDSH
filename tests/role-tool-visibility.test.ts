@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { restrictInheritedShell } from '../src/policy/role-tool-visibility.js'
+import { ROLE_PROCESS_TOOL } from '../src/roles.js'
 
 describe('role shell visibility', () => {
   it('hides inherited bash and pwsh for Main, Theory, and Report', () => {
@@ -21,6 +22,6 @@ describe('role shell visibility', () => {
       restrict: (filter: { deny: string[] }) => { denied.push(filter.deny); return () => {} },
     } }
     restrictInheritedShell(ctx as never, {} as never, 'DATA_ANALYSIS')
-    expect(denied).toEqual([])
+    expect(denied).toEqual(ROLE_PROCESS_TOOL === 'bash' ? [] : [['bash']])
   })
 })
