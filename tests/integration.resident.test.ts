@@ -217,7 +217,7 @@ async function boot(options: {
     output: { schema: { type: 'object', additionalProperties: true, properties: {} }, render: () => [{ type: 'text', text: 'stub' }] },
     async execute() { return {} },
   }))
-  for (const name of ['read', 'read_image', 'write', 'edit', 'str_replace_editor', 'skill', 'grep']) {
+  for (const name of ['read', 'read_image', 'write', 'edit', 'skill', 'grep', 'str_replace_editor']) {
     ctx.tools.register(defineTool({
       name,
       description: `test stub for base DSH tool ${name}`,
@@ -312,12 +312,13 @@ describe('integration: resident subagent through the real agent loop', () => {
     const mainRequest = booted.mainAdapter.requests[0]!
     const mainTools = requestedToolNames(mainRequest)
     expect(mainTools).toEqual(expect.arrayContaining([
-      'read', 'read_image', 'list', 'grep', 'str_replace_editor', 'skill', 'manifest', 'workflow_task',
+      'read', 'read_image', 'list', 'grep', 'skill', 'manifest', 'workflow_task',
       'send_to_agent', 'install_python_package', 'reference_extract',
     ]))
     for (const name of ['bash', 'pwsh', 'glob', 'workflow', 'subagent', 'subagent_fork', 'send_message', 'interrupt_agent', 'list_agents', 'todo_write']) {
       expect(mainTools).not.toContain(name)
     }
+    expect(mainTools).not.toContain('str_replace_editor')
     expect(mainTools.slice().sort()).toEqual(booted.ctx.tools.schemas(booted.mainAgent).map(tool => tool.name).sort())
     for (const schema of mainRequest.tools ?? []) {
       const callable = booted.ctx.tools.get(schema.name, booted.mainAgent)

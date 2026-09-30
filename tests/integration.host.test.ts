@@ -363,7 +363,7 @@ describe('integration: assembled host (real context)', () => {
 
   it('registers exactly ONE continuable setup and routes it by RoleRegistry', async () => {
     const assembled = await boot({ roleSandbox: true })
-    const roleTools = ['list', 'grep', ROLE_PROCESS_TOOL, 'read', 'read_image', 'write', 'edit', 'str_replace_editor', 'manifest', 'report_workflow']
+    const roleTools = ['list', 'grep', ROLE_PROCESS_TOOL, 'read', 'read_image', 'write', 'edit', 'manifest', 'report_workflow']
 
     // Ordinary DSH child: the router installs nothing — stock messaging comes
     // from the base bundle since the standalone report tool was removed upstream.
@@ -390,9 +390,7 @@ describe('integration: assembled host (real context)', () => {
     expect(theory.toolDescriptions.get('write')).toContain(
       `Relative paths resolve from ${assembled.workspaceRoot}.`,
     )
-    expect(theory.toolDescriptions.get('str_replace_editor')).toContain(
-      `the absolute workspace root for this agent is ${assembled.workspaceRoot}`,
-    )
+    expect(theory.toolNames).not.toContain('str_replace_editor')
     const theoryRoster = theory.toolRestrictions.find(restriction => restriction.allow !== undefined)
     expect(theoryRoster?.allow).not.toContain('bash')
     expect(theoryRoster?.allow).not.toContain('workflow')
@@ -415,14 +413,7 @@ describe('integration: assembled host (real context)', () => {
     expect(reportRoster?.allow).not.toContain('bash')
     expect(reportRoster?.allow).not.toContain('workflow')
     expect(reporter.toolRestrictions.some(restriction => restriction.deny?.includes('pwsh'))).toBe(true)
-    mkdirSync(join(assembled.workspaceRoot, 'Report'), { recursive: true })
-    const editor = reporter.registeredTools.get('str_replace_editor')
-    const editorExecution = { agent: reporter.agent, signal: new AbortController().signal }
-    expect(editor?.execute).toBeTypeOf('function')
-    await expect(editor!.execute!({ command: 'view', path: resolve(assembled.workspaceRoot, 'Report') }, editorExecution))
-      .rejects.toThrow(/use the bounded list tool/u)
-    await expect(editor!.execute!({ command: 'view', path: resolve(assembled.workspaceRoot, 'Report/main.tex') }, editorExecution))
-      .resolves.toMatchObject({ command: 'view' })
+    expect(reporter.toolNames).not.toContain('str_replace_editor')
     expect(reporter.skillNames).toEqual(['experiment-report-writer'])
     expect(reporter.sections.map(section => section.name)).not.toEqual(expect.arrayContaining([
       'autoreport:skill:experiment-report-writer',

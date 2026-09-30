@@ -37,7 +37,7 @@ export const ROLE_PROCESS_TOOL = process.platform === 'win32' ? 'pwsh' : 'bash'
 
 /** File tools every role receives; paths are workspace-relative. */
 export const BASE_TOOLS = [
-  'read', 'list', 'grep', 'read_image', 'write', 'edit', 'str_replace_editor', 'skill',
+  'read', 'list', 'grep', 'read_image', 'write', 'edit', 'skill',
 ] as const
 
 /** Coordination/protocol tools MAIN uses to orchestrate the workflow. */

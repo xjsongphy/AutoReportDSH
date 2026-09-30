@@ -336,29 +336,6 @@ export async function apply(ctx: Context, config: Partial<Config> = {}, options:
           },
         })
       }
-      const strReplaceEditor = agent.ctx.tools.get('str_replace_editor', agent)
-      if (strReplaceEditor !== undefined) {
-        const execute = strReplaceEditor.execute.bind(strReplaceEditor)
-        register({
-          ...strReplaceEditor,
-          description: `${strReplaceEditor.description} AutoReport path context: the absolute workspace root for this agent is ${workspaceRoot}. This tool requires absolute paths; use that directory as the base for workspace files.`,
-          async execute(args, execution) {
-            const fields = typeof args === 'object' && args !== null && !Array.isArray(args)
-              ? args as Record<string, unknown>
-              : undefined
-            if (fields?.['command'] === 'view') {
-              if (fileSystem === undefined || typeof fields['path'] !== 'string') {
-                throw new Error('AutoReport cannot verify editor view targets in this session; use read for files and list for directories')
-              }
-              const target = await fileSystem.resolve(fields['path'], { signal: execution.signal })
-              if ((await fileSystem.stat(target, execution.signal))?.type === 'directory') {
-                throw new Error('str_replace_editor cannot view directories in AutoReport; use the bounded list tool')
-              }
-            }
-            return execute(args, execution)
-          },
-        })
-      }
       releases.push(restrictRoleToolSurface(agent, role, processToolAvailable))
       assertRoleToolSurface(agent, role, processToolAvailable)
       configuredRoles.set(agent, { role, workspaceRoot, dispose })

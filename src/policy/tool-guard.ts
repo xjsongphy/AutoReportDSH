@@ -68,6 +68,9 @@ export const MUTATION_TOOL_NAMES = new Set([
   'write', 'edit', 'delete', 'delete_file', 'apply_patch', 'str_replace_editor',
 ])
 
+/** DSH tools deliberately omitted from every AutoReport model surface. */
+const HIDDEN_DSH_TOOL_NAMES = new Set(['glob', 'str_replace_editor'])
+
 function record(value: unknown): Readonly<Record<string, unknown>> | undefined {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
     ? value as Readonly<Record<string, unknown>>
@@ -370,7 +373,7 @@ export function createRoleToolGuard(options: RoleGuardOptions): ToolGuard {
     if (!resolved.policy.tools.includes(exec.name)) {
       // Restricted DSH tools should fall through to the registry's ordinary
       // UNKNOWN_TOOL result instead of teaching the model about hidden tools.
-      if (exec.name === 'glob') return undefined
+      if (HIDDEN_DSH_TOOL_NAMES.has(exec.name)) return undefined
       return `AutoReport ${resolved.role} has no declared capability for ${exec.name}; use its role-scoped tools`
     }
     if (!protectedCall) return undefined
