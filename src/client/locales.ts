@@ -136,7 +136,7 @@ export const zh: Record<AutoReportLocaleKey, string> = {
  */
 export type ToolRowLocaleKey =
   | 'sendToAgentTitle' | 'workflowTaskTitle'
-  | 'listTitle' | 'manifestTitle' | 'referenceExtractTitle' | 'reportWorkflowTitle'
+  | 'listTitle' | 'manifestReadTitle' | 'manifestUpdateTitle' | 'referenceExtractTitle' | 'reportWorkflowTitle'
   | 'installPackageTitle' | 'compileReportTitle' | 'renderPageTitle'
   | 'running' | 'failed' | 'stopped'
   | 'tasks' | 'files' | 'levels'
@@ -150,7 +150,8 @@ export const toolRowEn: Record<ToolRowLocaleKey, string> = {
   sendToAgentTitle: 'Delegate to subagent',
   workflowTaskTitle: 'Report task board',
   listTitle: 'Browse directory',
-  manifestTitle: 'Delivery manifest',
+  manifestReadTitle: 'Read manifest',
+  manifestUpdateTitle: 'Update manifest',
   referenceExtractTitle: 'Extract reference',
   reportWorkflowTitle: 'Report task outcome',
   installPackageTitle: 'Install Python package',
@@ -184,7 +185,8 @@ export const toolRowZh: Record<ToolRowLocaleKey, string> = {
   sendToAgentTitle: '委派子代理',
   workflowTaskTitle: '报告任务板',
   listTitle: '浏览目录',
-  manifestTitle: '交付清单',
+  manifestReadTitle: '读取交付清单',
+  manifestUpdateTitle: '修改交付清单',
   referenceExtractTitle: '提取参考文献',
   reportWorkflowTitle: '回报任务',
   installPackageTitle: '安装 Python 包',

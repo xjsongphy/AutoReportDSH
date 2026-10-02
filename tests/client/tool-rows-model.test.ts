@@ -12,6 +12,7 @@ import {
   installPackageSummary,
   listSummary,
   manifestSummary,
+  manifestTitle,
   parseArgs,
   referenceExtractSummary,
   renderPageSummary,
@@ -208,30 +209,42 @@ describe('listSummary', () => {
   })
 })
 
-describe('manifestSummary', () => {
-  it('names the role a read targets', () => {
-    expect(manifestSummary(JSON.stringify({ action: 'read', agent: 'theory' }), null, en)).toBe('Read THEORY')
+describe('manifestTitle', () => {
+  it('names the action the call takes on the manifest', () => {
+    expect(manifestTitle(JSON.stringify({ action: 'read' }), en)).toBe('Read manifest')
+    expect(manifestTitle(JSON.stringify({ action: 'update' }), en)).toBe('Update manifest')
+    expect(manifestTitle(JSON.stringify({ action: 'update' }), zh)).toBe('修改交付清单')
   })
 
-  it('is the bare verb when the call targets the caller’s own role', () => {
-    expect(manifestSummary(JSON.stringify({}), null, en)).toBe('Read')
+  it('reads an absent or unreadable action as the default read', () => {
+    expect(manifestTitle(JSON.stringify({}), zh)).toBe('读取交付清单')
+    expect(manifestTitle('{"action":"upd', zh)).toBe('读取交付清单')
+  })
+})
+
+describe('manifestSummary', () => {
+  it('names the role the call targets', () => {
+    expect(manifestSummary(JSON.stringify({ action: 'read', agent: 'theory' }), null, en)).toBe('THEORY')
+  })
+
+  it('is empty when the call targets the caller’s own role', () => {
+    expect(manifestSummary(JSON.stringify({}), null, en)).toBeUndefined()
   })
 
   it('counts the file descriptions an update carries', () => {
     const files = [{ path: 'a' }, { path: 'b' }]
     expect(manifestSummary(JSON.stringify({ action: 'update', agent: 'plotting', files }), null, en))
-      .toBe('Update PLOTTING · 2 files')
+      .toBe('PLOTTING · 2 files')
     expect(manifestSummary(JSON.stringify({ action: 'update', agent: 'plotting', files }), null, zh))
-      .toBe('更新 PLOTTING · 2 个文件')
+      .toBe('PLOTTING · 2 个文件')
   })
 
-  it('drops the count when the update carries none', () => {
-    expect(manifestSummary(JSON.stringify({ action: 'update', agent: 'main' }), null, en)).toBe('Update MAIN')
-    expect(manifestSummary(JSON.stringify({ action: 'update', agent: 'main', files: [] }), null, en)).toBe('Update MAIN')
+  it('keeps the role when the update carries no count', () => {
+    expect(manifestSummary(JSON.stringify({ action: 'update', agent: 'main' }), null, en)).toBe('MAIN')
+    expect(manifestSummary(JSON.stringify({ action: 'update', agent: 'main', files: [] }), null, en)).toBe('MAIN')
   })
 
-  it('is empty for an unknown action or unreadable arguments', () => {
-    expect(manifestSummary(JSON.stringify({ action: 'delete' }), null, en)).toBeUndefined()
+  it('is empty for arguments it cannot read', () => {
     expect(manifestSummary('{"action":"upd', null, en)).toBeUndefined()
   })
 })

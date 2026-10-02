@@ -167,11 +167,19 @@ describe('the plugin’s other tool rows', () => {
     expect(screen.getByText('Data · 2 levels')).toBeDefined()
   })
 
-  it('counts the file descriptions a manifest update carries', () => {
+  it('names the action and the role a manifest call targets', () => {
     const files = [{ path: 'a' }, { path: 'b' }]
     render(<ManifestRow {...props(running({ action: 'update', agent: 'plotting', files }))} />)
 
-    expect(screen.getByText('Update PLOTTING · 2 files')).toBeDefined()
+    expect(screen.getByText('Update manifest')).toBeDefined()
+    expect(screen.getByText('PLOTTING · 2 files')).toBeDefined()
+  })
+
+  it('reads a manifest call as a verb phrase in the shell locale', () => {
+    render(<ManifestRow {...props(running({ action: 'read', agent: 'theory' }), zh)} />)
+
+    expect(screen.getByText('读取交付清单')).toBeDefined()
+    expect(screen.getByText('THEORY')).toBeDefined()
   })
 
   it('names the PDF a reference extraction reads', () => {

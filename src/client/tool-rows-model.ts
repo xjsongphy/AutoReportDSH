@@ -234,24 +234,43 @@ export function listSummary(argsRaw: string, _output: string | null, t: ToolRowT
 }
 
 /**
+ * Row label for one `manifest` call: the action it takes on the manifest.
+ *
+ * The action is part of the label rather than of the summary so the row reads
+ * as a verb phrase — `Read manifest · THEORY` — like every other tool row. An
+ * action the wire enum does not carry cannot reach a row, so anything that is
+ * not `update` reads as the default `read`.
+ * @param argsRaw - raw argument JSON.
+ * @param t - translator for the row's copy.
+ * @returns the row label.
+ */
+export function manifestTitle(argsRaw: string, t: ToolRowText): string {
+  const args = parseArgs(argsRaw)
+  const action = args === undefined ? undefined : asString(args.action)
+  return t(action === 'update' ? 'manifestUpdateTitle' : 'manifestReadTitle')
+}
+
+/**
  * Collapsed summary for one `manifest` call: which role's manifest, and how
  * many file descriptions an update carries.
+ *
+ * A call that targets the caller's own role names no role on the wire, and a
+ * call that writes nothing names no count; each is left out rather than
+ * invented.
  * @param argsRaw - raw argument JSON.
  * @param _output - unused; the manifest body belongs behind the disclosure.
  * @param t - translator for the row's copy.
- * @returns the summary, or undefined when the call is not readable.
+ * @returns the summary, or undefined when the call names nothing to summarise.
  */
 export function manifestSummary(argsRaw: string, _output: string | null, t: ToolRowText): string | undefined {
   const args = parseArgs(argsRaw)
   if (args === undefined) return undefined
-  const action = asString(args.action) ?? 'read'
-  const verb = action === 'read' ? t('read') : action === 'update' ? t('update') : undefined
-  if (verb === undefined) return undefined
   const role = roleLabel(args.agent)
-  const label = role === undefined ? verb : `${verb} ${role}`
-  if (action !== 'update') return label
-  const count = Array.isArray(args.files) ? args.files.length : 0
-  return count === 0 ? label : `${label} · ${count} ${t('files')}`
+  const count = Array.isArray(args.files) && args.files.length > 0
+    ? `${args.files.length} ${t('files')}`
+    : undefined
+  if (role === undefined) return count
+  return count === undefined ? role : `${role} · ${count}`
 }
 
 /**

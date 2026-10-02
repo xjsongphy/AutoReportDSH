@@ -33,7 +33,7 @@ import { IconFlagOutline14 } from './icons.js'
 import { css } from './styles.js'
 import {
   callArgs, compileReportSummary, installPackageSummary, listSummary, manifestSummary,
-  parseArgs, referenceExtractSummary, renderPageSummary, reportWorkflowSummary,
+  manifestTitle, parseArgs, referenceExtractSummary, renderPageSummary, reportWorkflowSummary,
   sendToAgentSummary, toolRowFacts, workflowTaskSummary,
   type ToolRowFacts, type ToolRowState, type ToolRowText,
 } from './tool-rows-model.js'
@@ -155,10 +155,17 @@ function RowShell({ title, summary, facts, argsRaw, t, icon, inspect }: RowShell
  */
 type RowSummary = (argsRaw: string, output: string | null, t: ToolRowText) => string | undefined
 
+/**
+ * Row label: a fixed locale key, or one the call's own arguments decide — a
+ * tool whose verb is an argument (`manifest` reads or updates) says so in the
+ * label, where every other row already leads with its verb.
+ */
+type RowTitle = ToolRowLocaleKey | ((argsRaw: string, t: ToolRowText) => string)
+
 /** The three facts that distinguish one AutoReport tool row from another. */
 interface RowSpec {
-  /** Locale key of the always-visible row label. */
-  readonly title: ToolRowLocaleKey
+  /** The always-visible row label. */
+  readonly title: RowTitle
   /** Idle glyph for the leading slot. */
   readonly icon: ReactNode
   /** What the row says while collapsed. */
@@ -167,7 +174,7 @@ interface RowSpec {
 
 /**
  * Build the row component for one AutoReport tool.
- * @param spec - the row's title key, idle glyph, and summary function.
+ * @param spec - the row's title, idle glyph, and summary function.
  * @returns the component to register against the tool's wire name.
  */
 function toolRow(spec: RowSpec) {
@@ -176,7 +183,7 @@ function toolRow(spec: RowSpec) {
     const facts = toolRowFacts(block)
     return (
       <RowShell
-        title={t(spec.title)}
+        title={typeof spec.title === 'string' ? t(spec.title) : spec.title(argsRaw, t)}
         summary={spec.summary(argsRaw, facts.output, t)}
         facts={facts}
         argsRaw={argsRaw}
@@ -211,7 +218,7 @@ export const ListRow = toolRow({
 
 /** One `manifest` read or update. */
 export const ManifestRow = toolRow({
-  title: 'manifestTitle',
+  title: manifestTitle,
   icon: <IconListPenOutline16 />,
   summary: manifestSummary,
 })
