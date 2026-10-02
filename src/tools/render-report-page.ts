@@ -13,6 +13,47 @@ import { genericCall } from './presentation.js'
 
 const RENDER_TIMEOUT_MS = 60_000
 
+/** Shape of the `llm` service this tool needs; the runtime owns the real type. */
+interface RouteLlm {
+  resolveModelInfo?: (
+    provider: string,
+    model: string,
+    signal?: AbortSignal,
+  ) => Promise<{ inputModalities?: readonly string[] }>
+}
+
+/**
+ * Refuse to render for a route that cannot inspect the result.
+ *
+ * The same gate DSH's `read_image` enforces, applied to this tool: a rendered
+ * page is useful only when the exact calling route can look at it, so an
+ * unknown or text-only capability refuses before any filesystem work instead
+ * of after it. The tool stays registered for every model — the refusal is what
+ * tells a text-only model to switch.
+ * @param ctx - the plugin context used to resolve the `llm` service.
+ * @param route - the calling agent's resolved provider/model.
+ * @param signal - the execution's abort signal.
+ * @param requestedPath - the raw, not-yet-resolved path named in refusals.
+ */
+async function assertImageCapableRoute(
+  ctx: Context,
+  route: { provider?: string | undefined; model?: string | undefined } | undefined,
+  signal: AbortSignal | undefined,
+  requestedPath: string,
+): Promise<void> {
+  const llm = ctx.get('llm') as RouteLlm | undefined
+  if (route?.provider === undefined || route.model === undefined || llm?.resolveModelInfo === undefined) {
+    throw new Error(`cannot render "${requestedPath}" as a page preview: the current model route could not be resolved`)
+  }
+  const active = await llm.resolveModelInfo(route.provider, route.model, signal)
+  if (active.inputModalities === undefined || !active.inputModalities.includes('image')) {
+    throw new Error(
+      `cannot render "${requestedPath}" as a page preview: model "${route.model}" does not declare image input;`
+      + ' switch to an image-capable model to inspect rendered pages',
+    )
+  }
+}
+
 export async function renderReportPage(
   ctx: Context,
   agent: Agent,
@@ -89,6 +130,13 @@ export function installRenderReportPageTool(ctx: Context, workspaceRootOverride?
     async execute(args, exec) {
       const agent = exec.agent as Agent | undefined
       if (agent === undefined) throw new Error('render_report_page requires a REPORT agent')
+      const routed = agent.session?.requestHeader()?.config
+      await assertImageCapableRoute(
+        ctx,
+        { provider: routed?.provider ?? agent.options?.provider, model: routed?.model ?? agent.options?.model },
+        exec.signal,
+        args.path,
+      )
       return renderReportPage(ctx, agent, args.path, args.page, exec.signal, workspaceRootOverride)
     },
   }))
