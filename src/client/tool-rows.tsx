@@ -25,7 +25,7 @@ import { useState, type ReactNode } from 'react'
 import {
   DisclosureRow, IconBrowseOutline16, IconChecklistOutline14, IconDownloadOutline16,
   IconFolderOpenOutline16, IconListPenOutline16, IconPaperclipOutline16, IconPlayOutline16,
-  IconPaperPlaneOutline14, StateDot,
+  IconPaperPlaneOutline14, JsonTree, StateDot, type JsonTreeLabels,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ToolCallViewProps } from '@deepseek-ai/dsh-client-ui-tool/client'
@@ -34,7 +34,7 @@ import { css } from './styles.js'
 import {
   callArgs, compileReportSummary, installPackageSummary, listSummary, manifestSummary,
   manifestTitle, parseArgs, referenceExtractSummary, renderPageSummary, reportWorkflowSummary,
-  sendToAgentSummary, toolRowFacts, workflowTaskSummary,
+  sendToAgentSummary, toolRowFacts, workflowTaskSummary, workflowTaskTitle,
   type ToolRowFacts, type ToolRowState, type ToolRowText,
 } from './tool-rows-model.js'
 import type { ToolRowLocaleKey } from './locales.js'
@@ -72,13 +72,62 @@ function prettyArgs(argsRaw: string): string | null {
   return parsed === undefined ? argsRaw : JSON.stringify(parsed, null, 2)
 }
 
-/** One gutter-labelled section of the expanded card. */
-function IoSection({ label, body, error = false }: { label: string, body: string | null, error?: boolean }) {
+/**
+ * A body that is a JSON object or array, or undefined for anything else.
+ *
+ * AutoReport's tools answer with one text block holding a JSON document, so
+ * this is what decides between the structured tree and the plain text block —
+ * a failure message or a truncated argument prefix stays plain text.
+ * @param body - the section's text.
+ * @returns the parsed container, or undefined.
+ */
+function jsonContainer(body: string): object | undefined {
+  try {
+    const parsed = JSON.parse(body) as unknown
+    return typeof parsed === 'object' && parsed !== null ? parsed : undefined
+  } catch {
+    return undefined
+  }
+}
+
+/** DSH's JSON-tree chrome, assembled from this plugin's flat dictionary. */
+function jsonTreeLabels(t: ToolRowText): JsonTreeLabels {
+  return {
+    copyValue: t('copyValue'),
+    copyJson: t('copyJson'),
+    copyPath: t('copyPath'),
+    copyPrettyJson: t('copyPrettyJson'),
+    copyCompactJson: t('copyCompactJson'),
+    copied: t('copied'),
+    copyFailed: t('copyFailed'),
+    collapseNode: t('collapseNode'),
+    expandNode: t('expandNode'),
+    // The one label DSH builds from the action's own name.
+    copyButtonTitle: action => t('copyButtonTitle').replace('{action}', action),
+  }
+}
+
+/**
+ * One gutter-labelled section of the expanded card.
+ *
+ * A JSON document renders as DSH's own inspector tree, so a long diagnostic or
+ * log string folds instead of flooding the card; anything else stays a text
+ * block.
+ */
+function IoSection({ label, body, labels, error = false }: {
+  label: string
+  body: string | null
+  labels: JsonTreeLabels
+  error?: boolean
+}) {
   if (body === null) return null
+  const data = jsonContainer(body)
   return (
     <section className={css.toolIoSection}>
       <span className={css.toolIoLabel}>{label}</span>
-      <pre className={css.toolIoText} data-error={error ? '' : undefined}>{body}</pre>
+      {data === undefined
+        ? <pre className={css.toolIoText} data-error={error ? '' : undefined}>{body}</pre>
+        : <JsonTree className={css.toolIoTree} data={data} label={label} labels={labels} copyable expandTopLevel />}
     </section>
   )
 }
@@ -101,6 +150,7 @@ interface RowShellProps {
 function RowShell({ title, summary, facts, argsRaw, t, icon, inspect }: RowShellProps) {
   const [expanded, setExpanded] = useState(false)
   const args = prettyArgs(argsRaw)
+  const labels = jsonTreeLabels(t)
   const expandable = args !== null || facts.output !== null
   const open = expanded && expandable
   const label = facts.errorSummary ?? summary
@@ -131,11 +181,11 @@ function RowShell({ title, summary, facts, argsRaw, t, icon, inspect }: RowShell
         )}
       >
         <div className={css.toolIo}>
-          <IoSection label={t('in')} body={args} />
+          <IoSection label={t('in')} body={args} labels={labels} />
           {facts.output === null ? null : (
             <>
               <span className={css.toolIoDivider} />
-              <IoSection label={t('out')} body={facts.output} error={facts.state === 'error'} />
+              <IoSection label={t('out')} body={facts.output} labels={labels} error={facts.state === 'error'} />
             </>
           )}
         </div>
@@ -204,7 +254,7 @@ export const SendToAgentRow = toolRow({
 
 /** One `workflow_task` board operation. */
 export const WorkflowTaskRow = toolRow({
-  title: 'workflowTaskTitle',
+  title: workflowTaskTitle,
   icon: <IconChecklistOutline14 />,
   summary: workflowTaskSummary,
 })

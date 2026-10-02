@@ -17,6 +17,13 @@ export default defineConfig({
   esbuild: {
     jsx: 'automatic',
   },
+  resolve: {
+    // A linked harness package carries its own React copy beside its sources.
+    // Rendering one of its stateful components (the JSON inspector tree, say)
+    // under @testing-library would then run on a React the test renderer knows
+    // nothing about, so the suite pins a single copy.
+    dedupe: ['react', 'react-dom'],
+  },
   test: {
     include: ['tests/**/*.test.ts', 'tests/**/*.test.tsx'],
     // Linked harness packages resolve their own workspace peers through the

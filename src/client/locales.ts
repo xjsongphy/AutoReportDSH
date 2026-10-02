@@ -136,19 +136,26 @@ export const zh: Record<AutoReportLocaleKey, string> = {
  */
 export type ToolRowLocaleKey =
   | 'sendToAgentTitle' | 'workflowTaskTitle'
+  | 'boardReadTitle' | 'boardUpdateTitle' | 'boardCancelTitle' | 'boardReopenTitle'
   | 'listTitle' | 'manifestReadTitle' | 'manifestUpdateTitle' | 'referenceExtractTitle' | 'reportWorkflowTitle'
   | 'installPackageTitle' | 'compileReportTitle' | 'renderPageTitle'
   | 'running' | 'failed' | 'stopped'
-  | 'tasks' | 'files' | 'levels'
-  | 'read' | 'update' | 'cancel' | 'reopen' | 'resend' | 'checked'
+  | 'tasks' | 'files' | 'levels' | 'entries' | 'workspaceRoot'
+  | 'resend' | 'checked'
   | 'completed' | 'blocked' | 'succeeded' | 'timedOut' | 'infraError'
   | 'page'
   | 'in' | 'out' | 'inspect'
+  | 'copyValue' | 'copyJson' | 'copyPath' | 'copyPrettyJson' | 'copyCompactJson'
+  | 'copied' | 'copyFailed' | 'collapseNode' | 'expandNode' | 'copyButtonTitle'
 
 /** English copy for the tool rows. */
 export const toolRowEn: Record<ToolRowLocaleKey, string> = {
   sendToAgentTitle: 'Delegate to subagent',
   workflowTaskTitle: 'Report task board',
+  boardReadTitle: 'Read task board',
+  boardUpdateTitle: 'Update task board',
+  boardCancelTitle: 'Cancel task',
+  boardReopenTitle: 'Reopen task',
   listTitle: 'Browse directory',
   manifestReadTitle: 'Read manifest',
   manifestUpdateTitle: 'Update manifest',
@@ -156,17 +163,15 @@ export const toolRowEn: Record<ToolRowLocaleKey, string> = {
   reportWorkflowTitle: 'Report task outcome',
   installPackageTitle: 'Install Python package',
   compileReportTitle: 'Compile report',
-  renderPageTitle: 'Render report page',
+  renderPageTitle: 'Preview report',
   running: 'Running',
   failed: 'Failed',
   stopped: 'Stopped',
   tasks: 'tasks',
   files: 'files',
   levels: 'levels',
-  read: 'Read',
-  update: 'Update',
-  cancel: 'Cancel',
-  reopen: 'Reopen',
+  entries: 'entries',
+  workspaceRoot: 'workspace root',
   resend: 'resend',
   checked: 'done',
   completed: 'Completed',
@@ -178,12 +183,26 @@ export const toolRowEn: Record<ToolRowLocaleKey, string> = {
   in: 'IN',
   out: 'OUT',
   inspect: 'Inspect',
+  copyValue: 'Copy value',
+  copyJson: 'Copy JSON',
+  copyPath: 'Copy path',
+  copyPrettyJson: 'Copy pretty JSON',
+  copyCompactJson: 'Copy compact JSON',
+  copied: 'Copied',
+  copyFailed: 'Copy failed',
+  collapseNode: 'Collapse',
+  expandNode: 'Expand',
+  copyButtonTitle: 'Copy {action}',
 }
 
 /** Chinese copy for the tool rows. */
 export const toolRowZh: Record<ToolRowLocaleKey, string> = {
   sendToAgentTitle: '委派子代理',
   workflowTaskTitle: '报告任务板',
+  boardReadTitle: '读取任务板',
+  boardUpdateTitle: '更新任务板',
+  boardCancelTitle: '取消任务',
+  boardReopenTitle: '重开任务',
   listTitle: '浏览目录',
   manifestReadTitle: '读取交付清单',
   manifestUpdateTitle: '修改交付清单',
@@ -191,17 +210,15 @@ export const toolRowZh: Record<ToolRowLocaleKey, string> = {
   reportWorkflowTitle: '回报任务',
   installPackageTitle: '安装 Python 包',
   compileReportTitle: '编译报告',
-  renderPageTitle: '预览报告页',
+  renderPageTitle: '预览报告',
   running: '进行中',
   failed: '失败',
   stopped: '已中断',
   tasks: '个任务',
   files: '个文件',
   levels: '层',
-  read: '读',
-  update: '更新',
-  cancel: '取消',
-  reopen: '重开',
+  entries: '项',
+  workspaceRoot: '工作区根目录',
   resend: '重派',
   checked: '勾选',
   completed: '完成',
@@ -213,4 +230,14 @@ export const toolRowZh: Record<ToolRowLocaleKey, string> = {
   in: '输入',
   out: '输出',
   inspect: '查看',
+  copyValue: '复制值',
+  copyJson: '复制 JSON',
+  copyPath: '复制路径',
+  copyPrettyJson: '复制格式化 JSON',
+  copyCompactJson: '复制压缩 JSON',
+  copied: '已复制',
+  copyFailed: '复制失败',
+  collapseNode: '折叠',
+  expandNode: '展开',
+  copyButtonTitle: '复制{action}',
 }

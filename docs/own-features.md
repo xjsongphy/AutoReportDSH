@@ -73,7 +73,11 @@ platform.
   owning the slot, and every other tool falls back unchanged. The rows are one
   shell plus a (title key, idle glyph, summary) triple per tool; the glyphs come
   from ui-primitives except `report_workflow`'s, which this plugin draws itself in
-  the same figma-extract idiom. DSH's Web client does not read
+  the same figma-extract idiom. The expanded card renders an argument or result
+  that is a JSON document through DSH's own inspector tree, so a LaTeX log or a
+  manifest listing folds and copies per node instead of flooding the card; a
+  failure message or a truncated streaming prefix, which is not a document,
+  stays a plain text block. DSH's Web client does not read
   `ToolDefinition.presentCall`/`presentResult`, so those declarations only
   serve other clients; the row is what a Web user sees.
 

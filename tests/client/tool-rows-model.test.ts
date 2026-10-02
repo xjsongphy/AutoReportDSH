@@ -20,6 +20,7 @@ import {
   sendToAgentSummary,
   toolRowFacts,
   workflowTaskSummary,
+  workflowTaskTitle,
   type ToolRowLocaleKey,
 } from '../../src/client/tool-rows-model.js'
 
@@ -139,6 +140,20 @@ describe('sendToAgentSummary', () => {
   })
 })
 
+describe('workflowTaskTitle', () => {
+  it('names the board operation the call performs', () => {
+    expect(workflowTaskTitle(JSON.stringify({ action: 'read' }), en)).toBe('Read task board')
+    expect(workflowTaskTitle(JSON.stringify({ action: 'update' }), en)).toBe('Update task board')
+    expect(workflowTaskTitle(JSON.stringify({ action: 'cancel' }), zh)).toBe('取消任务')
+    expect(workflowTaskTitle(JSON.stringify({ action: 'reopen' }), zh)).toBe('重开任务')
+  })
+
+  it('falls back to the bare board for an unknown or unreadable action', () => {
+    expect(workflowTaskTitle(JSON.stringify({ action: 'explode' }), zh)).toBe('报告任务板')
+    expect(workflowTaskTitle('{"action":"upd', zh)).toBe('报告任务板')
+  })
+})
+
 describe('workflowTaskSummary', () => {
   it('counts the whole board once the read settles', () => {
     const output = JSON.stringify({ tasks: [{ task_id: 'task-1' }, { task_id: 'task-2' }, { task_id: 'task-3' }] })
@@ -154,25 +169,25 @@ describe('workflowTaskSummary', () => {
   it('names the task and its status for a single-task read', () => {
     const output = JSON.stringify({ task: { task_id: 'task-2', status: 'in_progress' } })
     expect(workflowTaskSummary(JSON.stringify({ action: 'read', task_id: 'task-2' }), output, en))
-      .toBe('Read task-2 · in_progress')
-    expect(workflowTaskSummary(JSON.stringify({ action: 'read', task_id: 'task-2' }), null, en)).toBe('Read task-2')
+      .toBe('task-2 · in_progress')
+    expect(workflowTaskSummary(JSON.stringify({ action: 'read', task_id: 'task-2' }), null, en)).toBe('task-2')
   })
 
   it('counts the replacement checklist an update carries', () => {
     const steps = [{ description: 'a', done: true }, { description: 'b', done: true }, { description: 'c' }]
     expect(workflowTaskSummary(JSON.stringify({ action: 'update', task_id: 'task-2', steps }), null, en))
-      .toBe('Update task-2 · 2/3 done')
+      .toBe('task-2 · 2/3 done')
   })
 
   it('drops the count when the checklist is missing or malformed', () => {
-    expect(workflowTaskSummary(JSON.stringify({ action: 'update', task_id: 'task-2' }), null, en)).toBe('Update task-2')
+    expect(workflowTaskSummary(JSON.stringify({ action: 'update', task_id: 'task-2' }), null, en)).toBe('task-2')
     expect(workflowTaskSummary(JSON.stringify({ action: 'update', task_id: 'task-2', steps: 'nope' }), null, en))
-      .toBe('Update task-2')
+      .toBe('task-2')
   })
 
-  it('names the transition for cancel and reopen', () => {
-    expect(workflowTaskSummary(JSON.stringify({ action: 'cancel', task_id: 'task-3' }), null, en)).toBe('Cancel task-3')
-    expect(workflowTaskSummary(JSON.stringify({ action: 'reopen', task_id: 'task-4' }), null, en)).toBe('Reopen task-4')
+  it('names the task for cancel and reopen', () => {
+    expect(workflowTaskSummary(JSON.stringify({ action: 'cancel', task_id: 'task-3' }), null, en)).toBe('task-3')
+    expect(workflowTaskSummary(JSON.stringify({ action: 'reopen', task_id: 'task-4' }), null, en)).toBe('task-4')
   })
 
   it('is empty for an unknown action or unreadable arguments', () => {
@@ -183,7 +198,7 @@ describe('workflowTaskSummary', () => {
   it('speaks the shell locale', () => {
     const steps = [{ description: 'a', done: true }, { description: 'b', done: true }, { description: 'c' }]
     expect(workflowTaskSummary(JSON.stringify({ action: 'update', task_id: 'task-2', steps }), null, zh))
-      .toBe('更新 task-2 · 2/3 勾选')
+      .toBe('task-2 · 2/3 勾选')
     expect(workflowTaskSummary(JSON.stringify({ action: 'read' }), JSON.stringify({ tasks: [] }), zh)).toBe('0 个任务')
   })
 })
@@ -199,9 +214,23 @@ describe('listSummary', () => {
     expect(listSummary(JSON.stringify({ path: 'Data', depth: 1 }), null, en)).toBe('Data')
   })
 
-  it('reads an absent path as the workspace root', () => {
-    expect(listSummary(JSON.stringify({}), null, en)).toBe('.')
-    expect(listSummary(JSON.stringify({ depth: 2 }), null, en)).toBe('. · 2 levels')
+  it('names the workspace root instead of showing a bare dot', () => {
+    expect(listSummary(JSON.stringify({}), null, en)).toBe('workspace root')
+    expect(listSummary(JSON.stringify({ path: '.' }), null, zh)).toBe('工作区根目录')
+    expect(listSummary(JSON.stringify({ depth: 2 }), null, en)).toBe('workspace root · 2 levels')
+  })
+
+  it('counts the entries a settled listing returned', () => {
+    const output = JSON.stringify({ path: 'Data', directories: ['a'], files: ['b', 'c'], links: [], truncated: false })
+    expect(listSummary(JSON.stringify({ path: 'Data' }), output, en)).toBe('Data · 3 entries')
+    expect(listSummary(JSON.stringify({ path: 'Data' }), output, zh)).toBe('Data · 3 项')
+    expect(listSummary(JSON.stringify({ path: 'Data', depth: 2 }), output, en)).toBe('Data · 2 levels · 3 entries')
+  })
+
+  it('leaves the count out while the listing runs or when it is unreadable', () => {
+    expect(listSummary(JSON.stringify({ path: 'Data' }), null, en)).toBe('Data')
+    expect(listSummary(JSON.stringify({ path: 'Data' }), 'not json', en)).toBe('Data')
+    expect(listSummary(JSON.stringify({ path: 'Data' }), JSON.stringify({ files: 'nope' }), en)).toBe('Data')
   })
 
   it('is empty for arguments it cannot read', () => {
@@ -242,6 +271,18 @@ describe('manifestSummary', () => {
   it('keeps the role when the update carries no count', () => {
     expect(manifestSummary(JSON.stringify({ action: 'update', agent: 'main' }), null, en)).toBe('MAIN')
     expect(manifestSummary(JSON.stringify({ action: 'update', agent: 'main', files: [] }), null, en)).toBe('MAIN')
+  })
+
+  it('counts the entries a settled read reports', () => {
+    const output = JSON.stringify({ agent_type: 'theory', files: [{ path: 'a' }, { path: 'b' }], notes: '' })
+    expect(manifestSummary(JSON.stringify({ action: 'read', agent: 'theory' }), output, en)).toBe('THEORY · 2 files')
+    expect(manifestSummary(JSON.stringify({ action: 'read' }), output, zh)).toBe('2 个文件')
+    expect(manifestSummary(JSON.stringify({ action: 'read' }), JSON.stringify({ files: [] }), en)).toBe('0 files')
+  })
+
+  it('leaves the count out while the read runs or when it is unreadable', () => {
+    expect(manifestSummary(JSON.stringify({ action: 'read', agent: 'theory' }), null, en)).toBe('THEORY')
+    expect(manifestSummary(JSON.stringify({ action: 'read' }), 'not json', en)).toBeUndefined()
   })
 
   it('is empty for arguments it cannot read', () => {

@@ -32,6 +32,11 @@ function props(block: unknown, t = en, rest: Record<string, unknown> = {}) {
   return { callId: 'call-1', toolName: 'tool', block, openFile: () => {}, loadImage: () => {}, t, ...rest } as never
 }
 
+/** The inspector trees' rendered text, keys and values together. */
+function treeText(): string {
+  return Array.from(document.querySelectorAll(`.${css.toolIoTree}`)).map(node => node.textContent).join('\n')
+}
+
 /** The collapsed row's disclosure target. */
 function row(): HTMLElement {
   const found = document.querySelector('[data-disclosure-row]')
@@ -85,7 +90,8 @@ describe('SendToAgentRow', () => {
 
     expect(screen.getByText('IN')).toBeDefined()
     expect(screen.getByText('OUT')).toBeDefined()
-    expect(screen.getByText(/"role": "THEORY"/)).toBeDefined()
+    expect(document.querySelectorAll(`.${css.toolIoTree}`)).toHaveLength(1)
+    expect(treeText()).toContain('role')
     expect(screen.getByText(/second line/)).toBeDefined()
   })
 
@@ -94,7 +100,7 @@ describe('SendToAgentRow', () => {
 
     fireEvent.click(row())
 
-    expect(screen.getByText(/"role": "THEORY"/)).toBeDefined()
+    expect(treeText()).toContain('role')
     expect(screen.queryByText('OUT')).toBeNull()
   })
 
@@ -141,8 +147,8 @@ describe('WorkflowTaskRow', () => {
     const steps = [{ description: 'a', done: true }, { description: 'b', done: true }, { description: 'c' }]
     render(<WorkflowTaskRow {...props(running({ action: 'update', task_id: 'task-2', steps }))} />)
 
-    expect(screen.getByText('Report task board')).toBeDefined()
-    expect(screen.getByText('Update task-2 · 2/3 done')).toBeDefined()
+    expect(screen.getByText('Update task board')).toBeDefined()
+    expect(screen.getByText('task-2 · 2/3 done')).toBeDefined()
   })
 
   it('counts the whole board once the read settles', () => {
@@ -152,10 +158,11 @@ describe('WorkflowTaskRow', () => {
     expect(screen.getByText('2 tasks')).toBeDefined()
   })
 
-  it('names the transition for a cancelled task', () => {
-    render(<WorkflowTaskRow {...props(running({ action: 'cancel', task_id: 'task-3' }))} />)
+  it('names the task a cancellation acts on', () => {
+    render(<WorkflowTaskRow {...props(running({ action: 'cancel', task_id: 'task-3' }), zh)} />)
 
-    expect(screen.getByText('Cancel task-3')).toBeDefined()
+    expect(screen.getByText('取消任务')).toBeDefined()
+    expect(screen.getByText('task-3')).toBeDefined()
   })
 })
 
@@ -165,6 +172,13 @@ describe('the plugin’s other tool rows', () => {
 
     expect(screen.getByText('Browse directory')).toBeDefined()
     expect(screen.getByText('Data · 2 levels')).toBeDefined()
+  })
+
+  it('names the workspace root and the entries a settled listing returned', () => {
+    const output = JSON.stringify({ path: '.', directories: ['Data'], files: ['a', 'b'], links: [], truncated: false })
+    render(<ListRow {...props(settled({}, [text(output)]), zh)} />)
+
+    expect(screen.getByText('工作区根目录 · 3 项')).toBeDefined()
   })
 
   it('names the action and the role a manifest call targets', () => {
@@ -216,6 +230,40 @@ describe('the plugin’s other tool rows', () => {
   })
 })
 
+describe('expanded result rendering', () => {
+  it('renders a JSON result as the inspector tree instead of a raw dump', () => {
+    const output = JSON.stringify({ status: 'success', pdf: 'Report/main.pdf', log: 'line one\nline two' })
+    render(<CompileReportRow {...props(settled({ path: 'Report/main.tex' }, [text(output)]))} />)
+
+    fireEvent.click(row())
+
+    // Both panes — the arguments and the result — are containers, so no pane
+    // falls back to the plain text block.
+    expect(document.querySelectorAll(`.${css.toolIoTree}`)).toHaveLength(2)
+    expect(document.querySelector(`.${css.toolIoText}`)).toBeNull()
+  })
+
+  it('keeps a failure message, which is not JSON, in the text block', () => {
+    const output = 'task-2 cannot be cancelled From completed'
+    render(<CompileReportRow {...props(settled({ path: 'Report/main.tex' }, [text(output)], { isError: true }))} />)
+
+    fireEvent.click(row())
+
+    // Twice: once as the collapsed failure summary, once in the result pane.
+    expect(screen.getAllByText(output)).toHaveLength(2)
+    expect(document.querySelectorAll(`.${css.toolIoTree}`)).toHaveLength(1)
+  })
+
+  it('keeps a streaming argument prefix, which is not JSON, in the text block', () => {
+    render(<ReferenceExtractRow {...props({ callId: 'call-1', argsRaw: '{"path":"Ref' })} />)
+
+    fireEvent.click(row())
+
+    expect(screen.getByText('{"path":"Ref')).toBeDefined()
+    expect(document.querySelector(`.${css.toolIoTree}`)).toBeNull()
+  })
+})
+
 describe('row chrome', () => {
   it('separates the row label from its summary', () => {
     render(<SendToAgentRow {...props(running({ role: 'THEORY', prompt: 'derive it' }))} />)
@@ -226,7 +274,7 @@ describe('row chrome', () => {
   it('drops the separator together with a summary it has nothing to say in', () => {
     render(<WorkflowTaskRow {...props(running({ action: 'read' }))} />)
 
-    expect(screen.getByText('Report task board')).toBeDefined()
+    expect(screen.getByText('Read task board')).toBeDefined()
     expect(document.querySelector(`.${css.toolSep}`)).toBeNull()
   })
 

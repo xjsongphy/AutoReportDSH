@@ -175,7 +175,30 @@ function checklistSize(steps: unknown): { done: number; total: number } | undefi
 }
 
 /**
- * Collapsed summary for one `workflow_task` call.
+ * Row label for one `workflow_task` call: the board operation it performs.
+ *
+ * A whole-board read and an update name the board, while cancel and reopen
+ * name the single task they act on. An action the wire enum does not carry
+ * cannot reach a row, so anything else reads as the bare board.
+ * @param argsRaw - raw argument JSON.
+ * @param t - translator for the row's copy.
+ * @returns the row label.
+ */
+export function workflowTaskTitle(argsRaw: string, t: ToolRowText): string {
+  const args = parseArgs(argsRaw)
+  const action = args === undefined ? undefined : asString(args.action)
+  switch (action) {
+    case 'read': return t('boardReadTitle')
+    case 'update': return t('boardUpdateTitle')
+    case 'cancel': return t('boardCancelTitle')
+    case 'reopen': return t('boardReopenTitle')
+    default: return t('workflowTaskTitle')
+  }
+}
+
+/**
+ * Collapsed summary for one `workflow_task` call: the task it names, and what
+ * the call says about it.
  *
  * `update` counts the replacement checklist the call itself carries, so it
  * needs no result. A whole-board `read` is the one label that does: the task
@@ -183,7 +206,7 @@ function checklistSize(steps: unknown): { done: number; total: number } | undefi
  * @param argsRaw - raw argument JSON.
  * @param output - flattened result text, or null while still running.
  * @param t - translator for the row's copy.
- * @returns the summary, or undefined when the call is not readable.
+ * @returns the summary, or undefined when the call names nothing to summarise.
  */
 export function workflowTaskSummary(
   argsRaw: string,
@@ -192,45 +215,45 @@ export function workflowTaskSummary(
 ): string | undefined {
   const args = parseArgs(argsRaw)
   if (args === undefined) return undefined
-  const action = args.action
+  const action = asString(args.action)
   const taskId = asString(args.task_id)
-  if (action === 'read') {
-    if (taskId === undefined) {
-      const size = boardSize(output)
-      return size === undefined ? undefined : `${size} ${t('tasks')}`
-    }
-    const status = taskStatus(output)
-    const label = `${t('read')} ${taskId}`
-    return status === undefined ? label : `${label} · ${status}`
+  if (action === 'read' && taskId === undefined) {
+    const size = boardSize(output)
+    return size === undefined ? undefined : `${size} ${t('tasks')}`
   }
-  const verb = action === 'update'
-    ? t('update')
-    : action === 'cancel'
-      ? t('cancel')
-      : action === 'reopen' ? t('reopen') : undefined
-  if (verb === undefined) return undefined
-  const label = taskId === undefined ? verb : `${verb} ${taskId}`
-  if (action !== 'update') return label
-  const size = checklistSize(args.steps)
-  return size === undefined ? label : `${label} · ${size.done}/${size.total} ${t('checked')}`
+  if (taskId === undefined) return undefined
+  if (action === 'read') {
+    const status = taskStatus(output)
+    return status === undefined ? taskId : `${taskId} · ${status}`
+  }
+  if (action === 'update') {
+    const size = checklistSize(args.steps)
+    return size === undefined ? taskId : `${taskId} · ${size.done}/${size.total} ${t('checked')}`
+  }
+  return action === 'cancel' || action === 'reopen' ? taskId : undefined
 }
 
 /**
- * Collapsed summary for one `list` call: the directory, and how deep it goes.
+ * Collapsed summary for one `list` call: the directory, how deep it goes, and
+ * how much a settled listing held.
  *
- * The path is optional on the wire (absent means the workspace root), so an
- * unreadable path reads as `.` rather than as no summary at all.
+ * The path is optional on the wire and defaults to the workspace root, which
+ * is named rather than shown as a bare `.`.
  * @param argsRaw - raw argument JSON.
- * @param _output - unused; a listing says nothing the row does not already have.
+ * @param output - flattened result text, or null while still running.
  * @param t - translator for the row's copy.
  * @returns the summary, or undefined when the arguments are not readable.
  */
-export function listSummary(argsRaw: string, _output: string | null, t: ToolRowText): string | undefined {
+export function listSummary(argsRaw: string, output: string | null, t: ToolRowText): string | undefined {
   const args = parseArgs(argsRaw)
   if (args === undefined) return undefined
-  const path = asString(args.path) ?? '.'
+  const path = asString(args.path)
+  const parts = [path === undefined || path === '.' ? t('workspaceRoot') : path]
   const depth = asNumber(args.depth)
-  return depth === undefined || depth <= 1 ? path : `${path} · ${depth} ${t('levels')}`
+  if (depth !== undefined && depth > 1) parts.push(`${depth} ${t('levels')}`)
+  const size = listingSize(output)
+  if (size !== undefined) parts.push(`${size} ${t('entries')}`)
+  return parts.join(' · ')
 }
 
 /**
@@ -252,25 +275,45 @@ export function manifestTitle(argsRaw: string, t: ToolRowText): string {
 
 /**
  * Collapsed summary for one `manifest` call: which role's manifest, and how
- * many file descriptions an update carries.
+ * many files it covers — the descriptions an update writes, or the entries a
+ * settled read reports.
  *
- * A call that targets the caller's own role names no role on the wire, and a
- * call that writes nothing names no count; each is left out rather than
+ * A call that targets the caller's own role names no role on the wire, and an
+ * update that writes nothing names no count; each is left out rather than
  * invented.
  * @param argsRaw - raw argument JSON.
- * @param _output - unused; the manifest body belongs behind the disclosure.
+ * @param output - flattened result text, or null while still running.
  * @param t - translator for the row's copy.
  * @returns the summary, or undefined when the call names nothing to summarise.
  */
-export function manifestSummary(argsRaw: string, _output: string | null, t: ToolRowText): string | undefined {
+export function manifestSummary(argsRaw: string, output: string | null, t: ToolRowText): string | undefined {
   const args = parseArgs(argsRaw)
   if (args === undefined) return undefined
   const role = roleLabel(args.agent)
-  const count = Array.isArray(args.files) && args.files.length > 0
-    ? `${args.files.length} ${t('files')}`
-    : undefined
-  if (role === undefined) return count
-  return count === undefined ? role : `${role} · ${count}`
+  const writing = asString(args.action) === 'update'
+  // An update's count is what the call carries; a read's is what it returned.
+  const count = writing
+    ? (Array.isArray(args.files) ? args.files.length : 0)
+    : manifestSize(output)
+  const counted = count === undefined || (writing && count === 0) ? undefined : `${count} ${t('files')}`
+  if (role === undefined) return counted
+  return counted === undefined ? role : `${role} · ${counted}`
+}
+
+/** Entries a settled listing returned, or undefined when it is unreadable. */
+function listingSize(output: string | null): number | undefined {
+  const parsed = output === null ? undefined : asObject(parseResult(output))
+  if (parsed === undefined) return undefined
+  const parts = [parsed.directories, parsed.files, parsed.links]
+  if (!parts.every(part => Array.isArray(part))) return undefined
+  return (parts as unknown[][]).reduce((total, part) => total + part.length, 0)
+}
+
+/** Files a settled manifest read reports, or undefined when it is unreadable. */
+function manifestSize(output: string | null): number | undefined {
+  const parsed = output === null ? undefined : asObject(parseResult(output))
+  const files = parsed === undefined ? undefined : parsed.files
+  return Array.isArray(files) ? files.length : undefined
 }
 
 /**

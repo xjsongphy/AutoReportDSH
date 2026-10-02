@@ -72,6 +72,7 @@ export const css = {
   toolIoLabel: 'ar-tool-io-label',
   toolIoDivider: 'ar-tool-io-divider',
   toolIoText: 'ar-tool-io-text',
+  toolIoTree: 'ar-tool-io-tree',
   toolInspect: 'ar-tool-inspect',
 } as const
 
@@ -659,6 +660,11 @@ const STYLESHEET = `
 }
 .${css.toolIoText}[data-error] {
   color: var(--dsw-alias-state-error-primary);
+}
+/* DSH's inspector tree draws itself; the section only has to let it shrink
+   inside the grid column instead of forcing the card wider. */
+.${css.toolIoTree} {
+  min-width: 0;
 }
 .${css.toolInspect} {
   align-self: flex-start;
