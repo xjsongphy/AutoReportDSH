@@ -50,7 +50,7 @@ describe('autoreport preset contribution', () => {
     apply(context)
 
     expect(tools.sort()).toEqual([
-      'install_python_package', 'manifest', 'reference_extract', 'send_to_agent', 'workflow_task',
+      'extract_pdf', 'install_python_package', 'manifest', 'send_to_agent', 'workflow_task',
     ])
     expect(skills).toEqual([])
     expect(referencesProvider).toBe(1)

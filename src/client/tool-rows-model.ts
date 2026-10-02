@@ -317,7 +317,7 @@ function manifestSize(output: string | null): number | undefined {
 }
 
 /**
- * Collapsed summary for one `reference_extract` call: the PDF it reads.
+ * Collapsed summary for one `extract_pdf` call: the PDF it reads.
  * @param argsRaw - raw argument JSON.
  * @param _output - unused; the extraction result belongs behind the disclosure.
  * @param _t - unused; a path needs no copy.

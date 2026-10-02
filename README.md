@@ -177,7 +177,7 @@ $DSH_HOME/
 
 | Role | Writes | Reads | Execution |
 |---|---|---|---|
-| Main | `Outline/` | the whole workspace | `reference_extract`; approval-backed `install_python_package` |
+| Main | `Outline/` | the whole workspace | `extract_pdf`; approval-backed `install_python_package` |
 | Theory | `Theory/` | the whole workspace | none |
 | Data Analysis | `Data/Processed/` | the whole workspace | foreground Bash on Linux/macOS; PowerShell on Windows |
 | Plotting | `Plots/` | the whole workspace | foreground Bash on Linux/macOS; PowerShell on Windows |
@@ -281,7 +281,7 @@ license, so its two vendored documents carry none.
 
 Referenced at runtime rather than vendored:
 
-- [MinerU](https://github.com/opendatalab/MinerU) — the `mineru-open-api` CLI called by `reference_extract` to extract `References/` PDFs into `Outline/.cache/mineru/`
+- [MinerU](https://github.com/opendatalab/MinerU) — the `mineru-open-api` CLI called by `extract_pdf` to extract `References/` PDFs into `Outline/.cache/mineru/`
 
 ## License
 

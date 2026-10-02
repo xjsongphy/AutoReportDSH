@@ -52,7 +52,7 @@ platform.
   `write`/`edit` targets; the host adapter rewrites relative paths to absolute
   workspace paths before the stock DSH tools run.
   MAIN uses `python_environment` for approved package changes and
-  `reference_extract` for MinerU PDF extraction; it has no general shell.
+  `extract_pdf` for MinerU PDF extraction; it has no general shell.
   The `list` tool rename, provider-backed filesystem contract, MAIN deliverables,
   task cancellation, and search limits are tracked
   in [Role filesystem, delivery, and cancellation decisions](role-filesystem-decisions.md).

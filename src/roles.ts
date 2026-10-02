@@ -43,7 +43,7 @@ export const BASE_TOOLS = [
 /** Coordination/protocol tools MAIN uses to orchestrate the workflow. */
 const MAIN_COORDINATOR_TOOLS = [
   'manifest', 'workflow_task', 'send_to_agent', 'ask_user_question',
-  'reference_extract', 'install_python_package',
+  'extract_pdf', 'install_python_package',
 ] as const
 
 /** Shared handoff-protocol tools for specialist roles. */

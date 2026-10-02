@@ -14,7 +14,7 @@ import { installManifestTool } from './tools/manifest.js'
 import { createSendToAgentTool, installSendToAgentGuidance } from './tools/send-to-agent.js'
 import { installWorkflowTaskTool } from './tools/workflow-task.js'
 import { installPythonPackageTool } from './tools/python-package-install.js'
-import { installReferenceExtractTool } from './tools/reference-extract.js'
+import { installReferenceExtractTool } from './tools/extract-pdf.js'
 import type {} from './runtime.js'
 
 export const name = 'autoreport-preset'

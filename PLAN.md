@@ -9,7 +9,7 @@ language and workflow defaults live in the `autoreport` DSH user-settings
 namespace. Data Analysis and Plotting receive a foreground platform shell:
 confined Bash on Linux/macOS and the DSH PowerShell tool on Windows. MAIN uses
 `install_python_package` for approved package installation. PDF extraction is
-documented by the `reference_extract` tool itself; REPORT also has
+documented by the `extract_pdf` tool itself; REPORT also has
 `render_report_page` for visual review.
 
 **Rev 12 context and capability amendment.** A shared code-owned role roster
@@ -20,7 +20,7 @@ shadowed for AutoReport, and non-compute roles hide inherited shell tools.
 Compute roles receive a scoped shell tool without an escalation parameter and
 fail closed when DSH cannot provide full file confinement. All roles receive
 bounded `list`/`grep`; Report can render PDF pages to PNG for `read_image`.
-The PDF extraction recipe skill is removed now that `reference_extract` owns
+The PDF extraction recipe skill is removed now that `extract_pdf` owns
 its invocation. Python runtime context names the selected interpreter only
 for Main and compute roles, with shell facts only for compute roles.
 
@@ -656,7 +656,7 @@ the complete log path. `render_report_page` renders one PDF page to PNG in
 AutoReport-owned skills are registered in role-bound subagent child scopes rather than
 preset-wide: PLOTTING gets `plotting-quality`; REPORT gets the report writer and, for
 Typst, the `typst` reference bundle; THEORY and DATA_ANALYSIS get none. MAIN uses the
-`reference_extract` tool description for PDF extraction. Static bundled resources use DSH's normal skill
+`extract_pdf` tool description for PDF extraction. Static bundled resources use DSH's normal skill
 registration and publish `resourceBase` from their own layout — a skill shipped as a
 directory bundle (`skills/<name>/SKILL.md` beside its references) advertises the anchor,
 a flat document does not, so a body that talks about the experiment workspace is never

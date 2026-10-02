@@ -2,9 +2,9 @@ import { mkdirSync, mkdtempSync, realpathSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { EXTRACT_TIMEOUT_MS, MINERU_TIMEOUT_SECONDS, installReferenceExtractTool } from '../src/tools/reference-extract.js'
+import { EXTRACT_TIMEOUT_MS, MINERU_TIMEOUT_SECONDS, installReferenceExtractTool } from '../src/tools/extract-pdf.js'
 
-describe('reference_extract', () => {
+describe('extract_pdf', () => {
   it('passes a References PDF and an Outline output directory as fixed argv', async () => {
     const root = mkdtempSync(join(tmpdir(), 'autoreport-reference-'))
     mkdirSync(join(root, 'References'))

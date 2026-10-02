@@ -50,7 +50,7 @@ const TOOL_ROWS = [
   ['workflow_task', WorkflowTaskRow],
   ['list', ListRow],
   ['manifest', ManifestRow],
-  ['reference_extract', ReferenceExtractRow],
+  ['extract_pdf', ReferenceExtractRow],
   ['report_workflow', ReportWorkflowRow],
   ['install_python_package', InstallPackageRow],
   ['compile_report', CompileReportRow],

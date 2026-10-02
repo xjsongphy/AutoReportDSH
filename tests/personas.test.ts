@@ -71,7 +71,7 @@ const FORBIDDEN_PERSONA_PATTERNS: readonly { pattern: RegExp; reason: string }[]
   { pattern: /report_exec/u, reason: 'retired tool; do not tell the model what not to call' },
   { pattern: /delegation_revision/u, reason: 'delegation mechanics belong to the report_workflow tool description' },
   { pattern: /block_type(?=="|:|\s)/u, reason: 'delegation mechanics belong to the report_workflow tool description; the missing_dependency policy names the blocker itself' },
-  { pattern: /mineru-open-api/u, reason: 'PDF extraction details live in the reference_extract tool' },
+  { pattern: /mineru-open-api/u, reason: 'PDF extraction details live in the extract_pdf tool' },
   { pattern: /apply_patch/u, reason: 'apply_patch is not mounted in DSH; auto-validation claims are false' },
   { pattern: /automatically validated/iu, reason: 'runtime auto-validation claims must be true' },
   { pattern: /do the work yourself/iu, reason: 'contradicts MAIN coordinate-do-not-execute' },
@@ -90,7 +90,7 @@ describe('persona slimming', () => {
     const text = loadMainPersona()
     expect(text).toContain('send_to_agent')
     expect(text).not.toContain('report_task')
-    expect(text).toContain('reference_extract')
+    expect(text).toContain('extract_pdf')
     expect(text).toContain('install_python_package')
     expect(text).not.toContain('bash')
     expect(text).not.toContain('Use `list` for directory discovery')

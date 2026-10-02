@@ -273,7 +273,7 @@ export const ManifestRow = toolRow({
   summary: manifestSummary,
 })
 
-/** One `reference_extract` PDF extraction. */
+/** One `extract_pdf` PDF extraction. */
 export const ReferenceExtractRow = toolRow({
   title: 'referenceExtractTitle',
   icon: <IconPaperclipOutline16 />,

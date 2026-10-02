@@ -128,7 +128,7 @@ describe('autoreport tool rows', () => {
 
     expect(slots.entries('tool.call.toolview').map(entry => entry.options.key).sort())
       .toEqual([
-        'compile_report', 'install_python_package', 'list', 'manifest', 'reference_extract',
+        'compile_report', 'extract_pdf', 'install_python_package', 'list', 'manifest',
         'render_report_page', 'report_workflow', 'send_to_agent', 'workflow_task',
       ])
     expect(locale.bind(TOOL_NS)('tasks')).toBe('个任务')
