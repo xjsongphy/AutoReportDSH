@@ -136,25 +136,44 @@ export const zh: Record<AutoReportLocaleKey, string> = {
  */
 export type ToolRowLocaleKey =
   | 'sendToAgentTitle' | 'workflowTaskTitle'
+  | 'listTitle' | 'manifestTitle' | 'referenceExtractTitle' | 'reportWorkflowTitle'
+  | 'installPackageTitle' | 'compileReportTitle' | 'renderPageTitle'
   | 'running' | 'failed' | 'stopped'
-  | 'tasks'
+  | 'tasks' | 'files' | 'levels'
   | 'read' | 'update' | 'cancel' | 'reopen' | 'resend' | 'checked'
+  | 'completed' | 'blocked' | 'succeeded' | 'timedOut' | 'infraError'
+  | 'page'
   | 'in' | 'out' | 'inspect'
 
 /** English copy for the tool rows. */
 export const toolRowEn: Record<ToolRowLocaleKey, string> = {
   sendToAgentTitle: 'Delegate to subagent',
   workflowTaskTitle: 'Report task board',
+  listTitle: 'Browse directory',
+  manifestTitle: 'Delivery manifest',
+  referenceExtractTitle: 'Extract reference',
+  reportWorkflowTitle: 'Report task outcome',
+  installPackageTitle: 'Install Python package',
+  compileReportTitle: 'Compile report',
+  renderPageTitle: 'Render report page',
   running: 'Running',
   failed: 'Failed',
   stopped: 'Stopped',
   tasks: 'tasks',
+  files: 'files',
+  levels: 'levels',
   read: 'Read',
   update: 'Update',
   cancel: 'Cancel',
   reopen: 'Reopen',
   resend: 'resend',
   checked: 'done',
+  completed: 'Completed',
+  blocked: 'Blocked',
+  succeeded: 'Succeeded',
+  timedOut: 'Timed out',
+  infraError: 'Environment error',
+  page: 'page {n}',
   in: 'IN',
   out: 'OUT',
   inspect: 'Inspect',
@@ -164,16 +183,31 @@ export const toolRowEn: Record<ToolRowLocaleKey, string> = {
 export const toolRowZh: Record<ToolRowLocaleKey, string> = {
   sendToAgentTitle: '委派子代理',
   workflowTaskTitle: '报告任务板',
+  listTitle: '浏览目录',
+  manifestTitle: '交付清单',
+  referenceExtractTitle: '提取参考文献',
+  reportWorkflowTitle: '回报任务',
+  installPackageTitle: '安装 Python 包',
+  compileReportTitle: '编译报告',
+  renderPageTitle: '预览报告页',
   running: '进行中',
   failed: '失败',
   stopped: '已中断',
   tasks: '个任务',
+  files: '个文件',
+  levels: '层',
   read: '读',
   update: '更新',
   cancel: '取消',
   reopen: '重开',
   resend: '重派',
   checked: '勾选',
+  completed: '完成',
+  blocked: '受阻',
+  succeeded: '成功',
+  timedOut: '超时',
+  infraError: '环境错误',
+  page: '第 {n} 页',
   in: '输入',
   out: '输出',
   inspect: '查看',

@@ -7,8 +7,15 @@ import { describe, expect, it } from 'vitest'
 import { toolRowEn, toolRowZh } from '../../src/client/locales.js'
 import {
   callArgs,
+  compileReportSummary,
   flattenResult,
+  installPackageSummary,
+  listSummary,
+  manifestSummary,
   parseArgs,
+  referenceExtractSummary,
+  renderPageSummary,
+  reportWorkflowSummary,
   sendToAgentSummary,
   toolRowFacts,
   workflowTaskSummary,
@@ -177,5 +184,153 @@ describe('workflowTaskSummary', () => {
     expect(workflowTaskSummary(JSON.stringify({ action: 'update', task_id: 'task-2', steps }), null, zh))
       .toBe('更新 task-2 · 2/3 勾选')
     expect(workflowTaskSummary(JSON.stringify({ action: 'read' }), JSON.stringify({ tasks: [] }), zh)).toBe('0 个任务')
+  })
+})
+
+describe('listSummary', () => {
+  it('names the directory being listed', () => {
+    expect(listSummary(JSON.stringify({ path: 'Data' }), null, en)).toBe('Data')
+  })
+
+  it('counts the levels only when the call descends past the first', () => {
+    expect(listSummary(JSON.stringify({ path: 'Data', depth: 3 }), null, en)).toBe('Data · 3 levels')
+    expect(listSummary(JSON.stringify({ path: 'Data', depth: 3 }), null, zh)).toBe('Data · 3 层')
+    expect(listSummary(JSON.stringify({ path: 'Data', depth: 1 }), null, en)).toBe('Data')
+  })
+
+  it('reads an absent path as the workspace root', () => {
+    expect(listSummary(JSON.stringify({}), null, en)).toBe('.')
+    expect(listSummary(JSON.stringify({ depth: 2 }), null, en)).toBe('. · 2 levels')
+  })
+
+  it('is empty for arguments it cannot read', () => {
+    expect(listSummary('{"path":"Da', null, en)).toBeUndefined()
+  })
+})
+
+describe('manifestSummary', () => {
+  it('names the role a read targets', () => {
+    expect(manifestSummary(JSON.stringify({ action: 'read', agent: 'theory' }), null, en)).toBe('Read THEORY')
+  })
+
+  it('is the bare verb when the call targets the caller’s own role', () => {
+    expect(manifestSummary(JSON.stringify({}), null, en)).toBe('Read')
+  })
+
+  it('counts the file descriptions an update carries', () => {
+    const files = [{ path: 'a' }, { path: 'b' }]
+    expect(manifestSummary(JSON.stringify({ action: 'update', agent: 'plotting', files }), null, en))
+      .toBe('Update PLOTTING · 2 files')
+    expect(manifestSummary(JSON.stringify({ action: 'update', agent: 'plotting', files }), null, zh))
+      .toBe('更新 PLOTTING · 2 个文件')
+  })
+
+  it('drops the count when the update carries none', () => {
+    expect(manifestSummary(JSON.stringify({ action: 'update', agent: 'main' }), null, en)).toBe('Update MAIN')
+    expect(manifestSummary(JSON.stringify({ action: 'update', agent: 'main', files: [] }), null, en)).toBe('Update MAIN')
+  })
+
+  it('is empty for an unknown action or unreadable arguments', () => {
+    expect(manifestSummary(JSON.stringify({ action: 'delete' }), null, en)).toBeUndefined()
+    expect(manifestSummary('{"action":"upd', null, en)).toBeUndefined()
+  })
+})
+
+describe('referenceExtractSummary', () => {
+  it('names the PDF being extracted', () => {
+    expect(referenceExtractSummary(JSON.stringify({ path: 'References/教材讲义.pdf' }), null, en))
+      .toBe('References/教材讲义.pdf')
+  })
+
+  it('is empty without a path or for unreadable arguments', () => {
+    expect(referenceExtractSummary(JSON.stringify({}), null, en)).toBeUndefined()
+    expect(referenceExtractSummary('{"path":"Ref', null, en)).toBeUndefined()
+  })
+})
+
+describe('reportWorkflowSummary', () => {
+  it('names the task and its completed outcome', () => {
+    expect(reportWorkflowSummary(JSON.stringify({ task_id: 'task-2', status: 'success' }), null, en))
+      .toBe('task-2 · Completed')
+    expect(reportWorkflowSummary(JSON.stringify({ task_id: 'task-2', status: 'success' }), null, zh))
+      .toBe('task-2 · 完成')
+  })
+
+  it('names the blockage a blocked report carries', () => {
+    expect(reportWorkflowSummary(JSON.stringify({ task_id: 'task-2', status: 'blocked', block_type: 'missing_data' }), null, en))
+      .toBe('task-2 · Blocked (missing_data)')
+  })
+
+  it('is the bare blockage when no type was given', () => {
+    expect(reportWorkflowSummary(JSON.stringify({ task_id: 'task-2', status: 'blocked' }), null, en))
+      .toBe('task-2 · Blocked')
+  })
+
+  it('is empty without a task or for an unknown status', () => {
+    expect(reportWorkflowSummary(JSON.stringify({ status: 'success' }), null, en)).toBeUndefined()
+    expect(reportWorkflowSummary(JSON.stringify({ task_id: 'task-2', status: 'maybe' }), null, en)).toBeUndefined()
+    expect(reportWorkflowSummary('{"task_id":"task', null, en)).toBeUndefined()
+  })
+})
+
+describe('installPackageSummary', () => {
+  it('names the requirement being installed', () => {
+    expect(installPackageSummary(JSON.stringify({ package: 'scipy==1.14.1' }), null, en)).toBe('scipy==1.14.1')
+  })
+
+  it('is empty without a package or for unreadable arguments', () => {
+    expect(installPackageSummary(JSON.stringify({}), null, en)).toBeUndefined()
+    expect(installPackageSummary('{"packa', null, en)).toBeUndefined()
+  })
+})
+
+describe('compileReportSummary', () => {
+  const out = (status: string) => JSON.stringify({ status })
+
+  it('names the entry file before the compile settles', () => {
+    expect(compileReportSummary(JSON.stringify({ path: 'Report/main.tex' }), null, en)).toBe('Report/main.tex')
+  })
+
+  it('adds the settled status once the compile answers', () => {
+    expect(compileReportSummary(JSON.stringify({ path: 'Report/main.tex' }), out('success'), en))
+      .toBe('Report/main.tex · Succeeded')
+    expect(compileReportSummary(JSON.stringify({ path: 'Report/main.tex' }), out('failed'), zh))
+      .toBe('Report/main.tex · 失败')
+  })
+
+  it('names a timeout and an infrastructure failure distinctly', () => {
+    expect(compileReportSummary(JSON.stringify({ path: 'Report/main.tex' }), out('timeout'), en))
+      .toBe('Report/main.tex · Timed out')
+    expect(compileReportSummary(JSON.stringify({ path: 'Report/main.tex' }), out('infrastructure_error'), en))
+      .toBe('Report/main.tex · Environment error')
+  })
+
+  it('keeps the bare path when the result is unreadable or unknown', () => {
+    expect(compileReportSummary(JSON.stringify({ path: 'Report/main.tex' }), 'not json', en)).toBe('Report/main.tex')
+    expect(compileReportSummary(JSON.stringify({ path: 'Report/main.tex' }), out('weird'), en)).toBe('Report/main.tex')
+  })
+
+  it('is empty without a path or for unreadable arguments', () => {
+    expect(compileReportSummary(JSON.stringify({}), null, en)).toBeUndefined()
+    expect(compileReportSummary('{"path":"Rep', null, en)).toBeUndefined()
+  })
+})
+
+describe('renderPageSummary', () => {
+  it('names the page being rendered', () => {
+    expect(renderPageSummary(JSON.stringify({ path: 'Report/main.pdf', page: 3 }), null, en))
+      .toBe('Report/main.pdf · page 3')
+    expect(renderPageSummary(JSON.stringify({ path: 'Report/main.pdf', page: 3 }), null, zh))
+      .toBe('Report/main.pdf · 第 3 页')
+  })
+
+  it('keeps the bare path when the page is missing or malformed', () => {
+    expect(renderPageSummary(JSON.stringify({ path: 'Report/main.pdf' }), null, en)).toBe('Report/main.pdf')
+    expect(renderPageSummary(JSON.stringify({ path: 'Report/main.pdf', page: 'x' }), null, en)).toBe('Report/main.pdf')
+  })
+
+  it('is empty without a path or for unreadable arguments', () => {
+    expect(renderPageSummary(JSON.stringify({ page: 1 }), null, en)).toBeUndefined()
+    expect(renderPageSummary('{"path":"Rep', null, en)).toBeUndefined()
   })
 })

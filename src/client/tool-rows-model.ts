@@ -1,5 +1,5 @@
 /**
- * Pure view model for AutoReport's two dedicated tool rows.
+ * Pure view model for AutoReport's dedicated tool rows.
  *
  * Everything here is a function of the durable call slice alone — no I/O, no
  * session state, no clock — because a tool row renders on live streaming AND
@@ -46,6 +46,17 @@ function asString(value: unknown): string | undefined {
 /** Parsed arguments as an object, or undefined for a truncated prefix. */
 function asObject(value: unknown): Record<string, unknown> | undefined {
   return typeof value === 'object' && value !== null ? value as Record<string, unknown> : undefined
+}
+
+/** Finite number, or undefined. */
+function asNumber(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined
+}
+
+/** A role argument, spelled the way the delegation row spells it. */
+function roleLabel(value: unknown): string | undefined {
+  const role = asString(value)
+  return role === undefined ? undefined : role.toUpperCase()
 }
 
 /**
@@ -202,4 +213,136 @@ export function workflowTaskSummary(
   if (action !== 'update') return label
   const size = checklistSize(args.steps)
   return size === undefined ? label : `${label} · ${size.done}/${size.total} ${t('checked')}`
+}
+
+/**
+ * Collapsed summary for one `list` call: the directory, and how deep it goes.
+ *
+ * The path is optional on the wire (absent means the workspace root), so an
+ * unreadable path reads as `.` rather than as no summary at all.
+ * @param argsRaw - raw argument JSON.
+ * @param _output - unused; a listing says nothing the row does not already have.
+ * @param t - translator for the row's copy.
+ * @returns the summary, or undefined when the arguments are not readable.
+ */
+export function listSummary(argsRaw: string, _output: string | null, t: ToolRowText): string | undefined {
+  const args = parseArgs(argsRaw)
+  if (args === undefined) return undefined
+  const path = asString(args.path) ?? '.'
+  const depth = asNumber(args.depth)
+  return depth === undefined || depth <= 1 ? path : `${path} · ${depth} ${t('levels')}`
+}
+
+/**
+ * Collapsed summary for one `manifest` call: which role's manifest, and how
+ * many file descriptions an update carries.
+ * @param argsRaw - raw argument JSON.
+ * @param _output - unused; the manifest body belongs behind the disclosure.
+ * @param t - translator for the row's copy.
+ * @returns the summary, or undefined when the call is not readable.
+ */
+export function manifestSummary(argsRaw: string, _output: string | null, t: ToolRowText): string | undefined {
+  const args = parseArgs(argsRaw)
+  if (args === undefined) return undefined
+  const action = asString(args.action) ?? 'read'
+  const verb = action === 'read' ? t('read') : action === 'update' ? t('update') : undefined
+  if (verb === undefined) return undefined
+  const role = roleLabel(args.agent)
+  const label = role === undefined ? verb : `${verb} ${role}`
+  if (action !== 'update') return label
+  const count = Array.isArray(args.files) ? args.files.length : 0
+  return count === 0 ? label : `${label} · ${count} ${t('files')}`
+}
+
+/**
+ * Collapsed summary for one `reference_extract` call: the PDF it reads.
+ * @param argsRaw - raw argument JSON.
+ * @param _output - unused; the extraction result belongs behind the disclosure.
+ * @param _t - unused; a path needs no copy.
+ * @returns the summary, or undefined when the path is absent or unreadable.
+ */
+export function referenceExtractSummary(argsRaw: string, _output: string | null, _t: ToolRowText): string | undefined {
+  const args = parseArgs(argsRaw)
+  return args === undefined ? undefined : asString(args.path)
+}
+
+/**
+ * Collapsed summary for one `report_workflow` call: the task and its outcome,
+ * with the blockage type when a blocked report carries one.
+ * @param argsRaw - raw argument JSON.
+ * @param _output - unused; the tool answers with a message id only.
+ * @param t - translator for the row's copy.
+ * @returns the summary, or undefined when the call is not readable.
+ */
+export function reportWorkflowSummary(argsRaw: string, _output: string | null, t: ToolRowText): string | undefined {
+  const args = parseArgs(argsRaw)
+  if (args === undefined) return undefined
+  const taskId = asString(args.task_id)
+  if (taskId === undefined) return undefined
+  const status = asString(args.status)
+  if (status === 'success') return `${taskId} · ${t('completed')}`
+  if (status !== 'blocked') return undefined
+  const blockType = asString(args.block_type)
+  const blocked = t('blocked')
+  return `${taskId} · ${blockType === undefined ? blocked : `${blocked} (${blockType})`}`
+}
+
+/**
+ * Collapsed summary for one `install_python_package` call: the requirement.
+ * @param argsRaw - raw argument JSON.
+ * @param _output - unused; the install log belongs behind the disclosure.
+ * @param _t - unused; a requirement spec needs no copy.
+ * @returns the summary, or undefined when the package is absent or unreadable.
+ */
+export function installPackageSummary(argsRaw: string, _output: string | null, _t: ToolRowText): string | undefined {
+  const args = parseArgs(argsRaw)
+  return args === undefined ? undefined : asString(args.package)
+}
+
+/** Copy key for one settled compile status, or undefined for an unknown one. */
+function compileStatusKey(status: string): ToolRowLocaleKey | undefined {
+  switch (status) {
+    case 'success': return 'succeeded'
+    case 'failed': return 'failed'
+    case 'timeout': return 'timedOut'
+    case 'infrastructure_error': return 'infraError'
+    default: return undefined
+  }
+}
+
+/**
+ * Collapsed summary for one `compile_report` call: the entry file, and the
+ * settled status once the compile answers.
+ * @param argsRaw - raw argument JSON.
+ * @param output - flattened result text, or null while still running.
+ * @param t - translator for the row's copy.
+ * @returns the summary, or undefined when the entry file is absent or unreadable.
+ */
+export function compileReportSummary(argsRaw: string, output: string | null, t: ToolRowText): string | undefined {
+  const args = parseArgs(argsRaw)
+  const path = args === undefined ? undefined : asString(args.path)
+  if (path === undefined) return undefined
+  const settled = output === null ? undefined : asObject(parseResult(output))
+  const status = settled === undefined ? undefined : asString(settled.status)
+  const key = status === undefined ? undefined : compileStatusKey(status)
+  return key === undefined ? path : `${path} · ${t(key)}`
+}
+
+/**
+ * Collapsed summary for one `render_report_page` call: the PDF and the page.
+ *
+ * The page label's word order differs by locale, so the dictionary carries the
+ * number as a `{n}` placeholder instead of the summary assembling it.
+ * @param argsRaw - raw argument JSON.
+ * @param _output - unused; the rendered page is an image block, not text.
+ * @param t - translator for the row's copy.
+ * @returns the summary, or undefined when the PDF path is absent or unreadable.
+ */
+export function renderPageSummary(argsRaw: string, _output: string | null, t: ToolRowText): string | undefined {
+  const args = parseArgs(argsRaw)
+  if (args === undefined) return undefined
+  const path = asString(args.path)
+  if (path === undefined) return undefined
+  const page = asNumber(args.page)
+  return page === undefined ? path : `${path} · ${t('page').replace('{n}', String(page))}`
 }

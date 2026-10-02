@@ -120,14 +120,17 @@ describe('autoreport settings card apply', () => {
 })
 
 describe('autoreport tool rows', () => {
-  it('claims one keyed tool view per workflow-bearing tool', async () => {
+  it('claims one keyed tool view per tool the plugin registers', async () => {
     const { ctx, slots, locale } = await bench()
     declareCards(slots)
 
     await ctx.plugin({ inject: [...inject], apply }).await()
 
     expect(slots.entries('tool.call.toolview').map(entry => entry.options.key).sort())
-      .toEqual(['send_to_agent', 'workflow_task'])
+      .toEqual([
+        'compile_report', 'install_python_package', 'list', 'manifest', 'reference_extract',
+        'render_report_page', 'report_workflow', 'send_to_agent', 'workflow_task',
+      ])
     expect(locale.bind(TOOL_NS)('tasks')).toBe('个任务')
     locale.setLocale('en')
     expect(locale.bind(TOOL_NS)('tasks')).toBe('tasks')
@@ -138,7 +141,7 @@ describe('autoreport tool rows', () => {
     declareCards(slots)
     const fiber = ctx.plugin({ inject: [...inject], apply })
     await fiber.await()
-    expect(slots.entries('tool.call.toolview')).toHaveLength(2)
+    expect(slots.entries('tool.call.toolview')).toHaveLength(9)
 
     await fiber.dispose()
 

@@ -1,8 +1,8 @@
 /**
  * Browser half of AutoReportDSH: the settings card for the `autoreport`
  * namespace, registered into DSH's plugin-configuration tab, a
- * conversation-window model picker for AutoReport subagents, and the two
- * dedicated tool rows for the workflow-bearing tools.
+ * conversation-window model picker for AutoReport subagents, and a dedicated
+ * tool row for each tool the plugin registers itself.
  *
  * Host registration of the namespace already lives in `src/runtime.ts`. This
  * file only owns chrome, controls, and copy. Cross-plugin collaboration is
@@ -22,7 +22,10 @@ import { AUTOREPORT_SETTINGS_NAMESPACE, AutoReportCardController, type Specialis
 import { en, toolRowEn, toolRowZh, zh, type AutoReportLocaleKey, type ToolRowLocaleKey } from './locales.js'
 import { SubagentModelSelect, type SubagentModelChoice, type SubagentModelInjected } from './SubagentModelSelect.js'
 import { installCardStyles } from './styles.js'
-import { SendToAgentRow, TOOL_NS, WorkflowTaskRow } from './tool-rows.js'
+import {
+  CompileReportRow, InstallPackageRow, ListRow, ManifestRow, ReferenceExtractRow,
+  RenderPageRow, ReportWorkflowRow, SendToAgentRow, TOOL_NS, WorkflowTaskRow,
+} from './tool-rows.js'
 
 export type { AutoReportCardProps } from './AutoReportCard.js'
 export type { AutoReportCardFace, AutoReportCardSettings, AutoReportCardState } from './controller.js'
@@ -36,10 +39,22 @@ export const SETTINGS_NS = 'settings.autoreport'
 /** Agent preset whose children get the conversation-window model picker. */
 const AUTOREPORT_PRESET = 'autoreport'
 
-/** Wire tool names this plugin renders itself, paired with their row. */
+/**
+ * Wire tool names this plugin renders itself, paired with their row.
+ *
+ * Every name here is one only this plugin registers; a tool DSH already draws
+ * a row for (`read`, `write`, `bash`, …) keeps DSH's own row untouched.
+ */
 const TOOL_ROWS = [
   ['send_to_agent', SendToAgentRow],
   ['workflow_task', WorkflowTaskRow],
+  ['list', ListRow],
+  ['manifest', ManifestRow],
+  ['reference_extract', ReferenceExtractRow],
+  ['report_workflow', ReportWorkflowRow],
+  ['install_python_package', InstallPackageRow],
+  ['compile_report', CompileReportRow],
+  ['render_report_page', RenderPageRow],
 ] as const
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
@@ -98,7 +113,8 @@ export function apply(ctx: ClientContext): void {
  *
  * The slot is declared by ui-tool; `slots.inject` waits for that declaration,
  * so these land whether or not the chat node mounted first. Keys DSH already
- * ships would be taken over, not shared — neither of these two is shipped.
+ * ships would be taken over, not shared — so `TOOL_ROWS` holds only names DSH
+ * draws no row for, and a stock session's own tool rows are left alone.
  * @param ctx - the browser plugin context.
  */
 function installToolRows(ctx: ClientContext): void {

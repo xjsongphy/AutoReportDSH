@@ -4,7 +4,10 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 import { toolRowEn, toolRowZh, type ToolRowLocaleKey } from '../../src/client/locales.js'
-import { SendToAgentRow, WorkflowTaskRow } from '../../src/client/tool-rows.js'
+import {
+  CompileReportRow, ListRow, ManifestRow, ReferenceExtractRow, RenderPageRow,
+  ReportWorkflowRow, SendToAgentRow, WorkflowTaskRow,
+} from '../../src/client/tool-rows.js'
 import { css } from '../../src/client/styles.js'
 
 afterEach(cleanup)
@@ -153,6 +156,55 @@ describe('WorkflowTaskRow', () => {
     render(<WorkflowTaskRow {...props(running({ action: 'cancel', task_id: 'task-3' }))} />)
 
     expect(screen.getByText('Cancel task-3')).toBeDefined()
+  })
+})
+
+describe('the plugin’s other tool rows', () => {
+  it('names the directory a listing reads and how deep it goes', () => {
+    render(<ListRow {...props(running({ path: 'Data', depth: 2 }))} />)
+
+    expect(screen.getByText('Browse directory')).toBeDefined()
+    expect(screen.getByText('Data · 2 levels')).toBeDefined()
+  })
+
+  it('counts the file descriptions a manifest update carries', () => {
+    const files = [{ path: 'a' }, { path: 'b' }]
+    render(<ManifestRow {...props(running({ action: 'update', agent: 'plotting', files }))} />)
+
+    expect(screen.getByText('Update PLOTTING · 2 files')).toBeDefined()
+  })
+
+  it('names the PDF a reference extraction reads', () => {
+    render(<ReferenceExtractRow {...props(running({ path: 'References/教材讲义.pdf' }))} />)
+
+    expect(screen.getByText('References/教材讲义.pdf')).toBeDefined()
+  })
+
+  it('names the task and the blockage a blocked report carries', () => {
+    render(<ReportWorkflowRow {...props(running({ task_id: 'task-2', status: 'blocked', block_type: 'missing_data' }))} />)
+
+    expect(screen.getByText('Report task outcome')).toBeDefined()
+    expect(screen.getByText('task-2 · Blocked (missing_data)')).toBeDefined()
+  })
+
+  it('adds the settled status to a finished compile', () => {
+    const output = JSON.stringify({ status: 'failed', exitCode: 1 })
+    render(<CompileReportRow {...props(settled({ path: 'Report/main.tex' }, [text(output)]))} />)
+
+    expect(screen.getByText('Report/main.tex · Failed')).toBeDefined()
+  })
+
+  it('names the page a render reads', () => {
+    render(<RenderPageRow {...props(running({ path: 'Report/main.pdf', page: 3 }), zh)} />)
+
+    expect(screen.getByText('Report/main.pdf · 第 3 页')).toBeDefined()
+  })
+
+  it('keeps the bare title while the arguments are still streaming', () => {
+    render(<ReferenceExtractRow {...props({ callId: 'call-1', argsRaw: '{"path":"Ref' })} />)
+
+    expect(screen.getByText('Extract reference')).toBeDefined()
+    expect(document.querySelector(`.${css.toolSep}`)).toBeNull()
   })
 })
 

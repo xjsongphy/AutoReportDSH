@@ -64,12 +64,17 @@ platform.
   application UI. That page lists each language's projects (derived from the
   Client's session store — a project is a workspace an AutoReport session has
   conversed in) with one control that moves a project to the other language.
-- **Web tool rows:** `send_to_agent` and `workflow_task` claim their keyed
-  `tool.call.toolview` entry, so a delegation reads as `→ DATA_ANALYSIS · <subject>`
-  and a board operation as `update task-2 · 3/5 勾选` instead of DSH's generic
-  "Tool call" row. This is additive — the shipped chat node keeps owning the
-  slot, and every other tool falls back unchanged. DSH's Web client does not read
-  `ToolDefinition.presentCall`/`presentResult`, so those four declarations only
+- **Web tool rows:** every tool this plugin registers claims its keyed
+  `tool.call.toolview` entry, so a delegation reads as `→ DATA_ANALYSIS · <subject>`,
+  a board operation as `update task-2 · 3/5 勾选`, a listing as `Data · 2 层`, and a
+  compile as `Report/main.tex · 成功` instead of DSH's generic "Tool call" row.
+  This is additive — only wire names DSH ships no row for are claimed, so a stock
+  `read`/`write`/`bash` call keeps DSH's own row, the shipped chat node keeps
+  owning the slot, and every other tool falls back unchanged. The rows are one
+  shell plus a (title key, idle glyph, summary) triple per tool; the glyphs come
+  from ui-primitives except `report_workflow`'s, which this plugin draws itself in
+  the same figma-extract idiom. DSH's Web client does not read
+  `ToolDefinition.presentCall`/`presentResult`, so those declarations only
   serve other clients; the row is what a Web user sees.
 
 ## Report-skill gates

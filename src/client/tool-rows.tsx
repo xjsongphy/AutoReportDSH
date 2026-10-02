@@ -1,11 +1,17 @@
 /**
- * Dedicated tool rows for AutoReport's two workflow-bearing tools.
+ * Dedicated tool rows for AutoReport's own tools.
  *
  * DSH dispatches each tool call to a keyed `tool.call.toolview` entry by wire
  * tool name, and falls back to its generic "Tool call" row when nothing claims
- * the name. Claiming `send_to_agent` and `workflow_task` is therefore additive:
- * a call reads as who was dispatched and which task it touched, instead of an
- * anonymous row whose only clue is the argument JSON.
+ * the name. Claiming a name is therefore additive: a call reads as what it did
+ * — who was dispatched, which task it touched, which directory was listed —
+ * instead of an anonymous row whose only clue is the argument JSON.
+ *
+ * Every row differs from its siblings in exactly three facts (title key, idle
+ * glyph, summary function), so `toolRow` builds them from that triple and the
+ * shell — lifecycle, disclosure, argument/result panes, inspector — is written
+ * once. A tool DSH already ships a row for is deliberately left alone; the wire
+ * names claimed here are the ones only this plugin registers.
  *
  * The collapsed chrome is DSH's own `DisclosureRow` (ui-primitives is a shell
  * platform module, so it is required, never bundled). ui-tool is imported for
@@ -17,15 +23,21 @@
 
 import { useState, type ReactNode } from 'react'
 import {
-  DisclosureRow, IconChecklistOutline14, IconPaperPlaneOutline14, StateDot,
+  DisclosureRow, IconBrowseOutline16, IconChecklistOutline14, IconDownloadOutline16,
+  IconFolderOpenOutline16, IconListPenOutline16, IconPaperclipOutline16, IconPlayOutline16,
+  IconPaperPlaneOutline14, StateDot,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ToolCallViewProps } from '@deepseek-ai/dsh-client-ui-tool/client'
+import { IconFlagOutline14 } from './icons.js'
 import { css } from './styles.js'
 import {
-  callArgs, parseArgs, sendToAgentSummary, toolRowFacts, workflowTaskSummary,
+  callArgs, compileReportSummary, installPackageSummary, listSummary, manifestSummary,
+  parseArgs, referenceExtractSummary, renderPageSummary, reportWorkflowSummary,
+  sendToAgentSummary, toolRowFacts, workflowTaskSummary,
   type ToolRowFacts, type ToolRowState, type ToolRowText,
 } from './tool-rows-model.js'
+import type { ToolRowLocaleKey } from './locales.js'
 
 /** Dictionary namespace shared by both rows. */
 export const TOOL_NS = 'autoreport.tools'
@@ -136,42 +148,105 @@ function RowShell({ title, summary, facts, argsRaw, t, icon, inspect }: RowShell
 }
 
 /**
- * Render one `send_to_agent` delegation.
- * @param props - the slot's owner currency plus this plugin's copy.
- * @returns the delegation row.
+ * Collapsed summary of one call, from its arguments and any settled result.
+ *
+ * A tool that reads nothing back from its result simply ignores the second
+ * argument, so every row shares one signature.
  */
-export function SendToAgentRow({ block, inspect, t }: RowProps) {
-  const argsRaw = callArgs(block)
-  return (
-    <RowShell
-      title={t('sendToAgentTitle')}
-      summary={sendToAgentSummary(argsRaw, t)}
-      facts={toolRowFacts(block)}
-      argsRaw={argsRaw}
-      t={t}
-      icon={<IconPaperPlaneOutline14 />}
-      inspect={inspect}
-    />
-  )
+type RowSummary = (argsRaw: string, output: string | null, t: ToolRowText) => string | undefined
+
+/** The three facts that distinguish one AutoReport tool row from another. */
+interface RowSpec {
+  /** Locale key of the always-visible row label. */
+  readonly title: ToolRowLocaleKey
+  /** Idle glyph for the leading slot. */
+  readonly icon: ReactNode
+  /** What the row says while collapsed. */
+  readonly summary: RowSummary
 }
 
 /**
- * Render one `workflow_task` board operation.
- * @param props - the slot's owner currency plus this plugin's copy.
- * @returns the board row.
+ * Build the row component for one AutoReport tool.
+ * @param spec - the row's title key, idle glyph, and summary function.
+ * @returns the component to register against the tool's wire name.
  */
-export function WorkflowTaskRow({ block, inspect, t }: RowProps) {
-  const argsRaw = callArgs(block)
-  const facts = toolRowFacts(block)
-  return (
-    <RowShell
-      title={t('workflowTaskTitle')}
-      summary={workflowTaskSummary(argsRaw, facts.output, t)}
-      facts={facts}
-      argsRaw={argsRaw}
-      t={t}
-      icon={<IconChecklistOutline14 />}
-      inspect={inspect}
-    />
-  )
+function toolRow(spec: RowSpec) {
+  return function AutoReportToolRow({ block, inspect, t }: RowProps) {
+    const argsRaw = callArgs(block)
+    const facts = toolRowFacts(block)
+    return (
+      <RowShell
+        title={t(spec.title)}
+        summary={spec.summary(argsRaw, facts.output, t)}
+        facts={facts}
+        argsRaw={argsRaw}
+        t={t}
+        icon={spec.icon}
+        inspect={inspect}
+      />
+    )
+  }
 }
+
+/** One `send_to_agent` delegation. */
+export const SendToAgentRow = toolRow({
+  title: 'sendToAgentTitle',
+  icon: <IconPaperPlaneOutline14 />,
+  summary: (argsRaw, _output, t) => sendToAgentSummary(argsRaw, t),
+})
+
+/** One `workflow_task` board operation. */
+export const WorkflowTaskRow = toolRow({
+  title: 'workflowTaskTitle',
+  icon: <IconChecklistOutline14 />,
+  summary: workflowTaskSummary,
+})
+
+/** One `list` directory listing. */
+export const ListRow = toolRow({
+  title: 'listTitle',
+  icon: <IconFolderOpenOutline16 />,
+  summary: listSummary,
+})
+
+/** One `manifest` read or update. */
+export const ManifestRow = toolRow({
+  title: 'manifestTitle',
+  icon: <IconListPenOutline16 />,
+  summary: manifestSummary,
+})
+
+/** One `reference_extract` PDF extraction. */
+export const ReferenceExtractRow = toolRow({
+  title: 'referenceExtractTitle',
+  icon: <IconPaperclipOutline16 />,
+  summary: referenceExtractSummary,
+})
+
+/** One `report_workflow` task-outcome report. */
+export const ReportWorkflowRow = toolRow({
+  title: 'reportWorkflowTitle',
+  icon: <IconFlagOutline14 />,
+  summary: reportWorkflowSummary,
+})
+
+/** One `install_python_package` install. */
+export const InstallPackageRow = toolRow({
+  title: 'installPackageTitle',
+  icon: <IconDownloadOutline16 />,
+  summary: installPackageSummary,
+})
+
+/** One `compile_report` run. */
+export const CompileReportRow = toolRow({
+  title: 'compileReportTitle',
+  icon: <IconPlayOutline16 />,
+  summary: compileReportSummary,
+})
+
+/** One `render_report_page` preview. */
+export const RenderPageRow = toolRow({
+  title: 'renderPageTitle',
+  icon: <IconBrowseOutline16 />,
+  summary: renderPageSummary,
+})
