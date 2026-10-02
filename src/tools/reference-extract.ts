@@ -11,7 +11,10 @@ import { assertWorkspaceRoot, ensureOwnedDirectory, existingWorkspacePath } from
 import { genericCall } from './presentation.js'
 import type AutoReportWorkflowRuntime from '../runtime.js'
 
-const EXTRACT_TIMEOUT_MS = 180_000
+/** CLI-side extraction timeout in seconds, matching the Python reference's default. */
+export const MINERU_TIMEOUT_SECONDS = 300
+/** Wrapper deadline: the CLI's own --timeout fires first so its error lands in diagnostics. */
+export const EXTRACT_TIMEOUT_MS = (MINERU_TIMEOUT_SECONDS + 30) * 1000
 
 export function installReferenceExtractTool(ctx: Context): () => void {
   return ctx.tools.register(defineTool({
@@ -34,13 +37,13 @@ export function installReferenceExtractTool(ctx: Context): () => void {
       if (extname(source.absolute).toLowerCase() !== '.pdf' || !statSync(source.absolute).isFile()) {
         throw new Error('reference_extract expects a PDF file under References/')
       }
-      const stem = parse(source.absolute).name.replace(/[^a-zA-Z0-9_-]/gu, '_') || 'reference'
+      const stem = parse(source.absolute).name.replace(/[<>:"\\|?*\u0000-\u001F]/gu, '_').trim() || 'reference'
       const output = ensureOwnedDirectory(workspace, 'Outline', ['.cache', 'mineru', stem])
       const sandbox = ctx.get('sandbox')
       const subprocess = ctx.get('subprocess')
       if (sandbox === undefined || subprocess === undefined) throw new Error('reference_extract needs DSH sandbox and subprocess services')
       const confined = await sandbox.confine(
-        ['mineru-open-api', 'extract', source.absolute, '-o', output],
+        ['mineru-open-api', 'extract', source.absolute, '--timeout', String(MINERU_TIMEOUT_SECONDS), '-o', output],
         { mode: 'workspace-write', workspaceRoot: realpathSync(join(workspace, 'Outline')), sessionId: agent.session.id as SessionId },
         exec.signal,
       )

@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, realpathSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { installReferenceExtractTool } from '../src/tools/reference-extract.js'
+import { EXTRACT_TIMEOUT_MS, MINERU_TIMEOUT_SECONDS, installReferenceExtractTool } from '../src/tools/reference-extract.js'
 
 describe('reference_extract', () => {
   it('passes a References PDF and an Outline output directory as fixed argv', async () => {
@@ -39,9 +39,10 @@ describe('reference_extract', () => {
     mkdirSync(join(root, 'References'))
     mkdirSync(join(root, 'Outline'))
     writeFileSync(join(root, 'References', 'handout.pdf'), '%PDF')
+    let tool: { execute: (args: unknown, exec: unknown) => Promise<unknown> } | undefined
     let argv: readonly string[] = []
     const ctx = {
-      tools: { register: (definition: unknown) => () => {} },
+      tools: { register: (definition: typeof tool) => { tool = definition; return () => {} } },
       get: (name: string) => name === 'sandbox'
         ? { confine: (args: readonly string[]) => { argv = args; return { argv: args, enforcement: 'full' } } }
         : name === 'subprocess'
@@ -52,8 +53,7 @@ describe('reference_extract', () => {
           : undefined,
     }
     installReferenceExtractTool(ctx as never)
-    const tool = captureRegisteredTool(ctx)
-    await tool.execute({ path: 'References/handout.pdf' }, {
+    await tool?.execute({ path: 'References/handout.pdf' }, {
       agent: { session: { id: 'main', header: { cwd: root } } },
       signal: new AbortController().signal,
     })
