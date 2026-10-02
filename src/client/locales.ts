@@ -202,7 +202,7 @@ export const toolRowZh: Record<ToolRowLocaleKey, string> = {
   boardReadTitle: '读取任务板',
   boardUpdateTitle: '更新任务板',
   boardCancelTitle: '取消任务',
-  boardReopenTitle: '重开任务',
+  boardReopenTitle: '恢复任务',
   listTitle: '浏览目录',
   manifestReadTitle: '读取交付清单',
   manifestUpdateTitle: '修改交付清单',

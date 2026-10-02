@@ -145,7 +145,7 @@ describe('workflowTaskTitle', () => {
     expect(workflowTaskTitle(JSON.stringify({ action: 'read' }), en)).toBe('Read task board')
     expect(workflowTaskTitle(JSON.stringify({ action: 'update' }), en)).toBe('Update task board')
     expect(workflowTaskTitle(JSON.stringify({ action: 'cancel' }), zh)).toBe('取消任务')
-    expect(workflowTaskTitle(JSON.stringify({ action: 'reopen' }), zh)).toBe('重开任务')
+    expect(workflowTaskTitle(JSON.stringify({ action: 'reopen' }), zh)).toBe('恢复任务')
   })
 
   it('falls back to the bare board for an unknown or unreadable action', () => {
