@@ -369,6 +369,11 @@ export function createRoleToolGuard(options: RoleGuardOptions): ToolGuard {
       if (exec.name !== ROLE_PROCESS_TOOL) {
         return `AutoReport process execution on ${process.platform} uses the ${ROLE_PROCESS_TOOL} tool; ${exec.name} is unavailable`
       }
+      // A preset-mounted stock shell can replace the AutoReport compute shell,
+      // which is foreground-only; background jobs are outside the role model.
+      if (record(exec.arguments)?.['run_in_background'] === true) {
+        return `AutoReport shell calls are foreground-only; ${resolved.role} cannot start background jobs`
+      }
     }
     if (!resolved.policy.tools.includes(exec.name)) {
       // Restricted DSH tools should fall through to the registry's ordinary

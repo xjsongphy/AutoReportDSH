@@ -154,8 +154,10 @@ export function installRoutedReportTool(
     if (child.session !== undefined && rolePolicy(entry.binding.role).hasProcessTool && childCtx.get('shell') !== undefined) {
       // Scoped registration gives only these roles a shell. DSH owns its
       // registration lifetime together with the child context.
-      if (process.platform === 'win32') installPowerShellTool(childCtx, { enableRunInBackground: false })
-      else disposers.push(installComputeBashTool(childCtx, entry.binding.role, workflow.config.workspaceRoot))
+      if (process.platform === 'win32') installShellTool(() => installPowerShellTool(childCtx, { enableRunInBackground: false }))
+      else {
+        installShellTool(() => disposers.push(installComputeBashTool(childCtx, entry.binding.role, workflow.config.workspaceRoot)))
+      }
     }
     disposers.push(restrictInheritedShell(childCtx, child, entry.binding.role))
     disposers.push(registerRoleSkills(childCtx, entry.binding.role, language))
@@ -194,6 +196,21 @@ export function installRoutedReportTool(
 
 /** Agents whose report surface this process already routed. */
 const routedChildren = new WeakSet<Agent>()
+
+/**
+ * Install one role shell, tolerating a shell the child's preset already
+ * mounted in its own scope layer (delegated children join the parent's
+ * preset, so base rows like tool-bash can occupy the scope before the
+ * router runs). The stock shell stays in place; the role guard remains
+ * the enforcement backstop (foreground-only, role-scoped sandbox).
+ */
+function installShellTool(install: () => void): void {
+  try {
+    install()
+  } catch (error: unknown) {
+    if (!(error instanceof Error) || !/already registered in this scope/u.test(error.message)) throw error
+  }
+}
 
 /**
  * Register the child report router. Master dsh removed the continuable-setup

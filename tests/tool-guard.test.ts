@@ -160,6 +160,20 @@ describe('AutoReport role tool guard', () => {
       .toContain('generic sandbox escalation')
   })
 
+  it('denies background shell calls even for compute roles', () => {
+    const root = workspace()
+    const registry = new RoleRegistry()
+    const analyst = agent('analyst', root)
+    registry.registerReserved(binding('DATA_ANALYSIS', analyst.id))
+    const guard = createRoleToolGuard({ registry })
+    // Stock dsh bash exposes run_in_background; a preset-mounted shell that
+    // replaces the AutoReport compute shell must not reopen background jobs.
+    expect(guard(execution('bash', { command: 'python a.py', run_in_background: true }, analyst)))
+      .toContain('foreground')
+    expect(guard(execution('bash', { command: 'python a.py', run_in_background: false }, analyst))).toBeUndefined()
+    expect(guard(execution('bash', { command: 'python a.py' }, analyst))).toBeUndefined()
+  })
+
   it('lets hidden optional DSH tools fall through to the registry unknown-tool result', () => {
     const root = workspace()
     const registry = new RoleRegistry()

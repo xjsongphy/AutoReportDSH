@@ -43,8 +43,13 @@ function parameterDescriptionOf(tools: { name: string }[], name: string, paramet
   return description
 }
 
-function childContext(id = 'child-1', cwd?: string) {
-  const tools: { name: string }[] = []
+function childContext(id = 'child-1', cwd?: string, options: {
+  /** Names already registered in the agent's own scope layer (e.g. a preset-mounted shell). */
+  presetTools?: readonly string[]
+  /** Extra services `ctx.get` resolves (e.g. shell/shellEnv for compute installs). */
+  services?: Record<string, unknown>
+} = {}) {
+  const tools: { name: string }[] = options.presetTools?.map(name => ({ name })) ?? []
   const skills: { name: string }[] = []
   const sections: { name: string; text: string }[] = []
   const contexts: { name: string; text: string }[] = []
@@ -71,13 +76,17 @@ function childContext(id = 'child-1', cwd?: string) {
   const listeners = new Map<string, unknown>()
   const ctx = {
     agent: { id: sessionId, session },
-    get: (name: string) => name === 'skills' ? skillsService : undefined,
+    get: (name: string) => name === 'skills' ? skillsService : options.services?.[name],
     on: (event: string, listener: unknown) => {
       listeners.set(event, listener)
       return () => { listeners.delete(event) }
     },
     tools: {
       register: (tool: { name: string }) => {
+        // Mirror the scoped registry: one name per scope layer.
+        if (tools.some(entry => entry.name === tool.name)) {
+          throw new Error(`tool "${tool.name}" is already registered in this scope`)
+        }
         tools.push(tool)
         return () => {}
       },
@@ -166,8 +175,12 @@ describe('report router', () => {
     // personas must never restate them (see tests/personas.test.ts).
     expect(descriptionOf(child.tools, 'report_workflow')).toContain('missing_data')
     expect(descriptionOf(child.tools, 'report_workflow')).toContain('quality')
+    // Small models must see the concrete call shape and the prose-summary trap.
+    expect(descriptionOf(child.tools, 'report_workflow')).toContain('Example call: report_workflow({task_id: "task-1"')
+    expect(descriptionOf(child.tools, 'report_workflow')).toContain('plain-text summary without this call')
     // The patch format is owned by the parameter the model fills, not by the
     // tool description (codex/harness convention: constraints live on params).
+    expect(parameterDescriptionOf(child.tools, 'manifest', 'files')).toContain('description_new')
     expect(parameterDescriptionOf(child.tools, 'manifest', 'notes_patch')).toContain('Line-based patch')
     expect(parameterDescriptionOf(child.tools, 'manifest', 'notes_patch')).toContain('End of File')
     expect(parameterDescriptionOf(child.tools, 'manifest', 'notes_patch')).toContain('rejected')
@@ -178,12 +191,60 @@ describe('report router', () => {
     // delegation policy stays in the preset scope and must not leak here.
     const protocol = child.contexts.find(context => context.name === 'autoreport:report-protocol')
     expect(protocol?.text).toContain('must finish through `report_workflow`')
+    expect(protocol?.text).toContain('invalid workflow report')
     expect(child.sections.some(section => section.name === 'tool:send_to_agent')).toBe(false)
     expect(child.tools.some(tool => tool.name === 'report')).toBe(false)
     expect(
       child.session.snapshotEvents().filter(event => event.type === 'sandbox/mode').map(event => event.data),
     ).toEqual([{ mode: 'workspace-write' }])
     expect(child.providers).toEqual(['autoreport-references'])
+  })
+
+  it('installs the compute shell for DATA_ANALYSIS when the child scope has none', () => {
+    const child = childContext('child-da', '/tmp/autoreport-da-workspace', {
+      services: {
+        shell: { sandboxMode: 'workspace-write' },
+        shellEnv: { collect: () => ({}) },
+      },
+    })
+    const host = hostContext()
+    const roleRegistry = new RoleRegistry()
+    roleRegistry.registerReserved({
+      version: 1,
+      role: 'DATA_ANALYSIS',
+      childSessionId: SessionId('child-da'),
+      parentSessionId: SessionId('main'),
+      workflowId: 'wf',
+      provisioning: 'reserved',
+    })
+    installRoutedReportTool(child.ctx, child.agent as never, host.ctx, routedWorkflow({ roleRegistry }))
+    expect(child.tools.map(tool => tool.name)).toEqual(['manifest', 'report_workflow', 'bash'])
+  })
+
+  it('keeps a preset-mounted shell when the child scope already registered bash', () => {
+    // Children join the parent's preset, so base rows like tool-bash can
+    // already occupy the child's own scope layer; the router must not crash
+    // the child on that duplicate, and the role guard stays the enforcement.
+    const child = childContext('child-da', '/tmp/autoreport-da-workspace', {
+      presetTools: ['bash'],
+      services: {
+        shell: { sandboxMode: 'workspace-write' },
+        shellEnv: { collect: () => ({}) },
+      },
+    })
+    const host = hostContext()
+    const roleRegistry = new RoleRegistry()
+    roleRegistry.registerReserved({
+      version: 1,
+      role: 'DATA_ANALYSIS',
+      childSessionId: SessionId('child-da'),
+      parentSessionId: SessionId('main'),
+      workflowId: 'wf',
+      provisioning: 'reserved',
+    })
+    expect(() => installRoutedReportTool(child.ctx, child.agent as never, host.ctx, routedWorkflow({ roleRegistry })))
+      .not.toThrow()
+    expect(child.tools.map(tool => tool.name)).toEqual(['bash', 'manifest', 'report_workflow'])
   })
 
   it('installs report workflow, compilation, and page rendering only for REPORT', () => {
