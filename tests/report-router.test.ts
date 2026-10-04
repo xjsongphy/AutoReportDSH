@@ -221,6 +221,32 @@ describe('report router', () => {
     expect(child.tools.map(tool => tool.name)).toEqual(['manifest', 'report_workflow', 'bash'])
   })
 
+  it('defers to the preset shell when the child joins a preset', () => {
+    // Preset rows mount lazily on first use, so a joined preset's stock shell
+    // is not in the scope yet at routing time; registering our own bash would
+    // collide with that later mount and fail the child. The role guard keeps
+    // the stock shell inside the role model (foreground-only, no escalation).
+    const child = childContext('child-da', '/tmp/autoreport-da-workspace', {
+      services: {
+        shell: { sandboxMode: 'workspace-write' },
+        shellEnv: { collect: () => ({}) },
+        agentPresets: { composedPreset: () => 'base' },
+      },
+    })
+    const host = hostContext()
+    const roleRegistry = new RoleRegistry()
+    roleRegistry.registerReserved({
+      version: 1,
+      role: 'DATA_ANALYSIS',
+      childSessionId: SessionId('child-da'),
+      parentSessionId: SessionId('main'),
+      workflowId: 'wf',
+      provisioning: 'reserved',
+    })
+    installRoutedReportTool(child.ctx, child.agent as never, host.ctx, routedWorkflow({ roleRegistry }))
+    expect(child.tools.map(tool => tool.name)).toEqual(['manifest', 'report_workflow'])
+  })
+
   it('keeps a preset-mounted shell when the child scope already registered bash', () => {
     // Children join the parent's preset, so base rows like tool-bash can
     // already occupy the child's own scope layer; the router must not crash

@@ -153,10 +153,15 @@ export function installRoutedReportTool(
     }
     if (child.session !== undefined && rolePolicy(entry.binding.role).hasProcessTool && childCtx.get('shell') !== undefined) {
       // Scoped registration gives only these roles a shell. DSH owns its
-      // registration lifetime together with the child context.
-      if (process.platform === 'win32') installShellTool(() => installPowerShellTool(childCtx, { enableRunInBackground: false }))
-      else {
-        installShellTool(() => disposers.push(installComputeBashTool(childCtx, entry.binding.role, workflow.config.workspaceRoot)))
+      // registration lifetime together with the child context. A joined
+      // preset mounts the stock shell into this scope lazily, so the overlay
+      // shell must step aside there — the role guard keeps the stock shell
+      // foreground-only and escalation-free.
+      if (!joinsPreset(childCtx)) {
+        if (process.platform === 'win32') installShellTool(() => installPowerShellTool(childCtx, { enableRunInBackground: false }))
+        else {
+          installShellTool(() => disposers.push(installComputeBashTool(childCtx, entry.binding.role, workflow.config.workspaceRoot)))
+        }
       }
     }
     disposers.push(restrictInheritedShell(childCtx, child, entry.binding.role))
@@ -196,6 +201,20 @@ export function installRoutedReportTool(
 
 /** Agents whose report surface this process already routed. */
 const routedChildren = new WeakSet<Agent>()
+
+/**
+ * Whether the child's scope joined a preset. Preset rows mount lazily on
+ * first use, so a joined preset's stock shell is not visible at routing
+ * time — but it will occupy the scope later. Registered names must not
+ * collide with that mount, and joined presets always carry the platform
+ * shell as a base row.
+ */
+function joinsPreset(childCtx: Context): boolean {
+  const presets = childCtx.get('agentPresets') as
+    | { composedPreset?: (ctx: Context) => string | undefined }
+    | undefined
+  return presets?.composedPreset?.(childCtx) !== undefined
+}
 
 /**
  * Install one role shell, tolerating a shell the child's preset already
