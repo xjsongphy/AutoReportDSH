@@ -268,7 +268,7 @@ export function installManifestTool(ctx: Context, hostCtx: Context, role: AutoRe
         agent: { type: 'string', enum: ['main', 'theory', 'data_analysis', 'plotting', 'report'], description: 'Role whose manifest to act on; defaults to your own role. update may only target your own role.' },
         files: {
           type: 'array',
-          description: `File description updates for files you wrote, at most ${MAX_FILE_ENTRIES} entries.`,
+          description: `File description updates for files you wrote, at most ${MAX_FILE_ENTRIES} entries. Example entry: {"path": "Theory/theory.md", "description_new": "what the file contains and what downstream agents need from it"} — the write field is description_new (description alone is rejected); description_old is an optional mismatch guard.`,
           items: {
             type: 'object',
             additionalProperties: false,

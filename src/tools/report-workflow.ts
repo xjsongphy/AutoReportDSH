@@ -45,6 +45,7 @@ export function installWorkflowReportTool(childCtx: Context, hostCtx: Context, r
         'Success is rejected while your manifest has stale file descriptions — update descriptions for changed files via manifest first.',
         'Reporting is idempotent: repeating the same task_id and delegation_revision returns the already-accepted message instead of reporting twice.',
         'Reporting does not end the turn; finish normally after an accepted report.',
+        'Example call: report_workflow({task_id: "task-1", delegation_revision: 1, status: "success", response: "self-contained outcome summary", produced_files: ["Theory/theory.md"]}). A plain-text summary without this call is not a report and the task fails as an invalid workflow report.',
       ].join(' '),
       parameters: {
         task_id: { type: 'string', required: true, description: 'Exact task id from the task briefing.' },

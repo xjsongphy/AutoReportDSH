@@ -92,7 +92,9 @@ export const CHILD_REPORT_PROTOCOL_CONTEXT = `# Reporting back to Main
 
 Main-dispatched tasks must finish through \`report_workflow\`: never end the turn
 on a dispatch without reporting — there is no other way to finish a dispatched
-task. Do not ask the user questions directly — assume sensibly or report
+task. Ending the turn with only a text summary leaves the task failed as an
+invalid workflow report; the report must be the \`report_workflow\` call itself.
+Do not ask the user questions directly — assume sensibly or report
 \`missing_data\` to Main.
 
 Never install or change Python packages or environments yourself — MAIN owns the
