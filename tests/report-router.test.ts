@@ -5,6 +5,7 @@ import { RoleRegistry } from '../src/workflow/role-registry.js'
 import type { Config } from '../src/config.js'
 import { AUTOREPORT_SCHEMA_VERSION, type RoleBindingSnapshot } from '../src/workflow/events.js'
 import { installRoutedReportTool, type RoutedWorkflow } from '../src/tools/report-router.js'
+import { ROLE_PROCESS_TOOL } from '../src/roles.js'
 import type { AutoReportRecordType } from '../src/workflow/events.js'
 import { sessionIn, workspaceForTests, workflowState } from './helpers/workflow-log.js'
 import { installManifestTool } from '../src/tools/manifest.js'
@@ -106,6 +107,9 @@ function childContext(id = 'child-1', cwd?: string, options: {
     },
     skills: skillsService,
   }
+  // Installers like the stock pwsh tool read injected services as direct
+  // properties (`ctx.shell`), not through `get()`; expose both surfaces.
+  Object.assign(ctx, options.services)
   return {
     ctx: ctx as unknown as Context,
     agent: { id: sessionId, session },
@@ -218,7 +222,7 @@ describe('report router', () => {
       provisioning: 'reserved',
     })
     installRoutedReportTool(child.ctx, child.agent as never, host.ctx, routedWorkflow({ roleRegistry }))
-    expect(child.tools.map(tool => tool.name)).toEqual(['manifest', 'report_workflow', 'bash'])
+    expect(child.tools.map(tool => tool.name)).toEqual(['manifest', 'report_workflow', ROLE_PROCESS_TOOL])
   })
 
   it('defers to the preset shell when the child joins a preset', () => {
@@ -252,7 +256,7 @@ describe('report router', () => {
     // already occupy the child's own scope layer; the router must not crash
     // the child on that duplicate, and the role guard stays the enforcement.
     const child = childContext('child-da', '/tmp/autoreport-da-workspace', {
-      presetTools: ['bash'],
+      presetTools: [ROLE_PROCESS_TOOL],
       services: {
         shell: { sandboxMode: 'workspace-write' },
         shellEnv: { collect: () => ({}) },
@@ -270,7 +274,7 @@ describe('report router', () => {
     })
     expect(() => installRoutedReportTool(child.ctx, child.agent as never, host.ctx, routedWorkflow({ roleRegistry })))
       .not.toThrow()
-    expect(child.tools.map(tool => tool.name)).toEqual(['bash', 'manifest', 'report_workflow'])
+    expect(child.tools.map(tool => tool.name)).toEqual([ROLE_PROCESS_TOOL, 'manifest', 'report_workflow'])
   })
 
   it('installs report workflow, compilation, and page rendering only for REPORT', () => {
