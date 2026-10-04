@@ -209,6 +209,9 @@ describe('report router', () => {
       services: {
         shell: { sandboxMode: 'workspace-write' },
         shellEnv: { collect: () => ({}) },
+        // The stock pwsh installer requires a sandbox policy service whenever
+        // the shell executor confines.
+        sandboxPolicy: { resolve: () => ({ mode: 'workspace-write' }) },
       },
     })
     const host = hostContext()
@@ -260,6 +263,7 @@ describe('report router', () => {
       services: {
         shell: { sandboxMode: 'workspace-write' },
         shellEnv: { collect: () => ({}) },
+        sandboxPolicy: { resolve: () => ({ mode: 'workspace-write' }) },
       },
     })
     const host = hostContext()
