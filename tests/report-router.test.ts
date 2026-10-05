@@ -228,11 +228,12 @@ describe('report router', () => {
     expect(child.tools.map(tool => tool.name)).toEqual(['manifest', 'report_workflow', ROLE_PROCESS_TOOL])
   })
 
-  it('defers to the preset shell when the child joins a preset', () => {
-    // Preset rows mount lazily on first use, so a joined preset's stock shell
-    // is not in the scope yet at routing time; registering our own bash would
-    // collide with that later mount and fail the child. The role guard keeps
-    // the stock shell inside the role model (foreground-only, no escalation).
+  it('defers to the driver shell for a managed child that joins a preset', () => {
+    // A managed (driver-created) child of a preset-joined parent receives the
+    // platform shell from its driver's own lazy scope mount; registering our
+    // own bash first would collide with that mount and fail the child's first
+    // turn. The role guard keeps the stock shell inside the role model
+    // (foreground-only, no escalation).
     const child = childContext('child-da', '/tmp/autoreport-da-workspace', {
       services: {
         shell: { sandboxMode: 'workspace-write' },
@@ -252,6 +253,32 @@ describe('report router', () => {
     })
     installRoutedReportTool(child.ctx, child.agent as never, host.ctx, routedWorkflow({ roleRegistry }))
     expect(child.tools.map(tool => tool.name)).toEqual(['manifest', 'report_workflow'])
+  })
+
+  it('installs the compute shell for a resident child even when the scope joins a preset', () => {
+    // Resident children are created directly: no driver mounts a shell into
+    // their scope, and the AutoReport preset itself carries no shell row, so
+    // deferring on the preset join leaves the role with no process tool at all
+    // (the 2026-10 DATA_ANALYSIS regression).
+    const child = childContext('child-da', '/tmp/autoreport-da-workspace', {
+      services: {
+        shell: { sandboxMode: 'workspace-write' },
+        shellEnv: { collect: () => ({}) },
+        agentPresets: { composedPreset: () => 'base' },
+      },
+    })
+    const host = hostContext()
+    const roleRegistry = new RoleRegistry()
+    roleRegistry.registerReserved({
+      version: 1,
+      role: 'DATA_ANALYSIS',
+      childSessionId: SessionId('child-da'),
+      parentSessionId: SessionId('main'),
+      workflowId: 'wf',
+      provisioning: 'reserved',
+    })
+    installRoutedReportTool(child.ctx, child.agent as never, host.ctx, routedWorkflow({ roleRegistry }), { resident: true })
+    expect(child.tools.map(tool => tool.name)).toEqual(['manifest', 'report_workflow', ROLE_PROCESS_TOOL])
   })
 
   it('keeps a preset-mounted shell when the child scope already registered bash', () => {

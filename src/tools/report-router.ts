@@ -103,6 +103,21 @@ export function installSpecialistModelSelection(childCtx: Context, child: Agent,
   }
 }
 
+/** How the routed child was created, which decides who supplies its shell. */
+export interface RoutedComposition {
+  /**
+   * The child was created directly by the AutoReport resident setup. No
+   * driver mounts a shell into such a scope, so the overlay must provide the
+   * role's compute shell itself — the joined preset carries no shell row, and
+   * deferring on the preset join leaves the role without a process tool (the
+   * 2026-10 DATA_ANALYSIS regression). Managed (driver-created) children of a
+   * preset-joined parent instead receive the platform shell from their
+   * driver's lazy scope mount; an early overlay bash would collide with that
+   * mount inside the child's first turn.
+   */
+  readonly resident?: boolean
+}
+
 /**
  * Route one continuable child's report surface by pre-provisioned role.
  * AutoReport children get the structured protocol and role skills; ordinary
@@ -113,6 +128,7 @@ export function installSpecialistModelSelection(childCtx: Context, child: Agent,
  * @param child - the child agent being composed.
  * @param hostCtx - host context carrying shared services.
  * @param workflow - AutoReport role registry, config, and owning-session lookup.
+ * @param composition - how the child was created; decides the shell provider.
  * @returns child-scoped disposer.
  */
 export function installRoutedReportTool(
@@ -120,6 +136,7 @@ export function installRoutedReportTool(
   child: Agent,
   hostCtx: Context,
   workflow: RoutedWorkflow,
+  composition: RoutedComposition = {},
 ): () => void {
   const entry = workflow.roleRegistry.lookup(child.id)
   if (entry === undefined) return () => {}
@@ -153,11 +170,14 @@ export function installRoutedReportTool(
     }
     if (child.session !== undefined && rolePolicy(entry.binding.role).hasProcessTool && childCtx.get('shell') !== undefined) {
       // Scoped registration gives only these roles a shell. DSH owns its
-      // registration lifetime together with the child context. A joined
-      // preset mounts the stock shell into this scope lazily, so the overlay
-      // shell must step aside there — the role guard keeps the stock shell
-      // foreground-only and escalation-free.
-      if (!joinsPreset(childCtx)) {
+      // registration lifetime together with the child context. A managed
+      // (driver-created) child of a preset-joined parent receives the stock
+      // shell from its driver's lazy scope mount, so the overlay shell steps
+      // aside there — the role guard keeps the stock shell foreground-only
+      // and escalation-free. Resident children get the overlay shell
+      // unconditionally: nothing else mounts one into their scope.
+      const driverMountsTheShell = composition.resident !== true && joinsPreset(childCtx)
+      if (!driverMountsTheShell) {
         if (process.platform === 'win32') installShellTool(() => installPowerShellTool(childCtx, { enableRunInBackground: false }))
         else {
           installShellTool(() => disposers.push(installComputeBashTool(childCtx, entry.binding.role, workflow.config.workspaceRoot)))
@@ -203,11 +223,10 @@ export function installRoutedReportTool(
 const routedChildren = new WeakSet<Agent>()
 
 /**
- * Whether the child's scope joined a preset. Preset rows mount lazily on
- * first use, so a joined preset's stock shell is not visible at routing
- * time — but it will occupy the scope later. Registered names must not
- * collide with that mount, and joined presets always carry the platform
- * shell as a base row.
+ * Whether the child's scope joined a preset. A managed (driver-created)
+ * child of a preset-joined parent receives its stock shell from the driver's
+ * lazy scope mount — invisible at routing time, but occupying the scope
+ * later, so an overlay registration would collide with it.
  */
 function joinsPreset(childCtx: Context): boolean {
   const presets = childCtx.get('agentPresets') as
