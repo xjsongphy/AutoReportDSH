@@ -34,6 +34,7 @@ import ToolRuntime, { defineTool } from '@deepseek-ai/dsh-tools'
 import AgentRegistry, { type Agent } from '@deepseek-ai/dsh-agent'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { deliverSubagentPrompt } from '@deepseek-ai/dsh-subagent/internal'
+import { ROLE_PROCESS_TOOL } from '../src/roles.js'
 import { apply as applyHost } from '../src/host.js'
 import { apply as applyReportRouter } from '../src/tools/report-router.js'
 import * as presetModule from '../src/preset.js'
@@ -431,10 +432,10 @@ describe('integration: resident subagent through the real agent loop', () => {
     expect(booted.specialistAdapter.requests[0]?.provider).toBe(SPECIALIST_PROVIDER)
     expect(booted.specialistAdapter.requests[0]?.model).toBe(SPECIALIST_MODEL)
 
-    // DATA_ANALYSIS keeps its process tool and — with no bundled skills —
-    // loses the skill loader (the 2026-10 regression pair).
+    // DATA_ANALYSIS keeps its platform process tool and — with no bundled
+    // skills — loses the skill loader (the 2026-10 regression pair).
     const analystTools = requestedToolNames(booted.specialistAdapter.requests[0]!)
-    expect(analystTools).toContain('bash')
+    expect(analystTools).toContain(ROLE_PROCESS_TOOL)
     expect(analystTools).not.toContain('skill')
 
     await until(

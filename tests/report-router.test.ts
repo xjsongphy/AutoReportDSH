@@ -264,6 +264,9 @@ describe('report router', () => {
       services: {
         shell: { sandboxMode: 'workspace-write' },
         shellEnv: { collect: () => ({}) },
+        // The stock pwsh installer requires a sandbox policy service whenever
+        // the shell executor confines (same stub as the bare-host test above).
+        sandboxPolicy: { resolve: () => ({ mode: 'workspace-write' }) },
         agentPresets: { composedPreset: () => 'base' },
       },
     })
