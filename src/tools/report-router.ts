@@ -3,6 +3,7 @@ import { installModelSelection, type Agent, type ModelSelection } from '@deepsee
 import { ReasoningEffortId } from '@deepseek-ai/dsh-llm'
 import type AutoReportWorkflowRuntime from '../runtime.js'
 import { applyRoleSandbox } from '../policy/sandbox-roots.js'
+import { SKILL_TOOL, rolePolicy } from '../roles.js'
 import { installWorkflowReportTool } from './report-workflow.js'
 import { installManifestTool } from './manifest.js'
 import { registerRoleSkills, type ReportSkillLanguage } from '../skills-preset.js'
@@ -157,7 +158,14 @@ export function installRoutedReportTool(
     // escalation-free.
     disposers.push(restrictInheritedShell(childCtx, child, entry.binding.role))
     disposers.push(registerRoleSkills(childCtx, entry.binding.role, language))
-    disposers.push(installReferencesSkills(childCtx))
+    // The references skill provider is catalog content for the skill loader.
+    // Roles whose surface has no `skill` tool (THEORY, DATA_ANALYSIS) would
+    // only carry dead catalog entries, so the provider follows the same
+    // role-policy predicate that owns the loader (`restrictRoleToolSurface`,
+    // `residentToolFilter`, tests/role-skill-alignment.test.ts).
+    if (rolePolicy(entry.binding.role).tools.includes(SKILL_TOOL)) {
+      disposers.push(installReferencesSkills(childCtx))
+    }
     const session = child.session
     if (session !== undefined) {
       const workspaceRoot = workflow.config.workspaceRoot ?? session.header.cwd

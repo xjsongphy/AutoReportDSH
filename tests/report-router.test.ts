@@ -201,7 +201,10 @@ describe('report router', () => {
     expect(
       child.session.snapshotEvents().filter(event => event.type === 'sandbox/mode').map(event => event.data),
     ).toEqual([{ mode: 'workspace-write' }])
-    expect(child.providers).toEqual(['autoreport-references'])
+    // THEORY has no `skill` tool in its role surface, so it also gets no
+    // references skill provider: catalog content without a loader is dead
+    // weight (see tests/role-skill-alignment.test.ts for the same-source rule).
+    expect(child.providers).toEqual([])
   })
 
   it('never registers a shell; the host role surface owns role shells', () => {

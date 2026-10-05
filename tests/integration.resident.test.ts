@@ -388,6 +388,12 @@ describe('integration: resident subagent through the real agent loop', () => {
     for (const name of ['workflow', 'subagent', 'subagent_fork', 'send_message', 'interrupt_agent', 'list_agents', 'todo_write', 'glob']) {
       expect(childTools).not.toContain(name)
     }
+    // End-to-end same-source rule: without the `skill` tool the child's first
+    // request also carries no skill catalog (the DSH tool-skill gate plus the
+    // router's provider gating must both hold).
+    for (const request of booted.specialistAdapter.requests) {
+      expect(JSON.stringify(request.messages ?? [])).not.toContain('<available_skills>')
+    }
 
     // The child's own turn ended completed — no UNKNOWN turn error.
     expect(lastTurnEndReason(child!)?.kind).toBe('completed')
