@@ -76,18 +76,19 @@ jobs:
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 \
             || echo 'apparmor userns knob absent — the functional probe decides'
 
-      - name: Install and build the harness
-        working-directory: deepseek-harness
-        run: |
-          pnpm install --frozen-lockfile
-          pnpm run build
+      - name: Prepare the selected Harness
+        uses: ./AutoReportDSH/.github/actions/prepare-harness
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          pnpm-version: '11.7.0'
 
       - name: Install plugin dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile --prefer-offline
 
-      - name: Type-check and build plugin
+      - name: Type-check client and build plugin
+        shell: bash
         run: |
-          pnpm run typecheck
+          pnpm exec tsc -p tsconfig.client.json --noEmit
           pnpm run build
 
       - name: Run test suite against selected Harness ref

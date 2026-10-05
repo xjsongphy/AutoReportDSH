@@ -127,11 +127,13 @@ function settleTaskFromDelegation(
 
 function observeDeliveredMessage(message: DeliveredMessage, deps: WorkflowReportObserverDependencies): void {
   const source = message.source
-  if (source.kind === 'subagent-report') {
-    const reportSource = source as SubagentReportMessageSource
+  if (source.kind === 'subagent-report' || source.kind === 'agent-message') {
+    const senderSessionId = source.kind === 'subagent-report'
+      ? (source as SubagentReportMessageSource).senderSessionId
+      : source.senderSessionId
     const parsed = parseWorkflowEnvelopeFromText(messageText(message))
     if (!parsed.ok) {
-      const current = currentForChild(deps.state, reportSource.senderSessionId)
+      const current = currentForChild(deps.state, senderSessionId)
       if (current === undefined) return
       const failed: DelegationSnapshot = {
         ...current,
@@ -148,12 +150,16 @@ function observeDeliveredMessage(message: DeliveredMessage, deps: WorkflowReport
 
     const claimedReport = parsed.value
     const attempt = deps.state.delegationAt(claimedReport.task_id, claimedReport.delegation_revision)
-    if (attempt === undefined || attempt.childSessionId !== reportSource.senderSessionId) return
+    if (attempt === undefined || attempt.childSessionId !== senderSessionId) return
     const reportMessageId = String(message.id)
     if (attempt.reportMessageId === reportMessageId) return
     if (hasAcceptedWorkflowReport(attempt)) return
     const current = deps.state.currentDelegation(claimedReport.task_id)
-    const stale = current === undefined || current.delegationRevision !== claimedReport.delegation_revision
+    const task = deps.state.getTask(claimedReport.task_id)
+    const cancelled = attempt.phase === 'cancelled' || task?.status === 'cancelled'
+    const stale = current === undefined
+      || current.delegationRevision !== claimedReport.delegation_revision
+      || cancelled
     // Deliver the canonical envelope MAIN received rather than recomputing it
     // from a later projection (which may include artifacts observed after the
     // report was sent). Validation still restricts the model's claim to paths
@@ -166,11 +172,17 @@ function observeDeliveredMessage(message: DeliveredMessage, deps: WorkflowReport
     }
     const settled: DelegationSnapshot = {
       ...attempt,
-      phase: stale ? 'stale' : report.status === 'success' ? 'completed' : 'blocked',
+      // Cancellation stays durable even after a late report. Reopening the
+      // task must never make this old revision eligible to settle it again.
+      phase: cancelled ? 'cancelled' : stale ? 'stale' : report.status === 'success' ? 'completed' : 'blocked',
       report,
       reportMessageId,
       settledAt: Date.now(),
-      ...(stale ? { reason: `late report for delegation revision ${report.delegation_revision}` } : {}),
+      ...(stale ? {
+        reason: cancelled
+          ? `late report for cancelled delegation revision ${report.delegation_revision}`
+          : `late report for delegation revision ${report.delegation_revision}`,
+      } : {}),
     }
     deps.commit('autoreport/delegation', settled)
     if (!stale) {

@@ -74,6 +74,7 @@ describe('resolveWorkflowSettings precedence', () => {
     expect(realpathSync(resolved.pythonExecutable as string)).toBe(
       realpathSync(managedPythonExecutable(dshHome)),
     )
+    expect(resolved.pythonManaged).toBe(true)
   })
 
   it('applies each single layer above the schema defaults', () => {

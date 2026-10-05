@@ -105,6 +105,72 @@ describe('report observer', () => {
     await expect(pending).resolves.toMatchObject({ status: 'completed', response: 'processed.csv written' })
   })
 
+  it('folds a report delivered through DSH sendMessage agent-message transport', () => {
+    const session = sessionIn(WORKSPACE, 'parent')
+    const state = workflowState(session)
+    const waiters = new WaiterRegistry()
+    seedWaiting(session, state)
+    const event = session.append('user/message', createUserMessage({
+      content: [{ type: 'text', text: JSON.stringify({
+        task_id: 'task-7',
+        delegation_revision: 1,
+        status: 'success',
+        block_type: null,
+        response: 'delivered through the real manager-owned transport',
+        produced_files: [],
+      }) }],
+      source: { kind: 'agent-message', form: 'relay', senderSessionId: SessionId('child-da') },
+    }), { surfaceOp: 'append' })
+
+    observe(session, state, waiters, event)
+    expect(state.currentDelegation('task-7')?.phase).toBe('completed')
+    expect(state.getTask('task-7')?.status).toBe('completed')
+  })
+
+  it('keeps a cancelled task terminal when the same revision reports late', () => {
+    const session = sessionIn(WORKSPACE, 'parent')
+    const state = workflowState(session)
+    const waiters = new WaiterRegistry()
+    const waiting = seedWaiting(session, state)
+    state.apply(appendWorkflowEvent(session, 'autoreport/task', {
+      ...state.getTask('task-7')!, status: 'cancelled', revision: 2,
+    }))
+    state.apply(appendWorkflowEvent(session, 'autoreport/delegation', {
+      ...waiting, phase: 'cancelled', reason: 'cancelled by Main', settledAt: 20,
+    }))
+    const event = session.append('user/message', createUserMessage({
+      content: [{ type: 'text', text: JSON.stringify({
+        task_id: 'task-7',
+        delegation_revision: 1,
+        status: 'success',
+        block_type: null,
+        response: 'arrived after cancellation',
+        produced_files: [],
+      }) }],
+      source: { kind: 'subagent-report', form: 'relay', senderSessionId: SessionId('child-da') },
+    }), { surfaceOp: 'append' })
+
+    observe(session, state, waiters, event)
+    expect(state.currentDelegation('task-7')?.phase).toBe('cancelled')
+    expect(state.currentDelegation('task-7')?.report?.response).toBe('arrived after cancellation')
+    expect(state.currentDelegation('task-7')?.reason).toMatch(/cancelled delegation/u)
+    expect(state.getTask('task-7')?.status).toBe('cancelled')
+
+    state.apply(appendWorkflowEvent(session, 'autoreport/task', {
+      ...state.getTask('task-7')!, status: 'pending', revision: 3,
+    }))
+    // Replay the durable log, then deliver the same old report with a new inbox
+    // id while the task is reopened but not yet redispatched.
+    const recovered = workflowState(session)
+    const duplicate = session.append('user/message', createUserMessage({
+      content: event.data.content,
+      source: event.data.source,
+    }), { surfaceOp: 'append' })
+    observe(session, recovered, waiters, duplicate)
+    expect(recovered.currentDelegation('task-7')?.phase).toBe('cancelled')
+    expect(recovered.getTask('task-7')?.status).toBe('pending')
+  })
+
   it('settles wait:true from the report delivery inbox splice before MAIN consumes it', async () => {
     const session = sessionIn(WORKSPACE, 'parent')
     const state = workflowState(session)

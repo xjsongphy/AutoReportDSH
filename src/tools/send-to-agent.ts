@@ -164,6 +164,9 @@ function subjectFromPrompt(prompt: string, rawSubject: unknown): string {
 
 /** Convert one already-folded terminal delegation into the waiter vocabulary. */
 function terminalOutcome(snapshot: DelegationSnapshot | undefined): WaiterOutcome | undefined {
+  if (snapshot?.phase === 'cancelled') {
+    return { status: 'cancelled' }
+  }
   if (snapshot?.phase === 'completed') {
     return {
       status: 'completed',
@@ -493,8 +496,15 @@ export function createSendToAgentTool(deps: SendToAgentDependencies): ToolDefini
         throw error
       }
 
-      const waiting: DelegationSnapshot = { ...dispatched, acceptedMessageId, phase: 'waiting_for_child' }
-      deps.workflow.commit(parentSession, 'autoreport/delegation', waiting)
+      const latest = live.state.delegationAt(taskId, revision)
+      if (latest?.phase === 'dispatched') {
+        const waiting: DelegationSnapshot = {
+          ...latest,
+          acceptedMessageId,
+          phase: 'waiting_for_child',
+        }
+        deps.workflow.commit(parentSession, 'autoreport/delegation', waiting)
+      }
       const wait = args.wait !== false
       if (!wait) {
         return {

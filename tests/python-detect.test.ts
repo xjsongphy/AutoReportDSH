@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, realpathSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, realpathSync, symlinkSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { describe, expect, it } from 'vitest'
@@ -21,6 +21,14 @@ function fakePython(root: string, version = 'Python 3.12.0-test'): string {
   return writeFakePython(root, version)
 }
 
+function linkedPython(prefix: string, base: string): string {
+  const bin = join(prefix, process.platform === 'win32' ? 'Scripts' : 'bin')
+  mkdirSync(bin, { recursive: true })
+  const executable = join(bin, process.platform === 'win32' ? 'python.cmd' : 'python')
+  symlinkSync(base, executable, 'file')
+  return executable
+}
+
 describe('detectPythonEnvironments', () => {
   it('lists a workspace venv and PATH python without requiring a custom-path check', () => {
     const workspace = mkdtempSync(join(tmpdir(), 'autoreport-py-detect-'))
@@ -34,6 +42,53 @@ describe('detectPythonEnvironments', () => {
     })
     expect(found.some(candidate => candidate.source === 'virtualenv' && candidate.executable.includes('.venv'))).toBe(true)
     expect(invalidCustomPythonPath(executable)).toBeUndefined()
+  })
+
+  it('keeps a venv interpreter launch path when it symlinks to a base interpreter', () => {
+    const root = mkdtempSync(join(tmpdir(), 'autoreport-py-venv-link-'))
+    const base = fakePython(join(root, 'base'))
+    const venvPython = linkedPython(join(root, '.venv'), base)
+
+    const found = detectPythonEnvironments({
+      workspace: root,
+      home: join(root, 'no-home'),
+      env: { PATH: '' },
+      condaCli: false,
+      wellKnownConda: false,
+    })
+    expect(found.find(candidate => candidate.source === 'virtualenv')?.executable).toBe(venvPython)
+  })
+
+  it('keeps distinct venvs that share a base interpreter and deduplicates aliases within one venv', () => {
+    const root = mkdtempSync(join(tmpdir(), 'autoreport-py-shared-base-'))
+    const base = fakePython(join(root, 'base'))
+    const venvPython = linkedPython(join(root, '.venv'), base)
+    const envPython = linkedPython(join(root, '.env'), base)
+    const found = detectPythonEnvironments({
+      workspace: root,
+      home: join(root, 'no-home'),
+      env: { PATH: '', VIRTUAL_ENV: join(root, '.venv') },
+      condaCli: false,
+      wellKnownConda: false,
+    })
+    expect(found.map(candidate => candidate.executable)).toEqual([venvPython, envPython])
+  })
+
+  it('excludes only the managed environment when other environments share its base interpreter', () => {
+    const root = mkdtempSync(join(tmpdir(), 'autoreport-py-managed-base-'))
+    const base = fakePython(join(root, 'base'))
+    const dshHome = join(root, 'dsh-home')
+    linkedPython(managedVenvDir(dshHome), base)
+    const venvPython = linkedPython(join(root, '.venv'), base)
+    const found = detectPythonEnvironments({
+      workspace: root,
+      dshHome,
+      home: join(root, 'no-home'),
+      env: { PATH: '', VIRTUAL_ENV: managedVenvDir(dshHome) },
+      condaCli: false,
+      wellKnownConda: false,
+    })
+    expect(found.map(candidate => candidate.executable)).toEqual([MANAGED_PYTHON_SENTINEL, venvPython])
   })
 
   it('lists conda base and named envs under an install prefix', () => {
@@ -96,6 +151,7 @@ describe('ensureManagedPython', () => {
       env: pathWithBin(bin),
     })
     expect(realpathSync(created)).toBe(realpathSync(managedPythonExecutable(dshHome)))
+    expect(created).toBe(managedPythonExecutable(dshHome))
     expect(invalidCustomPythonPath(created)).toBeUndefined()
     expect(missingAnalysisPackages(created)).toEqual([])
     expect(ensureManagedPython({

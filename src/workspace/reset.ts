@@ -19,8 +19,8 @@
 
 import type { CommandDefinition, CommandInvocation, CommandResult } from '@deepseek-ai/dsh-commands'
 import type { Session } from '@deepseek-ai/dsh-session'
-import { readdirSync, rmSync, statSync } from 'node:fs'
-import { join, resolve } from 'node:path'
+import { lstatSync, readdirSync, rmSync, statSync } from 'node:fs'
+import { join, parse, resolve, sep } from 'node:path'
 import { ensureInitialized, type InitializationResult, type ReportLanguage } from './init.js'
 import {
   resolveReportLanguage,
@@ -66,6 +66,28 @@ function isDirectory(path: string): boolean {
   }
 }
 
+/** Reject any symlink component before reset follows a workspace-relative path. */
+function assertNoSymlinkComponents(path: string): void {
+  const absolute = resolve(path)
+  const root = parse(absolute).root
+  const components = absolute.slice(root.length).split(sep).filter(Boolean)
+  let current = root
+  for (const component of components) {
+    current = join(current, component)
+    try {
+      if (lstatSync(current).isSymbolicLink()
+        && !(process.platform === 'darwin' && current === '/var')) {
+        throw new Error(`reset refuses paths containing a symbolic link: ${current}`)
+      }
+    } catch (error: unknown) {
+      if (error instanceof Error && error.message.startsWith('reset refuses paths containing')) throw error
+      // A missing component has no descendants that can currently resolve.
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return
+      throw error
+    }
+  }
+}
+
 /** One entry count in a report a human reads. */
 function entryCount(count: number): string {
   return count === 1 ? '1 entry' : `${count} entries`
@@ -95,11 +117,16 @@ export function renderReset(result: ResetResult): string {
  *   workspace, and a mistyped path must not silently become one.
  */
 export function resetWorkspace(root: string, language: ReportLanguage): ResetResult {
-  if (!isDirectory(root)) throw new Error(`workspace root is not a directory: ${root}`)
+  const absoluteRoot = resolve(root)
+  assertNoSymlinkComponents(absoluteRoot)
+  if (!isDirectory(absoluteRoot)) throw new Error(`workspace root is not a directory: ${root}`)
+  // Preflight every target before deleting anything, so a later symlink cannot
+  // leave a partially reset workspace.
+  for (const dir of RESET_DIRS) assertNoSymlinkComponents(join(absoluteRoot, dir))
   const clearedDirs: string[] = []
   let removedEntries = 0
   for (const dir of RESET_DIRS) {
-    const path = join(root, dir)
+    const path = join(absoluteRoot, dir)
     if (!isDirectory(path)) continue
     // An empty target is already what a reset wants; only targets holding
     // something are cleared, so the report names real removals.
@@ -109,7 +136,7 @@ export function resetWorkspace(root: string, language: ReportLanguage): ResetRes
     rmSync(path, { recursive: true, force: true })
     clearedDirs.push(dir)
   }
-  const restored: InitializationResult = ensureInitialized(root, language)
+  const restored: InitializationResult = ensureInitialized(absoluteRoot, language)
   return {
     clearedDirs,
     removedEntries,

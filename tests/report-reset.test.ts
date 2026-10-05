@@ -2,7 +2,7 @@
 
 import type { CommandInvocation } from '@deepseek-ai/dsh-commands'
 import { SESSION_FORMAT_VERSION, Session, SessionId } from '@deepseek-ai/dsh-session'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, relative } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -115,6 +115,30 @@ describe('resetWorkspace', () => {
 
   it('refuses a root that is not a directory instead of creating one', () => {
     expect(() => resetWorkspace(join(tempRoot(), 'missing'), 'latex')).toThrow(/not a directory/)
+  })
+
+  it('refuses a reset target whose parent is a symlink and preserves its external contents', () => {
+    const root = seededWorkspace()
+    const external = join(root, 'References')
+    rmSync(join(root, 'Data'), { recursive: true, force: true })
+    symlinkSync(external, join(root, 'Data'), 'dir')
+
+    expect(() => resetWorkspace(root, 'latex')).toThrow(/symbolic link/u)
+    expect(readFileSync(join(external, 'handout.pdf'), 'utf8')).toBe('paper')
+    expect(existsSync(join(root, 'Theory/theory.md'))).toBe(true)
+  })
+
+  it.skipIf(process.platform === 'win32')('checks symlinks when a Unix workspace name contains a literal backslash', () => {
+    const root = join(tempRoot(), 'work\\space')
+    ensureInitialized(root, 'latex')
+    write(join(root, 'References/Processed/raw.csv'), 'raw measurements')
+    write(join(root, 'Theory/theory.md'), 'keep generated work on rejection')
+    rmSync(join(root, 'Data'), { recursive: true, force: true })
+    symlinkSync(join(root, 'References'), join(root, 'Data'), 'dir')
+
+    expect(() => resetWorkspace(root, 'latex')).toThrow(/symbolic link/u)
+    expect(readFileSync(join(root, 'References/Processed/raw.csv'), 'utf8')).toBe('raw measurements')
+    expect(existsSync(join(root, 'Theory/theory.md'))).toBe(true)
   })
 })
 

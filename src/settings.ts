@@ -261,6 +261,8 @@ export interface WorkflowSettingsSnapshot {
   readonly delegationWaitTimeoutMs: number
   /** Resolved Python interpreter when configured at any layer. */
   readonly pythonExecutable?: string
+  /** True when the selected interpreter is the managed uv environment. */
+  readonly pythonManaged?: boolean
 }
 
 /** Input layers for {@link resolveWorkflowSettings}; every layer may be absent. */
@@ -415,6 +417,11 @@ export function resolveWorkflowSettings(layers: WorkflowSettingsLayers): Workflo
     layers.dshHome,
     layers.pythonEnv,
   )
+  const pythonManaged = isManagedPythonSetting(firstDefined(
+    override?.pythonExecutable,
+    user?.pythonExecutable,
+    composition?.pythonExecutable,
+  ) ?? '')
   const specialistModel = firstDefined(
     routeField('override.specialistModel', override?.specialistModel),
     routeField('user.specialistModel', user?.specialistModel),
@@ -426,5 +433,6 @@ export function resolveWorkflowSettings(layers: WorkflowSettingsLayers): Workflo
     delegationIdleTimeoutMs,
     delegationWaitTimeoutMs,
     ...(pythonExecutable === undefined ? {} : { pythonExecutable }),
+    ...(pythonManaged ? { pythonManaged: true } : {}),
   })
 }

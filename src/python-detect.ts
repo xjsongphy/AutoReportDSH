@@ -11,7 +11,7 @@
 import { spawnSync, type SpawnSyncReturns } from 'node:child_process'
 import { existsSync, mkdirSync, readdirSync, realpathSync, rmSync, statSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { basename, dirname, isAbsolute, join } from 'node:path'
+import { basename, dirname, isAbsolute, join, resolve } from 'node:path'
 
 /**
  * Stored `pythonExecutable` for the AutoReport-managed venv. The client
@@ -26,7 +26,7 @@ export interface PythonCandidate {
   /** `conda`, `virtualenv`, `pyenv`, `path`, or `managed`. */
   readonly source: string
   /**
-   * Canonical absolute executable, or {@link MANAGED_PYTHON_SENTINEL} for
+   * Absolute launch path, or {@link MANAGED_PYTHON_SENTINEL} for
    * the AutoReport-managed row (created on save if missing).
    */
   readonly executable: string
@@ -71,7 +71,8 @@ const WELL_KNOWN_CONDA_ROOTS = [
 
 /**
  * Scan conda, virtualenv, pyenv, PATH, and workspace venvs for runnable
- * interpreters. Duplicates (same real path) are dropped.
+ * interpreters. Aliases within the same launch directory are deduplicated;
+ * separate venv directories remain distinct even with a shared base executable.
  * @param options - workspace, home, and env overrides.
  * @returns candidates in discovery order.
  */
@@ -80,18 +81,21 @@ export function detectPythonEnvironments(options: PythonDetectOptions = {}): Pyt
   const home = options.home ?? tryHomedir()
   const seen = new Set<string>()
   const candidates: PythonCandidate[] = []
-  const managedReal = options.dshHome === undefined
+  const managedBin = options.dshHome === undefined
     ? undefined
-    : canonicalize(pythonInPrefix(managedVenvDir(options.dshHome)))
+    : canonicalize(dirname(managedPythonExecutable(options.dshHome)))
 
   const add = (path: string, source: string, label: string): void => {
-    const resolved = canonicalize(path)
-    if (resolved === undefined || seen.has(resolved)) return
-    if (managedReal !== undefined && resolved === managedReal) return
-    if (!isFile(resolved)) return
-    const version = pythonVersion(resolved) ?? 'unknown version'
-    seen.add(resolved)
-    candidates.push({ label, source, executable: resolved, version })
+    const realPath = canonicalize(path)
+    if (realPath === undefined) return
+    const launchDirectory = canonicalize(dirname(path)) ?? resolve(dirname(path))
+    const identity = `${launchDirectory}\u0000${realPath}`
+    if (seen.has(identity)) return
+    if (managedBin !== undefined && launchDirectory === managedBin) return
+    if (!isFile(path)) return
+    const version = pythonVersion(path) ?? 'unknown version'
+    seen.add(identity)
+    candidates.push({ label, source, executable: resolve(path), version })
   }
 
   const condaPrefix = env.CONDA_PREFIX
@@ -169,7 +173,7 @@ export function ensureManagedPython(options: {
   if (isFile(existing)) {
     const version = pythonVersion(existing)
     if (version !== undefined) {
-      const executable = canonicalize(existing) ?? existing
+      const executable = existing
       ensureAnalysisPackages(executable, env)
       return executable
     }
@@ -183,7 +187,7 @@ export function ensureManagedPython(options: {
   if (!isFile(created) || pythonVersion(created) === undefined) {
     throw new Error(`AutoReport managed venv did not produce a runnable Python at ${created}`)
   }
-  const executable = canonicalize(created) ?? created
+  const executable = created
   ensureAnalysisPackages(executable, env)
   return executable
 }

@@ -88,20 +88,23 @@ jobs:
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 \
             || echo 'apparmor userns knob absent — the functional probe decides'
 
-      - name: Install and build the pinned Harness
-        working-directory: deepseek-harness
-        run: |
-          pnpm install --frozen-lockfile
-          pnpm run build
+      - name: Prepare the pinned Harness
+        uses: ./AutoReportDSH/.github/actions/prepare-harness
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          pnpm-version: '11.7.0'
 
       - name: Install plugin dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile --prefer-offline
 
       # Installer tests and boot smokes require dist/. Build before the suite
       # so a clean CI checkout does not depend on test-order side effects.
-      - name: Type-check and build plugin
+      # The build already type-checks host sources with the same strict
+      # tsconfig. Check the separate client project once, then emit the build.
+      - name: Type-check client and build plugin
+        shell: bash
         run: |
-          pnpm run typecheck
+          pnpm exec tsc -p tsconfig.client.json --noEmit
           pnpm run build
 
       - name: Run keyless test suite
