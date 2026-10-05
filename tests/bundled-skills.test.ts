@@ -79,8 +79,10 @@ describe('loadBundledSkills', () => {
 
   it('bundles a frozen current-writer projection without workflow-prompt instructions', () => {
     const writer = skills.find(skill => skill.name === 'experiment-report-writer')
-    expect(writer?.content).toContain('38085aededa0')
+    expect(writer?.content).toContain('5d1aca1155fd42584095bb49bf87ea614c2875e8')
     expect(writer?.content).toContain('Narrative requirements')
+    expect(writer?.content).toContain('Narrative flow')
+    expect(writer?.content).toContain('Detail economy')
     expect(writer?.content).toContain('Claim ledger contract')
     expect(writer?.content).toContain('Document release gates')
     expect(writer?.content).not.toContain('report_workflow')

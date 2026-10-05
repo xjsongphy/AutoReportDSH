@@ -5,20 +5,20 @@
   "runtimeFetch": false,
   "upstream": {
     "repository": "https://github.com/xjsongphy/skills",
-    "commit": "38085aededa0",
-    "committedAt": "2026-08-22T06:32:53Z",
+    "commit": "5d1aca1155fd42584095bb49bf87ea614c2875e8",
+    "committedAt": "2026-10-05T23:08:47+08:00",
     "modules": [
       {
         "path": "writer/references/types/report.md",
-        "blob": "0ad8976948f219cf90ba42ad0c26729c2b6f94e4"
+        "blob": "8000d5dc2eb8eecb4151e6d4b903e025197f49cc"
       },
       {
         "path": "writer/references/type-addons/report-experiment.md",
-        "blob": "e116ac4d6c439b36116e26913f986657a74c01dc"
+        "blob": "45d0bd13ae3df442f593d7a1a6b32bc0b49d23b5"
       },
       {
         "path": "writer/references/common/writing.md",
-        "blob": "ef0b2da6939db4a7a9c3aacfc26aeeace496da85"
+        "blob": "ffad5483aa24a7baf18477744508b9bfee53f165"
       },
       {
         "path": "writer/references/common/evidence-and-citations.md",
@@ -26,7 +26,11 @@
       },
       {
         "path": "writer/references/formats/latex.md",
-        "blob": "240e186faf7a14e144040dd28d73ab5387df73be"
+        "blob": "530c3465ae5ac4c8322fc13be1a4e10a92f6f170"
+      },
+      {
+        "path": "writer/references/formats/typst.md",
+        "blob": "dfdeb5ad560ea035aab3050248327eec3aff485f"
       },
       {
         "path": "writer/references/checks/document.md",
@@ -35,9 +39,10 @@
     ]
   },
   "localAdaptations": [
-    "selected only the report-relevant writer modules",
+    "selected only the report-relevant writer modules (Typst reduced to its report-relevant mechanics)",
     "flattened the selected modules into one bundled skill",
     "replaced internal module-path references with local section references",
-    "restored and re-set Bad/Good example pairs in experiment-report scenarios: two pairs restored verbatim from the legacy AutoReportCLI experiment-report-writer skill (narrative-to-element LaTeX pair, define-before-formula F=kx pair); the remaining upstream pairs were re-set from algorithm/technical-documentation topics to measurement scenarios"
+    "kept the AutoReport experiment-report editorial contract as a local addition that takes precedence on level of detail, repetition, and document structure",
+    "kept the narrative-flow and define-before-formula Bad/Good example pairs in experiment-report scenarios; the worked example ships in both LaTeX and Typst"
   ]
 }

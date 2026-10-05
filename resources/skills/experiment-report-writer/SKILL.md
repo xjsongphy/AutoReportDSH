@@ -9,10 +9,11 @@ description: Frozen projection of the upstream writer rules for physics and engi
 
 This skill contains a **vendored, frozen projection** of the report-relevant modules from
 [`xjsongphy/skills`](https://github.com/xjsongphy/skills) commit
-`38085aededa0` (2026-08-22). It makes **no runtime network request**. The
-selected upstream modules and their blob hashes are recorded in
-[`provenance.json`](provenance.json). The AutoReport-specific experiment-report
-guidance immediately below is a local addition; the frozen projection follows it.
+`5d1aca1155fd42584095bb49bf87ea614c2875e8` (2026-10-05). It makes **no runtime
+network request**. The selected upstream modules and their blob hashes are
+recorded in [`provenance.json`](provenance.json). The AutoReport-specific
+experiment-report guidance immediately below is a local addition; the frozen
+projection follows it.
 
 Use this skill to draft, revise, or audit the reader-facing body of a physics
 or engineering experiment report. Apply a user-provided course, laboratory,
@@ -161,26 +162,44 @@ changes the conclusion; do not narrate every cell. Place detailed raw data,
 derivations, or exhaustive result grids in an appendix when the reader needs
 the main argument first.
 
-### Define before formula (restored from the legacy experiment-report skill)
+## Narrative flow
 
-**EVERY variable and unit must be defined in narrative before it appears in a
-formula.** Never introduce variables inside parentheses after a formula.
+An element (list, table, formula, figure) always sits inside prose. **NEVER**
+open a section directly with a list, table, formula, or figure; **ALWAYS**
+lead with explanatory text that states what is shown, under which conditions,
+and what pattern the reader should look for.
 
-**Bad** (undefined variables):
+Use a "narrative → element → explanation" structure. The prose after an
+element unpacks its meaning and significance, connects it to previous
+findings, provides context for what comes next, and states practical or
+theoretical implications when material. Do not stack several elements without
+prose between them. A figure or table standing alone without narrative
+interpretation is unacceptable.
 
-```latex
-根据公式 $F = kx$，其中...
-```
+**Bad** (element opens the section; elements stacked without prose):
 
-**Good** (define first, then formula):
+> ## 结果
+>
+> [表 1]
+>
+> [图 1]
+>
+> [公式 (1)]
 
-```latex
-对于弹簧系统，胡克定律指出恢复力 $F$ 与位移 $x$ 成正比：
-\begin{equation}
-  F = kx
-\end{equation}
-其中 $k$ 为弹簧劲度系数。
-```
+**Good** (narrative leads in and interprets each element):
+
+> ## 结果
+>
+> 表 1 给出三种控温条件下测得的电阻值；响应随温度单调增大，与线性预期一致。
+>
+> [表 1]
+>
+> 对数据作最小二乘拟合，得温度系数
+>
+> [公式 (1)]
+>
+> 其中 $\alpha$ 为电阻温度系数。拟合残差在仪器误差范围内，表明线性模型适用；
+> 图 1 将该拟合与测量点叠加显示。
 
 ## Physics and engineering experiment add-on (upstream `type-addons/report-experiment.md`)
 
@@ -193,67 +212,199 @@ method, and traceable source of every quantitative result. Let actual measured
 data and supplied requirements define scope; mark unsupported requested items
 instead of fabricating them.
 
-Use the usual order when no template overrides it: introduction; necessary
-theory; setup and procedure; results and discussion; conclusion; references;
-appendix. Results and discussion normally receive most of the body because they
-connect measurement, uncertainty, theory, and interpretation.
+## Structure and proportions
 
-Discuss systematic and random uncertainty only to the extent the data or method
-supports it. Compare theory with measurement where the design permits it, and
-state which conclusions are limited by measurement scope, data coverage, or
-uncontrolled conditions.
+Use the usual order when no template overrides it: title page; introduction;
+necessary theory; setup and procedure; results and discussion; conclusion;
+acknowledgments (optional); references; appendix.
 
-### Narrative → element → explanation (restored from the legacy experiment-report skill)
+- The introduction stays within about one third of the body text.
+- Results and discussion form the main body — more than half of the text —
+  because they connect measurement, uncertainty, theory, and interpretation.
+- Write the main sections first and draft the abstract (and keywords) last, so
+  it summarizes what was actually written.
 
-**NEVER** start a section directly with a list, table, formula, or figure.
-**ALWAYS** include explanatory text first, using the
-**narrative → element → explanation** structure: after presenting data,
-formulas, tables, or figures, add explanatory text that unpacks meaning,
-connects to previous findings, and discusses implications.
+## Writing breakdown
 
-**Bad** (abrupt start):
+Break a multi-section report into one todo per major section before writing,
+and complete the sections one at a time; never draft the whole report in a
+single pass. Place summary sections such as the abstract at the end of the
+list. Split an oversized section further — data-table interpretation, figure
+interpretation, theory–experiment comparison, systematic-error analysis,
+limitations and improvements — rather than writing it in one burst. Mark a
+todo complete only after its section is fully written and checked.
+
+## Professional tone
+
+- Use complete sentences and state facts directly. Say what you know, flag
+  what you do not know, and never fake confidence.
+- Do not use conversational filler such as “我们将探索”, “我们可以看到”,
+  “值得注意的是”, "we will explore", "we can see", or "it is worth noting".
+
+## Reader-relevance filter
+
+Every sentence must give the reader content: a fact, definition, relation,
+procedure, result, limitation, or interpretation. Remove meta-commentary
+about the writing process or the author's intention — “这段话的目的是”,
+“没有公开资料，因此不能推测” — unless the limitation changes the report's
+conclusion. Do not justify an omission or wording choice merely because it
+was made. When revising a report, do not restore deleted explanatory filler
+simply because it explains why the text was written that way.
+
+## Detail economy
+
+An expert reader wants the argument, not the transcript of the measurement
+session. Concretely:
+
+- The abstract and the conclusion are mostly qualitative. Include a number
+  only when the number itself is the headline result; do not enumerate ten
+  values in an abstract.
+- State each measured or fitted value once, where it is interpreted. Reuse it
+  by cross-reference instead of restating the same number in theory, results,
+  discussion, and appendix.
+- Keep instrument operation sequences, switch settings, unit-conversion
+  checks, and on-the-fly self-checks out of the report; they belong in a lab
+  notebook, or in a procedure appendix only when the template demands it.
+- Do not reproduce the full raw data grid in the main text. A compact table of
+  the points the argument uses, or a plot, replaces the grid; ship a complete
+  data appendix only when the course or template requires it.
+- Discuss uncertainty in prose and name only the material components with
+  their justification; do not build a component-by-component bookkeeping
+  table when the budget is dominated by one or two terms.
+- Verification side-trips — endpoint recomputation, alternative fits,
+  residual spot checks — support confidence; report their conclusion, not
+  every intermediate comparison.
+- Answer appended thought questions in a few sentences each; they are not
+  mini-essays and must not restate the body.
+
+## Define before formula
+
+**EVERY variable and unit must be defined in the narrative before it appears
+in a formula.** Never introduce variables inside parentheses after a formula
+as their first definition.
+
+**Bad** (undefined variables):
+
+> 根据公式 $F = kx$，其中……
+
+**Good** (define first, then formula):
+
+> 对于弹簧系统，胡克定律指出恢复力 $F$ 与位移 $x$ 成正比：
+>
+> $$F = kx$$
+>
+> 其中 $k$ 为弹簧劲度系数。
+
+## Main-text lists
+
+Avoid `itemize` and `enumerate` in the main text; an experiment report reads
+as continuous prose. Use a list only when the template requires it, for
+appendix data, or for genuinely parallel procedural steps.
+
+## Worked example
+
+A good section introduces its elements in prose, defines every variable, and
+interprets each result (LaTeX):
 
 ```latex
-\section{结果}
+\subsection{倍频法}
 
-\begin{table}
-...
+实验中观察到的倍频曲线如\autoref{double-frequency}所示。未加样品以及在电光
+晶体后放置云母片时，利用倍频法测量得到的结果如\autoref{double-frequency-table}
+所示。
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.5\linewidth]{fig/倍频}
+  \caption{倍频曲线}
+  \label{double-frequency}
+\end{figure}
+
+\begin{table}[H]
+  \centering
+  \caption{倍频法测量结果}
+  \setlength{\tabcolsep}{0.4cm}{
+    \begin{tabular}{ccc}
+      \hline
+      光路 & $V_\text{D0}$/V & $V_\text{DP}$/V \\
+      \hline
+      电光晶体 & -106$\pm$5 & 1269$\pm$5 \\
+      加入云母片 & -619$\pm$5 & 996$\pm$5 \\
+      \hline
+    \end{tabular}}
+  \label{double-frequency-table}
 \end{table}
 
+因此，半波电压为
+
 \begin{equation}
-...
+  V_{\pi}= V_\text{DP}-V_\text{D0}=1375\text{ V}
 \end{equation}
+
+由\autoref{r63}，晶体的电光系数为
+
+\begin{equation}
+  r_{63} = \frac{\lambda}{2 n_\text{o}^3 V_{\pi 2}} = 16.8\times10^{-10}\,\mathrm{cm/V}
+\end{equation}
+
+其中 $V_{\pi 2} = 4V_\pi$ 为四块串联晶体的总半波电压，$\lambda = 632.8~\mathrm{nm}$
+为激光波长，$n_\text{o}$ 为晶体寻常光折射率。
 ```
 
-**Good** (narrative leads into content):
+Points to note:
 
-```latex
-\section{结果}
+1. **Narrative first**: explanatory text introduces the figure and table
+   before they appear.
+2. **Variables defined before use**: $V_{\pi 2}$, $\lambda$, $n_\text{o}$ are
+   defined where the formula that uses them is interpreted.
+3. **Proper cross-references**: `\autoref{}` for figures, tables, equations.
+4. **Complete captions**: figure and table captions are self-explanatory.
+5. **Results explained**: each numerical result is interpreted in context,
+   once.
 
-表~\ref{tab:measurements}展示了在不同条件下测得的实验数据。实验中控制变量为X，
-记录的响应变量Y呈现以下规律。
+The same section in Typst (identical narrative shape; only the syntax
+differs):
 
-\begin{table}
-...
-\end{table}
+```typst
+=== 倍频法
 
-对于质量为 $m$、所受合力为 $F$ 的物体，牛顿第二定律为
-\begin{equation}
-  F = ma .
-\end{equation}
-其中，$a$ 表示物体加速度。
+实验中观察到的倍频曲线如 @double-frequency 所示。未加样品以及在电光晶体后
+放置云母片时，利用倍频法测量得到的结果如 @double-frequency-table 所示。
+
+#figure(
+  image("fig/倍频.png", width: 50%),
+  caption: [倍频曲线],
+) <double-frequency>
+
+#figure(
+  table(
+    columns: 3,
+    table.hline(),
+    table.header([光路], [$V_"D0"$ / V], [$V_"DP"$ / V]),
+    table.hline(),
+    [电光晶体], [$-106 plus.minus 5$], [$1269 plus.minus 5$],
+    [加入云母片], [$-619 plus.minus 5$], [$996 plus.minus 5$],
+    table.hline(),
+  ),
+  caption: [倍频法测量结果],
+) <double-frequency-table>
+
+因此，半波电压为
+
+$ V_pi = V_"DP" - V_"D0" = 1375 "V" $
+
+由 @r63，晶体的电光系数为
+
+$ r_63 = lambda / (2 n_o^3 V_(pi2)) = 16.8 times 10^(-10) "cm/V" $
+
+其中 $V_(pi2) = 4 V_pi$ 为四块串联晶体的总半波电压，$lambda = 632.8 "nm"$ 为
+激光波长，$n_o$ 为晶体寻常光折射率。
 ```
 
-Keep narrative ahead of raw elements. A results section that opens directly on
-a data table and a chain of formulas leaves the reader without a claim to
-attach them to:
-
-**Bad:** the Results section opens on a data table followed by three formulas,
-with no sentence saying what was swept, what was measured, or what the trend
-shows.
-
-**Good:** one sentence first — “表 1 给出不同退火温度下测得的方阻，每片重复
-三次取平均” — then the table, then the reading that changes the conclusion.
+Discuss systematic and random uncertainty only to the extent the data or
+method supports it. Compare theory with measurement where the design permits
+it, and state which conclusions are limited by measurement scope, data
+coverage, or uncontrolled conditions.
 
 ## Shared technical writing rules (upstream `common/writing.md`)
 
@@ -625,14 +776,41 @@ do not force presentation choices into prose.
 
 - Use labels for display equations that will be referenced. Prefer `siunitx`
   for units when the template supports it.
-- Give each figure and table a complete caption and stable label. Keep table
-  width appropriate to content rather than filling a line by default.
+- Use `\begin{equation}...\label{eq:name}...\end{equation}` for numbered
+  display equations, and `\autoref{eq:name}` / `\eqref{eq:name}` (or
+  `\autoref{fig:...}`, `\autoref{tab:...}`) for cross-references to
+  equations, figures, and tables.
+- Prefer a ruled style for tables — `ruledtabular` or booktabs rules — and
+  align numeric columns on the decimal point (a `d{a.b}`-style column format
+  when the class provides it). Give each figure and table a complete caption
+  and stable label. Keep table width appropriate to content rather than
+  filling a line by default.
 - Use theorem-like environments consistently for textbook material. State
   language and font settings explicitly for CJK documents.
 - Keep source files modular when a project has several chapters or sections;
   keep paths portable and references resolvable.
 
 Inspect the rendered output when layout matters.
+
+## Typst format contract (upstream `formats/typst.md`)
+
+*Frozen from upstream heading: Typst syntax (report-relevant rules).*
+
+Do not write LaTeX commands in Typst markup. The report-relevant mechanics:
+
+- Use `#figure` with `image`, `table`, or another block as its body; put a
+  `<label>` after the element and refer to it with `@label`. Use
+  `table.cell`/`table.hline` when spans or rules are needed.
+- Give a numbered display equation a label after the math block
+  (`$ F = k x $ <eq:hooke>`) and refer to it with `@eq:name`. Keep labels
+  stable and use references instead of manually typed numbers.
+- Style tables like ruled academic tables: `table.hline` for the top, header,
+  and bottom rules (booktabs style, no vertical rules), `table.header` for the
+  header row, and a fixed number of decimal places in each numeric column so
+  values stay comparable.
+- Keep reusable style in scoped `#set`/`#show` rules. For Chinese body text,
+  use `#set par(first-line-indent: (amount: 2em, all: true), justify: true)`
+  and turn the indent off for outlines, bibliographies, lists, and tables.
 
 ## Document release gates (upstream `checks/document.md`)
 
