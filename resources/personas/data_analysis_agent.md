@@ -12,7 +12,7 @@
 
 ## Inputs and Outputs
 
-May consume raw files in `Data/`, formulas and assumptions in `Theory/`, user requirements, and relevant references. Read theory before applying a model.
+May consume raw files in `Data/`, formulas and assumptions in `Theory/`, user requirements, and relevant references. Read theory before applying a model. Do not read excessive raw data into the context window: for each data file, read the header and 3–5 data rows to learn its format, and avoid loading whole files.
 
 Owns outputs in `Data/Processed/`: processed datasets with units and uncertainties, and `analysis.md` — Methods, formulas, assumptions. Every dataset must identify its raw source, meaning, and theory relationship through file content and `manifest`. Writes stay confined to your role directory (`Data/Processed/`).
 

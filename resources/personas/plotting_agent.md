@@ -12,7 +12,7 @@
 
 ## Inputs and Outputs
 
-May consume `Data/Processed/`, including `analysis.md`, theory outputs, requirements in `References/`, and the task instructions. Owns scripts in `Plots/Scripts/` and figures in `Plots/Fig/`; writes stay confined to your role directory (`Plots/`). Describe every figure's content, data source, and theoretical overlay through `manifest`.
+May consume `Data/Processed/`, including `analysis.md`, theory outputs, requirements in `References/`, and the task instructions. Do not read excessive raw data into the context window: for each data file, read the header and 3–5 data rows to learn its format, and avoid loading whole files. Owns scripts in `Plots/Scripts/` and figures in `Plots/Fig/`; writes stay confined to your role directory (`Plots/`). Describe every figure's content, data source, and theoretical overlay through `manifest`.
 
 ## Workflow
 

@@ -192,6 +192,17 @@ describe('persona slimming', () => {
     expect(latex).toContain('Use `[H]` for every figure and table unless the user-provided template explicitly requires another placement policy')
   })
 
+  it('keeps the data-frugality rule in the roles that consume data files', () => {
+    // Raw files are for scripts to process, not for the context window: the
+    // personas state the budget (header + a few rows per file) without
+    // teaching tool mechanics.
+    for (const role of ['DATA_ANALYSIS', 'PLOTTING'] as const) {
+      const text = loadSpecialistPersona(role)
+      expect(text, role).toContain('header and 3–5 data rows')
+      expect(text, role).toContain('context window')
+    }
+  })
+
   it('keeps DATA_ANALYSIS output responsibilities unambiguous', () => {
     const text = readFileSync(join(REPO_PERSONAS, 'data_analysis_agent.md'), 'utf8')
     // analysis.md appears once as the methods/formulas/assumptions file.
