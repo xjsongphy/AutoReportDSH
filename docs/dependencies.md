@@ -81,6 +81,28 @@ Once a first-class per-session root override lands upstream, the wrap in
 `src/policy/sandbox-override.ts` can be replaced by it and this section's
 dev-only notes deleted.
 
+## CI build reuse and test parallelism
+
+CI and Canary share `.github/actions/prepare-harness`. Dependencies are still
+installed from the frozen lockfile with the pnpm store cache. The complete
+Harness build is cached separately, including package declarations, generated
+contracts, native addons, Web assets, and their build-environment record. A
+cache hit skips the upstream build; a miss runs the original full build.
+
+The build key includes the resolved Harness commit (not a movable tag or branch
+name), runner OS/architecture, Node and pnpm versions, and the preparation
+action's content hash. There is no fallback to an older revision. Editing the
+preparation action invalidates its cache. Plugin sources are built and tested
+on every run; the emitting host build performs its strict type check, and CI
+checks the separate client project once.
+
+Vitest runs isolated files in separate processes using all available CPUs.
+Individual tests retain their normal ordering because fixtures mutate process
+environment, registries and timers. Global setup builds missing plugin `dist/`
+once before workers start, so parallel boot/installer tests cannot race to
+delete and regenerate shared build output. CI already builds that output
+before starting Vitest.
+
 ## Wiring decision
 
 Dependencies use pnpm `link:` entries pointing into the harness checkout rather than npm

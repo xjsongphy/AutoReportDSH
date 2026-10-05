@@ -6,8 +6,7 @@
  * substituted persona text and absolute entry paths, and a rendered overlay
  * that disables the stock child-report row and inserts both AutoReport rows.
  *
- * The suite builds once when `dist/` is absent and skips with a reason only
- * if even the build attempt fails (e.g. no toolchain on a bare checkout).
+ * Global setup builds once when `dist/` is absent, before any worker starts.
  * @module tests/integration.boot
  */
 
@@ -25,37 +24,22 @@ const INSTALLER = join(REPO_ROOT, 'scripts', 'install-user-preset.ts')
 const OVERLAY_FILE = join(REPO_ROOT, 'cordis.overlay.generated.yml')
 
 /**
- * Ensure built dist exists; try one bounded `pnpm run build` otherwise.
- * Returns undefined when ready, or the skip reason string.
+ * Ensure global setup materialized dist; workers never build shared output.
  */
-function ensureBuilt(): string | undefined {
-  if (existsSync(HOST_ENTRY) && existsSync(ROUTER_ENTRY) && existsSync(CLIENT_BUNDLE)) return undefined
-  const build = spawnSync('pnpm', ['run', 'build'], {
-    cwd: REPO_ROOT,
-    encoding: 'utf8',
-    timeout: 180_000,
-    env: { ...process.env, CI: process.env['CI'] ?? 'true' },
-  })
-  if (build.status !== 0) {
-    return `skipping: \`pnpm run build\` failed (${build.status}): ${(build.stderr ?? '').slice(-400)}`
-  }
-  if (!existsSync(HOST_ENTRY) || !existsSync(ROUTER_ENTRY) || !existsSync(CLIENT_BUNDLE)) {
-    return 'skipping: build succeeded but dist entries are still missing'
-  }
-  return undefined
+function ensureBuilt(): void {
+  if (existsSync(HOST_ENTRY) && existsSync(ROUTER_ENTRY) && existsSync(CLIENT_BUNDLE)) return
+  throw new Error('AutoReport test global setup did not build all required dist entries')
 }
 
-const skipReason = ensureBuilt()
-if (skipReason !== undefined) console.warn(skipReason)
+ensureBuilt()
 
 const tempDirs: string[] = []
 afterEach(() => {
   for (const dir of tempDirs.splice(0)) rmSync(dir, { recursive: true, force: true })
 })
 
-describe.skipIf(skipReason !== undefined)('integration: installer CLI against a temp DSH_HOME', () => {
+describe('integration: installer CLI against a temp DSH_HOME', () => {
   it('materializes the user preset and renders the two-row patch overlay', () => {
-    expect(skipReason).toBeUndefined()
     const home = mkdtempSync(join(tmpdir(), 'autoreport-boot-home-'))
     tempDirs.push(home)
 

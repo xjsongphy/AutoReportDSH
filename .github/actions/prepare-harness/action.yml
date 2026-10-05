@@ -1,0 +1,51 @@
+name: Prepare Harness
+description: Install the selected Harness and reuse its complete build for the same host and revision.
+
+inputs:
+  node-version:
+    description: Node version used to build the Harness
+    required: true
+  pnpm-version:
+    description: pnpm version used to install the Harness
+    required: true
+
+runs:
+  using: composite
+  steps:
+    # Resolve tags/branches to a commit before looking up the build. Canary's
+    # manual ref can move without its input string changing.
+    - name: Resolve Harness revision
+      id: revision
+      shell: bash
+      working-directory: deepseek-harness
+      run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+    # Keep installing from the lockfile: setup-node caches the pnpm store,
+    # while workspace links and lifecycle scripts must run on this checkout.
+    - name: Install Harness dependencies
+      shell: bash
+      working-directory: deepseek-harness
+      run: pnpm install --frozen-lockfile --prefer-offline
+
+    # Cache only build outputs, including declarations, generated Typert
+    # contracts, native addons, and the Web build's matching environment record.
+    # Exact keys only: an older Harness build must never satisfy a new revision.
+    - name: Restore Harness build
+      id: build-cache
+      uses: actions/cache@v4
+      with:
+        key: autoreport-harness-build-v1-${{ runner.os }}-${{ runner.arch }}-node${{ inputs.node-version }}-pnpm${{ inputs.pnpm-version }}-${{ steps.revision.outputs.sha }}-${{ hashFiles('AutoReportDSH/.github/actions/prepare-harness/action.yml') }}
+        path: |
+          deepseek-harness/vendor/*/lib
+          deepseek-harness/packages/*/*/lib
+          deepseek-harness/apps/*/lib
+          deepseek-harness/apps/web/dist
+          deepseek-harness/native/system/packages/*/lib
+          deepseek-harness/native/system/packages/*/bin
+          deepseek-harness/.dsh-build
+
+    - name: Build Harness on cache miss
+      if: steps.build-cache.outputs.cache-hit != 'true'
+      shell: bash
+      working-directory: deepseek-harness
+      run: pnpm run build

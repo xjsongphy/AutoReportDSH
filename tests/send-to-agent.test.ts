@@ -443,6 +443,49 @@ describe('send_to_agent', () => {
     expect(waiters.pendingKeys()).toBe(0)
   })
 
+  it('does not replace a report observed before message delivery returns', async () => {
+    const raceHarness = harness()
+    // Model the observer committing a fast report while DSH is still resolving
+    // the delivery receipt returned by the transport.
+    raceHarness.subagents.startContinuable.mockImplementation(async () => {
+      const dispatched = raceHarness.state.currentDelegation('task-1')
+      if (dispatched === undefined) throw new Error('dispatch was not committed')
+      raceHarness.workflow.commit(raceHarness.session, 'autoreport/delegation', {
+        ...dispatched,
+        acceptedMessageId: 'msg-fast',
+        phase: 'completed',
+        report: {
+          task_id: 'task-1', delegation_revision: 1, status: 'success',
+          block_type: null, response: 'fast report', produced_files: [],
+        },
+        reportMessageId: 'report-fast', settledAt: 2,
+      })
+      raceHarness.workflow.commit(raceHarness.session, 'autoreport/task', task({ status: 'completed', revision: 2 }))
+      return { childId: SessionId('child-theory'), messageId: 'msg-fast' }
+    })
+
+    await expect(raceHarness.call({ role: 'THEORY', task_id: 'task-1', prompt: 'Derive H' }))
+      .resolves.toMatchObject({ status: 'success', response: 'fast report' })
+    expect(raceHarness.state.currentDelegation('task-1')?.phase).toBe('completed')
+    expect(raceHarness.state.currentDelegation('task-1')?.report?.response).toBe('fast report')
+  })
+
+  it('returns cancellation observed before the delivery receipt without starting a waiter', async () => {
+    const { call, state, workflow, session, subagents, waiters } = harness()
+    subagents.startContinuable.mockImplementation(async () => {
+      const dispatched = state.currentDelegation('task-1')!
+      workflow.commit(session, 'autoreport/delegation', { ...dispatched, phase: 'cancelled' })
+      workflow.commit(session, 'autoreport/task', { ...state.getTask('task-1')!, status: 'cancelled' })
+      waiters.settle('task-1#1', { status: 'cancelled' })
+      return { childId: SessionId('child-theory'), messageId: 'msg-cancelled' }
+    })
+
+    await expect(call({ role: 'THEORY', task_id: 'task-1', prompt: 'Derive H' }))
+      .resolves.toMatchObject({ status: 'cancelled' })
+    expect(state.currentDelegation('task-1')?.phase).toBe('cancelled')
+    expect(waiters.pendingKeys()).toBe(0)
+  })
+
   it('records a durable timeout when wait:true elapses with no report', async () => {
     const { call, state } = harness()
     await expect(call({

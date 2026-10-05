@@ -33,7 +33,9 @@ export function installPythonPackageTool(ctx: Context): () => void {
         snapshotPythonExecutable: session => workflow.projectionFor(String(session.id))?.meta?.settings?.pythonExecutable,
       }, agent.session)
       const selected = workflow.projectionFor(String(agent.session.id))?.meta?.settings?.pythonExecutable
-      const managed = selected !== undefined && isManagedPythonSetting(selected)
+      const managedSelection = workflow.projectionFor(String(agent.session.id))?.meta?.settings
+      const managed = managedSelection?.pythonManaged === true
+        || (selected !== undefined && isManagedPythonSetting(selected))
       const approver = ctx.get('approval') as { request: (request: { agent: Agent; toolName: string; callId: typeof exec.callId; reason: string; signal: AbortSignal }) => Promise<string> } | undefined
       if (approver === undefined) throw new Error('package installation requires a user approval channel')
       const decision = await approver.request({

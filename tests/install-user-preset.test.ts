@@ -1,4 +1,3 @@
-import { spawnSync } from 'node:child_process'
 import { mkdtempSync, readFileSync, rmSync, writeFileSync, existsSync, mkdirSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -31,15 +30,9 @@ function builtEntry(): string {
 }
 
 function ensureBuilt(): void {
-  if (existsSync(builtEntry())) return
-  const build = spawnSync('pnpm', ['run', 'build'], {
-    cwd: ROOT,
-    encoding: 'utf8',
-    timeout: 180_000,
-  })
-  if (build.status !== 0 || !existsSync(builtEntry())) {
-    throw new Error(`autoreport test: pnpm run build failed (${build.status}): ${(build.stderr ?? '').slice(-400)}`)
-  }
+  // Global setup owns this shared output; workers must never rebuild it while
+  // another installer test is reading it.
+  if (!existsSync(builtEntry())) throw new Error('AutoReport test global setup did not build dist')
 }
 
 describe('install-user-preset', () => {
