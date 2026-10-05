@@ -11,15 +11,20 @@ describe('fixed role table', () => {
     expect(rolePolicy('THEORY')).toEqual({
       writableRoot: 'Theory',
       hasProcessTool: false,
-      tools: ['read', 'list', 'grep', 'read_image', 'write', 'edit', 'skill', 'manifest', 'report_workflow'],
+      // THEORY registers no bundled skills, so the skill loader is not granted.
+      tools: ['read', 'list', 'grep', 'read_image', 'write', 'edit', 'manifest', 'report_workflow'],
     })
     for (const role of ['DATA_ANALYSIS', 'PLOTTING'] as const) {
       expect(rolePolicy(role).writableRoot).toBe(
         role === 'DATA_ANALYSIS' ? 'Data/Processed'
           : role === 'PLOTTING' ? 'Plots' : 'Report')
       expect(rolePolicy(role).hasProcessTool).toBe(true)
+      // Only PLOTTING carries a skill catalog (plotting-quality), so only
+      // PLOTTING keeps the skill loader.
       expect(rolePolicy(role).tools).toEqual(
-        ['read', 'list', 'grep', 'read_image', 'write', 'edit', 'skill', 'manifest', 'report_workflow', ROLE_PROCESS_TOOL])
+        role === 'DATA_ANALYSIS'
+          ? ['read', 'list', 'grep', 'read_image', 'write', 'edit', 'manifest', 'report_workflow', ROLE_PROCESS_TOOL]
+          : ['read', 'list', 'grep', 'read_image', 'write', 'edit', 'skill', 'manifest', 'report_workflow', ROLE_PROCESS_TOOL])
     }
     expect(rolePolicy('REPORT')).toEqual({
       writableRoot: 'Report',

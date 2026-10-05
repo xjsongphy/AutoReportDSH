@@ -37,8 +37,15 @@ export const ROLE_PROCESS_TOOL = process.platform === 'win32' ? 'pwsh' : 'bash'
 
 /** File tools every role receives; paths are workspace-relative. */
 export const BASE_TOOLS = [
-  'read', 'list', 'grep', 'read_image', 'write', 'edit', 'skill',
+  'read', 'list', 'grep', 'read_image', 'write', 'edit',
 ] as const
+
+/**
+ * DSH's skill-catalog loader. Only roles whose scope registers bundled skills
+ * keep it (`skillNamesForRole`): a loader over an empty catalog can only
+ * invite invented skill names.
+ */
+export const SKILL_TOOL = 'skill'
 
 /** Coordination/protocol tools MAIN uses to orchestrate the workflow. */
 const MAIN_COORDINATOR_TOOLS = [
@@ -62,7 +69,7 @@ export interface ReportRolePolicy {
 const MAIN_POLICY: ReportRolePolicy = {
   writableRoot: 'Outline',
   hasProcessTool: false,
-  tools: [...BASE_TOOLS, ...MAIN_COORDINATOR_TOOLS],
+  tools: [...BASE_TOOLS, SKILL_TOOL, ...MAIN_COORDINATOR_TOOLS],
 }
 
 const THEORY_POLICY: ReportRolePolicy = {
@@ -80,13 +87,13 @@ const DATA_ANALYSIS_POLICY: ReportRolePolicy = {
 const PLOTTING_POLICY: ReportRolePolicy = {
   writableRoot: 'Plots',
   hasProcessTool: true,
-  tools: [...BASE_TOOLS, ...SPECIALIST_PROTOCOL_TOOLS, ROLE_PROCESS_TOOL],
+  tools: [...BASE_TOOLS, SKILL_TOOL, ...SPECIALIST_PROTOCOL_TOOLS, ROLE_PROCESS_TOOL],
 }
 
 const REPORT_POLICY: ReportRolePolicy = {
   writableRoot: 'Report',
   hasProcessTool: false,
-  tools: [...BASE_TOOLS, ...SPECIALIST_PROTOCOL_TOOLS, 'compile_report', 'render_report_page'],
+  tools: [...BASE_TOOLS, SKILL_TOOL, ...SPECIALIST_PROTOCOL_TOOLS, 'compile_report', 'render_report_page'],
 }
 
 const POLICIES: Readonly<Record<AutoReportRole, ReportRolePolicy>> = {

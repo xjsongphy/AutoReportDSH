@@ -36,8 +36,12 @@ function usageLines(toolNames: readonly string[]): string[] {
     visible.has('list')
       ? '- Do not use failed `read` calls to probe for existence. After a not-found or wrong-type error, inspect the containing directory with `list` instead of trying more guessed paths.'
       : '- Do not use failed `read` calls to probe for existence; do not continue with more guessed paths after a not-found or wrong-type error.',
-    '- Never invent skill names; invoke `skill` only with a name shown in your skill catalog. If no catalog skill matches the task, continue without one.',
   )
+  if (visible.has('skill')) {
+    // Same-source with the surface: a role without the loader has no catalog,
+    // so the warning would point at a tool it cannot call.
+    lines.push('- Never invent skill names; invoke `skill` only with a name shown in your skill catalog. If no catalog skill matches the task, continue without one.')
+  }
   return lines
 }
 

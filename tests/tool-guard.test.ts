@@ -245,7 +245,9 @@ describe('AutoReport role tool guard', () => {
     expect(guard(execution('grep', { pattern: 'raw' }, theory))).toBeUndefined()
     expect(guard(execution('grep', { pattern: 'voltage', path: 'Data/Raw' }, main))).toBeUndefined()
     expect(guard(execution('grep', { pattern: 'voltage', path: join(root, 'Data/Raw') }, main))).toContain('workspace-relative')
-    expect(guard(execution('skill', { name: 'arbitrary' }, theory))).toBeUndefined()
+    // THEORY registers no bundled skills, so its policy does not declare the
+    // skill loader; the guard refuses the call at execution time too.
+    expect(guard(execution('skill', { name: 'arbitrary' }, theory))).toContain('no declared capability for skill')
     expect(guard(execution('manifest', { action: 'read' }, theory))).toBeUndefined()
     expect(guard(execution('manifest', { action: 'read', agent: 'data_analysis' }, theory))).toBeUndefined()
     expect(guard(execution('report_workflow', {}, theory))).toBeUndefined()

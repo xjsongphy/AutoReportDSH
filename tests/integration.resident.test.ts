@@ -347,7 +347,7 @@ describe('integration: resident subagent through the real agent loop', () => {
       deny: [
         'send_to_agent', 'ask_user_question', 'workflow', 'subagent', 'subagent_fork',
         'send_message', 'interrupt_agent', 'list_agents', 'todo_write', 'glob', 'pwsh', 'bash',
-        'install_python_package',
+        'install_python_package', 'skill',
       ],
     })
 
@@ -364,12 +364,14 @@ describe('integration: resident subagent through the real agent loop', () => {
       expect(request.model).toBe(SPECIALIST_MODEL)
     }
     // The routed tool surface: the structured report protocol, NOT delegation.
+    // THEORY registers no bundled skills, so the skill loader is hidden too —
+    // an empty catalog plus a loader only invites invented skill names.
     const childTools = requestedToolNames(booted.specialistAdapter.requests[0]!)
     expect(childTools).toContain('report_workflow')
     expect(childTools).toContain('manifest')
     expect(childTools).toContain('list')
     expect(childTools).toContain('grep')
-    expect(childTools).toContain('skill')
+    expect(childTools).not.toContain('skill')
     expect(childTools).not.toContain('bash')
     expect(childTools).not.toContain('pwsh')
     expect(childTools).not.toContain('send_to_agent')
@@ -428,6 +430,12 @@ describe('integration: resident subagent through the real agent loop', () => {
     expect(lastTurnEndReason(child!)?.kind).toBe('completed')
     expect(booted.specialistAdapter.requests[0]?.provider).toBe(SPECIALIST_PROVIDER)
     expect(booted.specialistAdapter.requests[0]?.model).toBe(SPECIALIST_MODEL)
+
+    // DATA_ANALYSIS keeps its process tool and — with no bundled skills —
+    // loses the skill loader (the 2026-10 regression pair).
+    const analystTools = requestedToolNames(booted.specialistAdapter.requests[0]!)
+    expect(analystTools).toContain('bash')
+    expect(analystTools).not.toContain('skill')
 
     await until(
       () => relayTexts(booted.mainSession).some(text => text.includes('DATA_ANALYSIS') && text.includes('数据分析完成')),

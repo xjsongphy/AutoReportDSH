@@ -41,7 +41,7 @@ describe('residentDescriptor', () => {
       agentModel: 'deepseek-flash',
       agentReasoningEffort: 'low',
       persona: 'theory persona',
-      toolFilter: { deny: ['send_to_agent', 'ask_user_question', 'workflow', 'subagent', 'subagent_fork', 'send_message', 'interrupt_agent', 'list_agents', 'todo_write', 'glob', 'pwsh', 'bash', 'install_python_package'] },
+      toolFilter: { deny: ['send_to_agent', 'ask_user_question', 'workflow', 'subagent', 'subagent_fork', 'send_message', 'interrupt_agent', 'list_agents', 'todo_write', 'glob', 'pwsh', 'bash', 'install_python_package', 'skill'] },
     })
   })
 
@@ -53,10 +53,20 @@ describe('residentDescriptor', () => {
 
   it('keeps the coordinator tools out of every resident child', () => {
     const otherProcessTool = ROLE_PROCESS_TOOL === 'bash' ? 'pwsh' : 'bash'
-    const delegatedTools = ['send_to_agent', 'ask_user_question', 'workflow', 'subagent', 'subagent_fork', 'send_message', 'interrupt_agent', 'list_agents', 'todo_write', 'glob', otherProcessTool, 'install_python_package']
+    const delegatedTools = ['send_to_agent', 'ask_user_question', 'workflow', 'subagent', 'subagent_fork', 'send_message', 'interrupt_agent', 'list_agents', 'todo_write', 'glob', otherProcessTool, 'install_python_package', 'skill']
     expect(RESIDENT_TOOL_FILTER).toEqual({ deny: delegatedTools })
     expect(residentToolFilter('THEORY').deny?.slice().sort()).toEqual([...delegatedTools, ROLE_PROCESS_TOOL].sort())
     expect(residentToolFilter('DATA_ANALYSIS')).toEqual(RESIDENT_TOOL_FILTER)
+  })
+
+  it('keeps the skill loader for exactly the roles whose policy grants it', () => {
+    // The policy table and the skill registry must agree: a role with no
+    // registered bundled skills has no skill catalog, so the loader tool would
+    // only invite invented names (session 48970218's "data-analysis" error).
+    expect(residentToolFilter('THEORY').deny).toContain('skill')
+    expect(residentToolFilter('DATA_ANALYSIS').deny).toContain('skill')
+    expect(residentToolFilter('PLOTTING').deny).not.toContain('skill')
+    expect(residentToolFilter('REPORT').deny).not.toContain('skill')
   })
 })
 

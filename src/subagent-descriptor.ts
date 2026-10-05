@@ -22,12 +22,15 @@ import type { Session } from '@deepseek-ai/dsh-session'
 import type { ReasoningEffortId } from '@deepseek-ai/dsh-llm'
 import { snapshotSubagentDescriptor, type SubagentDescriptorData } from '@deepseek-ai/dsh-subagent'
 import type { ToolRestriction } from '@deepseek-ai/dsh-tools'
-import { DSH_ROLE_ESCAPE_TOOL_NAMES, rolePolicy, type SpecialistRole } from './roles.js'
+import { DSH_ROLE_ESCAPE_TOOL_NAMES, SKILL_TOOL, rolePolicy, type SpecialistRole } from './roles.js'
 
 /** Filter DSH capabilities the fixed role policy does not assign. */
 export function residentToolFilter(role: SpecialistRole, visibleTools?: ReadonlySet<string>): ToolRestriction {
   const policy = rolePolicy(role)
-  const denied = DSH_ROLE_ESCAPE_TOOL_NAMES.filter(name => !policy.tools.includes(name))
+  // The skill loader follows the same policy: a role whose scope registers no
+  // bundled skills has no catalog, so the loader must be denied too, or a
+  // cold-resumed child would see a tool that only invites invented names.
+  const denied = [...DSH_ROLE_ESCAPE_TOOL_NAMES, SKILL_TOOL].filter(name => !policy.tools.includes(name))
   const filtered = visibleTools === undefined ? denied : denied.filter(name => visibleTools.has(name))
   return { deny: filtered }
 }

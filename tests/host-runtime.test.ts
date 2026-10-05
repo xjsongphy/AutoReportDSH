@@ -426,7 +426,7 @@ describe('host workflow runtime', () => {
     expect(restrict).toHaveBeenCalledWith({ deny: [
       'send_to_agent', 'ask_user_question', 'workflow', 'subagent', 'subagent_fork',
         'send_message', 'interrupt_agent', 'list_agents', 'todo_write', 'glob', 'pwsh', 'bash',
-        'install_python_package',
+        'install_python_package', 'skill',
     ] })
 
     // Unjoined parent: nothing preset-plane is restrictable, so the deny-list
@@ -495,7 +495,7 @@ describe('host workflow runtime', () => {
       toolFilter: { deny: [
         'send_to_agent', 'ask_user_question', 'workflow', 'subagent', 'subagent_fork',
       'send_message', 'interrupt_agent', 'list_agents', 'todo_write', 'glob', 'pwsh', 'bash',
-        'install_python_package',
+        'install_python_package', 'skill',
       ] },
     })
   })
