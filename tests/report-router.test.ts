@@ -204,40 +204,16 @@ describe('report router', () => {
     expect(child.providers).toEqual(['autoreport-references'])
   })
 
-  it('installs the compute shell for DATA_ANALYSIS when the child scope has none', () => {
+  it('never registers a shell; the host role surface owns role shells', () => {
+    // Two same-name registrations in one scope layer throw `tool "bash" is
+    // already registered in this scope` and failed every DATA_ANALYSIS
+    // dispatch. The host wraps (or backfills) the role shell; the router
+    // contributes protocol tools only.
     const child = childContext('child-da', '/tmp/autoreport-da-workspace', {
       services: {
         shell: { sandboxMode: 'workspace-write' },
         shellEnv: { collect: () => ({}) },
-        // The stock pwsh installer requires a sandbox policy service whenever
-        // the shell executor confines.
         sandboxPolicy: { resolve: () => ({ mode: 'workspace-write' }) },
-      },
-    })
-    const host = hostContext()
-    const roleRegistry = new RoleRegistry()
-    roleRegistry.registerReserved({
-      version: 1,
-      role: 'DATA_ANALYSIS',
-      childSessionId: SessionId('child-da'),
-      parentSessionId: SessionId('main'),
-      workflowId: 'wf',
-      provisioning: 'reserved',
-    })
-    installRoutedReportTool(child.ctx, child.agent as never, host.ctx, routedWorkflow({ roleRegistry }))
-    expect(child.tools.map(tool => tool.name)).toEqual(['manifest', 'report_workflow', ROLE_PROCESS_TOOL])
-  })
-
-  it('defers to the driver shell for a managed child that joins a preset', () => {
-    // A managed (driver-created) child of a preset-joined parent receives the
-    // platform shell from its driver's own lazy scope mount; registering our
-    // own bash first would collide with that mount and fail the child's first
-    // turn. The role guard keeps the stock shell inside the role model
-    // (foreground-only, no escalation).
-    const child = childContext('child-da', '/tmp/autoreport-da-workspace', {
-      services: {
-        shell: { sandboxMode: 'workspace-write' },
-        shellEnv: { collect: () => ({}) },
         agentPresets: { composedPreset: () => 'base' },
       },
     })
@@ -253,62 +229,6 @@ describe('report router', () => {
     })
     installRoutedReportTool(child.ctx, child.agent as never, host.ctx, routedWorkflow({ roleRegistry }))
     expect(child.tools.map(tool => tool.name)).toEqual(['manifest', 'report_workflow'])
-  })
-
-  it('installs the compute shell for a resident child even when the scope joins a preset', () => {
-    // Resident children are created directly: no driver mounts a shell into
-    // their scope, and the AutoReport preset itself carries no shell row, so
-    // deferring on the preset join leaves the role with no process tool at all
-    // (the 2026-10 DATA_ANALYSIS regression).
-    const child = childContext('child-da', '/tmp/autoreport-da-workspace', {
-      services: {
-        shell: { sandboxMode: 'workspace-write' },
-        shellEnv: { collect: () => ({}) },
-        // The stock pwsh installer requires a sandbox policy service whenever
-        // the shell executor confines (same stub as the bare-host test above).
-        sandboxPolicy: { resolve: () => ({ mode: 'workspace-write' }) },
-        agentPresets: { composedPreset: () => 'base' },
-      },
-    })
-    const host = hostContext()
-    const roleRegistry = new RoleRegistry()
-    roleRegistry.registerReserved({
-      version: 1,
-      role: 'DATA_ANALYSIS',
-      childSessionId: SessionId('child-da'),
-      parentSessionId: SessionId('main'),
-      workflowId: 'wf',
-      provisioning: 'reserved',
-    })
-    installRoutedReportTool(child.ctx, child.agent as never, host.ctx, routedWorkflow({ roleRegistry }), { resident: true })
-    expect(child.tools.map(tool => tool.name)).toEqual(['manifest', 'report_workflow', ROLE_PROCESS_TOOL])
-  })
-
-  it('keeps a preset-mounted shell when the child scope already registered bash', () => {
-    // Children join the parent's preset, so base rows like tool-bash can
-    // already occupy the child's own scope layer; the router must not crash
-    // the child on that duplicate, and the role guard stays the enforcement.
-    const child = childContext('child-da', '/tmp/autoreport-da-workspace', {
-      presetTools: [ROLE_PROCESS_TOOL],
-      services: {
-        shell: { sandboxMode: 'workspace-write' },
-        shellEnv: { collect: () => ({}) },
-        sandboxPolicy: { resolve: () => ({ mode: 'workspace-write' }) },
-      },
-    })
-    const host = hostContext()
-    const roleRegistry = new RoleRegistry()
-    roleRegistry.registerReserved({
-      version: 1,
-      role: 'DATA_ANALYSIS',
-      childSessionId: SessionId('child-da'),
-      parentSessionId: SessionId('main'),
-      workflowId: 'wf',
-      provisioning: 'reserved',
-    })
-    expect(() => installRoutedReportTool(child.ctx, child.agent as never, host.ctx, routedWorkflow({ roleRegistry })))
-      .not.toThrow()
-    expect(child.tools.map(tool => tool.name)).toEqual([ROLE_PROCESS_TOOL, 'manifest', 'report_workflow'])
   })
 
   it('installs report workflow, compilation, and page rendering only for REPORT', () => {

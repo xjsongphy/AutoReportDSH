@@ -12,6 +12,11 @@ import type { SpecialistRole } from '../roles.js'
 import { existingWorkspacePath } from '../workspace/path.js'
 import { genericCall } from './presentation.js'
 
+/** Marker distinguishing the overlay compute shell from stock platform shells:
+ *  the host role surface must not wrap (and so re-register) an already
+ *  role-hardened compute shell under the same name. */
+export const COMPUTE_SHELL_MARKER = Symbol.for('autoreport.compute-shell')
+
 /** Install the full foreground shell capability only for Data and Plotting. */
 export function installComputeBashTool(ctx: Context, role: SpecialistRole, workspaceRootOverride?: string): () => void {
   if (role !== 'DATA_ANALYSIS' && role !== 'PLOTTING') throw new Error(`${role} has no compute shell capability`)
@@ -25,7 +30,7 @@ export function installComputeBashTool(ctx: Context, role: SpecialistRole, works
   }
   const shellEnv = ctx.get('shellEnv') as typeof ctx.shellEnv | undefined
   if (shellEnv === undefined) throw new Error('AutoReport compute bash requires the DSH shell environment service')
-  return ctx.tools.register(defineTool({
+  const definition = defineTool({
     name: 'bash',
     description: 'Run a foreground bash command for data analysis or plotting. Each call has a fresh shell. Check exitCode and stderr; if sandbox denies an operation or a dependency is missing, report the blocker to MAIN. Writes are confined to your role directory. This tool has no sandbox escalation or background mode.',
     parameters: {
@@ -89,5 +94,7 @@ export function installComputeBashTool(ctx: Context, role: SpecialistRole, works
         sandbox: { enforcement: result.sandbox?.enforcement ?? 'unknown' },
       }
     },
-  }))
+  })
+  ;(definition as { [COMPUTE_SHELL_MARKER]?: boolean })[COMPUTE_SHELL_MARKER] = true
+  return ctx.tools.register(definition)
 }

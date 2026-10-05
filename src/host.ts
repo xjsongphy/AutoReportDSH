@@ -28,6 +28,7 @@ import { describeDshVersionSupport, readRunningDshVersion } from './dsh-version.
 import { installTurnGuards } from './workflow/turn-guard.js'
 import { createListDirectoryTool, type DirectoryFileSystem } from './tools/list-directory.js'
 import { createGrepTool, type SearchFileSystem } from './tools/grep.js'
+import { COMPUTE_SHELL_MARKER, installComputeBashTool } from './tools/compute-bash.js'
 import { skillNamesForRole } from './skills-preset.js'
 import { loadBundledSkills } from './workspace/skill-loader.js'
 import { restrictInheritedShell } from './policy/role-tool-visibility.js'
@@ -275,10 +276,30 @@ export async function apply(ctx: Context, config: Partial<Config> = {}, options:
       register(createListDirectoryTool(workspaceRoot, agent, fileSystem))
       register(createGrepTool(workspaceRoot, agent, searchFileSystem))
       let processToolAvailable = false
-      if (rolePolicy(role).hasProcessTool) {
+      // Only the compute roles carry a process tool, so the role narrows to
+      // SpecialistRole exactly when the branch below is reachable.
+      const specialistRole = role === 'MAIN' ? undefined : role
+      if (rolePolicy(role).hasProcessTool && specialistRole !== undefined) {
         const shell = agent.ctx.tools.get(ROLE_PROCESS_TOOL, agent)
-        if (shell !== undefined) {
+        if (shell !== undefined && (shell as { [COMPUTE_SHELL_MARKER]?: boolean })[COMPUTE_SHELL_MARKER] !== true) {
           register(wrapRoleAwareShell(shell, role, workspaceRoot))
+          processToolAvailable = true
+        } else if (shell === undefined) {
+          // No stock shell is chain-visible: the overlay compute shell
+          // backfills the role's process tool. The host role surface is the
+          // single shell owner — the report router never registers a shell —
+          // so the same-name collision that failed DATA_ANALYSIS dispatch
+          // (the 2026-10 regression) cannot recur.
+          try {
+            releases.push(installComputeBashTool(agent.ctx, specialistRole, workspaceRoot))
+            processToolAvailable = true
+          } catch {
+            // No sandboxing shell stack in this deployment; the role runs on
+            // file tools and reports missing_dependency where relevant.
+          }
+        } else {
+          // The visible shell is the overlay compute shell from an earlier
+          // configuration pass — already role-hardened, never re-wrap it.
           processToolAvailable = true
         }
       }

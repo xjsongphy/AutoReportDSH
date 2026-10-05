@@ -610,9 +610,7 @@ export default class AutoReportWorkflowRuntime extends Service {
       // are present from the first resident request.
       await childCtx.inject(['skills'], (skillCtx) => {
         skillCtx.effect(
-          // Resident: this directly-created child gets its role shell from the
-          // router — no driver will mount one into its scope.
-          () => installRoutedReportTool(skillCtx, child, this.ctx, this, { resident: true }),
+          () => installRoutedReportTool(skillCtx, child, this.ctx, this),
           `autoreport.resident.${role}()`,
         )
       })

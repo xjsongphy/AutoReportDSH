@@ -1,5 +1,4 @@
 import type { Context } from '@deepseek-ai/cordis'
-import { apply as installPowerShellTool } from '@deepseek-ai/dsh-tool-pwsh'
 import { installModelSelection, type Agent, type ModelSelection } from '@deepseek-ai/dsh-agent'
 import { ReasoningEffortId } from '@deepseek-ai/dsh-llm'
 import type AutoReportWorkflowRuntime from '../runtime.js'
@@ -9,12 +8,10 @@ import { installManifestTool } from './manifest.js'
 import { registerRoleSkills, type ReportSkillLanguage } from '../skills-preset.js'
 import { installCompileReportTool } from './compile-report.js'
 import { installRenderReportPageTool } from './render-report-page.js'
-import { installComputeBashTool } from './compute-bash.js'
 import { installReferencesSkills } from '../skills-references.js'
 import { loadReportLanguageGuidance } from '../workspace/skill-loader.js'
 import { CHILD_REPORT_CONTEXT, CHILD_REPORT_PROTOCOL_CONTEXT } from './prompt.js'
 import { skillLoadTracker } from '../policy/skill-gate.js'
-import { rolePolicy } from '../roles.js'
 import { restrictInheritedShell } from '../policy/role-tool-visibility.js'
 
 /** Entry file and theme per report language. */
@@ -103,21 +100,6 @@ export function installSpecialistModelSelection(childCtx: Context, child: Agent,
   }
 }
 
-/** How the routed child was created, which decides who supplies its shell. */
-export interface RoutedComposition {
-  /**
-   * The child was created directly by the AutoReport resident setup. No
-   * driver mounts a shell into such a scope, so the overlay must provide the
-   * role's compute shell itself — the joined preset carries no shell row, and
-   * deferring on the preset join leaves the role without a process tool (the
-   * 2026-10 DATA_ANALYSIS regression). Managed (driver-created) children of a
-   * preset-joined parent instead receive the platform shell from their
-   * driver's lazy scope mount; an early overlay bash would collide with that
-   * mount inside the child's first turn.
-   */
-  readonly resident?: boolean
-}
-
 /**
  * Route one continuable child's report surface by pre-provisioned role.
  * AutoReport children get the structured protocol and role skills; ordinary
@@ -128,7 +110,6 @@ export interface RoutedComposition {
  * @param child - the child agent being composed.
  * @param hostCtx - host context carrying shared services.
  * @param workflow - AutoReport role registry, config, and owning-session lookup.
- * @param composition - how the child was created; decides the shell provider.
  * @returns child-scoped disposer.
  */
 export function installRoutedReportTool(
@@ -136,7 +117,6 @@ export function installRoutedReportTool(
   child: Agent,
   hostCtx: Context,
   workflow: RoutedWorkflow,
-  composition: RoutedComposition = {},
 ): () => void {
   const entry = workflow.roleRegistry.lookup(child.id)
   if (entry === undefined) return () => {}
@@ -168,22 +148,13 @@ export function installRoutedReportTool(
       // surviving session self-heals: the next guard call re-seeds from the log.
       disposers.push(() => { skillLoadTracker.forget(String(child.id)) })
     }
-    if (child.session !== undefined && rolePolicy(entry.binding.role).hasProcessTool && childCtx.get('shell') !== undefined) {
-      // Scoped registration gives only these roles a shell. DSH owns its
-      // registration lifetime together with the child context. A managed
-      // (driver-created) child of a preset-joined parent receives the stock
-      // shell from its driver's lazy scope mount, so the overlay shell steps
-      // aside there — the role guard keeps the stock shell foreground-only
-      // and escalation-free. Resident children get the overlay shell
-      // unconditionally: nothing else mounts one into their scope.
-      const driverMountsTheShell = composition.resident !== true && joinsPreset(childCtx)
-      if (!driverMountsTheShell) {
-        if (process.platform === 'win32') installShellTool(() => installPowerShellTool(childCtx, { enableRunInBackground: false }))
-        else {
-          installShellTool(() => disposers.push(installComputeBashTool(childCtx, entry.binding.role, workflow.config.workspaceRoot)))
-        }
-      }
-    }
+    // Shell provisioning belongs to the host role surface alone: it wraps a
+    // chain-visible stock shell, or backfills the overlay compute shell when
+    // none is visible. Two same-name registrations in one scope layer throw
+    // `tool "bash" is already registered in this scope` and failed every
+    // DATA_ANALYSIS dispatch (the 2026-10 regression), so the router never
+    // registers a shell. The role guard keeps any shell foreground-only and
+    // escalation-free.
     disposers.push(restrictInheritedShell(childCtx, child, entry.binding.role))
     disposers.push(registerRoleSkills(childCtx, entry.binding.role, language))
     disposers.push(installReferencesSkills(childCtx))
@@ -221,34 +192,6 @@ export function installRoutedReportTool(
 
 /** Agents whose report surface this process already routed. */
 const routedChildren = new WeakSet<Agent>()
-
-/**
- * Whether the child's scope joined a preset. A managed (driver-created)
- * child of a preset-joined parent receives its stock shell from the driver's
- * lazy scope mount — invisible at routing time, but occupying the scope
- * later, so an overlay registration would collide with it.
- */
-function joinsPreset(childCtx: Context): boolean {
-  const presets = childCtx.get('agentPresets') as
-    | { composedPreset?: (ctx: Context) => string | undefined }
-    | undefined
-  return presets?.composedPreset?.(childCtx) !== undefined
-}
-
-/**
- * Install one role shell, tolerating a shell the child's preset already
- * mounted in its own scope layer (delegated children join the parent's
- * preset, so base rows like tool-bash can occupy the scope before the
- * router runs). The stock shell stays in place; the role guard remains
- * the enforcement backstop (foreground-only, role-scoped sandbox).
- */
-function installShellTool(install: () => void): void {
-  try {
-    install()
-  } catch (error: unknown) {
-    if (!(error instanceof Error) || !/already registered in this scope/u.test(error.message)) throw error
-  }
-}
 
 /**
  * Register the child report router. Master dsh removed the continuable-setup

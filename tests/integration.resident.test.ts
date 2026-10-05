@@ -177,6 +177,10 @@ async function boot(options: {
     },
   } as never)
   ctx.provide('commands', { register: () => () => {} } as never)
+  // Production deployments always mount the DSH shell capability; without it
+  // the overlay shell installer never activates and the 2026-10 duplicate-bash
+  // collision (host wrap vs router compute shell) cannot reproduce here.
+  ctx.provide('shell', { sandboxMode: 'workspace-write' } as never)
   ctx.provide('shellEnv', { register: () => () => {} } as never)
   ctx.provide('fs', {} as never)
   ctx.provide('subprocess', {
@@ -387,6 +391,35 @@ describe('integration: resident subagent through the real agent loop', () => {
     const relays = relayTexts(booted.mainSession)
     expect(relays.length).toBeGreaterThanOrEqual(1)
     expect(relays.some(text => text.includes('THEORY') && text.includes('理论推导完成'))).toBe(true)
+  })
+
+  it('wait=true: a DATA_ANALYSIS dispatch settles with exactly one role shell', { timeout: 30_000 }, async () => {
+    // Regression for the 2026-10 duplicate-bash blocker: with a shell service
+    // mounted, the host role surface (wrap) and the report router (compute
+    // shell) both used to register `bash` into the child's own scope layer,
+    // and the second registration failed the whole dispatch. Ownership now
+    // lives only in the host role surface.
+    const booted = await boot({
+      mainCalls: [{
+        name: 'send_to_agent',
+        args: {
+          role: 'DATA_ANALYSIS',
+          subject: '数据分析探针',
+          prompt: '探针：确认派生链路可用',
+        },
+      }],
+      mainTexts: ['报告已收到'],
+      specialistTexts: ['child done'],
+    })
+
+    sendUser(booted.mainAgent, '开始完成实验报告')
+    await until(() => booted.mainAgent.status === 'idle', 'MAIN turn idle')
+    expect(lastTurnEndReason(booted.mainSession)?.kind).toBe('completed')
+    const workflow = booted.runtime.forSession(booted.mainSession)
+    expect(workflow.state.bindingForRole('DATA_ANALYSIS')?.provisioning).toBe('active')
+    const child = booted.childSession()
+    expect(child).toBeDefined()
+    expect(descriptorOf(child!)?.['label']).toBe('AutoReport DATA_ANALYSIS')
   })
 
   it('wait=false: the incident path — MAIN moves on, the async report still settles and relays', { timeout: 30_000 }, async () => {
