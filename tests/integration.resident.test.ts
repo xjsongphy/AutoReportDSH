@@ -150,6 +150,9 @@ async function boot(options: {
   specialistTexts?: readonly string[]
   /** Composition specialist route; defaults to the registered test provider. */
   specialistModel?: Config['specialistModel']
+  /** Deployments without a global base bash row: the role shell must be
+   *  backfilled agent-locally, which restrict() must never name. */
+  omitGlobalBash?: boolean
 }): Promise<Booted> {
   const ctx = new Context()
   const workspaceRoot = tempDir('autoreport-resident-ws-')
@@ -208,13 +211,15 @@ async function boot(options: {
     output: { schema: { type: 'object', additionalProperties: true, properties: {} }, render: () => [{ type: 'text', text: 'stub' }] },
     async execute() { return {} },
   }))
-  ctx.tools.register(defineTool({
-    name: 'bash',
-    description: 'test shell stub so the THEORY denial is enforced',
-    parameters: {},
-    output: { schema: { type: 'object', additionalProperties: true, properties: {} }, render: () => [{ type: 'text', text: 'stub' }] },
-    async execute() { return {} },
-  }))
+  if (options.omitGlobalBash !== true) {
+    ctx.tools.register(defineTool({
+      name: 'bash',
+      description: 'test shell stub so the THEORY denial is enforced',
+      parameters: {},
+      output: { schema: { type: 'object', additionalProperties: true, properties: {} }, render: () => [{ type: 'text', text: 'stub' }] },
+      async execute() { return {} },
+    }))
+  }
   ctx.tools.register(defineTool({
     name: 'pwsh',
     description: 'test PowerShell stub so the THEORY denial is enforced on Windows',
@@ -406,6 +411,34 @@ describe('integration: resident subagent through the real agent loop', () => {
           role: 'DATA_ANALYSIS',
           subject: '数据分析探针',
           prompt: '探针：确认派生链路可用',
+        },
+      }],
+      mainTexts: ['报告已收到'],
+      specialistTexts: ['child done'],
+    })
+
+    sendUser(booted.mainAgent, '开始完成实验报告')
+    await until(() => booted.mainAgent.status === 'idle', 'MAIN turn idle')
+    expect(lastTurnEndReason(booted.mainSession)?.kind).toBe('completed')
+    const workflow = booted.runtime.forSession(booted.mainSession)
+    expect(workflow.state.bindingForRole('DATA_ANALYSIS')?.provisioning).toBe('active')
+    const child = booted.childSession()
+    expect(child).toBeDefined()
+    expect(descriptorOf(child!)?.['label']).toBe('AutoReport DATA_ANALYSIS')
+  })
+
+  it('wait=true: DATA_ANALYSIS settles when no stock bash is global (agent-local backfill)', { timeout: 30_000 }, async () => {
+    // Real deployments compose the base shell rows per preset, not globally:
+    // the role shell is backfilled as an agent-local compute shell, and
+    // restrict() — which only names global tools — must not list it.
+    const booted = await boot({
+      omitGlobalBash: true,
+      mainCalls: [{
+        name: 'send_to_agent',
+        args: {
+          role: 'DATA_ANALYSIS',
+          subject: '无全局 bash 的派生探针',
+          prompt: '探针：确认无全局 bash 时派生链路可用',
         },
       }],
       mainTexts: ['报告已收到'],

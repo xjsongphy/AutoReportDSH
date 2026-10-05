@@ -94,7 +94,7 @@ function wrapRoleAwareShell(
   }
 }
 
-function restrictRoleToolSurface(agent: Agent, role: AutoReportRole, processToolAvailable: boolean): () => void {
+function restrictRoleToolSurface(agent: Agent, role: AutoReportRole): () => void {
   const policy = rolePolicy(role)
   // Agent-local registrations (list/grep everywhere; specialist manifest/
   // report_workflow are mounted in the child scope): restrict() names globals
@@ -104,7 +104,16 @@ function restrictRoleToolSurface(agent: Agent, role: AutoReportRole, processTool
     : new Set(['list', 'grep', 'manifest', 'report_workflow', 'compile_report', 'render_report_page'])
   const allowed = policy.tools.filter(name => {
     if (agentLocalTools.has(name)) return false
-    if (name === ROLE_PROCESS_TOOL && !processToolAvailable) return false
+    if (name === ROLE_PROCESS_TOOL) {
+      // restrict() names global tools only. A backfilled compute shell lives
+      // in the agent's own scope layer — it must not be named (naming it
+      // throws `names unknown global tool` and fails the dispatch); a
+      // chain-visible stock shell is global and must stay on the allow list
+      // to survive the mask.
+      const shell = agent.ctx.tools.get(name, agent)
+      return shell !== undefined
+        && (shell as { [COMPUTE_SHELL_MARKER]?: boolean })[COMPUTE_SHELL_MARKER] !== true
+    }
     return agent.ctx.tools.get(name, agent) !== undefined
   })
   const deny = DSH_ROLE_ESCAPE_TOOL_NAMES.filter(name =>
@@ -357,7 +366,7 @@ export async function apply(ctx: Context, config: Partial<Config> = {}, options:
           },
         })
       }
-      releases.push(restrictRoleToolSurface(agent, role, processToolAvailable))
+      releases.push(restrictRoleToolSurface(agent, role))
       assertRoleToolSurface(agent, role, processToolAvailable)
       configuredRoles.set(agent, { role, workspaceRoot, dispose })
       // Rehydrate resident activations only after Main's scoped tools are ready,
