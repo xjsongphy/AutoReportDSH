@@ -5,8 +5,8 @@
   "runtimeFetch": false,
   "upstream": {
     "repository": "https://github.com/xjsongphy/skills",
-    "commit": "c234f03e59776f38d6662e350533d83d01f42e8a",
-    "committedAt": "2026-10-06T23:24:10+08:00",
+    "commit": "f6d8974244f299413be564b083ebe86634512d56",
+    "committedAt": "2026-10-06T23:28:58+08:00",
     "modules": [
       {
         "path": "writer/references/types/report.md",
@@ -14,7 +14,7 @@
       },
       {
         "path": "writer/references/type-addons/report-experiment.md",
-        "blob": "7925260f7a9a8a1ba9ad1b025764c05e77cd3dc2"
+        "blob": "3c468475e7fff2467401eb2489afb60abd783133"
       },
       {
         "path": "writer/references/common/writing.md",
@@ -26,11 +26,11 @@
       },
       {
         "path": "writer/references/formats/latex.md",
-        "blob": "530c3465ae5ac4c8322fc13be1a4e10a92f6f170"
+        "blob": "bdc1367ab70c8f92eb7956f1102b239eb7829a1b"
       },
       {
         "path": "writer/references/formats/typst.md",
-        "blob": "dfdeb5ad560ea035aab3050248327eec3aff485f"
+        "blob": "26c884763b02731ed95d2b20ccd56db261b4e8af"
       },
       {
         "path": "writer/references/checks/document.md",
@@ -42,7 +42,7 @@
     "selected only the report-relevant writer modules (Typst reduced to its report-relevant mechanics)",
     "flattened the selected modules into one bundled skill",
     "replaced internal module-path references with local section references",
-    "kept the AutoReport experiment-report editorial contract as a local addition that takes precedence on level of detail, repetition, and document structure",
-    "kept the narrative-flow and define-before-formula Bad/Good example pairs in experiment-report scenarios; the worked example ships in both LaTeX and Typst"
+    "kept the AutoReport experiment-report editorial contract as a local addition that takes precedence on level of detail, repetition, and document structure; its introduction rule allows a short framing background paragraph",
+    "kept the narrative-flow and define-before-formula Bad/Good example pairs in experiment-report scenarios; the worked example ships in both LaTeX and Typst; prose-pattern examples use measurement scenarios"
   ]
 }

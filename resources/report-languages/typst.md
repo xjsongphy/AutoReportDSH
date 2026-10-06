@@ -5,6 +5,11 @@ theme. Load `typst` for authoring.
 
 ## Typst layout rules
 
+- Combine the panels of one measurement into one multi-panel figure (a `grid`
+  inside `#figure`, panels labelled `(a)`, `(b)`) with a shared caption; a
+  standalone figure only for a standalone conclusion. Panel width 0.3–0.8 of
+  the text width.
+
 - Use Typst `figure`, `table`, `grid`, `tablex`, and local theme functions; do not use LaTeX commands, packages, `[H]`, `\linewidth`, or LaTeX column syntax.
 - Reference figures from `../Plots/Fig/` with Typst paths and use `bibliography("bibli.bib")` or the project's configured CSL/BibLaTeX-compatible workflow.
 - Follow the math notation already established by the supplied template. For a
