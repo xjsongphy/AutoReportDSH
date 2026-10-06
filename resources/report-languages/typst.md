@@ -16,3 +16,12 @@ theme. Load `typst` for authoring.
   surrounding sentence and punctuate it accordingly. Check notation and units
   across Theory, Results, captions, and Conclusion after compiling; a successful
   Typst build does not perform this check.
+- Inline math carries no spaces inside the delimiters (`$C_0$`). Spaced
+  delimiters (`$ C_0 = 5000 "pF" $`) switch Typst to display mode: the formula
+  breaks out of the paragraph and floats as a separate block. Reserve spaced
+  math for labelled display equations only.
+- Read the theme's `#set math.equation(...)` before writing references. The
+  local theme sets the equation supplement to 式, so `@eq:name` already renders
+  as 式 (n); never write the supplement word in front of a reference, and
+  likewise never prefix figure or table references with a word the theme's
+  supplement already provides.

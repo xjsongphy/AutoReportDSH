@@ -53,7 +53,19 @@ error: file not found: ../Plots/Fig/result.png
 
 **Fix:** the referenced artifact does not exist yet. Check what PLOTTING actually produced under `Plots/Fig/` (fs list/read), fix the path, or report `blocked` (`missing_data`) if the figure was never produced. Never invent placeholder paths.
 
-### 3. Missing font
+### 3. Inline formula floats as its own block
+
+No compiler error: the PDF shows short formulas broken out of paragraphs,
+floating beside or after the text they belong to.
+
+**Cause:** spaces inside `$ ... $` switch Typst to display mode. Inline math
+must be written without inner spaces (`$C_0$`); reserve `$ ... $` with spaces
+for labelled display equations.
+
+**Fix:** read the reported line and strip the inner spaces from inline math,
+then recompile and inspect the affected paragraph in the rendered output.
+
+### 4. Missing font
 
 ```
 error: unknown font family: ...

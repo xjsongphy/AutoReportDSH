@@ -798,6 +798,9 @@ Inspect the rendered output when layout matters.
 
 Do not write LaTeX commands in Typst markup. The report-relevant mechanics:
 
+- Inline math carries no spaces inside the delimiters (`$C_0$`); spaced
+  delimiters (`$ C_0 $`) switch to display mode and break the formula out of
+  the paragraph.
 - Use `#figure` with `image`, `table`, or another block as its body; put a
   `<label>` after the element and refer to it with `@label`. Use
   `table.cell`/`table.hline` when spans or rules are needed.
