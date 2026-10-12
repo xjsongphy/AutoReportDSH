@@ -32,7 +32,7 @@ export function installComputeBashTool(ctx: Context, role: SpecialistRole, works
   if (shellEnv === undefined) throw new Error('AutoReport compute bash requires the DSH shell environment service')
   const definition = defineTool({
     name: 'bash',
-    description: 'Run a foreground bash command for data analysis or plotting. Each call has a fresh shell. Check exitCode and stderr; if sandbox denies an operation or a dependency is missing, report the blocker to MAIN. Writes are confined to your role directory. This tool has no sandbox escalation or background mode.',
+    description: 'Run a foreground bash command for data analysis or plotting. Each call has a fresh shell with pipefail enabled, so filtering output with tail/head does not hide an upstream failure. Check exitCode and stderr; if sandbox denies an operation or a dependency is missing, report the blocker to MAIN. Writes are confined to your role directory. This tool has no sandbox escalation or background mode.',
     parameters: {
       command: { type: 'string', required: true, description: 'Bash command to run.' },
       description: { type: 'string', required: true, description: 'Short purpose of this command.' },
@@ -75,7 +75,7 @@ export function installComputeBashTool(ctx: Context, role: SpecialistRole, works
       )
       if (probe.enforcement !== 'full') throw new Error('bash requires full DSH file-sandbox enforcement')
       const request = {
-        command: args.command,
+        command: `set -o pipefail\n${args.command}`,
         workdir,
         dshEnv: shellEnv.collect(exec),
         sandboxPolicy: policy,
