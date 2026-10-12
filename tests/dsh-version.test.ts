@@ -1,3 +1,4 @@
+import { apply as applyHost } from '../src/host.js'
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -68,4 +69,9 @@ describe('dsh version notice', () => {
     expect(unknown.verified).toBe(false)
     expect(unknown.message).toContain(VERIFIED_DSH_VERSION)
   })
+})
+
+it('rejects an older host before activating any report capability', async () => {
+  const context = { logger: { warn: () => {}, info: () => {} } }
+  await expect(applyHost(context as never, {}, { runningDshVersion: '0.1.6-alpha.2' })).rejects.toThrow(/only dsh 0.2.0-rc.2 is supported/)
 })

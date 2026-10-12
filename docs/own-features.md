@@ -263,9 +263,8 @@ stock DSH confines each role to its own directory and the `patches/` source shim
 is retired. Activation self-checks the wrap and fails loud rather than silently
 running a role on the unconfined root.
 
-The plugin is verified against one upstream DSH release rather than bound to it:
-the plugin supports only DSH 0.2.0-rc.2 and rejects other detected versions instead of
-refusing. The wiring, the retired seams, and the nightly upstream canary are in
+The plugin supports only DSH 0.2.0-rc.2 and rejects other detected releases.
+The dependency wiring, configuration forms, bundle presets, and scheduled verification are in
 [`docs/dependencies.md`](dependencies.md).
 
 Open, and deliberately not claimed as done:
