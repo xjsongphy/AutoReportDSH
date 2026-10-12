@@ -1,12 +1,12 @@
 /** In-memory settings-scope double for card-form specs. */
 
 import { vi } from 'vitest'
-import type { SettingsScope, SettingsScopeSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
+import type { ConfigForm, ConfigFormSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
 
 /** Handle over one stubbed scope. */
-export interface StubSettingsScope<T> {
+export interface StubConfigForm<T> {
   /** The scope face handed to the form under test. */
-  scope: SettingsScope<T>
+  scope: ConfigForm<T>
   /** Spy behind `scope.set`. */
   set: ReturnType<typeof vi.fn>
   /** Spy behind `scope.unset`. */
@@ -15,7 +15,7 @@ export interface StubSettingsScope<T> {
    * Replace part of the snapshot and notify subscribers.
    * @param next - snapshot fields to replace.
    */
-  publish(next: Partial<SettingsScopeSnapshot<T>>): void
+  publish(next: Partial<ConfigFormSnapshot<T>>): void
 }
 
 /**
@@ -23,8 +23,8 @@ export interface StubSettingsScope<T> {
  * lets the spec publish Host acceptances.
  * @returns the stub handle.
  */
-export function stubSettingsScope<T>(): StubSettingsScope<T> {
-  let snapshot: SettingsScopeSnapshot<T> = {
+export function stubConfigForm<T>(): StubConfigForm<T> {
+  let snapshot: ConfigFormSnapshot<T> = {
     status: 'loading',
     value: undefined,
     base: undefined,
@@ -34,8 +34,8 @@ export function stubSettingsScope<T>(): StubSettingsScope<T> {
     mode: 'host',
   }
   const listeners = new Set<() => void>()
-  const set = vi.fn(() => Promise.resolve())
-  const unset = vi.fn(() => Promise.resolve())
+  const set = vi.fn(() => Promise.resolve(true))
+  const unset = vi.fn(() => Promise.resolve(true))
   return {
     scope: {
       getSnapshot: () => snapshot,
@@ -45,6 +45,7 @@ export function stubSettingsScope<T>(): StubSettingsScope<T> {
       },
       set,
       unset,
+      mutate: vi.fn(() => Promise.resolve(true)),
     },
     set,
     unset,
@@ -59,7 +60,7 @@ export function stubSettingsScope<T>(): StubSettingsScope<T> {
  * Make the stub behave like a Host that accepts every write.
  * @param host - the stub to wire.
  */
-export function acceptWrites<T>(host: StubSettingsScope<T>): void {
+export function acceptWrites<T>(host: StubConfigForm<T>): void {
   const section = (): Record<string, unknown> => ({ ...(host.scope.getSnapshot().value as object) })
   const layer = (): Record<string, unknown> => ({ ...(host.scope.getSnapshot().user as object) })
   host.set.mockImplementation((field: string, value: unknown) => {

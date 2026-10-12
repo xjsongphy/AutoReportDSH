@@ -1,124 +1,38 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync, existsSync, mkdirSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync, existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it, afterEach } from 'vitest'
 import { install } from '../scripts/install-user-preset.js'
-
-const tempDirs: string[] = []
-
-function makeTemp(): string {
-  const dir = mkdtempSync(join(tmpdir(), 'autoreport-install-'))
-  tempDirs.push(dir)
-  return dir
-}
-
-afterEach(() => {
-  for (const dir of tempDirs.splice(0)) {
-    rmSync(dir, { recursive: true, force: true })
-  }
-})
-
-const ROOT = resolveRepoRoot()
-
-function resolveRepoRoot(): string {
-  // tests/ sits directly under the repo root.
-  return join(import.meta.dirname, '..')
-}
-
-function builtEntry(): string {
-  return join(ROOT, 'dist', 'src', 'index.js')
-}
-
-function ensureBuilt(): void {
-  // Global setup owns this shared output; workers must never rebuild it while
-  // another installer test is reading it.
-  if (!existsSync(builtEntry())) throw new Error('AutoReport test global setup did not build dist')
-}
-
-describe('install-user-preset', () => {
-  it('copies the preset, substitutes persona and tool paths, and renders the overlay', () => {
-    ensureBuilt()
-    const home = makeTemp()
-    const entry = builtEntry()
-    const result = install({ home, repoRoot: ROOT, entry })
-
-    expect(result.presetDir).toBe(join(home, '.agent-presets', 'autoreport'))
-    const composed = readFileSync(join(result.presetDir, 'agent.cordis.yml'), 'utf8')
-    expect(composed).toContain('Coordinate a physics experiment report from scope through completion.')
-    expect(composed).not.toContain('__AUTOREPORT_MAIN_PERSONA__')
-    expect(composed).not.toContain('PLACEHOLDER_MAIN_PERSONA')
-    expect(composed).toContain(join(ROOT, 'dist', 'src', 'preset.js'))
-    expect(composed).not.toContain('__AUTOREPORT_PRESET__')
-    expect(composed).not.toContain('__AUTOREPORT_SEND_TO_AGENT__')
-    expect(composed).not.toContain('tool-subagent')
-    expect(composed).not.toContain('dsh-tool-bash')
-    expect(composed).not.toContain('dsh-tool-fs-search')
-    expect(composed).not.toContain('dsh-tool-ralph')
-    expect(composed).not.toContain('dsh-tool-workflow')
-    expect(composed).not.toContain('dsh-tool-web')
-    expect(composed).not.toContain('dsh-tool-todo')
-    expect(composed).toContain("includeDefaultRoots: false")
-
-    const metadata = readFileSync(join(result.presetDir, 'preset.yml'), 'utf8')
-    expect(metadata).toContain('name: AutoReport')
-    expect(metadata).toContain('description: 面向物理实验报告的固定团队 Agent。')
-    expect(metadata).not.toMatch(/^name: autoreport$/m)
-
+const root = join(import.meta.dirname, '..')
+const homes: string[] = []
+const home = () => { const value = mkdtempSync(join(tmpdir(), 'autoreport-overlay-')); homes.push(value); return value }
+afterEach(() => { for (const value of homes.splice(0)) rmSync(value, { recursive: true, force: true }) })
+describe('RC2 source overlay', () => {
+  it('declares the native preset and links the built plugin', () => {
+    const target = home(), result = install({ home: target, repoRoot: root })
     const overlay = readFileSync(result.overlayFile, 'utf8')
-    expect(overlay).toContain('name: dsh-autoreport')
-    expect(overlay).not.toContain(entry)
-    expect(overlay).toContain(join(ROOT, 'dist', 'src', 'tools', 'report-router.js'))
-    expect(overlay).not.toContain('tool-subagent-report')
-    expect(overlay).not.toContain('__AUTOREPORT_ENTRY__')
-    expect(overlay).not.toContain('__AUTOREPORT_REPORT_ROUTER__')
-    expect(result.packageLink).toBe(join(home, 'profiles', 'node_modules', 'dsh-autoreport'))
+    expect(overlay).toContain('@deepseek-ai/dsh-agent-preset')
+    expect(overlay).toContain('id: autoreport')
+    expect(overlay).toContain(join(root, 'dist/src/preset.js'))
+    expect(overlay).not.toContain('__AUTOREPORT_')
+    expect(overlay).toContain('includeDefaultRoots: false')
+    expect(overlay).not.toContain('dsh-tool-subagent')
     expect(existsSync(result.packageLink)).toBe(true)
+    expect(existsSync(join(target, '.agent-presets'))).toBe(false)
   })
-
-  it('is idempotent: a rerun overwrites ours and keeps foreign files', () => {
-    ensureBuilt()
-    const home = makeTemp()
-    const presetDir = join(home, '.agent-presets', 'autoreport')
-    mkdirSync(presetDir, { recursive: true })
-    const foreign = join(presetDir, 'user-notes.md')
-    writeFileSync(foreign, 'keep me')
-
-    install({ home, repoRoot: ROOT, entry: builtEntry() })
-    writeFileSync(join(presetDir, 'agent.cordis.yml'), 'user edited this')
-    install({ home, repoRoot: ROOT, entry: builtEntry() })
-
-    expect(readFileSync(join(presetDir, 'agent.cordis.yml'), 'utf8')).toContain('Coordinate a physics experiment report from scope through completion.')
-    expect(existsSync(foreign)).toBe(true)
-    expect(readFileSync(foreign, 'utf8')).toBe('keep me')
+  it('rerenders the overlay without deleting user files', () => {
+    const target = home(), foreign = join(target, 'notes.md')
+    writeFileSync(foreign, 'keep')
+    install({ home: target, repoRoot: root })
+    install({ home: target, repoRoot: root })
+    expect(readFileSync(foreign, 'utf8')).toBe('keep')
   })
-
-  it('retires a leftover autoreport-main directory and keeps foreign files', () => {
-    ensureBuilt()
-    const home = makeTemp()
-    const legacyDir = join(home, '.agent-presets', 'autoreport-main')
-    mkdirSync(legacyDir, { recursive: true })
-    writeFileSync(join(legacyDir, 'agent.cordis.yml'), 'stale composition')
-    writeFileSync(join(legacyDir, 'user-notes.md'), 'keep me')
-
-    const result = install({ home, repoRoot: ROOT, entry: builtEntry() })
-
-    expect(result.retiredLegacyPresetDir).toBe(legacyDir)
-    expect(existsSync(legacyDir)).toBe(false)
-    expect(existsSync(join(result.presetDir, 'user-notes.md'))).toBe(true)
-    expect(readFileSync(join(result.presetDir, 'user-notes.md'), 'utf8')).toBe('keep me')
-    expect(readFileSync(join(result.presetDir, 'agent.cordis.yml'), 'utf8')).toContain('Coordinate a physics experiment report from scope through completion.')
+  it('rejects a missing build', () => {
+    expect(() => install({ home: home(), repoRoot: root, entry: '/missing-entry.js' })).toThrow(/run pnpm run build/)
   })
-
-  it('fails loud when the built entry is missing', () => {
-    const home = makeTemp()
-    expect(() => install({ home, repoRoot: ROOT, entry: join(home, 'does-not-exist.js') })).toThrowError(/built plugin entry not found/)
-  })
-
-  it('fails loud when the preset composition is missing', () => {
-    const home = makeTemp()
-    const dummyEntry = join(home, 'fake-entry.js')
-    writeFileSync(dummyEntry, '')
-    const emptyRoot = makeTemp()
-    expect(() => install({ home, repoRoot: emptyRoot, entry: dummyEntry })).toThrowError(/preset composition missing/)
+  it('does not replace a foreign package directory', () => {
+    const target = home()
+    mkdirSync(join(target, 'profiles/node_modules/dsh-autoreport'), { recursive: true })
+    expect(() => install({ home: target, repoRoot: root })).toThrow(/not a symlink/)
   })
 })

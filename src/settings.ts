@@ -52,7 +52,7 @@ export const WORKFLOW_SETTINGS_SCHEMA_DEFAULTS: Readonly<{
 })
 
 /** Registered DSH namespace for AutoReport's user-level workflow defaults. */
-export const AUTOREPORT_SETTINGS_NAMESPACE = 'autoreport' as SettingsNamespace
+export const AUTOREPORT_SETTINGS_NAMESPACE = 'autoreport-host' as SettingsNamespace
 
 export interface AutoReportUserSettings {
   /** Default report source language (schema default `latex`). */

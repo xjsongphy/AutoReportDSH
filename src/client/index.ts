@@ -67,7 +67,7 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 }
 
 /** Required services (cordis fiber inject). */
-export const inject = ['slots', 'locale', 'remote', 'remote.session', 'settingsScope', 'sessions', 'modelDirectories']
+export const inject = ['slots', 'locale', 'remote', 'remote.session', 'configForms', 'sessions', 'modelDirectories']
 
 /** Bundle id the Plugins page keys a bundle's own configuration by. */
 export const BUNDLE_ID = 'dsh-autoreport'
@@ -90,7 +90,7 @@ export function apply(ctx: ClientContext): void {
     // guard only forwards lifecycle verbs and declared services, so a dynamic
     // bundle reads the service directly instead of calling ctx.inject.
     const card = new AutoReportCardController(
-      ctx.settingsScope.bind({ namespace: AUTOREPORT_SETTINGS_NAMESPACE }),
+      ctx.configForms.get(AUTOREPORT_SETTINGS_NAMESPACE),
       ctx.sessions.list,
       () => loadSpecialistChoices(ctx),
     )

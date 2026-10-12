@@ -6,7 +6,7 @@
  */
 
 import type { SnapshotStore } from '@deepseek-ai/dsh-client-store'
-import type { SettingsScope } from '@deepseek-ai/dsh-client-ui-settings/client'
+import type { ConfigForm } from '@deepseek-ai/dsh-client-ui-settings/client'
 import type { MineruStatus } from './mineru-status-types.js'
 import { projectsByLanguage, type ProjectLanguage, type ProjectSessionRow, type ProjectLists } from './project-lists.js'
 import {
@@ -15,7 +15,7 @@ import {
 } from './card-form.js'
 
 /** Namespace of AutoReport's user-owned workflow defaults. */
-export const AUTOREPORT_SETTINGS_NAMESPACE = 'autoreport'
+export const AUTOREPORT_SETTINGS_NAMESPACE = 'autoreport-host'
 
 /** One Host-detected interpreter the Python picker can offer. */
 export interface PythonEnvironmentOption {
@@ -131,7 +131,7 @@ export class AutoReportCardController {
    *   are derived; project membership follows what actually conversed.
    */
   constructor(
-    private readonly scope: SettingsScope<AutoReportCardSettings>,
+    private readonly scope: ConfigForm<AutoReportCardSettings>,
     private readonly sessions: ProjectSessionSource,
     private readonly loadSpecialistChoices: () => Promise<readonly SpecialistChoice[]> = async () => [],
   ) {

@@ -141,7 +141,8 @@ export type ToolRowLocaleKey =
   | 'listTitle' | 'manifestReadTitle' | 'manifestUpdateTitle' | 'referenceExtractTitle' | 'reportWorkflowTitle'
   | 'installPackageTitle' | 'compileReportTitle' | 'renderPageTitle'
   | 'running' | 'failed' | 'stopped'
-  | 'tasks' | 'files' | 'levels' | 'entries' | 'workspaceRoot'
+  | 'task' | 'tasks' | 'files' | 'levels' | 'entries' | 'workspaceRoot'
+  | 'waitTimeout' | 'waitCancelled' | 'waitPending' | 'waitCompleted' | 'waitBlocked' | 'waitFailed' | 'waitStale'
   | 'resend' | 'checked'
   | 'completed' | 'blocked' | 'succeeded' | 'timedOut' | 'infraError'
   | 'page'
@@ -174,6 +175,7 @@ export const toolRowEn: Record<ToolRowLocaleKey, string> = {
   failed: 'Failed',
   stopped: 'Stopped',
   tasks: 'tasks',
+  task: 'task',
   files: 'files',
   levels: 'levels',
   entries: 'entries',
@@ -184,6 +186,13 @@ export const toolRowEn: Record<ToolRowLocaleKey, string> = {
   blocked: 'Blocked',
   succeeded: 'Succeeded',
   timedOut: 'Timed out',
+  waitTimeout: 'Wait timed out (execution is separate)',
+  waitCancelled: 'Wait cancelled (execution continues)',
+  waitPending: 'pending',
+  waitCompleted: 'completed',
+  waitBlocked: 'blocked',
+  waitFailed: 'failed or cancelled',
+  waitStale: 'stale result',
   infraError: 'Environment error',
   page: 'page {n}',
   in: 'IN',
@@ -226,6 +235,7 @@ export const toolRowZh: Record<ToolRowLocaleKey, string> = {
   failed: '失败',
   stopped: '已中断',
   tasks: '个任务',
+  task: '个任务',
   files: '个文件',
   levels: '层',
   entries: '项',
@@ -236,6 +246,13 @@ export const toolRowZh: Record<ToolRowLocaleKey, string> = {
   blocked: '受阻',
   succeeded: '成功',
   timedOut: '超时',
+  waitTimeout: '等待超时（仅结束等待）',
+  waitCancelled: '等待已取消（任务仍会继续）',
+  waitPending: '待返回',
+  waitCompleted: '已完成',
+  waitBlocked: '受阻',
+  waitFailed: '失败或取消',
+  waitStale: '结果已过期',
   infraError: '环境错误',
   page: '第 {n} 页',
   in: '输入',

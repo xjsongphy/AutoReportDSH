@@ -23,9 +23,9 @@
 
 import { useState, type ReactNode } from 'react'
 import {
-  DisclosureRow, IconBrowseOutline16, IconChecklistOutline14, IconDownloadOutline16,
-  IconFolderOpenOutline16, IconListPenOutline16, IconPaperclipOutline16, IconPlayOutline16,
-  IconPaperPlaneOutline14, JsonTree, StateDot, type JsonTreeLabels,
+  DisclosureRow, IconBrowseOutlineRegular, IconChecklistOutlineRegular, IconDownloadOutlineRegular,
+  IconFolderOpenOutlineRegular, IconListPenOutlineRegular, IconPaperclipOutlineRegular, IconPlayOutlineRegular,
+  IconPaperPlaneOutlineRegular, JsonTree, StateDot, type JsonTreeLabels,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ToolCallViewProps } from '@deepseek-ai/dsh-client-ui-tool/client'
@@ -248,35 +248,35 @@ function toolRow(spec: RowSpec) {
 /** One `send_to_agent` delegation. */
 export const SendToAgentRow = toolRow({
   title: 'sendToAgentTitle',
-  icon: <IconPaperPlaneOutline14 />,
+  icon: <IconPaperPlaneOutlineRegular />,
   summary: (argsRaw, _output, t) => sendToAgentSummary(argsRaw, t),
 })
 
 /** One `workflow_task` board operation. */
 export const WorkflowTaskRow = toolRow({
   title: workflowTaskTitle,
-  icon: <IconChecklistOutline14 />,
+  icon: <IconChecklistOutlineRegular />,
   summary: workflowTaskSummary,
 })
 
 /** One `list` directory listing. */
 export const ListRow = toolRow({
   title: 'listTitle',
-  icon: <IconFolderOpenOutline16 />,
+  icon: <IconFolderOpenOutlineRegular />,
   summary: listSummary,
 })
 
 /** One `manifest` read or update. */
 export const ManifestRow = toolRow({
   title: manifestTitle,
-  icon: <IconListPenOutline16 />,
+  icon: <IconListPenOutlineRegular />,
   summary: manifestSummary,
 })
 
 /** One `extract_pdf` PDF extraction. */
 export const ReferenceExtractRow = toolRow({
   title: 'referenceExtractTitle',
-  icon: <IconPaperclipOutline16 />,
+  icon: <IconPaperclipOutlineRegular />,
   summary: referenceExtractSummary,
 })
 
@@ -290,20 +290,20 @@ export const ReportWorkflowRow = toolRow({
 /** One `install_python_package` install. */
 export const InstallPackageRow = toolRow({
   title: 'installPackageTitle',
-  icon: <IconDownloadOutline16 />,
+  icon: <IconDownloadOutlineRegular />,
   summary: installPackageSummary,
 })
 
 /** One `compile_report` run. */
 export const CompileReportRow = toolRow({
   title: 'compileReportTitle',
-  icon: <IconPlayOutline16 />,
+  icon: <IconPlayOutlineRegular />,
   summary: compileReportSummary,
 })
 
 /** One `render_report_page` preview. */
 export const RenderPageRow = toolRow({
   title: 'renderPageTitle',
-  icon: <IconBrowseOutline16 />,
+  icon: <IconBrowseOutlineRegular />,
   summary: renderPageSummary,
 })

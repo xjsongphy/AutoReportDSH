@@ -11,7 +11,7 @@ on:
       dsh_ref:
         description: DeepSeek Harness tag or commit to verify
         required: false
-        default: '6b1808f432adfa96ab6c2f033e158ca230422e16'
+        default: '639ed015397290b3745d163aafe02ffee4aa3f84'
         type: string
 
 permissions:
@@ -23,7 +23,7 @@ concurrency:
 
 env:
   NODE_VERSION: '22.19.0'
-  DSH_REF: '6b1808f432adfa96ab6c2f033e158ca230422e16'
+  DSH_REF: '639ed015397290b3745d163aafe02ffee4aa3f84'
 
 defaults:
   run:
@@ -46,7 +46,7 @@ jobs:
         with:
           repository: deepseek-ai/deepseek-harness
           ref: ${{ inputs.dsh_ref || env.DSH_REF }}
-          path: deepseek-harness
+          path: deepseek-harness-0.2.0-rc.2
           persist-credentials: false
 
       - name: Set up pnpm
@@ -61,7 +61,7 @@ jobs:
           cache: pnpm
           cache-dependency-path: |
             AutoReportDSH/pnpm-lock.yaml
-            deepseek-harness/pnpm-lock.yaml
+            deepseek-harness-0.2.0-rc.2/pnpm-lock.yaml
 
       - name: Enable Corepack
         run: corepack enable

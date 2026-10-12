@@ -1,24 +1,10 @@
-/**
- * Tell the user which dsh build this plugin was verified against, and warn —
- * never block — when the running CLI is a different one.
- *
- * AutoReportDSH is verified against ONE pinned dsh build (CI runs its full
- * suite against the harness commit recorded in `docs/dependencies.md` and
- * `.github/workflows/ci.yml`). Other dsh builds usually work — the plugin
- * probes the seams it depends on and degrades gracefully where it can — but
- * an unverified combination may break mid-session in ways that are hard to
- * attribute. Surfacing the pair at activation turns that mystery into a
- * one-line hint. The plugin deliberately does not refuse to load: the pin
- * means "verified", not "exclusive".
- *
- * @module autoreport/dsh-version
- */
+/** Detect and enforce the exact DSH release supported by AutoReportDSH. */
 
 import { existsSync, readFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 
-/** The dsh build this plugin release was verified against. */
-export const VERIFIED_DSH_VERSION = '0.1.6-alpha.2'
+/** The only supported DSH runtime release. */
+export const VERIFIED_DSH_VERSION = '0.2.0-rc.2'
 
 /**
  * Read the version of the running dsh CLI.
@@ -68,7 +54,7 @@ export function describeDshVersionSupport(running: string | undefined): { verifi
   }
   return {
     verified: false,
-    message: `AutoReportDSH: running dsh ${running}, but this plugin is verified against dsh ${VERIFIED_DSH_VERSION}`
-      + ' — other builds usually work; if a tool misbehaves, align the CLI with docs/dependencies.md',
+    message: `AutoReportDSH: running dsh ${running}, but this plugin requires dsh ${VERIFIED_DSH_VERSION}`
+      + ' — only dsh 0.2.0-rc.2 is supported',
   }
 }

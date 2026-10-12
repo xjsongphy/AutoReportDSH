@@ -3,7 +3,7 @@
  * card consumes. The former `@deepseek-ai/dsh-client-runtime` package was
  * split upstream into the `ui-*` client packages; these imports are type-only,
  * so the structural shapes below keep the card compiling against the running
- * DSH client services (`slots`, `locale`, `settingsScope`, `sessions`,
+ * DSH client services (`slots`, `locale`, `configForms`, `sessions`,
  * `connection`) without importing any browser bundle. Runtime wiring is the
  * `dsh.client` manifest plus the `inject` array, unchanged. Store and settings
  * types come from their real owners (`@deepseek-ai/dsh-client-store`,
@@ -93,8 +93,8 @@ declare module '@deepseek-ai/dsh-client-runtime/client' {
       /** Bind a translation function to a registered namespace (alpha.2 client locale contract). */
       bind(namespace: string): (key: string) => string
     }
-    settingsScope: {
-      bind<T>(options: { namespace: string }): import('@deepseek-ai/dsh-client-ui-settings/client').SettingsScope<T>
+    configForms: {
+      get<T>(entryId: string): import('@deepseek-ai/dsh-client-ui-settings/client').ConfigForm<T>
     }
     remote: IRemote
     sessions: ISessions

@@ -1,7 +1,7 @@
 lockfileVersion: '9.0'
 
 settings:
-  autoInstallPeers: true
+  autoInstallPeers: false
   excludeLinksFromLockfile: false
 
 importers:
@@ -9,135 +9,141 @@ importers:
   .:
     dependencies:
       '@deepseek-ai/cordis':
-        specifier: link:../deepseek-harness/vendor/cordis
-        version: link:../deepseek-harness/vendor/cordis
+        specifier: link:../deepseek-harness-0.2.0-rc.2/vendor/cordis
+        version: link:../deepseek-harness-0.2.0-rc.2/vendor/cordis
+      '@deepseek-ai/cosmokit':
+        specifier: link:../deepseek-harness-0.2.0-rc.2/vendor/cosmokit
+        version: link:../deepseek-harness-0.2.0-rc.2/vendor/cosmokit
       '@deepseek-ai/dsh-agent':
-        specifier: link:../deepseek-harness/packages/core/agent
-        version: link:../deepseek-harness/packages/core/agent
+        specifier: link:../deepseek-harness-0.2.0-rc.2/packages/core/agent
+        version: link:../deepseek-harness-0.2.0-rc.2/packages/core/agent
       '@deepseek-ai/dsh-brand':
-        specifier: link:../deepseek-harness/packages/util/brand
-        version: link:../deepseek-harness/packages/util/brand
+        specifier: link:../deepseek-harness-0.2.0-rc.2/packages/util/brand
+        version: link:../deepseek-harness-0.2.0-rc.2/packages/util/brand
       '@deepseek-ai/dsh-commands':
-        specifier: link:../deepseek-harness/packages/interaction/commands
-        version: link:../deepseek-harness/packages/interaction/commands
+        specifier: link:../deepseek-harness-0.2.0-rc.2/packages/interaction/commands
+        version: link:../deepseek-harness-0.2.0-rc.2/packages/interaction/commands
       '@deepseek-ai/dsh-home-paths':
-        specifier: link:../deepseek-harness/packages/util/home-paths
-        version: link:../deepseek-harness/packages/util/home-paths
+        specifier: link:../deepseek-harness-0.2.0-rc.2/packages/util/home-paths
+        version: link:../deepseek-harness-0.2.0-rc.2/packages/util/home-paths
       '@deepseek-ai/dsh-llm':
-        specifier: link:../deepseek-harness/packages/llm/llm
-        version: link:../deepseek-harness/packages/llm/llm
+        specifier: link:../deepseek-harness-0.2.0-rc.2/packages/llm/llm
+        version: link:../deepseek-harness-0.2.0-rc.2/packages/llm/llm
       '@deepseek-ai/dsh-sandbox-policy':
-        specifier: link:../deepseek-harness/packages/sandbox/sandbox-policy
-        version: link:../deepseek-harness/packages/sandbox/sandbox-policy
+        specifier: link:../deepseek-harness-0.2.0-rc.2/packages/sandbox/sandbox-policy
+        version: link:../deepseek-harness-0.2.0-rc.2/packages/sandbox/sandbox-policy
       '@deepseek-ai/dsh-session':
-        specifier: link:../deepseek-harness/packages/core/session
-        version: link:../deepseek-harness/packages/core/session
+        specifier: link:../deepseek-harness-0.2.0-rc.2/packages/core/session
+        version: link:../deepseek-harness-0.2.0-rc.2/packages/core/session
       '@deepseek-ai/dsh-session-persistence':
-        specifier: link:../deepseek-harness/packages/session/session-persistence
-        version: link:../deepseek-harness/packages/session/session-persistence
+        specifier: link:../deepseek-harness-0.2.0-rc.2/packages/session/session-persistence
+        version: link:../deepseek-harness-0.2.0-rc.2/packages/session/session-persistence
       '@deepseek-ai/dsh-session-projection':
-        specifier: link:../deepseek-harness/packages/session/session-projection
-        version: link:../deepseek-harness/packages/session/session-projection
+        specifier: link:../deepseek-harness-0.2.0-rc.2/packages/session/session-projection
+        version: link:../deepseek-harness-0.2.0-rc.2/packages/session/session-projection
       '@deepseek-ai/dsh-settings':
-        specifier: link:../deepseek-harness/packages/settings/settings
-        version: link:../deepseek-harness/packages/settings/settings
-      '@deepseek-ai/dsh-shell-env':
-        specifier: link:../deepseek-harness/packages/shell/shell-env
-        version: link:../deepseek-harness/packages/shell/shell-env
+        specifier: link:../deepseek-harness-0.2.0-rc.2/packages/settings/settings
+        version: link:../deepseek-harness-0.2.0-rc.2/packages/settings/settings
       '@deepseek-ai/dsh-shell':
-        specifier: link:../deepseek-harness/packages/shell/shell
-        version: link:../deepseek-harness/packages/shell/shell
+        specifier: link:../deepseek-harness-0.2.0-rc.2/packages/shell/shell
+        version: link:../deepseek-harness-0.2.0-rc.2/packages/shell/shell
+      '@deepseek-ai/dsh-shell-env':
+        specifier: link:../deepseek-harness-0.2.0-rc.2/packages/shell/shell-env
+        version: link:../deepseek-harness-0.2.0-rc.2/packages/shell/shell-env
       '@deepseek-ai/dsh-skill':
-        specifier: link:../deepseek-harness/packages/skill/skill
-        version: link:../deepseek-harness/packages/skill/skill
+        specifier: link:../deepseek-harness-0.2.0-rc.2/packages/skill/skill
+        version: link:../deepseek-harness-0.2.0-rc.2/packages/skill/skill
       '@deepseek-ai/dsh-subagent':
-        specifier: link:../deepseek-harness/packages/subagent/subagent
-        version: link:../deepseek-harness/packages/subagent/subagent
+        specifier: link:../deepseek-harness-0.2.0-rc.2/packages/subagent/subagent
+        version: link:../deepseek-harness-0.2.0-rc.2/packages/subagent/subagent
       '@deepseek-ai/dsh-subprocess':
-        specifier: link:../deepseek-harness/packages/subprocess/subprocess
-        version: link:../deepseek-harness/packages/subprocess/subprocess
+        specifier: link:../deepseek-harness-0.2.0-rc.2/packages/subprocess/subprocess
+        version: link:../deepseek-harness-0.2.0-rc.2/packages/subprocess/subprocess
       '@deepseek-ai/dsh-system-prompt':
-        specifier: link:../deepseek-harness/packages/core/system-prompt
-        version: link:../deepseek-harness/packages/core/system-prompt
+        specifier: link:../deepseek-harness-0.2.0-rc.2/packages/core/system-prompt
+        version: link:../deepseek-harness-0.2.0-rc.2/packages/core/system-prompt
       '@deepseek-ai/dsh-tools':
-        specifier: link:../deepseek-harness/packages/core/tools
-        version: link:../deepseek-harness/packages/core/tools
+        specifier: link:../deepseek-harness-0.2.0-rc.2/packages/core/tools
+        version: link:../deepseek-harness-0.2.0-rc.2/packages/core/tools
       '@deepseek-ai/schemastery':
-        specifier: link:../deepseek-harness/vendor/schemastery
-        version: link:../deepseek-harness/vendor/schemastery
+        specifier: link:../deepseek-harness-0.2.0-rc.2/vendor/schemastery
+        version: link:../deepseek-harness-0.2.0-rc.2/vendor/schemastery
     devDependencies:
       '@deepseek-ai/dsh-agent-loop':
-        specifier: link:../deepseek-harness/packages/core/agent-loop
-        version: link:../deepseek-harness/packages/core/agent-loop
+        specifier: link:../deepseek-harness-0.2.0-rc.2/packages/core/agent-loop
+        version: link:../deepseek-harness-0.2.0-rc.2/packages/core/agent-loop
       '@deepseek-ai/dsh-api-remotes':
-        specifier: link:../deepseek-harness/packages/api/remotes
-        version: link:../deepseek-harness/packages/api/remotes
+        specifier: link:../deepseek-harness-0.2.0-rc.2/packages/api/remotes
+        version: link:../deepseek-harness-0.2.0-rc.2/packages/api/remotes
       '@deepseek-ai/dsh-bash-local':
-        specifier: link:../deepseek-harness/packages/shell/bash-local
-        version: link:../deepseek-harness/packages/shell/bash-local
+        specifier: link:../deepseek-harness-0.2.0-rc.2/packages/shell/bash-local
+        version: link:../deepseek-harness-0.2.0-rc.2/packages/shell/bash-local
       '@deepseek-ai/dsh-bash-sandbox':
-        specifier: link:../deepseek-harness/packages/shell/bash-sandbox
-        version: link:../deepseek-harness/packages/shell/bash-sandbox
-      '@deepseek-ai/dsh-pwsh-local':
-        specifier: link:../deepseek-harness/packages/shell/pwsh-local
-        version: link:../deepseek-harness/packages/shell/pwsh-local
-      '@deepseek-ai/dsh-pwsh-sandbox':
-        specifier: link:../deepseek-harness/packages/shell/pwsh-sandbox
-        version: link:../deepseek-harness/packages/shell/pwsh-sandbox
+        specifier: link:../deepseek-harness-0.2.0-rc.2/packages/shell/bash-sandbox
+        version: link:../deepseek-harness-0.2.0-rc.2/packages/shell/bash-sandbox
       '@deepseek-ai/dsh-client-connection':
-        specifier: link:../deepseek-harness/packages/client/connection
-        version: link:../deepseek-harness/packages/client/connection
+        specifier: link:../deepseek-harness-0.2.0-rc.2/packages/client/connection
+        version: link:../deepseek-harness-0.2.0-rc.2/packages/client/connection
       '@deepseek-ai/dsh-client-locale':
-        specifier: link:../deepseek-harness/packages/client/locale
-        version: link:../deepseek-harness/packages/client/locale
+        specifier: link:../deepseek-harness-0.2.0-rc.2/packages/client/locale
+        version: link:../deepseek-harness-0.2.0-rc.2/packages/client/locale
       '@deepseek-ai/dsh-client-store':
-        specifier: link:../deepseek-harness/packages/client/store
-        version: link:../deepseek-harness/packages/client/store
+        specifier: link:../deepseek-harness-0.2.0-rc.2/packages/client/store
+        version: link:../deepseek-harness-0.2.0-rc.2/packages/client/store
       '@deepseek-ai/dsh-client-ui-conversation':
-        specifier: link:../deepseek-harness/packages/client/ui-conversation
-        version: link:../deepseek-harness/packages/client/ui-conversation
+        specifier: link:../deepseek-harness-0.2.0-rc.2/packages/client/ui-conversation
+        version: link:../deepseek-harness-0.2.0-rc.2/packages/client/ui-conversation
       '@deepseek-ai/dsh-client-ui-plugin-manager':
-        specifier: link:../deepseek-harness/packages/client/ui-plugin-manager
-        version: link:../deepseek-harness/packages/client/ui-plugin-manager
+        specifier: link:../deepseek-harness-0.2.0-rc.2/packages/client/ui-plugin-manager
+        version: link:../deepseek-harness-0.2.0-rc.2/packages/client/ui-plugin-manager
       '@deepseek-ai/dsh-client-ui-primitives':
-        specifier: link:../deepseek-harness/packages/client/ui-primitives
-        version: link:../deepseek-harness/packages/client/ui-primitives
+        specifier: link:../deepseek-harness-0.2.0-rc.2/packages/client/ui-primitives
+        version: link:../deepseek-harness-0.2.0-rc.2/packages/client/ui-primitives
       '@deepseek-ai/dsh-client-ui-renderer':
-        specifier: link:../deepseek-harness/packages/client/ui-renderer
-        version: link:../deepseek-harness/packages/client/ui-renderer
+        specifier: link:../deepseek-harness-0.2.0-rc.2/packages/client/ui-renderer
+        version: link:../deepseek-harness-0.2.0-rc.2/packages/client/ui-renderer
       '@deepseek-ai/dsh-client-ui-settings':
-        specifier: link:../deepseek-harness/packages/client/ui-settings
-        version: link:../deepseek-harness/packages/client/ui-settings
+        specifier: link:../deepseek-harness-0.2.0-rc.2/packages/client/ui-settings
+        version: link:../deepseek-harness-0.2.0-rc.2/packages/client/ui-settings
       '@deepseek-ai/dsh-client-ui-settings-plugins':
-        specifier: link:../deepseek-harness/packages/client/ui-settings-plugins
-        version: link:../deepseek-harness/packages/client/ui-settings-plugins
+        specifier: link:../deepseek-harness-0.2.0-rc.2/packages/client/ui-settings-plugins
+        version: link:../deepseek-harness-0.2.0-rc.2/packages/client/ui-settings-plugins
       '@deepseek-ai/dsh-client-ui-slots':
-        specifier: link:../deepseek-harness/packages/client/ui-slots
-        version: link:../deepseek-harness/packages/client/ui-slots
+        specifier: link:../deepseek-harness-0.2.0-rc.2/packages/client/ui-slots
+        version: link:../deepseek-harness-0.2.0-rc.2/packages/client/ui-slots
       '@deepseek-ai/dsh-client-ui-tool':
-        specifier: link:../deepseek-harness/packages/client/ui-tool
-        version: link:../deepseek-harness/packages/client/ui-tool
+        specifier: link:../deepseek-harness-0.2.0-rc.2/packages/client/ui-tool
+        version: link:../deepseek-harness-0.2.0-rc.2/packages/client/ui-tool
+      '@deepseek-ai/dsh-pwsh-local':
+        specifier: link:../deepseek-harness-0.2.0-rc.2/packages/shell/pwsh-local
+        version: link:../deepseek-harness-0.2.0-rc.2/packages/shell/pwsh-local
+      '@deepseek-ai/dsh-pwsh-sandbox':
+        specifier: link:../deepseek-harness-0.2.0-rc.2/packages/shell/pwsh-sandbox
+        version: link:../deepseek-harness-0.2.0-rc.2/packages/shell/pwsh-sandbox
       '@deepseek-ai/dsh-sandbox':
-        specifier: link:../deepseek-harness/packages/sandbox/sandbox
-        version: link:../deepseek-harness/packages/sandbox/sandbox
+        specifier: link:../deepseek-harness-0.2.0-rc.2/packages/sandbox/sandbox
+        version: link:../deepseek-harness-0.2.0-rc.2/packages/sandbox/sandbox
       '@deepseek-ai/dsh-sandbox-local':
-        specifier: link:../deepseek-harness/packages/sandbox/sandbox-local
-        version: link:../deepseek-harness/packages/sandbox/sandbox-local
-      '@deepseek-ai/dsh-tool-bash':
-        specifier: link:../deepseek-harness/packages/shell/tool-bash
-        version: link:../deepseek-harness/packages/shell/tool-bash
+        specifier: link:../deepseek-harness-0.2.0-rc.2/packages/sandbox/sandbox-local
+        version: link:../deepseek-harness-0.2.0-rc.2/packages/sandbox/sandbox-local
       '@deepseek-ai/dsh-scope':
-        specifier: link:../deepseek-harness/packages/core/scope
-        version: link:../deepseek-harness/packages/core/scope
+        specifier: link:../deepseek-harness-0.2.0-rc.2/packages/core/scope
+        version: link:../deepseek-harness-0.2.0-rc.2/packages/core/scope
       '@deepseek-ai/dsh-subprocess-local':
-        specifier: link:../deepseek-harness/packages/subprocess/subprocess-local
-        version: link:../deepseek-harness/packages/subprocess/subprocess-local
+        specifier: link:../deepseek-harness-0.2.0-rc.2/packages/subprocess/subprocess-local
+        version: link:../deepseek-harness-0.2.0-rc.2/packages/subprocess/subprocess-local
+      '@deepseek-ai/dsh-tool-bash':
+        specifier: link:../deepseek-harness-0.2.0-rc.2/packages/shell/tool-bash
+        version: link:../deepseek-harness-0.2.0-rc.2/packages/shell/tool-bash
       '@deepseek-ai/dsh-tool-pwsh':
-        specifier: link:../deepseek-harness/packages/shell/tool-pwsh
-        version: link:../deepseek-harness/packages/shell/tool-pwsh
+        specifier: link:../deepseek-harness-0.2.0-rc.2/packages/shell/tool-pwsh
+        version: link:../deepseek-harness-0.2.0-rc.2/packages/shell/tool-pwsh
+      '@testing-library/dom':
+        specifier: ^10.4.1
+        version: 10.4.2
       '@testing-library/react':
         specifier: ^16.3.2
-        version: 16.3.2(@testing-library/dom@10.4.1)(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+        version: 16.3.2(@testing-library/dom@10.4.2)(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@types/node':
         specifier: ^24.0.0
         version: 24.13.3
@@ -674,8 +680,8 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@testing-library/dom@10.4.1':
-    resolution: {integrity: sha512-o4PXJQidqJl82ckFaXUeoAW+XysPLauYI43Abki5hABd853iMhitooc6znOnczgbTYmEP6U6/y1ZyKAIsvMKGg==}
+  '@testing-library/dom@10.4.2':
+    resolution: {integrity: sha512-yzr2S9HyAIdhz2/6qHgbs665Q7PKVcDF05vsOlHPxG1mo36gKVesdYVeDLnXgfjJ03CrKRk08knc6+E/9m8v2Q==}
     engines: {node: '>=18'}
 
   '@testing-library/react@16.3.2':
@@ -1435,7 +1441,7 @@ snapshots:
   '@rollup/rollup-win32-x64-msvc@4.62.5':
     optional: true
 
-  '@testing-library/dom@10.4.1':
+  '@testing-library/dom@10.4.2':
     dependencies:
       '@babel/code-frame': 7.29.7
       '@babel/runtime': 7.29.7
@@ -1446,10 +1452,10 @@ snapshots:
       picocolors: 1.1.1
       pretty-format: 27.5.1
 
-  '@testing-library/react@16.3.2(@testing-library/dom@10.4.1)(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
+  '@testing-library/react@16.3.2(@testing-library/dom@10.4.2)(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
     dependencies:
       '@babel/runtime': 7.29.7
-      '@testing-library/dom': 10.4.1
+      '@testing-library/dom': 10.4.2
       react: 18.3.1
       react-dom: 18.3.1(react@18.3.1)
     optionalDependencies:

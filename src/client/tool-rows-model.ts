@@ -68,7 +68,7 @@ function roleLabel(value: unknown): string | undefined {
  * @returns the raw argument JSON, never null.
  */
 export function callArgs(block: ToolRowBlock): string {
-  return ('kind' in block ? block.call?.argsRaw : block.argsRaw) ?? ''
+  return ('kind' in block ? block.call?.argsRaw : 'argsRaw' in block ? block.argsRaw : undefined) ?? ''
 }
 
 /**
@@ -151,6 +151,32 @@ function boardSize(output: string | null): number | undefined {
   return Array.isArray(tasks) ? tasks.length : undefined
 }
 
+/** Singular/plural task count for an English row, with locale-specific wording. */
+function taskCount(size: number, t: ToolRowText): string {
+  return `${size} ${t(size === 1 ? 'task' : 'tasks')}`
+}
+
+/** Summarize the result of a wait separately from the execution states it observed. */
+function waitSummary(output: string | null, t: ToolRowText): string | undefined {
+  const parsed = output === null ? undefined : asObject(parseResult(output))
+  if (parsed === undefined) return undefined
+  const status = asString(parsed.status)
+  const pending = Array.isArray(parsed.pending_task_ids) ? parsed.pending_task_ids.length : 0
+  if (status === 'timeout') return `${t('waitTimeout')} · ${taskCount(pending, t)} ${t('waitPending')}`
+  if (status === 'cancelled') return `${t('waitCancelled')} · ${taskCount(pending, t)} ${t('waitPending')}`
+  if (status !== 'settled' || !Array.isArray(parsed.results)) return undefined
+  const counts = new Map<string, number>()
+  for (const result of parsed.results) {
+    const readiness = asString(asObject(result)?.readiness)
+    const key = readiness === 'completed' ? 'waitCompleted'
+      : readiness === 'blocked' || readiness === 'dependency_blocked' ? 'waitBlocked'
+        : readiness === 'failed' || readiness === 'cancelled' ? 'waitFailed'
+          : readiness === 'stale' ? 'waitStale' : 'waitPending'
+    counts.set(key, (counts.get(key) ?? 0) + 1)
+  }
+  return [...counts].map(([key, count]) => `${count} ${t(key as ToolRowLocaleKey)}`).join(' · ')
+}
+
 /** Wire status of the single task a settled read returned. */
 function taskStatus(output: string | null): string | undefined {
   const parsed = output === null ? undefined : asObject(parseResult(output))
@@ -223,16 +249,20 @@ export function workflowTaskSummary(
   const action = asString(args.action)
   const taskId = asString(args.task_id)
   if (action === 'wait' || action === 'run') {
+    if (action === 'wait') {
+      const settled = waitSummary(output, t)
+      if (settled !== undefined) return settled
+    }
     const ids = Array.isArray(args.task_ids) ? args.task_ids.filter((id): id is string => typeof id === 'string') : []
     return ids.length > 0 ? ids.join(', ') : undefined
   }
   if (action === 'plan' || action === 'graph') {
     const size = action === 'plan' && Array.isArray(args.tasks) ? args.tasks.length : boardSize(output)
-    return size === undefined ? undefined : `${size} ${t('tasks')}`
+    return size === undefined ? undefined : taskCount(size, t)
   }
   if (action === 'read' && taskId === undefined) {
     const size = boardSize(output)
-    return size === undefined ? undefined : `${size} ${t('tasks')}`
+    return size === undefined ? undefined : taskCount(size, t)
   }
   if (taskId === undefined) return undefined
   if (action === 'read') {

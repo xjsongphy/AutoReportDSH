@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { CardForm, enumField, numberField, textField } from '../../src/client/card-form.js'
 import { AutoReportCardController, type AutoReportCardSettings } from '../../src/client/controller.js'
-import { acceptWrites, stubSettingsScope } from './stub-scope.js'
+import { acceptWrites, stubConfigForm } from './stub-scope.js'
 
 function form() {
-  const host = stubSettingsScope<Record<string, unknown>>()
+  const host = stubConfigForm<Record<string, unknown>>()
   const subject = new CardForm(host.scope, [
     numberField('delegationIdleTimeoutMs'),
     numberField('delegationWaitTimeoutMs'),
@@ -144,7 +144,7 @@ describe('AutoReportCardController', () => {
   }
 
   it('keys the injected snapshot on the autoreport namespace fields', () => {
-    const host = stubSettingsScope<AutoReportCardSettings>()
+    const host = stubConfigForm<AutoReportCardSettings>()
     const subject = new AutoReportCardController(host.scope, stubSessions())
     host.publish({
       status: 'ready',
@@ -171,7 +171,7 @@ describe('AutoReportCardController', () => {
   })
 
   it('treats a typed relative Python path as invalid and a detected path as valid', () => {
-    const host = stubSettingsScope<AutoReportCardSettings>()
+    const host = stubConfigForm<AutoReportCardSettings>()
     const subject = new AutoReportCardController(host.scope, stubSessions())
     host.publish({
       status: 'ready',

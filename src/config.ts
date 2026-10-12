@@ -14,6 +14,10 @@
  */
 
 import z from '@deepseek-ai/schemastery'
+import { isVolatile } from '@deepseek-ai/cosmokit'
+import { AUTO_REPORT_USER_SETTINGS_SCHEMA, type AutoReportUserSettings } from './settings.js'
+import { detectPythonEnvironments } from './python-detect.js'
+import { detectMineruStatus } from './mineru-status.js'
 
 /** Report source language for materialization and compilation. */
 export type ReportLanguage = 'latex' | 'typst'
@@ -30,6 +34,9 @@ export interface SpecialistRoute {
 
 /** Plugin configuration schema: DEFAULTS for the workflow settings chain (see module docs). */
 export interface Config {
+  workspaceLanguages?: AutoReportUserSettings['workspaceLanguages']
+  pythonEnvironments?: AutoReportUserSettings['pythonEnvironments']
+  mineruStatus?: AutoReportUserSettings['mineruStatus']
   /** Default report source language (schema default `latex`). */
   defaultReportLanguage: ReportLanguage
   /**
@@ -52,14 +59,17 @@ export interface Config {
 }
 
 export const Config: z<Config> = z.object({
-  defaultReportLanguage: z.union(['latex', 'typst'] as const).default('latex'),
+  ...Object.fromEntries(Object.entries(AUTO_REPORT_USER_SETTINGS_SCHEMA.dict!).map(([key, field]) => [key, field.volatile()])),
+  pythonEnvironments: z.array(z.object({ label: z.string(), executable: z.string(), source: z.string(), version: z.string() })).default(detectPythonEnvironments()).volatile(),
+  mineruStatus: z.object({ installed: z.boolean(), tokenConfigured: z.boolean(), tokenSource: z.union(['environment', 'config']) }).default(detectMineruStatus()).volatile(),
   workspaceRoot: z.string(),
-  specialistModel: z.object({
-    provider: z.string(),
-    model: z.string(),
-    reasoningEffort: z.string(),
-  }),
-  delegationWaitTimeoutMs: z.number().default(600_000),
-  delegationIdleTimeoutMs: z.number().default(60_000),
-  pythonExecutable: z.string(),
+
 }) as unknown as z<Config>
+
+/** Keep volatile configuration references live while exposing domain values. */
+export function liveConfig(input: Partial<Config>): Partial<Config> {
+  return Object.defineProperties({}, Object.fromEntries(Object.keys(input).map(key => [key, {
+    enumerable: true,
+    get: () => { const value: unknown = Reflect.get(input, key); return isVolatile(value) ? value.get() : value },
+  }]))) as Partial<Config>
+}

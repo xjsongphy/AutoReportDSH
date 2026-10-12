@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { Config } from '../src/config.js'
+import { Config, liveConfig } from '../src/config.js'
 
 describe('autoreport Config', () => {
   it('fills deployment defaults', () => {
-    const config = Config({}) as unknown as {
+    const config = liveConfig(Config({})) as unknown as {
       defaultReportLanguage: string
       delegationIdleTimeoutMs: number
       delegationWaitTimeoutMs: number
@@ -14,14 +14,14 @@ describe('autoreport Config', () => {
   })
 
   it('accepts a full explicit configuration', () => {
-    const config = Config({
+    const config = liveConfig(Config({
       defaultReportLanguage: 'typst',
       workspaceRoot: '/tmp/exp',
       specialistModel: { provider: 'openrouter', model: 'stealth/ox-alpha' },
       delegationIdleTimeoutMs: 500,
       delegationWaitTimeoutMs: 1000,
       pythonExecutable: '/opt/python3',
-    }) as unknown as Record<string, unknown>
+    })) as unknown as Record<string, unknown>
     expect(config['defaultReportLanguage']).toBe('typst')
     expect(config['specialistModel']).toEqual({ provider: 'openrouter', model: 'stealth/ox-alpha' })
     expect(config['pythonExecutable']).toBe('/opt/python3')

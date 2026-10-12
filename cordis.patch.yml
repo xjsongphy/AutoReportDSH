@@ -1,11 +1,62 @@
-# AutoReportDSH's installable DSH bundle. DSH applies this layer through the
-# profile mechanism; users do not need to pass a generated --patch overlay.
-
-# AutoReport's router installs report_workflow for role-bound AutoReport
-# subagents; ordinary children keep the stock adjacent-agent messaging the
-# base bundle mounts (the standalone stock report tool was removed upstream).
+# AutoReportDSH bundle for DSH 0.2.0-rc.2.
 - insert:
     - id: autoreport-host
       name: dsh-autoreport
     - id: autoreport-report-router
       name: dsh-autoreport/tools/report-router
+    - id: preset-autoreport
+      name: '@deepseek-ai/dsh-agent-preset'
+      config:
+        id: autoreport
+        name: AutoReport
+        description: 面向物理实验报告的固定团队 Agent。
+        plugins:
+          # AutoReport Main: a fixed physics-report coordinator preset.
+          # Absolute plugin paths and persona text are rendered by install-user-preset.ts.
+
+          - id: agent-instructions
+            name: '@deepseek-ai/dsh-agent-instructions'
+            config:
+              maxBytes: 65536
+
+          # Filesystem reads and Main's Outline writes; AutoReport guards enforce scope.
+          - id: tool-fs
+            name: '@deepseek-ai/dsh-tool-fs'
+
+          # Do not import ambient DSH or user-agent skills into AutoReport. AutoReport's
+          # bundled skills are registered by the `autoreport` row below; the preset's
+          # own References/skills provider remains available for experiment-local rules.
+          - id: skill-filesystem
+            name: '@deepseek-ai/dsh-skill-filesystem'
+            config:
+              includeDefaultRoots: false
+
+          - id: tool-skill
+            name: '@deepseek-ai/dsh-tool-skill'
+
+          # Local compaction survives because workflow state is log-only and durable.
+          - id: compaction
+            name: cordis:group
+            group: true
+            isolate:
+              compaction: true
+              toolResultPruner: true
+            config:
+              - id: compaction-basic
+                name: '@deepseek-ai/dsh-compaction-basic'
+              - id: command-compact
+                name: '@deepseek-ai/dsh-command-compact'
+              - id: tool-result-pruner
+                name: '@deepseek-ai/dsh-compaction-tool-result-pruner'
+                config:
+                  thresholdChars: 8192
+                  headChars: 4096
+                  tailChars: 1024
+
+          # One preset-plane AutoReport contribution: scoped bundled skills plus the
+          # current fixed-workflow MAIN tools. No generic subagent/workflow/ralph tools.
+          - id: autoreport
+            name: dsh-autoreport/preset
+
+          - id: tool-ask-user
+            name: '@deepseek-ai/dsh-tool-ask-user'

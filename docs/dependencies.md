@@ -1,28 +1,13 @@
 # Dependency wiring
 
-AutoReportDSH develops against a **pinned local harness checkout** (dsh is pre-release and
-iterating rapidly; `PLAN.md` §5 risk 9). The pin means **"verified against", not
-"exclusive"**: the plugin probes the seams it depends on and degrades gracefully
-where it can, so other dsh builds usually work — activation prints which pair
-is running (`src/dsh-version.ts`) instead of refusing.
-
-This file is the dependency authority for the repo: `README.md`, `README.zh.md`,
-`docs/own-features.md`, `.github/workflows/ci.yml`, and `src/host.ts` all point
-here for the pin rather than restating it.
+AutoReportDSH supports **DSH 0.2.0-rc.2 only**. Runtime activation rejects other detected releases, and the npm bundle declares an exact DSH peer and exact DSH package dependencies. There are no compatibility adapters for earlier releases.
 
 ## Pinned harness state
 
-- Checkout: sibling directory `../deepseek-harness` (all `link:` specifiers are
-  repository-relative so clean clones, CI, and other machines resolve them)
-- Verified base: `6b1808f432` (`release(dsh): 0.1.6-alpha.2`, upstream
-  `master`) — the plugin targets the LATEST upstream release, not the retired
-  `dsh-v0.1.1-rc.2` base it was originally written against. CI runs its full
-  suite against exactly this commit; the `Canary` workflow re-runs the suite
-  nightly against upstream `master` to surface API drift early.
-- Local development Harness: the sibling checkout sits on the upstream release
-  commit. No source shim, no per-session sandbox-root patch, and no
-  append-option dependency — the plugin writes only its own log, so the
-  `ignorable` marker is no longer needed by anything.
+- Checkout: sibling directory `../deepseek-harness-0.2.0-rc.2`.
+- Release: `dsh-v0.2.0-rc.2`, commit `639ed015397290b3745d163aafe02ffee4aa3f84`.
+- Source dependencies use repository-relative `link:` paths. CI checks out and builds the same release under that sibling directory.
+- The original `../deepseek-harness` checkout is independent; migration does not modify its uncommitted files.
 
 ## Compatibility seams
 
@@ -47,7 +32,7 @@ with or without the plugin — reads it unmodified.
 
 This replaced two mechanisms that both depended on the host:
 
-- **The persisted `ignorable` marker** is unreachable on 0.1.6-alpha.2:
+- **The persisted `ignorable` marker** is unreachable on 0.2.0-rc.2:
   `Session.append` now accepts options only for surface event types
   (`...opts: T extends SurfaceEventType ? [SurfaceIntent<T>] : []`), and
   `AppendOptions` no longer exists. All `autoreport/*` types are non-surface.
@@ -66,16 +51,11 @@ former `ctx.subagents.registerContinuableSetup` seam was removed upstream along
 with the standalone stock report tool, whose role is now played by adjacent-agent
 `send_message` and the host-only prompt delivery symbol.
 
-`@deepseek-ai/dsh-settings` supplies the AutoReport user-settings namespace
-through `ctx.settings.installSection`.
+`@deepseek-ai/dsh-settings` exposes the volatile Config fields of the profile's `autoreport-host` entry. The Host exports its Config schema; the client uses `ctx.configForms.get('autoreport-host')`. Edits are revision-checked and persist in the current profile's Cordis patch. Workflows retain their frozen settings snapshot; subsequent edits affect future workflows. Workspace-language changes update the workspace templates through the settings notification.
 
-The version the plugin is verified against has exactly one home,
-`VERIFIED_DSH_VERSION` in `src/dsh-version.ts`. Activation compares the running
-build against it and warns — never refuses — on a mismatch, and
-`scripts/prepare-npm-package.mjs` reads that same constant to derive the
-`^` range the publishable manifest declares for every `@deepseek-ai/dsh-*`
-dependency. Two copies of this value is what let the published range drift to
-the retired rc base once; there is now one.
+The bundle declares `preset-autoreport` with `@deepseek-ai/dsh-agent-preset`; the registry does not scan a user preset directory. MAIN and specialist personas are installed on their Agent scopes. Package installation requires no postinstall preset copier.
+
+`VERIFIED_DSH_VERSION` in `src/dsh-version.ts` is the one release constant used by activation and npm packaging. `scripts/prepare-npm-package.mjs` emits exact DSH dependency versions.
 
 Once a first-class per-session root override lands upstream, the wrap in
 `src/policy/sandbox-override.ts` can be replaced by it and this section's
@@ -83,7 +63,7 @@ dev-only notes deleted.
 
 ## CI build reuse and test parallelism
 
-CI and Canary share `.github/actions/prepare-harness`. Dependencies are still
+CI uses `.github/actions/prepare-harness`. Dependencies are still
 installed from the frozen lockfile with the pnpm store cache. The complete
 Harness build is cached separately, including package declarations, generated
 contracts, native addons, Web assets, and their build-environment record. A
@@ -124,51 +104,51 @@ use explicit `.ts` specifiers and cross-package internals).
 
 | Dependency | Linked path (relative to this repo) |
 |---|---|
-| `@deepseek-ai/cordis` | `../deepseek-harness/vendor/cordis` |
-| `@deepseek-ai/schemastery` | `../deepseek-harness/vendor/schemastery` |
-| `@deepseek-ai/dsh-session` | `../deepseek-harness/packages/core/session` |
-| `@deepseek-ai/dsh-session-persistence` | `../deepseek-harness/packages/session/session-persistence` |
-| `@deepseek-ai/dsh-session-projection` | `../deepseek-harness/packages/session/session-projection` |
-| `@deepseek-ai/dsh-settings` | `../deepseek-harness/packages/settings/settings` |
-| `@deepseek-ai/dsh-tools` | `../deepseek-harness/packages/core/tools` |
-| `@deepseek-ai/dsh-agent` | `../deepseek-harness/packages/core/agent` |
-| `@deepseek-ai/dsh-subagent` | `../deepseek-harness/packages/subagent/subagent` |
-| `@deepseek-ai/dsh-llm` | `../deepseek-harness/packages/llm/llm` |
-| `@deepseek-ai/dsh-system-prompt` | `../deepseek-harness/packages/core/system-prompt` |
-| `@deepseek-ai/dsh-skill` | `../deepseek-harness/packages/skill/skill` |
-| `@deepseek-ai/dsh-commands` | `../deepseek-harness/packages/interaction/commands` |
-| `@deepseek-ai/dsh-sandbox-policy` | `../deepseek-harness/packages/sandbox/sandbox-policy` |
-| `@deepseek-ai/dsh-shell-env` | `../deepseek-harness/packages/shell/shell-env` |
-| `@deepseek-ai/dsh-subprocess` | `../deepseek-harness/packages/subprocess/subprocess` |
-| `@deepseek-ai/dsh-home-paths` | `../deepseek-harness/packages/util/home-paths` |
-| `@deepseek-ai/dsh-brand` | `../deepseek-harness/packages/util/brand` |
+| `@deepseek-ai/cordis` | `../deepseek-harness-0.2.0-rc.2/vendor/cordis` |
+| `@deepseek-ai/schemastery` | `../deepseek-harness-0.2.0-rc.2/vendor/schemastery` |
+| `@deepseek-ai/dsh-session` | `../deepseek-harness-0.2.0-rc.2/packages/core/session` |
+| `@deepseek-ai/dsh-session-persistence` | `../deepseek-harness-0.2.0-rc.2/packages/session/session-persistence` |
+| `@deepseek-ai/dsh-session-projection` | `../deepseek-harness-0.2.0-rc.2/packages/session/session-projection` |
+| `@deepseek-ai/dsh-settings` | `../deepseek-harness-0.2.0-rc.2/packages/settings/settings` |
+| `@deepseek-ai/dsh-tools` | `../deepseek-harness-0.2.0-rc.2/packages/core/tools` |
+| `@deepseek-ai/dsh-agent` | `../deepseek-harness-0.2.0-rc.2/packages/core/agent` |
+| `@deepseek-ai/dsh-subagent` | `../deepseek-harness-0.2.0-rc.2/packages/subagent/subagent` |
+| `@deepseek-ai/dsh-llm` | `../deepseek-harness-0.2.0-rc.2/packages/llm/llm` |
+| `@deepseek-ai/dsh-system-prompt` | `../deepseek-harness-0.2.0-rc.2/packages/core/system-prompt` |
+| `@deepseek-ai/dsh-skill` | `../deepseek-harness-0.2.0-rc.2/packages/skill/skill` |
+| `@deepseek-ai/dsh-commands` | `../deepseek-harness-0.2.0-rc.2/packages/interaction/commands` |
+| `@deepseek-ai/dsh-sandbox-policy` | `../deepseek-harness-0.2.0-rc.2/packages/sandbox/sandbox-policy` |
+| `@deepseek-ai/dsh-shell-env` | `../deepseek-harness-0.2.0-rc.2/packages/shell/shell-env` |
+| `@deepseek-ai/dsh-subprocess` | `../deepseek-harness-0.2.0-rc.2/packages/subprocess/subprocess` |
+| `@deepseek-ai/dsh-home-paths` | `../deepseek-harness-0.2.0-rc.2/packages/util/home-paths` |
+| `@deepseek-ai/dsh-brand` | `../deepseek-harness-0.2.0-rc.2/packages/util/brand` |
 
 ### Test-only linked packages
 
 | Dependency | Linked path (relative to this repo) |
 |---|---|
-| `@deepseek-ai/dsh-tool-bash` | `../deepseek-harness/packages/shell/tool-bash` |
-| `@deepseek-ai/dsh-bash-local` | `../deepseek-harness/packages/shell/bash-local` |
-| `@deepseek-ai/dsh-bash-sandbox` | `../deepseek-harness/packages/shell/bash-sandbox` |
-| `@deepseek-ai/dsh-tool-pwsh` | `../deepseek-harness/packages/shell/tool-pwsh` (development/live test) |
-| `@deepseek-ai/dsh-pwsh-local` | `../deepseek-harness/packages/shell/pwsh-local` (development/live test) |
-| `@deepseek-ai/dsh-pwsh-sandbox` | `../deepseek-harness/packages/shell/pwsh-sandbox` (development/live test) |
-| `@deepseek-ai/dsh-shell` | `../deepseek-harness/packages/shell/shell` |
-| `@deepseek-ai/dsh-subprocess-local` | `../deepseek-harness/packages/subprocess/subprocess-local` |
-| `@deepseek-ai/dsh-sandbox` | `../deepseek-harness/packages/sandbox/sandbox` |
-| `@deepseek-ai/dsh-sandbox-local` | `../deepseek-harness/packages/sandbox/sandbox-local` |
-| `@deepseek-ai/dsh-client-locale` | `../deepseek-harness/packages/client/locale` |
-| `@deepseek-ai/dsh-client-store` | `../deepseek-harness/packages/client/store` |
-| `@deepseek-ai/dsh-client-ui-renderer` | `../deepseek-harness/packages/client/ui-renderer` |
-| `@deepseek-ai/dsh-client-ui-conversation` | `../deepseek-harness/packages/client/ui-conversation` |
-| `@deepseek-ai/dsh-client-ui-plugin-manager` | `../deepseek-harness/packages/client/ui-plugin-manager` |
-| `@deepseek-ai/dsh-client-ui-settings` | `../deepseek-harness/packages/client/ui-settings` |
-| `@deepseek-ai/dsh-client-ui-settings-plugins` | `../deepseek-harness/packages/client/ui-settings-plugins` |
-| `@deepseek-ai/dsh-client-ui-slots` | `../deepseek-harness/packages/client/ui-slots` |
-| `@deepseek-ai/dsh-client-ui-primitives` | `../deepseek-harness/packages/client/ui-primitives` |
-| `@deepseek-ai/dsh-client-ui-tool` | `../deepseek-harness/packages/client/ui-tool` |
-| `@deepseek-ai/dsh-client-connection` | `../deepseek-harness/packages/client/connection` |
-| `@deepseek-ai/dsh-api-remotes` | `../deepseek-harness/packages/api/remotes` |
+| `@deepseek-ai/dsh-tool-bash` | `../deepseek-harness-0.2.0-rc.2/packages/shell/tool-bash` |
+| `@deepseek-ai/dsh-bash-local` | `../deepseek-harness-0.2.0-rc.2/packages/shell/bash-local` |
+| `@deepseek-ai/dsh-bash-sandbox` | `../deepseek-harness-0.2.0-rc.2/packages/shell/bash-sandbox` |
+| `@deepseek-ai/dsh-tool-pwsh` | `../deepseek-harness-0.2.0-rc.2/packages/shell/tool-pwsh` (development/live test) |
+| `@deepseek-ai/dsh-pwsh-local` | `../deepseek-harness-0.2.0-rc.2/packages/shell/pwsh-local` (development/live test) |
+| `@deepseek-ai/dsh-pwsh-sandbox` | `../deepseek-harness-0.2.0-rc.2/packages/shell/pwsh-sandbox` (development/live test) |
+| `@deepseek-ai/dsh-shell` | `../deepseek-harness-0.2.0-rc.2/packages/shell/shell` |
+| `@deepseek-ai/dsh-subprocess-local` | `../deepseek-harness-0.2.0-rc.2/packages/subprocess/subprocess-local` |
+| `@deepseek-ai/dsh-sandbox` | `../deepseek-harness-0.2.0-rc.2/packages/sandbox/sandbox` |
+| `@deepseek-ai/dsh-sandbox-local` | `../deepseek-harness-0.2.0-rc.2/packages/sandbox/sandbox-local` |
+| `@deepseek-ai/dsh-client-locale` | `../deepseek-harness-0.2.0-rc.2/packages/client/locale` |
+| `@deepseek-ai/dsh-client-store` | `../deepseek-harness-0.2.0-rc.2/packages/client/store` |
+| `@deepseek-ai/dsh-client-ui-renderer` | `../deepseek-harness-0.2.0-rc.2/packages/client/ui-renderer` |
+| `@deepseek-ai/dsh-client-ui-conversation` | `../deepseek-harness-0.2.0-rc.2/packages/client/ui-conversation` |
+| `@deepseek-ai/dsh-client-ui-plugin-manager` | `../deepseek-harness-0.2.0-rc.2/packages/client/ui-plugin-manager` |
+| `@deepseek-ai/dsh-client-ui-settings` | `../deepseek-harness-0.2.0-rc.2/packages/client/ui-settings` |
+| `@deepseek-ai/dsh-client-ui-settings-plugins` | `../deepseek-harness-0.2.0-rc.2/packages/client/ui-settings-plugins` |
+| `@deepseek-ai/dsh-client-ui-slots` | `../deepseek-harness-0.2.0-rc.2/packages/client/ui-slots` |
+| `@deepseek-ai/dsh-client-ui-primitives` | `../deepseek-harness-0.2.0-rc.2/packages/client/ui-primitives` |
+| `@deepseek-ai/dsh-client-ui-tool` | `../deepseek-harness-0.2.0-rc.2/packages/client/ui-tool` |
+| `@deepseek-ai/dsh-client-connection` | `../deepseek-harness-0.2.0-rc.2/packages/client/connection` |
+| `@deepseek-ai/dsh-api-remotes` | `../deepseek-harness-0.2.0-rc.2/packages/api/remotes` |
 
 All names verified against each linked package's `package.json`; exports map `. -> ./lib/index.js`
 with types at `./lib/types/index.d.ts`.

@@ -209,7 +209,6 @@ async function detectExistingPlugin() {
 async function installPlugin() {
   await step('Install plugin dependencies', 'pnpm', ['install', '--frozen-lockfile'], repoRoot)
   await step('Build AutoReportDSH', 'pnpm', ['run', 'build'], repoRoot)
-  await step('Install the autoreport preset', 'pnpm', ['run', 'install:preset'], repoRoot)
   await step('Register plugin in the DSH web profile', dshCommand, ['plugin', '--profile', profile, 'add', repoRoot], repoRoot)
 }
 
@@ -223,6 +222,7 @@ try {
   if (!existsSync(repoRoot)) throw new Error(`plugin checkout not found: ${repoRoot}`)
   printHeader()
   const version = await detectDsh()
+  if (version !== '0.2.0-rc.2') throw new Error(`AutoReportDSH requires dsh 0.2.0-rc.2; found ${version}`)
   console.log(`${STATUS_INDENT}${paint('green', '✓')} Found DSH ${paint('bold', version)}`)
   const existing = await detectExistingPlugin()
   if (existing !== undefined && !(await confirmOverwrite(existing))) {

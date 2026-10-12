@@ -25,9 +25,11 @@ for (const dependencies of [source.dependencies ?? {}, source.devDependencies ??
     if (!name.startsWith('@deepseek-ai/')) continue
     packageDependencies[name] = name === '@deepseek-ai/cordis'
       ? '^4.0.1'
-      : name === '@deepseek-ai/schemastery'
+      : name === '@deepseek-ai/cosmokit'
+        ? '1.8.5'
+        : name === '@deepseek-ai/schemastery'
         ? '^3.18.1'
-        : `^${VERIFIED_DSH_VERSION}`
+        : VERIFIED_DSH_VERSION
     void version
   }
 }
@@ -46,12 +48,11 @@ const manifest = {
     'dist/src/**/*.js',
     'dist/resources/**',
     'dist/scripts/install-user-preset.js',
-    'dist/scripts/install-package-preset.js',
     'cordis.patch.yml',
     'presets/autoreport/**',
   ],
   scripts: {
-    postinstall: 'node dist/scripts/install-package-preset.js',
+
   },
   repository: {
     type: 'git',
@@ -60,6 +61,7 @@ const manifest = {
   license: source.license ?? 'MIT',
   publishConfig: { access: 'public' },
   dsh: source.dsh,
+  peerDependencies: source.peerDependencies,
   dependencies: packageDependencies,
 }
 
@@ -68,7 +70,6 @@ cpSync(join(root, 'dist', 'client.js'), join(output, 'dist', 'client.js'))
 cpSync(join(root, 'dist', 'src'), join(output, 'dist', 'src'), { recursive: true })
 cpSync(join(root, 'dist', 'resources'), join(output, 'dist', 'resources'), { recursive: true })
 cpSync(join(root, 'dist', 'scripts', 'install-user-preset.js'), join(output, 'dist', 'scripts', 'install-user-preset.js'))
-cpSync(join(root, 'dist', 'scripts', 'install-package-preset.js'), join(output, 'dist', 'scripts', 'install-package-preset.js'))
 cpSync(join(root, 'cordis.patch.yml'), join(output, 'cordis.patch.yml'))
 // The published root needs its own license and README: npm reads them from the
 // package root, and `dist/resources/**` carries CC BY-SA documents whose notices

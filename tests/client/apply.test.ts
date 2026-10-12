@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest'
 // load the TypeScript service (the package exports `./src/*` for this).
 import { SlotRegistry } from '@deepseek-ai/dsh-client-ui-renderer/src/client/registry.ts'
 import { apply, inject, BUNDLE_ID, SETTINGS_NS, TOOL_NS } from '../../src/client/index.js'
-import { stubSettingsScope } from './stub-scope.js'
+import { stubConfigForm } from './stub-scope.js'
 import type { AutoReportCardSettings } from '../../src/client/controller.js'
 
 /** Dictionary-only locale face: the published locale `/client` bundle is not Node-loadable. */
@@ -34,7 +34,7 @@ async function bench() {
   await ctx.plugin(SlotRegistry).await()
   const locale = fakeLocale()
   ctx.provide('locale', locale)
-  const host = stubSettingsScope<AutoReportCardSettings>()
+  const host = stubConfigForm<AutoReportCardSettings>()
   host.publish({
     status: 'ready',
     writable: true,
@@ -56,7 +56,7 @@ async function bench() {
       },
     }),
   })
-  ctx.provide('settingsScope', { bind: () => host.scope })
+  ctx.provide('configForms', { get: () => host.scope })
   ctx.provide('modelDirectories', { directoryFor: () => { throw new Error('not exercised in this bench') } })
   // The card lists projects from the session store, so the card registration
   // itself waits for this service.
@@ -80,7 +80,7 @@ function declareCards(slots: SlotRegistry): () => void {
 
 describe('autoreport settings card apply', () => {
   it('declares the services it uses', () => {
-    expect(inject).toEqual(['slots', 'locale', 'remote', 'remote.session', 'settingsScope', 'sessions', 'modelDirectories'])
+    expect(inject).toEqual(['slots', 'locale', 'remote', 'remote.session', 'configForms', 'sessions', 'modelDirectories'])
   })
 
   it('registers one configuration page keyed on the bundle', async () => {

@@ -12,3 +12,5 @@ export { apply, inject, resolveHostConfig } from './host.js'
 export { name as hostName } from './host.js'
 
 export const name = 'autoreport'
+
+export { Config } from './config.js'

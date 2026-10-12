@@ -11,7 +11,9 @@ import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { SessionId } from '@deepseek-ai/dsh-session'
 import type { ToolDefinition } from '@deepseek-ai/dsh-tools'
 import { isAbsolute, relative, resolve, sep } from 'node:path'
-import type { Config } from './config.js'
+import { liveConfig, type Config } from './config.js'
+import { PERSONA_PREFIX_SECTION } from '@deepseek-ai/dsh-system-prompt'
+import { loadMainPersona } from './personas.js'
 import { isAutoReportMainSession } from './membership.js'
 import { DSH_ROLE_ESCAPE_TOOL_NAMES, ROLE_PROCESS_TOOL, rolePolicy, type AutoReportRole } from './roles.js'
 import { installFilesystemScopeContext } from './filesystem-scope.js'
@@ -195,9 +197,7 @@ export function resolveHostConfig(raw: Partial<Config> = {}): Config {
  *   the DSH home itself.
  */
 export async function apply(ctx: Context, config: Partial<Config> = {}, options: RuntimeOptions = {}): Promise<void> {
-  // Version transparency, never a gate: the pin in docs/dependencies.md means
-  // "verified", not "exclusive". An unverified pair usually works — say so
-  // once, so a mid-session breakage can be attributed in one glance.
+  // DSH 0.2.0-rc.2 is the only supported runtime. Bare unit contexts have no launcher manifest.
   //
   // No session-vocabulary registration happens here, and none is needed: the
   // plugin keeps its own records in its own log (`src/workflow/store.ts`), so a
@@ -205,21 +205,24 @@ export async function apply(ctx: Context, config: Partial<Config> = {}, options:
   // harness build reads it unmodified.
   const support = describeDshVersionSupport(options.runningDshVersion ?? readRunningDshVersion())
   if (support.verified) ctx.logger.info(support.message)
-  else ctx.logger.warn(support.message)
+  else if (options.runningDshVersion !== undefined || readRunningDshVersion() !== undefined) throw new Error(support.message)
   // Role isolation resolves each AutoReport session's writable root through
   // the host sandbox policy at enforcement time. Bare unit-test contexts may
   // omit the service; a real deployment must accept the override — install
   // self-checks and fails loud rather than silently widening every role to
   // the experiment workspace.
   const sandboxPolicy = ctx.get('sandboxPolicy') as Parameters<typeof installSandboxOverride>[0] | undefined
-  const resolved = resolveHostConfig(config)
+  const resolved = liveConfig(config) as Config
+  // Loader applies schema defaults; direct test calls resolve them explicitly.
+  const base = resolveHostConfig(resolved)
+  const live = Object.defineProperties({}, Object.fromEntries(Object.keys({ ...base, ...resolved }).map(key => [key, { enumerable: true, get: () => Reflect.get(resolved, key) ?? Reflect.get(base, key) }]))) as Config
   if (resolved.workspaceRoot !== undefined) {
     if (hasUriScheme(resolved.workspaceRoot)) {
       throw new Error('AutoReport workspaceRoot must be a local filesystem path; URI workspaces are not supported by its role policy')
     }
-    resolved.workspaceRoot = resolve(resolved.workspaceRoot)
+    base.workspaceRoot = resolve(resolved.workspaceRoot)
   }
-  const runtime = new AutoReportWorkflowRuntime(ctx, resolved, options)
+  const runtime = new AutoReportWorkflowRuntime(ctx, live, options)
   const liveAgents = new Map<string, Agent>()
   const mainShellFilters = new Map<Agent, () => void>()
   const configuredRoles = new Map<Agent, { role: AutoReportRole; workspaceRoot: string; dispose: () => void }>()
@@ -366,6 +369,9 @@ export async function apply(ctx: Context, config: Partial<Config> = {}, options:
           },
         })
       }
+      if (role === 'MAIN') releases.push(agent.ctx.systemPrompt.section({
+        name: PERSONA_PREFIX_SECTION, order: agent.ctx.systemPrompt.getSectionOrder('DEPLOYMENT_PERSONA_PREFIX'), text: loadMainPersona(),
+      }))
       releases.push(restrictRoleToolSurface(agent, role))
       assertRoleToolSurface(agent, role, processToolAvailable)
       configuredRoles.set(agent, { role, workspaceRoot, dispose })
