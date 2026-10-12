@@ -99,12 +99,25 @@ current turn while preserving the specialist Session, role binding, and queued
 inbox work so that the same specialist can continue later.
 
 AutoReport resident specialists are created and resumed through the Agent
-factory and held by AutoReport handles. DSH's `subagents.interrupt()` only
-addresses activations registered with its continuation manager; it may accept
-an absent target as a no-op. Implement cancellation through an exact
-AutoReport-owned resident handle (or change the residency integration first),
-not by assuming the generic DSH interrupt tool can see these Agents. A cancel
-request is cooperative and may take time to reach quiescence.
+factory and held by AutoReport handles. The plugin installs effect-owned
+adapters around Agent cancellation and `subagents.interrupt()` so the stock
+conversation stop buttons reach these exact handles. Child interrupts check
+the durable parent address or exact live MAIN identity; ordinary DSH targets
+retain upstream routing. Unloading the plugin restores the original methods.
+
+Stopping MAIN interrupts all its resident specialists and active delegations,
+including asynchronous work after MAIN becomes idle. Stopping a specialist or
+cancelling its task settles its active delegation as `cancelled`; pending
+`send_to_agent(wait=true)` calls resolve immediately. Waiters also observe
+their caller's abort signal and release timers and listeners on every exit.
+Task continuation uses `workflow_task(reopen)` followed by redispatch, reusing
+the same specialist Session. Cancellation is cooperative: running model and
+tool calls must observe their turn signal before reaching quiescence.
+
+Late resident reports remain logged in MAIN's pending inbox without waking a
+stopped MAIN or reviving a cancelled delegation. A new user input permits
+foreground work again. These paths are covered by the real Agent loop and
+stock subagent interrupt RPC in `tests/integration.resident.test.ts`.
 
 ### Search is provider-backed and bounded
 
@@ -122,7 +135,6 @@ denied to AutoReport sessions; use `list` for names-only discovery.
 | P0 | Finish provider-backed `list` | DSH provider only in production; workspace-wide roots, bounds, symlink behavior, abort propagation, and output paths work for supported providers. |
 | P1 | Gate Plotting visual review on declared image input | Prompt requires `read_image` only for a route that declares image input and has the tool; unsupported/unknown routes continue without a MAIN limitation report. |
 | P1 | Add MAIN-only, workspace-contained `present` | A successful REPORT result can make the final PDF a Web deliverable; out-of-workspace and unapproved files are rejected. |
-| P1 | Wire `workflow_task(cancel)` to the exact resident activation | The turn stops, the task settles as cancelled, and the same child Session remains resumable. |
 | P1 | Verify role process integration | DSH host-chain coverage for shell execution through the per-role sandbox roots, including Windows `pwsh` ACL writes. |
 
 ## Explicit non-claims

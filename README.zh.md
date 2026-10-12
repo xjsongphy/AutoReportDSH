@@ -31,7 +31,8 @@ Plotting、Report —— 负责理论推导、数据分析、绘图和 LaTeX/Typ
 ### 工作流
 - **工作区自动初始化** — Main 首个回合只初始化一次；`/init` 用于手动修复或选择报告语言
 - **可重置工作区** — `/reset` 清掉生成物（`Outline/`、`Theory/`、`Plots/`、`Report/`、`Data/Processed/`），保留 `References/` 与原始 `Data/`，重建骨架，并把本会话的任务板清空
-- **任务与产物追踪** — Main 通过 `send_to_agent` 委派任务；specialist 在共享的 `manifest` 里描述自己的产出，下一个角色无需被告知即可找到；每个任务以声明完成收尾
+- **任务依赖图** — Main 通过 `workflow_task` 声明任务与依赖；插件检查循环、调度就绪任务、追踪结果版本并提供独立等待。`send_to_agent` 保留单任务派发能力。见[任务图接口说明](docs/own-features.md#task-graph-operations)。
+- **产物追踪** — specialist 在共享的 `manifest` 里描述自己的产出，下一个角色无需被告知即可找到
 - **specialist 可续写** — 每个 specialist 在后续任务中保留角色上下文；直接与它对话仍是普通对话
 - **其余是原样 DSH** — 未选择 `autoreport` preset 的 session 与没有本插件的 DSH 行为一致
 

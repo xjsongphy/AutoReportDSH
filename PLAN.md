@@ -320,8 +320,9 @@ The tool:
    it waits on an in-process waiter keyed by `(task_id, delegation_revision)` while the
    durable delegation projection remains authoritative. The waiter is resolved by the
    child report/settlement observer, not by waiting for the parent’s next model step. A
-   liveness-aware bounds produce a durable timeout phase and a tool error/result; they do
-   not create another queue or transport path. A bound child with DSH lifecycle status
+   liveness-aware bound produces a caller timeout result without changing execution
+   phase or creating a queue. Each role admits one unsettled execution; another
+   dispatch is rejected before a task or revision is committed. A bound child with DSH lifecycle status
    `running` pauses the 60-second idle timer; `idle` rearms it. A separate hard deadline
    always applies, including while the child remains active.
 
@@ -385,8 +386,9 @@ records its DSH `MessageId`, and folds it into the delegation state. A report fo
 revision is retained as stale evidence and cannot complete the current revision. Duplicate
 transport delivery is idempotent by report message identity. The first valid terminal
 report (`success` → completed, `blocked` → blocked) wins; later deliveries for that
-attempt, including a different DSH message id, are ignored. `timed_out` is not a
-terminal acceptance — a late valid report may still complete the attempt. A malformed
+attempt, including a different DSH message id, are ignored. New wait timeouts leave
+`waiting_for_child` unchanged; legacy `timed_out` records also remain open and do
+not authorize redispatch. A late valid report may still complete that revision. A malformed
 report (`failed`) may be overwritten by a later valid envelope. Cold load replays
 already-logged `user/message` / inbox-splice deliveries through
 `recoverWorkflowReports` so a crash after DSH persisted the parent message but before

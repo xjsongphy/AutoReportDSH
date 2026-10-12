@@ -287,8 +287,30 @@ Open, and deliberately not claimed as done:
   configured DSH home. Repeat it after a DSH compatibility change.
 
 `tests/workflow-task.test.ts` also covers update, cancel, reopen, redispatch of
-the same task at the next delegation revision, completion, and refusal to reopen
-a completed task.
+the same task at the next delegation revision, completion, and reopening a
+completed task for a new accepted result version.
+
+Conversation stop controls route through plugin-owned cancellation adapters.
+The real-loop cases in `tests/integration.resident.test.ts` cover MAIN stopping
+multiple specialists, asynchronous work, the stock child interrupt RPC and
+ownership checks, task cancellation, late reports staying parked, and user
+continuation reusing the same specialist. Waiter cancellation and adapter
+unload are covered by `tests/waiters.test.ts` and `tests/cancellation.test.ts`.
+
+Waiting timeouts end only MAIN's waiter. The task remains running at the same
+delegation revision, and the role rejects overlapping dispatches until a
+report or explicit cancellation settles the execution. The timeout result
+includes `execution_pending` and `delegation_phase`; historical `timed_out`
+records remain open for late reports and cancellation. Task/dependency checks
+run before creation and again after asynchronous resident provisioning, so
+rejected and concurrent dispatches do not create phantom tasks or revisions.
+
+Structured report JSON is parsed separately from its human summary; historical
+mixed-text relays also accept braces inside quoted response strings. The
+real-loop regression covers waiting expiry, rejected duplicate dispatches,
+and eventual successful settlement of the original revision. Compute bash
+enables `pipefail`, preserving an upstream failure when output is filtered
+through `head` or `tail`.
 
 ### Durable state lives in the plugin's own log
 
@@ -340,9 +362,91 @@ Properties this buys and costs:
   for AutoReport state, so such a session starts as a new workflow.
 
 Likewise, the durable AutoReport task state is that log, not DSH's generic
-`todo_write`. MAIN creates and redispatches workflow tasks through
-`send_to_agent`, and maintains the board itself through `workflow_task`
-(`read`, `update`, `cancel`, `reopen`); the tool states in its own description
-that it is the report task board and not a generic todo replacement. It is not a
-free-form board editor: transitions stay on the durable task/delegation model,
-so a cancelled or blocked task is reopened rather than rewritten.
+`todo_write`. MAIN can create a dependency graph through `workflow_task(plan)`
+or create and dispatch one task through `send_to_agent`. Graph operations stay
+on the durable task/delegation model; specialists only report their own work.
+
+### Task graph operations
+
+MAIN specifies business dependencies; the plugin enforces them. It never
+infers prerequisite edges from role names or prompt prose. Planning validates
+the complete proposed graph before writing any task: forward references within
+the batch are allowed, while unknown IDs, duplicate IDs/edges, self-edges and
+cycles are rejected. `run` admits only pending nodes with fresh completed
+prerequisites, one unresolved execution per role, and waits for the previous
+Agent driver to become idle before reusing that role.
+
+| Action | Arguments | Behavior |
+|---|---|---|
+| `plan` | `tasks`: 1–64 definitions with `role`, `subject`, `prompt`, optional `task_id`, `dependencies`, `context`, `steps` | Create tasks without starting work; named task IDs permit same-batch references. |
+| `graph` | None | Return prerequisite-first order, ready/waiting/blocked nodes, blocking paths, role activities and live waits. |
+| `read` | Optional `task_id` | Inspect one task or all tasks, including result version and execution revision. |
+| `run` | Optional `task_ids` | Schedule that scope and its prerequisite closure; no IDs selects the whole plan. An enabled scope is extended; pause before replacing it. |
+| `pause` | None | Stop future admission, preserving admitted specialist executions. |
+| `wait` | Nonempty `task_ids`, optional `mode: any/all`, `timeout_ms` | Await results without dispatching; return settled/pending targets, per-target outcomes and `all_succeeded`. |
+| `update` | `task_id`, one or more of `steps`, `subject`, `prompt`, `context`, `dependencies`; optional `expected_revision` | Validate a complete edit before saving. Running/completed instructions cannot be changed; checklists can. |
+| `cancel` | `task_id`, optional `expected_revision` | Cancel an unfinished task and its active or queued execution. |
+| `reopen` | `task_id`, optional `expected_revision` | Make completed/blocked/failed/cancelled work pending, pause admission for edits, invalidate dependent results and stop obsolete attempts. |
+
+Example plan (tool name `workflow_task`):
+
+```json
+{
+  "action": "plan",
+  "tasks": [
+    {"task_id":"task-theory","role":"THEORY","subject":"Theory","prompt":"Develop the required theory from References/."},
+    {"task_id":"task-analysis","role":"DATA_ANALYSIS","subject":"Analysis","prompt":"Analyze Data/ using the theory and record self-checks.","dependencies":["task-theory"]},
+    {"task_id":"task-plot","role":"PLOTTING","subject":"Figures","prompt":"Create figures from validated analysis.","dependencies":["task-analysis"]},
+    {"task_id":"task-report","role":"REPORT","subject":"Report","prompt":"Write and compile the experiment report.","dependencies":["task-theory","task-analysis","task-plot"]}
+  ]
+}
+```
+
+Run `{"action":"run","task_ids":["task-analysis"]}`, then
+`{"action":"wait","task_ids":["task-analysis"],"mode":"all"}`.
+MAIN reviews analysis/coverage before explicitly running `task-plot`, reviewing
+its coverage, and running `task-report`. Independent branches can use `mode:
+"any"` to react to the first result or blocker. A full graph run automatically
+releases downstream work on accepted prerequisite success; use scoped runs at
+MAIN review gates.
+
+Task mutation `revision` guards concurrent edits. Accepted `result_version`
+changes only when a fresh success is accepted, so checklist edits do not
+invalidate scientific results. Each execution pins dependency result versions.
+Reopening upstream work invalidates descendants; reports based on obsolete
+inputs cannot complete them. Inspection also recognizes stale completed rows
+from restored version pins, and `run` reconciles them before rebuilding.
+Unresolved historical executions are not assumed finished merely because an
+Agent is absent/idle: inspect, cancel and reopen them when recovery requires
+it. Saved plans and scheduling scopes survive plugin-log replay; call `run`
+to resume the desired scope after restoration. Older snapshots without saved
+prompts need `update(prompt=...)` before graph scheduling; prior cancellation,
+role bindings and specialist Sessions remain usable.
+
+Waits are process-local and listed separately from executions. Completion,
+timeout, cancellation, graph reset and plugin unload release their timers and
+listeners. Waiting expiry does not create a new execution or advance its
+revision. MAIN stop additionally pauses admission and cancels admitted work.
+During `/reset`, admission is stopped and drained before the old log/cache is
+removed. Graph operations return `WORKFLOW_RESETTING` with a retry-after-reset
+instruction; pending waits are cancelled before their target tasks disappear.
+
+### Workflow error feedback
+
+Workflow failures carry a stable `WORKFLOW_*` code in the tool's error metadata
+and model-visible `Details` JSON. Feedback identifies the field/index, actual
+ID/status/version, expected condition and remedy. Examples include:
+
+- `tasks[2].dependencies[0]` names an unknown task: correct the ID or include its definition in the batch.
+- A cycle reports the full path, such as `task-theory -> task-analysis -> task-theory`.
+- A refused dispatch names the unsatisfied dependency and its root blocking chain, status and result version.
+- An occupied role names the current task, execution revision and phase; a draining Agent additionally names its child Session.
+- `expected_revision` errors show expected and current mutation revisions and request a fresh read.
+- An obsolete report names the consumed dependency version and current version, and requests a rebuild.
+
+For example, attempting `task-plot` before `task-analysis` completes returns
+`WORKFLOW_DEPENDENCY_NOT_READY`, identifies `task-analysis` as `running`, states
+that a current `completed` result is required, and advises waiting/repairing
+that prerequisite. It creates no task, revision or briefing. A scheduler startup
+failure appears as that task's `failed_reason` and as an explicit downstream
+blocking path, rather than a successful task outcome.

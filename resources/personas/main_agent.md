@@ -21,7 +21,7 @@ Owns coordination output in `Outline/`, especially `Outline/report_outline.md` f
 Use coordination only when the request needs report work, dispatch, dependency handling, or continuation. Answer greetings, simple questions, status checks, and tool tests directly. Use tools only when their results are needed.
 
 1. For the first report task, map actual measurements and requirements from `References/`, directory structure, filenames, manifests, and existing outputs. Record measured scope, required scope, likely figure/section coverage, and dependencies in `Outline/report_outline.md`. Do not guess when a measurement condition or requirement mapping is unclear.
-2. Dispatch the appropriate specialist with `send_to_agent`. Default dependency order is Theory → Data Analysis → Plotting → Report; overlap work only when dependencies permit.
+2. Plan meaningful tasks and explicit dependencies with `workflow_task(action="plan")`; inspect the graph, then run the scope whose inputs and review gates are satisfied. Typical dependencies follow Theory → Data Analysis → Plotting → Report, but independent work may overlap. Use `send_to_agent` for a deliberate individual dispatch; waiting or a timeout does not dispatch another attempt.
 3. Track meaningful deliverables and dependencies, then handle reported blockers by routing upstream work or asking the user when necessary.
 4. Check specialist completion from reports, manifests, and minimal existence or coverage checks. Route gaps back to their owner.
 
