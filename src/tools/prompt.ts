@@ -22,6 +22,17 @@ directly through ordinary conversation when the user opens them; those exchanges
 are not workflow delegations and never change task state. Your dispatches are the
 workflow channel.
 
+## Dependencies and waiting
+
+Plan related tasks with \`workflow_task(action="plan")\` and declare prerequisite
+task IDs in \`dependencies\`; prose alone does not enforce ordering. Plans may
+reference unfinished or same-batch tasks. Prerequisites must be completed before dispatch.
+Each role admits one unsettled task. \`wait=false\` and a waiting timeout leave
+that execution pending; await its report instead of dispatching it again.
+To revise unfinished work, cancel it with \`workflow_task\`, reopen it, then
+redispatch the same task. A new revision is a new execution, not an update
+to the specialist's current turn.
+
 ## Minimal dispatch
 
 Send subagents only the task goal, relevant input locations, dependencies, and
@@ -73,10 +84,38 @@ report dependency needs instead of acting on them.`
  * MAIN's `tool:workflow_task` policy: when the durable board is worth writing
  * to, and why it is not a generic todo list.
  */
-export const WORKFLOW_TASK_SYSTEM_PROMPT = `# The workflow task board
+export const WORKFLOW_TASK_SYSTEM_PROMPT = `# The workflow task graph
 
-Use \`workflow_task\` only to read or maintain the durable AutoReport workflow
-checklist and status; do not use generic todo tools.
+MAIN decides meaningful tasks, roles and prerequisite edges. The plugin validates
+IDs and cycles, schedules ready tasks with one active task per role, and manages
+result versions and waiting. No role chain is inferred from prompt prose.
+Use this graph for report coordination; do not use generic todo tools.
+
+1. Use action="plan" with task definitions to create the graph without starting
+   work. Give explicit task-* IDs when referencing another task in the batch.
+2. Use action="graph" to see readiness, exact blocking paths, role occupancy and
+   existing waits. Correct the field/task identified in an error instead of
+   repeating the same invalid request.
+3. Use action="run" with task_ids to schedule those nodes and their prerequisites.
+   Omit task_ids only when the whole plan may execute automatically. At a MAIN
+   review/coverage gate, run just the upstream scope, inspect its results, then
+   explicitly run the downstream scope. Successful prerequisite reports release
+   downstream nodes automatically within the enabled scope.
+   Running another scope extends an enabled scheduler; pause first to replace
+   its scope. Pause before multi-call instruction edits as well.
+4. Use action="wait", task_ids and mode="any" to react to the first result or
+   blocker, or mode="all" to gather all target results. Waiting never dispatches.
+   Timeout stops only the wait; executions and result revisions are preserved.
+5. Use action="pause" to stop future automatic dispatch. To change unfinished
+   work, cancel, reopen, update and run it again. To revise completed upstream
+   work, reopen its original task: dependent results are invalidated and old
+   running attempts stop. Reopen pauses future admission; finish edits before
+   run resumes scheduling. Do not treat a new unrelated task as a replacement for
+   an existing dependency edge.
+
+Use expected_revision from read/graph for concurrent edits. Read feedback includes
+task IDs, result versions, role occupancy and dependency status; never bypass a
+dependency by omitting it to make a refused dispatch succeed.
 
 Track only nontrivial coordination work with concrete deliverables or
 dependencies; do not create workflow tasks for direct answers, simple checks,
@@ -108,8 +147,9 @@ follow-ups are ordinary conversation: answer normally, but never create,
 complete, or otherwise mutate AutoReport task state for them.
 
 AutoReport's durable task board is for Main-dispatched report work only; it is
-not DSH \`todo_write\`. MAIN creates and dispatches tasks with \`send_to_agent\` and
-may inspect, update checklist steps, cancel, or reopen them with \`workflow_task\`.
+not DSH \`todo_write\`. MAIN plans and schedules dependencies with \`workflow_task\`
+and can explicitly dispatch individual tasks with \`send_to_agent\`. MAIN owns
+graph inspection, independent waits, checklist edits, cancellation and reopening.
 Specialists report their assigned task through \`report_workflow\`; they do not
 mutate the task board directly.
 

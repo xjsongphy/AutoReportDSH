@@ -272,6 +272,7 @@ export async function assemble(options: AssembleOptions = {}): Promise<Assembled
   } as Agent
 
   ctx.provide('subagents', {
+    interrupt: () => {},
     startContinuable: async (spec: {
       childId: unknown
       label: string

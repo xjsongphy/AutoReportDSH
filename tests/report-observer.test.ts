@@ -80,6 +80,33 @@ let WORKSPACE = workspaceForTests('report-observer')
 beforeEach(() => { WORKSPACE = workspaceForTests('report-observer') })
 
 describe('report observer', () => {
+  it('settles and replays a structured successful report whose human response contains braces and quotes', async () => {
+    const session = sessionIn(WORKSPACE, 'parent')
+    const state = workflowState(session)
+    const waiters = new WaiterRegistry()
+    seedWaiting(session, state)
+    const response = 'κ ∈ {N, 1}; \\frac{a}{b}; "quoted"'
+    const message = createUserMessage({
+      source: { kind: 'subagent-report', form: 'relay', senderSessionId: SessionId('child-da') },
+      content: [
+        { type: 'text', text: `DATA_ANALYSIS completed: ${response}` },
+        { type: 'text', text: JSON.stringify({ task_id: 'task-7', delegation_revision: 1, status: 'success', block_type: null, response, produced_files: [] }) },
+      ],
+    })
+    const pending = waiters.wait('task-7#1', 5000)
+    const event = session.append('agent/inbox/spliced', { target: 'next-step', start: 0, inserted: [message] })
+    observe(session, state, waiters, event)
+    await expect(pending).resolves.toMatchObject({ status: 'completed', response })
+    expect(state.getTask('task-7')?.status).toBe('completed')
+    const restored = WorkflowState.empty()
+    seedWaiting(session, restored)
+    recoverWorkflowReports(session, { state: restored, waiters: new WaiterRegistry(), commit: (type, data) => {
+      restored.apply(appendWorkflowEvent(session, type, data))
+    } })
+    expect(restored.getTask('task-7')?.status).toBe('completed')
+    expect(restored.currentDelegation('task-7')?.report?.response).toBe(response)
+  })
+
   it('folds a valid success report into completed and settles the waiter', async () => {
     const session = sessionIn(WORKSPACE, 'parent')
     const state = workflowState(session)

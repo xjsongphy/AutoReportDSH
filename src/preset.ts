@@ -53,6 +53,7 @@ export function apply(ctx: Context): void {
     deliverChild: (parent, childSessionId, content, source, signal) =>
       ctx.autoreportWorkflow.deliverChild(parent, childSessionId, content, source, signal),
     workflow: ctx.autoreportWorkflow,
+    assertAvailable: session => ctx.autoreportWorkflow.coordinator.assertAvailable(session),
     config: ctx.autoreportWorkflow.config,
     llm: ctx.llm,
   }))

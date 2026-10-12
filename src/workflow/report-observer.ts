@@ -2,10 +2,12 @@ import type { Session, SessionEvent, SessionId } from '@deepseek-ai/dsh-session'
 import type { SubagentSettledMessageSource } from '@deepseek-ai/dsh-subagent'
 import type { SubagentReportMessageSource } from '../messages.js'
 import type { DelegationSnapshot, TaskSnapshot } from './events.js'
-import { delegationKey, parseWorkflowEnvelopeFromText } from './protocol.js'
+import { AUTOREPORT_SCHEMA_VERSION } from './events.js'
+import { delegationKey, isOpenDelegation, parseWorkflowReportContent } from './protocol.js'
 import type { WorkflowState } from './service.js'
 import type { WaiterRegistry, WaiterOutcome } from './waiters.js'
 import { attemptArtifactPathsForDelegation } from './file-notes.js'
+import { resultVersion, staleDependencyReason } from './graph.js'
 
 /** Dependencies borrowed by the durable parent-message observer. */
 export interface WorkflowReportObserverDependencies {
@@ -19,19 +21,12 @@ export interface WorkflowReportObserverDependencies {
 
 type DeliveredMessage = SessionEvent<'user/message'>['data']
 
-function messageText(message: DeliveredMessage): string {
-  return message.content
-    .filter((block): block is { type: 'text'; text: string } => block.type === 'text')
-    .map(block => block.text)
-    .join('\n')
-}
-
 function currentForChild(state: WorkflowState, childId: SessionId): DelegationSnapshot | undefined {
   let match: DelegationSnapshot | undefined
   for (const task of state.projection().tasks.values()) {
     const current = state.currentDelegation(task.taskId)
     if (current?.childSessionId !== childId) continue
-    if (current.phase !== 'dispatched' && current.phase !== 'waiting_for_child') continue
+    if (!isOpenDelegation(current)) continue
     if (match === undefined || (current.dispatchedAt ?? 0) > (match.dispatchedAt ?? 0)) match = current
   }
   return match
@@ -95,8 +90,10 @@ function settleTaskFromDelegation(
     const { blockedReason: _blocked, failedReason: _failed, ...rest } = task
     deps.commit('autoreport/task', {
       ...rest,
+      version: AUTOREPORT_SCHEMA_VERSION,
       status: 'completed',
       revision: task.revision + 1,
+      resultVersion: resultVersion(task) + 1,
     })
     return
   }
@@ -131,7 +128,7 @@ function observeDeliveredMessage(message: DeliveredMessage, deps: WorkflowReport
     const senderSessionId = source.kind === 'subagent-report'
       ? (source as SubagentReportMessageSource).senderSessionId
       : source.senderSessionId
-    const parsed = parseWorkflowEnvelopeFromText(messageText(message))
+    const parsed = parseWorkflowReportContent(message.content)
     if (!parsed.ok) {
       const current = currentForChild(deps.state, senderSessionId)
       if (current === undefined) return
@@ -157,9 +154,12 @@ function observeDeliveredMessage(message: DeliveredMessage, deps: WorkflowReport
     const current = deps.state.currentDelegation(claimedReport.task_id)
     const task = deps.state.getTask(claimedReport.task_id)
     const cancelled = attempt.phase === 'cancelled' || task?.status === 'cancelled'
+    const obsoleteInputs = staleDependencyReason(deps.state, attempt)
     const stale = current === undefined
       || current.delegationRevision !== claimedReport.delegation_revision
       || cancelled
+      || attempt.phase === 'stale'
+      || obsoleteInputs !== undefined
     // Deliver the canonical envelope MAIN received rather than recomputing it
     // from a later projection (which may include artifacts observed after the
     // report was sent). Validation still restricts the model's claim to paths
@@ -181,10 +181,14 @@ function observeDeliveredMessage(message: DeliveredMessage, deps: WorkflowReport
       ...(stale ? {
         reason: cancelled
           ? `late report for cancelled delegation revision ${report.delegation_revision}`
-          : `late report for delegation revision ${report.delegation_revision}`,
+          : obsoleteInputs ?? attempt.reason ?? `late report for delegation revision ${report.delegation_revision}`,
       } : {}),
     }
     deps.commit('autoreport/delegation', settled)
+    if (obsoleteInputs !== undefined && task !== undefined && current?.delegationRevision === claimedReport.delegation_revision && !cancelled) {
+      deps.commit('autoreport/task', { ...task, status: 'pending', staleReason: obsoleteInputs, revision: task.revision + 1 })
+      deps.waiters.settle(delegationKey(attempt.taskId, attempt.delegationRevision), { status: 'failed', response: obsoleteInputs })
+    }
     if (!stale) {
       settleTaskFromDelegation(deps.state, settled, deps)
       deps.waiters.settle(delegationKey(settled.taskId, settled.delegationRevision), settleOutcome(settled))

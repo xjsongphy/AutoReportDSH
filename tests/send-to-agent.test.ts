@@ -486,15 +486,24 @@ describe('send_to_agent', () => {
     expect(waiters.pendingKeys()).toBe(0)
   })
 
-  it('records a durable timeout when wait:true elapses with no report', async () => {
-    const { call, state } = harness()
+  it('expires the caller wait without ending execution or admitting another task to the role', async () => {
+    const { call, state, subagents, waiters } = harness()
     await expect(call({
       role: 'THEORY',
       task_id: 'task-1',
       prompt: 'Derive H',
       timeout_ms: 20,
-    })).resolves.toMatchObject({ status: 'timeout', task_id: 'task-1' })
-    expect(state.currentDelegation('task-1')?.phase).toBe('timed_out')
+    })).resolves.toMatchObject({ status: 'timeout', task_id: 'task-1', execution_pending: true, delegation_phase: 'waiting_for_child' })
+    expect(state.currentDelegation('task-1')?.phase).toBe('waiting_for_child')
+    expect(state.getTask('task-1')?.status).toBe('running')
+    expect(waiters.pendingKeys()).toBe(0)
+    for (const args of [{ task_id: 'task-1' }, {}]) {
+      await expect(call({ role: 'THEORY', prompt: 'repeat after timeout', wait: false, ...args })).rejects.toThrow(/already has work waiting/)
+    }
+    expect(state.projection().tasks.size).toBe(1)
+    expect(state.projection().delegations.size).toBe(1)
+    expect(subagents.startContinuable).toHaveBeenCalledOnce()
+    expect(subagents.followup).not.toHaveBeenCalled()
   })
 
   it('rejects a second wait while the current attempt is still waiting_for_child', async () => {
@@ -503,6 +512,49 @@ describe('send_to_agent', () => {
     await expect(call({ role: 'THEORY', task_id: 'task-1', prompt: 'overlap', wait: false }))
       .rejects.toThrow(/already has work waiting/)
   })
+
+  it('does not treat a legacy durable timed_out attempt as finished execution', async () => {
+    const { call, state, workflow, session, subagents } = harness()
+    await call({ role: 'THEORY', task_id: 'task-1', prompt: 'first', wait: false })
+    workflow.commit(session, 'autoreport/delegation', { ...state.currentDelegation('task-1')!, phase: 'timed_out', settledAt: 20 })
+    await expect(call({ role: 'THEORY', task_id: 'task-1', prompt: 'repeat', wait: false })).rejects.toThrow(/already has work waiting/)
+    expect(state.currentDelegation('task-1')?.delegationRevision).toBe(1)
+    expect(subagents.followup).not.toHaveBeenCalled()
+  })
+
+  it('rejects incomplete dependencies before creating a task, binding or dispatch', async () => {
+    const { call, state, subagents } = harness()
+    await expect(call({ role: 'PLOTTING', prompt: 'plot', dependencies: ['task-1'], wait: false })).rejects.toThrow(/dependency/)
+    expect(state.projection().tasks.size).toBe(1)
+    expect(state.projection().bindingsByRole.size).toBe(0)
+    expect(state.projection().delegations.size).toBe(0)
+    expect(subagents.startContinuable).not.toHaveBeenCalled()
+  })
+
+  it.each([['THEORY', 'THEORY', 1], ['THEORY', 'DATA_ANALYSIS', 2]] as const)(
+    'serializes admission after shared provisioning for %s and %s', async (firstRole, secondRole, expectedStarts) => {
+      const { session, state, workflow, subagents } = harness()
+      const ready = Promise.withResolvers<void>()
+      let childNumber = 0
+      const tool = createSendToAgentTool({
+        subagents, workflow, config: CONFIG, persona: () => 'persona',
+        childId: () => SessionId(`race-child-${++childNumber}`),
+        deliverChild: async () => 'unused',
+        resident: { ensure: async () => { await ready.promise; return undefined }, deliver: async () => undefined },
+      })
+      const exec = { agent: { id: session.id, session }, signal: new AbortController().signal }
+      const first = tool.execute({ role: firstRole, prompt: 'first', wait: false } as never, exec as never)
+      const second = tool.execute({ role: secondRole, prompt: 'second', wait: false } as never, exec as never)
+      const settled = Promise.allSettled([first, second])
+      ready.resolve()
+      const results = await settled
+      expect(results.filter(result => result.status === 'fulfilled')).toHaveLength(expectedStarts)
+      expect(subagents.startContinuable).toHaveBeenCalledTimes(expectedStarts)
+      expect(state.projection().delegations.size).toBe(expectedStarts)
+      expect(state.projection().tasks.size).toBe(1 + expectedStarts)
+      if (firstRole === secondRole) expect(results[1]).toMatchObject({ status: 'rejected', reason: expect.objectContaining({ message: expect.stringContaining('already has work waiting') }) })
+    },
+  )
 
   it('rejects completed tasks, missing dependencies, and role mismatch', async () => {
     const { call, workflow, session } = harness()
@@ -555,8 +607,7 @@ describe('send_to_agent', () => {
     await expect(tool.execute({ role: 'THEORY', task_id: 'task-1', prompt: 'x' } as never, exec as never))
       .resolves.toMatchObject({ status: 'timeout' })
     expect(startContinuable.mock.calls[0]?.[0]?.request?.agentOptions).toEqual({ provider: 'route-provider', model: 'route-model' })
-    expect(state.currentDelegation('task-1')?.phase).toBe('timed_out')
-    expect(state.currentDelegation('task-1')?.reason).toContain('30ms')
+    expect(state.currentDelegation('task-1')?.phase).toBe('waiting_for_child')
   })
 
   it('passes no agentOptions when the snapshot records explicit Main inheritance', async () => {

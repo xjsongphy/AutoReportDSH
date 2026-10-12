@@ -6,8 +6,10 @@
  * @module
  */
 
-import type { WorkflowReportEnvelope } from './events.js'
+import type { ContentBlock } from '@deepseek-ai/dsh-llm'
+import type { DelegationSnapshot, WorkflowReportEnvelope } from './events.js'
 import { normalizeWorkspaceRelativePath as normalizeProducedPath } from '../workspace/path.js'
+import { actualValue } from './errors.js'
 
 /** Upper bound for report response text (chars, UTF-16 code units). */
 export const MAX_RESPONSE_LENGTH = 16_384
@@ -61,14 +63,43 @@ export function parseWorkflowEnvelopeFromText(raw: unknown): ParseResult<Workflo
   const trimmed = raw.trim()
   const direct = parseWorkflowEnvelope(trimmed)
   if (direct.ok) return direct
-  const fence = /```(?:json)?\s*([\s\S]*?)\s*```/u.exec(trimmed)
-  if (fence?.[1] !== undefined) {
+  for (const fence of trimmed.matchAll(/```(?:json)?\s*([\s\S]*?)\s*```/gu)) {
+    if (fence[1] === undefined) continue
     const fenced = parseWorkflowEnvelope(fence[1])
     if (fenced.ok) return fenced
   }
-  const start = trimmed.lastIndexOf('{')
-  if (start < 0) return { ok: false, reason: 'report is not valid JSON' }
-  return parseWorkflowEnvelope(trimmed.slice(start))
+  // JSON.parse validates the whole suffix, including braces inside quoted
+  // response text. The last brace alone may belong to a formula such as {N, 1}.
+  for (let start = trimmed.lastIndexOf('{'); start >= 0; start = start === 0 ? -1 : trimmed.lastIndexOf('{', start - 1)) {
+    const parsed = parseWorkflowEnvelope(trimmed.slice(start))
+    if (parsed.ok) return parsed
+  }
+  return direct
+}
+
+/**
+ * Read a structured report block before interpreting a historical mixed-text relay.
+ * @param content - message blocks retaining the human summary and JSON separately.
+ * @returns the validated report or its parsing failure.
+ */
+export function parseWorkflowReportContent(content: readonly ContentBlock[]): ParseResult<WorkflowReportEnvelope> {
+  const texts = content.filter((block): block is Extract<ContentBlock, { type: 'text' }> => block.type === 'text')
+  for (const block of texts.toReversed()) {
+    const parsed = parseWorkflowEnvelope(block.text)
+    if (parsed.ok) return parsed
+  }
+  return parseWorkflowEnvelopeFromText(texts.map(block => block.text).join('\n'))
+}
+
+/**
+ * Whether an attempt still owes a report. Legacy timed_out records describe
+ * an expired caller wait, not proof that the child's execution ended.
+ * @param attempt - current durable delegation, if any.
+ * @returns whether redispatch must wait for settlement or explicit cancellation.
+ */
+export function isOpenDelegation(attempt: DelegationSnapshot | undefined): attempt is DelegationSnapshot & { phase: 'dispatched' | 'waiting_for_child' | 'timed_out' } {
+  return attempt !== undefined && attempt.report === undefined
+    && (attempt.phase === 'dispatched' || attempt.phase === 'waiting_for_child' || attempt.phase === 'timed_out')
 }
 
 /**
@@ -137,10 +168,10 @@ export function parseWorkflowEnvelope(raw: unknown): ParseResult<WorkflowReportE
   }
   const seen = new Set<string>()
   const produced_files: string[] = []
-  for (const entry of producedRaw) {
+  for (const [index, entry] of producedRaw.entries()) {
     const normalized = normalizeProducedPath(entry)
     if (normalized === null) {
-      return { ok: false, reason: `produced_files entry is absolute or traversing: ${String(entry)}` }
+      return { ok: false, reason: `produced_files[${index}]=${JSON.stringify(actualValue(entry))} must be a workspace-relative path string; absolute or traversing paths are rejected.` }
     }
     if (seen.has(normalized)) continue
     seen.add(normalized)

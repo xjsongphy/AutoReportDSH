@@ -9,7 +9,7 @@ import { SubagentError } from '@deepseek-ai/dsh-subagent'
 import { defineTool, type ToolDefinition } from '@deepseek-ai/dsh-tools'
 import type AutoReportWorkflowRuntime from '../runtime.js'
 import type { Config } from '../config.js'
-import { DSH_ROLE_ESCAPE_TOOL_NAMES, isSpecialistRole, rolePolicy, type SpecialistRole } from '../roles.js'
+import { DSH_ROLE_ESCAPE_TOOL_NAMES, rolePolicy, type SpecialistRole } from '../roles.js'
 import { loadSpecialistPersona } from '../personas.js'
 import {
   AUTOREPORT_SCHEMA_VERSION,
@@ -19,17 +19,17 @@ import {
 } from '../workflow/events.js'
 import type { WorkflowSettingsSnapshot } from '../settings.js'
 import { roleHandoffText } from '../workflow/file-notes.js'
-import { delegationKey } from '../workflow/protocol.js'
+import { delegationKey, isOpenDelegation } from '../workflow/protocol.js'
 import type { WaiterOutcome } from '../workflow/waiters.js'
 import { residentToolFilter } from '../subagent-descriptor.js'
 import { SEND_TO_AGENT_SECTION, SEND_TO_AGENT_SYSTEM_PROMPT } from './prompt.js'
 import { genericCall } from './presentation.js'
+import { assertDependenciesReady, assertRoleAvailable, dependencyVersions, requireTask } from '../workflow/graph.js'
+import { WorkflowError, workflowInteger, workflowRole, workflowSteps, workflowTaskIds, workflowText } from '../workflow/errors.js'
 
 const MAX_PROMPT = 16_384
 const MAX_CONTEXT = 8_192
 const MAX_SUBJECT = 256
-const MAX_STEPS = 64
-const MAX_STEP_LENGTH = 512
 const MIN_TIMEOUT_MS = 1
 const MAX_TIMEOUT_MS = 900_000
 /** Fallbacks used only when composition supplies no wait budgets. */
@@ -41,6 +41,8 @@ export type SendToAgentWorkflow = Pick<AutoReportWorkflowRuntime, 'roleRegistry'
 
 /** Dependencies used by the fixed-role delegation tool. */
 export interface SendToAgentDependencies {
+  /** Admission barrier owned by the live workflow runtime (e.g. during reset). */
+  readonly assertAvailable?: (session: Session) => void
   readonly subagents: Pick<SubagentRuntime, 'startContinuable'>
   /**
    * Host delivery onto a manager-owned continuable child (the unified-steer
@@ -73,9 +75,7 @@ export interface SendToAgentDependencies {
 }
 
 function text(raw: unknown, name: string, max: number): string {
-  if (typeof raw !== 'string' || raw.trim().length === 0) throw new Error(`${name} must be non-empty`)
-  if (raw.length > max) throw new Error(`${name} exceeds ${max} chars`)
-  return raw.trim()
+  return workflowText(raw, name, max)
 }
 
 /** Workspace-relative scope each role's tasks produce files into. */
@@ -114,27 +114,24 @@ function taskBriefing(
 
 function nextAttempt(task: TaskSnapshot, runtime: ReturnType<AutoReportWorkflowRuntime['forSession']>): number {
   const current = runtime.state.currentDelegation(task.taskId)
-  if (current?.phase === 'dispatched' && current.acceptedMessageId === undefined) return current.delegationRevision
-  if (current?.phase === 'waiting_for_child') throw new Error(`task ${task.taskId} already has work waiting for its child`)
+  if (isOpenDelegation(current)) throw new Error(`task ${task.taskId} already has work waiting for its child`)
   return (current?.delegationRevision ?? 0) + 1
 }
 
+function ensureRoleAvailable(role: SpecialistRole, state: ReturnType<AutoReportWorkflowRuntime['forSession']>['state']): void {
+  assertRoleAvailable(state, role)
+}
+
 function ensureTaskDispatchable(task: TaskSnapshot, role: SpecialistRole, state: ReturnType<AutoReportWorkflowRuntime['forSession']>['state']): void {
-  if (task.role !== role) throw new Error(`task ${task.taskId} belongs to ${task.role}, not ${role}`)
+  if (task.role !== role) throw new WorkflowError('WORKFLOW_ROLE_MISMATCH', `Task ${task.taskId} belongs to ${task.role}, not ${role}. Dispatch with role=${task.role}; task ownership cannot be reassigned.`, { task_id: task.taskId, expected_role: task.role, actual_role: role })
   if (task.status === 'completed' || task.status === 'cancelled') {
-    throw new Error(`task ${task.taskId} cannot be dispatched from status ${task.status}`)
+    throw new WorkflowError('WORKFLOW_TASK_NOT_DISPATCHABLE', `Task ${task.taskId} cannot be dispatched from status ${task.status}. ${task.status === 'completed' ? 'Reopen it for revision (which invalidates dependent results), or plan a different task.' : 'Reopen the cancelled task before dispatching.'}`, { task_id: task.taskId, status: task.status })
   }
-  for (const dependency of task.dependencies) {
-    if (state.getTask(dependency)?.status !== 'completed') throw new Error(`task dependency ${dependency} is not completed`)
-  }
+  assertDependenciesReady(state, task)
 }
 
 function normalizeTimeout(raw: unknown, fallback: number): number {
-  const value = raw === undefined ? fallback : raw
-  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < MIN_TIMEOUT_MS || value > MAX_TIMEOUT_MS) {
-    throw new Error(`timeout_ms must be an integer between ${MIN_TIMEOUT_MS} and ${MAX_TIMEOUT_MS}`)
-  }
-  return value
+  return workflowInteger(raw, 'timeout_ms', fallback, MAX_TIMEOUT_MS)
 }
 
 function isNotResumable(error: unknown): boolean {
@@ -143,17 +140,7 @@ function isNotResumable(error: unknown): boolean {
 }
 
 function taskSteps(raw: unknown): Array<{ description: string; done: boolean }> {
-  if (raw === undefined) return []
-  if (!Array.isArray(raw) || raw.length > MAX_STEPS) throw new Error(`steps must contain at most ${MAX_STEPS} items`)
-  return raw.map((item, index) => {
-    if (typeof item !== 'object' || item === null || Array.isArray(item)) throw new Error(`steps[${index}] must be an object`)
-    const step = item as Record<string, unknown>
-    if (typeof step.description !== 'string' || step.description.trim().length === 0 || step.description.length > MAX_STEP_LENGTH) {
-      throw new Error(`steps[${index}].description must be a non-empty string up to ${MAX_STEP_LENGTH} chars`)
-    }
-    if (step.done !== undefined && typeof step.done !== 'boolean') throw new Error(`steps[${index}].done must be boolean`)
-    return { description: step.description.trim(), done: step.done === true }
-  })
+  return workflowSteps(raw)
 }
 
 function subjectFromPrompt(prompt: string, rawSubject: unknown): string {
@@ -274,20 +261,21 @@ export function createSendToAgentTool(deps: SendToAgentDependencies): ToolDefini
       'wait=true is the default. Dispatch waits for DSH to accept the message, then this call waits for that delegation revision to settle. It returns "success" (report response and produced_files), "blocked" (response and block_type: "missing_data", "quality", or "missing_dependency"), "failed" (child turn ended without a valid report; response gives the reason), "cancelled" (workflow_task cancelled it), or "timeout" (idle or hard limit reached). Errors before DSH accepts the message, including child startup or delivery errors, fail the tool call instead of returning one of these statuses.',
       'For block_type "missing_dependency", install the reported dependency yourself; do not ask the subagent to install it.',
       'wait=false returns "delegated" after DSH accepts the message. Any eventual workflow report arrives later as a role \u2192 MAIN message in this conversation; do not poll for it.',
-      `timeout_ms is the absolute post-acceptance wait limit (default ${defaultHardTimeoutMs} ms; maximum ${MAX_TIMEOUT_MS} ms); child startup and message delivery are outside this limit. A separate idle timeout (configured default ${defaultIdleTimeoutMs} ms) counts while DSH reports the child as idle, pauses while it is running, and restarts when it becomes idle. Either timeout leaves the task open for redispatch.`,
+      `timeout_ms is the absolute post-acceptance wait limit (default ${defaultHardTimeoutMs} ms; maximum ${MAX_TIMEOUT_MS} ms); child startup and message delivery are outside this limit. A separate idle timeout (configured default ${defaultIdleTimeoutMs} ms) counts while DSH reports the child as idle, pauses while it is running, and restarts when it becomes idle. Either timeout ends only this caller's wait; the same task and revision still await their report. Do not redispatch or queue another task to the occupied role.`,
       'task_id must name an existing task of the requested role: completed or cancelled tasks, unknown task ids, and unfinished dependencies are rejected instead of dispatched. A rejected call changes nothing.',
-      'To redispatch a blocked, failed, or timed-out task, call again with the same task_id — this starts a new delegation revision. Supply missing inputs or corrected constraints in prompt/context rather than repeating the failed prompt verbatim.',
+      'Each role admits one unsettled task at a time. A busy role rejects dispatch without creating a task or revision. Redispatch a blocked or failed task with the same task_id after settlement; to change unfinished work, cancel it with workflow_task, reopen it, then redispatch. Supply missing inputs or corrected constraints rather than repeating the failed prompt verbatim.',
     ].join(' '),
     parameters: {
       role: { type: 'string', required: true, enum: ['THEORY', 'DATA_ANALYSIS', 'PLOTTING', 'REPORT'], description: 'Fixed subagent role that owns the work; an existing task_id must belong to this role.' },
-      prompt: { type: 'string', required: true, description: 'Task goal; include only the goal, relevant input locations, dependencies, and explicit user constraints.' },
+      prompt: { type: 'string', description: 'Task goal; required when creating a task, optional for task_id with a saved plan prompt.' },
       subject: { type: 'string', description: 'Short task subject when auto-creating a task. Defaults to the first line of prompt.' },
       dependencies: { type: 'array', items: { type: 'string' }, description: 'Task ids that must already be completed when auto-creating a task.' },
       steps: { type: 'array', items: { type: 'object', additionalProperties: false, properties: { description: { type: 'string', required: true }, done: { type: 'boolean' } } }, description: 'Initial durable checklist when auto-creating a task; ignored for an existing task_id.' },
-      task_id: { type: 'string', description: 'Existing task id to redispatch or follow up; must belong to role. Omit to create a new task.' },
+      task_id: { type: 'string', description: 'Existing settled task to redispatch; must belong to role. Omit to create a new task. This does not update a running task.' },
       context: { type: 'string', description: 'Explicit user constraints the subagent must preserve.' },
       wait: { type: 'boolean', description: 'Default true: after DSH accepts the dispatch, wait for this delegation revision to settle. false returns "delegated" after acceptance; the report arrives later as a message.' },
       timeout_ms: { type: 'number', description: `Absolute post-acceptance wait limit in milliseconds: an integer from ${MIN_TIMEOUT_MS} through ${MAX_TIMEOUT_MS}, default ${defaultHardTimeoutMs} ms unless overridden by this workflow's frozen settings. Child startup and message delivery are outside this limit. The separate idle timeout (configured default ${defaultIdleTimeoutMs} ms; also overridable by frozen settings) pauses while the child is running and restarts when it becomes idle.` },
+      expected_revision: { type: 'number', description: 'Optional task mutation revision from workflow_task read/graph. Rejects a dispatch if the plan changed meanwhile.' },
     },
     output: {
       schema: {
@@ -299,12 +287,19 @@ export function createSendToAgentTool(deps: SendToAgentDependencies): ToolDefini
     async execute(args, exec) {
       const parent = exec.agent as Agent | undefined
       if (parent === undefined) throw new Error('send_to_agent requires an owning Main agent')
-      const role = args.role
-      if (!isSpecialistRole(role)) throw new Error('role must name an AutoReport subagent')
-      const prompt = text(args.prompt, 'prompt', MAX_PROMPT)
-      const context = args.context === undefined ? undefined : text(args.context, 'context', MAX_CONTEXT)
+      const role = workflowRole(args.role)
       const parentSession: Session = parent.session
+      deps.assertAvailable?.(parentSession)
       const live = deps.workflow.forSession(parentSession)
+      if (args.task_id === undefined && args.expected_revision !== undefined) throw new WorkflowError('WORKFLOW_INVALID_ARGUMENT', 'expected_revision requires task_id: a newly created task has no prior revision to compare. Omit expected_revision when creating a task, or supply an existing task_id from read/graph.', { field: 'expected_revision', requires: 'task_id', actual: args.expected_revision })
+      const existing = args.task_id === undefined ? undefined : requireTask(live.state, text(args.task_id, 'task_id', 256))
+      if (existing !== undefined && [args.dependencies, args.subject, args.steps].some(value => value !== undefined)) {
+        throw new WorkflowError('WORKFLOW_INVALID_ARGUMENT', `Dispatch of existing task ${existing.taskId} cannot replace dependencies, subject or steps. Use workflow_task(action="update", task_id="${existing.taskId}") before dispatch; no parameters are silently ignored.`, { task_id: existing.taskId, fields: ['dependencies', 'subject', 'steps'].filter(field => (args as Record<string, unknown>)[field] !== undefined) })
+      }
+      if (args.prompt === undefined && existing !== undefined && existing.prompt === undefined) throw new WorkflowError('WORKFLOW_MISSING_PROMPT', `Task ${existing.taskId} has no saved prompt (legacy task). Supply prompt in send_to_agent, or save it with workflow_task(action="update", task_id="${existing.taskId}", prompt=...).`, { task_id: existing.taskId, field: 'prompt' })
+      let prompt = text(args.prompt ?? existing?.prompt, 'prompt', MAX_PROMPT)
+      let context = args.context === undefined ? existing?.context : text(args.context, 'context', MAX_CONTEXT)
+      const expectedRevision = args.expected_revision === undefined ? undefined : workflowInteger(args.expected_revision, 'expected_revision', 1, Number.MAX_SAFE_INTEGER)
 
       // Fail before creating or mutating any durable workflow state when the
       // frozen route cannot run in this deployment. The same route resolves
@@ -315,27 +310,18 @@ export function createSendToAgentTool(deps: SendToAgentDependencies): ToolDefini
         childAgentOptions(live.state.projection().meta?.settings, deps.config.specialistModel),
       )
 
-      // Provisioning is a runtime concern, not a Main tool concern. This
-      // await only closes the startup race for a resident role; it does not
-      // submit a prompt or wake the child.
-      await deps.resident?.ensure(parent, role, exec.signal)
-
-      let task: TaskSnapshot
-      let taskId: string
-      if (args.task_id !== undefined) {
-        taskId = text(args.task_id, 'task_id', 256)
-        const existing = live.state.getTask(taskId)
-        if (existing === undefined) throw new Error(`unknown task ${taskId}`)
-        task = existing
-      } else {
-        const dependencies = Array.isArray(args.dependencies) ? args.dependencies.map(String) : []
-        for (const dependency of dependencies) {
-          if (live.state.getTask(dependency) === undefined) throw new Error(`unknown dependency ${dependency}`)
+      const resolveTask = (): TaskSnapshot => {
+        if (args.task_id !== undefined) {
+          const taskId = text(args.task_id, 'task_id', 256)
+          const current = requireTask(live.state, taskId)
+          if (expectedRevision !== undefined && current.revision !== expectedRevision) throw new WorkflowError('WORKFLOW_TASK_CHANGED', `Task ${taskId} changed: expected revision ${expectedRevision}, actual revision ${current.revision}. Read the updated plan and retry with its revision.`, { task_id: taskId, expected_revision: expectedRevision, actual_revision: current.revision })
+          return current
         }
-        taskId = live.state.nextTaskId()
-        task = {
+        const dependencies = workflowTaskIds(args.dependencies, 'dependencies')
+        for (const [index, dependency] of dependencies.entries()) requireTask(live.state, dependency, `dependencies[${index}]`)
+        return {
           version: AUTOREPORT_SCHEMA_VERSION,
-          taskId,
+          taskId: live.state.nextTaskId(),
           subject: subjectFromPrompt(prompt, args.subject),
           role,
           dependencies,
@@ -343,16 +329,34 @@ export function createSendToAgentTool(deps: SendToAgentDependencies): ToolDefini
           revision: 1,
           steps: taskSteps(args.steps),
           scopes: [roleToScope(role)],
+          prompt,
+          ...(context === undefined ? {} : { context }),
         }
-        deps.workflow.commit(parentSession, 'autoreport/task', task)
       }
-
+      let task = resolveTask()
       ensureTaskDispatchable(task, role, live.state)
+      ensureRoleAvailable(role, live.state)
+      const settings = live.state.projection().meta?.settings
+      const hardTimeoutMs = normalizeTimeout(args.timeout_ms, settings?.delegationWaitTimeoutMs ?? defaultHardTimeoutMs)
+      const idleTimeoutMs = normalizeTimeout(undefined, settings?.delegationIdleTimeoutMs ?? defaultIdleTimeoutMs)
+
+      const child = await deps.resident?.ensure(parent, role, exec.signal)
+      exec.signal.throwIfAborted()
+      deps.assertAvailable?.(parentSession)
+      if (child?.status === 'running') throw new WorkflowError('WORKFLOW_ROLE_BUSY', `Role ${role} specialist ${child.id} is still running or draining its previous turn. Wait for it to become idle before dispatching; no new revision was created.`, { role, child_session_id: String(child.id), activity: child.status })
+      // Another call may have reserved this role or minted a task while
+      // provisioning awaited. Revalidate before any dispatch mutation.
+      task = resolveTask()
+      if (args.prompt === undefined) prompt = text(task.prompt, 'prompt', MAX_PROMPT)
+      if (args.context === undefined) context = task.context
+      ensureTaskDispatchable(task, role, live.state)
+      ensureRoleAvailable(role, live.state)
+      const taskId = task.taskId
       const revision = nextAttempt(task, live)
+      if (args.task_id === undefined) deps.workflow.commit(parentSession, 'autoreport/task', task)
 
       let binding = live.state.bindingForRole(role)
       let firstStart = binding === undefined || binding.provisioning === 'failed'
-      const settings = live.state.projection().meta?.settings
       if (firstStart) {
         const previousBinding = binding
         const newChild = mintChild()
@@ -385,14 +389,19 @@ export function createSendToAgentTool(deps: SendToAgentDependencies): ToolDefini
         childSessionId: binding.childSessionId,
         phase: 'dispatched',
         dispatchedAt: now(),
+        dependencyVersions: dependencyVersions(live.state, task),
       }
       deps.workflow.commit(parentSession, 'autoreport/delegation', dispatched)
       if (task.status !== 'running' || task.latestDelegationRevision !== revision) {
+        const { staleReason: _stale, ...freshTask } = task
         deps.workflow.commit(parentSession, 'autoreport/task', {
-          ...task,
+          ...freshTask,
+          version: AUTOREPORT_SCHEMA_VERSION,
           status: 'running',
           revision: task.revision + 1,
           latestDelegationRevision: revision,
+          prompt,
+          ...(context === undefined ? {} : { context }),
         })
       }
 
@@ -515,14 +524,6 @@ export function createSendToAgentTool(deps: SendToAgentDependencies): ToolDefini
         }
       }
 
-      const hardTimeoutMs = normalizeTimeout(
-        args.timeout_ms,
-        settings?.delegationWaitTimeoutMs ?? deps.config.delegationWaitTimeoutMs ?? 600_000,
-      )
-      const idleTimeoutMs = normalizeTimeout(
-        undefined,
-        settings?.delegationIdleTimeoutMs ?? deps.config.delegationIdleTimeoutMs ?? 60_000,
-      )
       // `startContinuable()` only waits for inbox acceptance. A very fast child
       // may have reported before this tool reaches its local waiter, so read the
       // durable projection first instead of sleeping until a timeout.
@@ -532,16 +533,14 @@ export function createSendToAgentTool(deps: SendToAgentDependencies): ToolDefini
           childSessionId: String(bound.childSessionId),
           idleTimeoutMs,
           hardTimeoutMs,
-        })
+        }, exec.signal)
       if (outcome.status === 'timed_out') {
         const current = live.state.delegationAt(taskId, revision)
-        if (current?.phase === 'waiting_for_child') {
-          deps.workflow.commit(parentSession, 'autoreport/delegation', {
-            ...current,
-            phase: 'timed_out',
-            reason: `no workflow report within idle ${idleTimeoutMs}ms or hard ${hardTimeoutMs}ms`,
-            settledAt: now(),
-          })
+        return {
+          ...resultFromOutcome(taskId, revision, outcome),
+          execution_pending: isOpenDelegation(current),
+          delegation_phase: current?.phase ?? 'unknown',
+          response: `Waiting expired after idle ${idleTimeoutMs}ms or hard ${hardTimeoutMs}ms; this does not cancel execution or create a new revision. Await the report, or cancel, reopen and redispatch to change unfinished work.`,
         }
       }
       return resultFromOutcome(taskId, revision, outcome)
@@ -585,6 +584,7 @@ export function apply(ctx: Context): void {
     deliverChild: (parent, childSessionId, content, source, signal) =>
       ctx.autoreportWorkflow.deliverChild(parent, childSessionId, content, source, signal),
     workflow: ctx.autoreportWorkflow,
+    assertAvailable: session => ctx.autoreportWorkflow.coordinator.assertAvailable(session),
     config: ctx.autoreportWorkflow.config,
     llm: ctx.llm,
   }))

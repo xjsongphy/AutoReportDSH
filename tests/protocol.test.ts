@@ -1,7 +1,33 @@
 import { describe, expect, it } from 'vitest'
-import { delegationKey, normalizeProducedPath, parseWorkflowEnvelope } from '../src/workflow/protocol.js'
+import { delegationKey, normalizeProducedPath, parseWorkflowEnvelope, parseWorkflowEnvelopeFromText, parseWorkflowReportContent } from '../src/workflow/protocol.js'
 
 describe('workflow protocol', () => {
+  const report = {
+    task_id: 'task-6', delegation_revision: 1, status: 'success', block_type: null,
+    response: 'κ ∈ {N, 1}; formula \\frac{a}{b}; "quoted" \\ escaped\nnew line', produced_files: [],
+  }
+
+  it('accepts the incident relay containing braces inside its response string', () => {
+    const mixed = `Background subagent reported:\nTHEORY → MAIN\n${JSON.stringify(report)}`
+    expect(parseWorkflowEnvelopeFromText(mixed)).toEqual({ ok: true, value: report })
+    expect(parseWorkflowReportContent([
+      { type: 'text', text: 'THEORY → MAIN\nκ ∈ {N, 1}' },
+      { type: 'text', text: JSON.stringify(report) },
+    ])).toEqual({ ok: true, value: report })
+  })
+
+  it('reads a report after unrelated code fences and a human prefix with braces', () => {
+    const text = `Example {N, 1}\n\`\`\`python\nprint("{x}")\n\`\`\`\n\`\`\`json\n${JSON.stringify(report)}\n\`\`\``
+    expect(parseWorkflowEnvelopeFromText(text)).toEqual({ ok: true, value: report })
+    expect(parseWorkflowReportContent([{ type: 'text', text }])).toEqual({ ok: true, value: report })
+  })
+
+  it('does not turn malformed JSON or arbitrary brace text into a valid report', () => {
+    expect(parseWorkflowEnvelopeFromText('κ ∈ {N, 1}')).toMatchObject({ ok: false })
+    expect(parseWorkflowReportContent([{ type: 'text', text: 'summary' }, { type: 'text', text: '{"task_id":"task-6"' }])).toMatchObject({ ok: false })
+    expect(parseWorkflowEnvelopeFromText(JSON.stringify({ ...report, status: 'unknown' }))).toMatchObject({ ok: false })
+  })
+
   it('derives stable composite keys', () => {
     expect(delegationKey('task-7', 3)).toBe('task-7#3')
   })

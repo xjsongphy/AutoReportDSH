@@ -24,9 +24,9 @@
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
-import LlmRuntime, { createUserMessage, type GenerateOptions } from '@deepseek-ai/dsh-llm'
+import LlmRuntime, { createUserMessage, ToolCallId, type GenerateOptions } from '@deepseek-ai/dsh-llm'
 import SessionStore, { SessionId, type Session } from '@deepseek-ai/dsh-session'
 import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
@@ -34,6 +34,7 @@ import ToolRuntime, { defineTool } from '@deepseek-ai/dsh-tools'
 import AgentRegistry, { type Agent } from '@deepseek-ai/dsh-agent'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { deliverSubagentPrompt } from '@deepseek-ai/dsh-subagent/internal'
+import SubagentRuntime from '@deepseek-ai/dsh-subagent'
 import { ROLE_PROCESS_TOOL } from '../src/roles.js'
 import { apply as applyHost } from '../src/host.js'
 import { apply as applyReportRouter } from '../src/tools/report-router.js'
@@ -153,6 +154,8 @@ async function boot(options: {
   /** Deployments without a global base bash row: the role shell must be
    *  backfilled agent-locally, which restrict() must never name. */
   omitGlobalBash?: boolean
+  /** Exercise the real stock subagent stop RPC against plugin-owned children. */
+  realSubagents?: boolean
 }): Promise<Booted> {
   const ctx = new Context()
   const workspaceRoot = tempDir('autoreport-resident-ws-')
@@ -169,7 +172,8 @@ async function boot(options: {
 
   // The resident path under test must never reach the legacy transport plane:
   // these fakes fail loud so a regression back to startContinuable is visible.
-  ctx.provide('subagents', {
+  if (options.realSubagents) await ctx.plugin(SubagentRuntime, {})
+  else ctx.provide('subagents', {
     startContinuable: async () => {
       throw new Error('legacy startContinuable must not run for resident dispatch')
     },
@@ -600,4 +604,346 @@ describe('integration: resident subagent through the real agent loop', () => {
     expect(live.state.getTask('task-1')?.status).toBe('failed')
     expect(live.state.getTask('task-1')?.failedReason).toContain('malformed prompt variable reference')
   })
+})
+
+/** Hold model generation until its real turn signal is cancelled. */
+function holdSpecialists(booted: Booted): { signals: AbortSignal[]; restore: () => void } {
+  const signals: AbortSignal[] = []
+  const original = booted.specialistAdapter.stream
+  booted.specialistAdapter.stream = async function* (options: GenerateOptions) {
+    const signal = options.signal!
+    signals.push(signal)
+    await new Promise<void>((_resolve, reject) => {
+      if (signal.aborted) reject(signal.reason)
+      else signal.addEventListener('abort', () => reject(signal.reason), { once: true })
+    })
+    yield* []
+  }
+  return { signals, restore: () => { booted.specialistAdapter.stream = original } }
+}
+
+async function waitingChild(booted: Booted, signals: AbortSignal[]): Promise<Agent> {
+  await until(() => signals.length > 0 && booted.runtime.forSession(booted.mainSession).waiters.pendingKeys() === 1,
+    'specialist generating while MAIN waits', 3000)
+  return booted.runtime.residentChild(booted.childSession()!.id)!
+}
+
+const THEORY_DISPATCH: ScriptedCall = { name: 'send_to_agent', args: { role: 'THEORY', prompt: 'derive theory' } }
+const THEORY_REPORT: ScriptedCall = {
+  name: 'report_workflow',
+  args: { task_id: 'task-1', delegation_revision: 2, status: 'success', response: 'done', produced_files: [] },
+}
+
+describe('integration: stop controls for resident subagents', () => {
+  it('MAIN stop cancels every active resident, drains wait=true, and keeps the child sessions', async () => {
+    const b = await boot({
+      realSubagents: true,
+      mainCalls: [
+        { ...THEORY_DISPATCH, args: { ...THEORY_DISPATCH.args, wait: false } },
+        { name: 'send_to_agent', args: { role: 'DATA_ANALYSIS', prompt: 'analyze data' } },
+      ],
+    })
+    const held = holdSpecialists(b)
+    sendUser(b.mainAgent, 'start report')
+    await until(() => held.signals.length === 2 && b.runtime.forSession(b.mainSession).waiters.pendingKeys() === 1,
+      'two specialists and MAIN waiting', 3000)
+    const workflow = b.runtime.forSession(b.mainSession)
+    const bindings = [...workflow.state.projection().bindingsByRole.values()]
+    b.mainAgent.cancel({ kind: 'user' }, { keepInbox: true })
+    await until(() => b.mainAgent.status === 'idle' && bindings.every(binding => b.runtime.residentChild(binding.childSessionId)?.status === 'idle'),
+      'all stopped', 3000)
+    expect(held.signals.every(signal => signal.aborted)).toBe(true)
+    expect(workflow.waiters.pendingKeys()).toBe(0)
+    expect(lastTurnEndReason(b.mainSession)?.kind).toBe('aborted')
+    for (const binding of bindings) {
+      expect(workflow.state.bindingForRole(binding.role)?.childSessionId).toBe(binding.childSessionId)
+      expect(b.runtime.residentChild(binding.childSessionId)).toBeDefined()
+    }
+    expect([...workflow.state.projection().tasks.values()].map(task => task.status)).toEqual(['cancelled', 'cancelled'])
+  })
+
+  it('the stock child interrupt RPC stops the exact resident and settles MAIN without a timeout', async () => {
+    const b = await boot({ realSubagents: true, mainCalls: [THEORY_DISPATCH], mainTexts: ['child interrupted'] })
+    const held = holdSpecialists(b)
+    sendUser(b.mainAgent, 'start report')
+    const child = await waitingChild(b, held.signals)
+    expect(() => b.ctx.subagents.interruptByParent(child.id, SessionId('another-parent'), 'continuable'))
+      .toThrow('subagent does not belong to this parent')
+    expect(held.signals[0]!.aborted).toBe(false)
+    expect(b.ctx.subagents.interruptByParent(child.id, b.mainAgent.id, 'continuable')).toEqual({ accepted: true })
+    await until(() => child.status === 'idle' && b.mainAgent.status === 'idle', 'child RPC stopped turn', 3000)
+    expect(held.signals[0]!.aborted).toBe(true)
+    expect(lastTurnEndReason(child.session)?.kind).toBe('aborted')
+    expect(b.runtime.forSession(b.mainSession).waiters.pendingKeys()).toBe(0)
+    expect(b.runtime.forSession(b.mainSession).state.currentDelegation('task-1')?.phase).toBe('cancelled')
+    expect(b.runtime.residentChild(child.id)).toBe(child)
+    await b.runtime.reportFromResident(child, [{ type: 'text', text: JSON.stringify({ ...THEORY_REPORT.args, delegation_revision: 1, response: 'κ ∈ {N, 1}' }) }],
+      new AbortController().signal)
+    await new Promise(resolve => setTimeout(resolve, 30))
+    expect(b.mainAgent.status).toBe('idle')
+    expect(b.mainAdapter.requests).toHaveLength(2)
+  })
+
+  it('MAIN stop also stops asynchronous delegation after MAIN is already idle', async () => {
+    const b = await boot({
+      realSubagents: true,
+      mainCalls: [{ ...THEORY_DISPATCH, args: { ...THEORY_DISPATCH.args, wait: false } }],
+      mainTexts: ['delegated'],
+    })
+    const held = holdSpecialists(b)
+    sendUser(b.mainAgent, 'start report')
+    await until(() => held.signals.length === 1 && b.mainAgent.status === 'idle', 'asynchronous child active', 3000)
+    b.mainAgent.cancel({ kind: 'user' }, { keepInbox: true })
+    await until(() => b.runtime.residentChild(b.childSession()!.id)?.status === 'idle', 'asynchronous child stopped', 3000)
+    expect(held.signals[0]!.aborted).toBe(true)
+    expect(b.runtime.forSession(b.mainSession).state.getTask('task-1')?.status).toBe('cancelled')
+  })
+
+  it('late child reports are parked after MAIN stop; explicit user input can reopen and reuse the same child', async () => {
+    const b = await boot({
+      realSubagents: true,
+      mainCalls: [THEORY_DISPATCH,
+        { name: 'workflow_task', args: { action: 'reopen', task_id: 'task-1' } },
+        { ...THEORY_DISPATCH, args: { ...THEORY_DISPATCH.args, task_id: 'task-1' } },
+      ],
+      mainTexts: ['resumed work completed'],
+      specialistCalls: [THEORY_REPORT], specialistTexts: ['child done'],
+    })
+    const held = holdSpecialists(b)
+    sendUser(b.mainAgent, 'start report')
+    const child = await waitingChild(b, held.signals)
+    b.mainAgent.cancel({ kind: 'user' }, { keepInbox: true })
+    await until(() => b.mainAgent.status === 'idle' && child.status === 'idle', 'stopped before late report', 3000)
+    const late = { ...THEORY_REPORT.args, delegation_revision: 1 }
+    await b.runtime.reportFromResident(child, [{ type: 'text', text: JSON.stringify(late) }], new AbortController().signal)
+    await new Promise(resolve => setTimeout(resolve, 30))
+    expect(b.mainAgent.status).toBe('idle')
+    expect(b.mainAdapter.requests).toHaveLength(1)
+    expect(b.mainAgent.inbox.nextStep.some(message => JSON.stringify(message).includes('delegation_revision'))).toBe(true)
+    expect(b.runtime.forSession(b.mainSession).state.currentDelegation('task-1')?.phase).toBe('cancelled')
+    held.restore()
+    sendUser(b.mainAgent, 'continue the interrupted work')
+    await until(() => b.mainAgent.status === 'idle' && b.runtime.forSession(b.mainSession).state.getTask('task-1')?.status === 'completed',
+      'same specialist completes revision 2', 3000)
+    expect(b.runtime.residentChild(child.id)).toBe(child)
+    expect(b.runtime.forSession(b.mainSession).state.currentDelegation('task-1')?.delegationRevision).toBe(2)
+    expect(b.mainSession.snapshotEvents().filter(e => e.type === 'turn/end').map(e => e.data.reason.kind)).toEqual(['aborted', 'completed'])
+  })
+
+  it('workflow_task cancel aborts the resident execution as well as the durable task', async () => {
+    const b = await boot({ realSubagents: true, mainCalls: [THEORY_DISPATCH], mainTexts: ['task cancelled'] })
+    const held = holdSpecialists(b)
+    sendUser(b.mainAgent, 'start report')
+    const child = await waitingChild(b, held.signals)
+    const result = await b.ctx.tools.execute({
+      callId: ToolCallId('user-cancel-task'), name: 'workflow_task', arguments: { action: 'cancel', task_id: 'task-1' },
+      agent: b.mainAgent, signal: new AbortController().signal,
+    })
+    expect(result.isError).toBe(false)
+    await until(() => child.status === 'idle' && b.mainAgent.status === 'idle', 'cancelled task execution', 3000)
+    expect(held.signals[0]!.aborted).toBe(true)
+    expect(b.runtime.forSession(b.mainSession).state.getTask('task-1')?.status).toBe('cancelled')
+    expect(b.runtime.residentChild(child.id)).toBe(child)
+  })
+
+  it('direct Agent cancellation handles aborted child turns and rejects a forged ancestor', async () => {
+    const b = await boot({ realSubagents: true, mainCalls: [THEORY_DISPATCH], mainTexts: ['child interrupted'] })
+    const held = holdSpecialists(b)
+    sendUser(b.mainAgent, 'start report')
+    const child = await waitingChild(b, held.signals)
+    expect(() => b.ctx.subagents.interrupt(child.id, { kind: 'ancestor', agent: { ...b.mainAgent } }))
+      .toThrow('resident subagent does not belong to this caller')
+    child.cancel({ kind: 'hook', reason: 'external interruption' }, { keepInbox: true })
+    await until(() => child.status === 'idle' && b.mainAgent.status === 'idle', 'direct child interrupted', 3000)
+    expect(b.runtime.forSession(b.mainSession).waiters.pendingKeys()).toBe(0)
+    expect(b.runtime.forSession(b.mainSession).state.currentDelegation('task-1')?.phase).toBe('cancelled')
+  })
+
+  it('delegates unknown subagent interrupts to the upstream implementation', async () => {
+    const b = await boot({ realSubagents: true, mainCalls: [] })
+    const cancelled = vi.spyOn(b.mainAgent, 'cancel')
+    expect(b.ctx.subagents.interruptByParent(SessionId('unknown-child'), b.mainAgent.id, 'continuable')).toEqual({ accepted: true })
+    expect(cancelled).not.toHaveBeenCalled()
+  })
+})
+
+it.each(['task-1', 'task-2'])('task cancellation leaves legacy queued work on the same specialist intact (%s)', async taskId => {
+  const b = await boot({
+    realSubagents: true,
+    mainCalls: [
+      { ...THEORY_DISPATCH, args: { ...THEORY_DISPATCH.args, wait: false } },
+    ],
+    mainTexts: ['first task running'],
+  })
+  const held = holdSpecialists(b)
+  sendUser(b.mainAgent, 'start report')
+  const workflow = b.runtime.forSession(b.mainSession)
+  await until(() => held.signals.length === 1 && b.mainAgent.status === 'idle', 'first task running', 3000)
+  const child = b.runtime.residentChild(b.childSession()!.id)!
+  // Older plugin versions admitted multiple tasks to a resident FIFO. Keep
+  // recovery/cancellation coverage for those logs without admitting new queues.
+  const messageId = await b.runtime.deliverResidentChild(b.mainAgent, child.id, [{ type: 'text', text: 'legacy queued task-2' }],
+    { kind: 'coordinator', form: 'relay', senderSessionId: b.mainAgent.id }, new AbortController().signal)
+  b.runtime.commit(b.mainSession, 'autoreport/task', { ...workflow.state.getTask('task-1')!, taskId: 'task-2', subject: 'legacy queued task' })
+  b.runtime.commit(b.mainSession, 'autoreport/delegation', {
+    ...workflow.state.currentDelegation('task-1')!, taskId: 'task-2', acceptedMessageId: messageId!,
+  })
+  const result = await b.ctx.tools.execute({
+    callId: ToolCallId('cancel-one-task'), name: 'workflow_task', arguments: { action: 'cancel', task_id: taskId },
+    agent: b.mainAgent, signal: new AbortController().signal,
+  })
+  expect(result.isError).toBe(false)
+  if (taskId === 'task-1') {
+    await until(() => child.status === 'idle', 'active task stops', 3000)
+    expect(held.signals[0]!.aborted).toBe(true)
+    expect(child.inbox.nextTurn).toHaveLength(1)
+    expect(workflow.state.getTask('task-2')?.status).toBe('running')
+  } else {
+    expect(held.signals[0]!.aborted).toBe(false)
+    expect(child.inbox.nextTurn).toHaveLength(0)
+    expect(workflow.state.getTask('task-1')?.status).toBe('running')
+  }
+  expect(workflow.state.getTask(taskId)?.status).toBe('cancelled')
+  b.mainAgent.cancel({ kind: 'user' }, { keepInbox: true })
+  await child.whenIdle()
+})
+
+it('an expired MAIN wait rejects overlapping dispatches and accepts the eventual brace-containing report on revision 1', async () => {
+  const b = await boot({
+    realSubagents: true,
+    mainCalls: [
+      { ...THEORY_DISPATCH, args: { ...THEORY_DISPATCH.args, timeout_ms: 50 } },
+      { ...THEORY_DISPATCH, args: { ...THEORY_DISPATCH.args, task_id: 'task-1', wait: false } },
+      { ...THEORY_DISPATCH, args: { ...THEORY_DISPATCH.args, subject: 'overlapping new task', wait: false } },
+    ],
+    mainTexts: ['waiting for existing task', 'received the eventual result'],
+    specialistCalls: [{ ...THEORY_REPORT, args: { ...THEORY_REPORT.args, delegation_revision: 1, response: 'κ ∈ {N, 1}; \\frac{a}{b}' } }],
+    specialistTexts: ['done'],
+  })
+  const ready = Promise.withResolvers<void>()
+  const originalStream = b.specialistAdapter.stream.bind(b.specialistAdapter)
+  b.specialistAdapter.stream = async function* (options: GenerateOptions) {
+    await Promise.race([ready.promise, new Promise<void>((_resolve, reject) => {
+      options.signal!.addEventListener('abort', () => reject(options.signal!.reason), { once: true })
+    })])
+    yield* originalStream(options)
+  }
+  sendUser(b.mainAgent, 'start report')
+  const workflow = b.runtime.forSession(b.mainSession)
+  try {
+    await until(() => b.mainAgent.status === 'idle', 'MAIN wait expired and overlap rejected', 3000)
+    const child = b.runtime.residentChild(b.childSession()!.id)!
+    expect(child.status).toBe('running')
+    expect(child.inbox.nextTurn).toHaveLength(0)
+    expect(workflow.state.projection().tasks.size).toBe(1)
+    expect(workflow.state.projection().delegations.size).toBe(1)
+    expect(workflow.state.currentDelegation('task-1')?.phase).toBe('waiting_for_child')
+    expect(workflow.waiters.pendingKeys()).toBe(0)
+    const results = b.mainSession.snapshotEvents().filter(e => e.type === 'tool/result').flatMap(e => e.data.message.content)
+    expect(JSON.stringify(results)).toContain('execution_pending')
+    expect(results.filter(block => block.type === 'tool-result' && block.isError)).toHaveLength(2)
+    ready.resolve()
+    await until(() => workflow.state.getTask('task-1')?.status === 'completed' && b.mainAgent.status === 'idle' && child.status === 'idle',
+      'late structured report settles same revision', 3000)
+    expect(workflow.state.currentDelegation('task-1')?.delegationRevision).toBe(1)
+    expect(workflow.state.currentDelegation('task-1')?.report?.response).toContain('{N, 1}')
+    expect(child.session.snapshotEvents().filter(e => e.type === 'turn/start')).toHaveLength(1)
+  } finally {
+    ready.resolve()
+  }
+})
+
+/** A model stub that reports the current briefing once, then closes its turn. */
+function reportEachBriefing(booted: Booted): void {
+  booted.specialistAdapter.stream = async function* (options: GenerateOptions) {
+    booted.specialistAdapter.requests.push(options)
+    const briefing = options.messages.findLast(message => message.source?.kind === 'coordinator')
+    const text = briefing?.content.filter(block => block.type === 'text').map(block => block.text).join('\n') ?? ''
+    const match = /AutoReport task (task-[A-Za-z0-9._-]+), delegation revision (\d+)/u.exec(text)
+    if (match === null) throw new Error('scheduled specialist has no coordinator task briefing')
+    const taskId = match[1]!
+    const revision = Number(match[2])
+    const callId = `auto-${taskId}-${revision}`
+    const reported = options.messages.some(message => message.content.some(block => block.type === 'tool-result' && String(block.toolCallId) === callId))
+    const chunks = reported ? textResponse('specialist done') : toolCallResponse(callId, 'report_workflow', {
+      task_id: taskId, delegation_revision: revision, status: 'success', response: `Completed ${taskId}: {N, 1}`, produced_files: [],
+    })
+    for (const chunk of chunks) { options.signal!.throwIfAborted(); yield chunk }
+  }
+}
+
+it('runs a planned dependency graph through the real factory/loop and waits without repeated dispatch', async () => {
+  const tasks = [
+    { task_id: 'task-report', role: 'REPORT', subject: 'Report', prompt: 'Report the workflow result', dependencies: ['task-data', 'task-plot'] },
+    { task_id: 'task-plot', role: 'PLOTTING', subject: 'Plot', prompt: 'Check the plotting stage', dependencies: ['task-data'] },
+    { task_id: 'task-data', role: 'DATA_ANALYSIS', subject: 'Analysis', prompt: 'Check the analysis stage', dependencies: ['task-theory'] },
+    { task_id: 'task-theory', role: 'THEORY', subject: 'Theory', prompt: 'Check the theory stage' },
+    { task_id: 'task-aux', role: 'THEORY', subject: 'Independent theory', prompt: 'Check a separate theory stage' },
+  ]
+  const b = await boot({ realSubagents: true, mainCalls: [
+    { name: 'workflow_task', args: { action: 'plan', tasks } },
+    { name: 'workflow_task', args: { action: 'run' } },
+    { name: 'workflow_task', args: { action: 'wait', task_ids: tasks.map(task => task.task_id), mode: 'all', timeout_ms: 3000 } },
+  ], mainTexts: ['all graph tasks completed'] })
+  reportEachBriefing(b)
+  sendUser(b.mainAgent, 'execute the planned workflow')
+  const state = b.runtime.forSession(b.mainSession).state
+  await until(() => b.mainAgent.status === 'idle' && state.projection().tasks.size === 5 && [...state.projection().tasks.values()].every(task => task.status === 'completed'),
+    'graph finishes all real-loop tasks', 5000)
+  expect(state.currentDelegation('task-data')?.dependencyVersions).toEqual({ 'task-theory': 1 })
+  expect(state.currentDelegation('task-report')?.dependencyVersions).toEqual({ 'task-data': 1, 'task-plot': 1 })
+  expect(state.projection().delegations.size).toBe(5)
+  expect(state.projection().meta?.scheduler?.enabled).toBe(false)
+  const theory = b.runtime.residentChild(state.bindingForRole('THEORY')!.childSessionId)!
+  await theory.whenIdle()
+  expect(theory.session.snapshotEvents().filter(event => event.type === 'turn/start')).toHaveLength(2)
+  expect(b.runtime.coordinator.inspect(b.mainSession).waits.graph).toHaveLength(0)
+  expect(lastTurnEndReason(b.mainSession)?.kind).toBe('completed')
+})
+
+it('MAIN stop pauses automatic scheduling and cancels only admitted graph executions', async () => {
+  const tasks = [
+    { task_id: 'task-a', role: 'THEORY', subject: 'Theory', prompt: 'Long theory work' },
+    { task_id: 'task-b', role: 'DATA_ANALYSIS', subject: 'Data', prompt: 'Long analysis work' },
+    { task_id: 'task-c', role: 'PLOTTING', subject: 'Plot', prompt: 'Downstream plotting', dependencies: ['task-a', 'task-b'] },
+  ]
+  const b = await boot({ realSubagents: true, mainCalls: [
+    { name: 'workflow_task', args: { action: 'plan', tasks } },
+    { name: 'workflow_task', args: { action: 'run' } },
+    { name: 'workflow_task', args: { action: 'wait', task_ids: ['task-c'], timeout_ms: 3000 } },
+  ] })
+  const held = holdSpecialists(b)
+  sendUser(b.mainAgent, 'start the planned graph')
+  const state = b.runtime.forSession(b.mainSession).state
+  await until(() => held.signals.length === 2 && b.runtime.coordinator.inspect(b.mainSession).waits.graph.length === 1,
+    'MAIN waits while two roles execute', 3000)
+  b.mainAgent.cancel({ kind: 'user' }, { keepInbox: true })
+  await until(() => b.mainAgent.status === 'idle' && held.signals.every(signal => signal.aborted), 'graph stopped', 3000)
+  expect(state.projection().meta?.scheduler?.enabled).toBe(false)
+  expect(state.getTask('task-a')?.status).toBe('cancelled')
+  expect(state.getTask('task-b')?.status).toBe('cancelled')
+  expect(state.getTask('task-c')?.status).toBe('pending')
+  expect(state.currentDelegation('task-c')).toBeUndefined()
+  expect(b.runtime.coordinator.inspect(b.mainSession).waits.graph).toHaveLength(0)
+  expect(lastTurnEndReason(b.mainSession)?.kind).toBe('aborted')
+})
+
+it('graph readiness accounts for a child whose previous turn is still draining', async () => {
+  const b = await boot({ realSubagents: true, mainCalls: [THEORY_DISPATCH], mainTexts: ['existing task interrupted'] })
+  const held = holdSpecialists(b)
+  sendUser(b.mainAgent, 'start report')
+  const child = await waitingChild(b, held.signals)
+  // Record a valid result while its driver remains active, as can happen at
+  // the report/turn-closing boundary before whenIdle resolves.
+  await b.runtime.reportFromResident(child, [{ type: 'text', text: JSON.stringify({ ...THEORY_REPORT.args, delegation_revision: 1 }) }], new AbortController().signal)
+  const plan = await b.ctx.tools.execute({ callId: ToolCallId('plan-following-task'), name: 'workflow_task',
+    arguments: { action: 'plan', tasks: [{ task_id: 'task-next', role: 'THEORY', subject: 'Next task', prompt: 'Next theory work' }] },
+    agent: b.mainAgent, signal: new AbortController().signal })
+  expect(plan.isError).toBe(false)
+  const view = b.runtime.coordinator.inspect(b.mainSession)
+  expect(view.tasks.find(task => task.task_id === 'task-next')).toMatchObject({ readiness: 'role_busy', role_activity: 'running' })
+  expect(view.ready_task_ids).not.toContain('task-next')
+  expect(view.tasks.find(task => task.task_id === 'task-next')?.waiting_reason).toContain(String(child.id))
+  child.cancel({ kind: 'user' }, { keepInbox: true })
+  await child.whenIdle()
 })

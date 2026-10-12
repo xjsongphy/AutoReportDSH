@@ -10,6 +10,8 @@ import { hasAcceptedWorkflowReport } from '../workflow/report-observer.js'
 import { parseWorkflowEnvelope } from '../workflow/protocol.js'
 import { observedProducedFilesForDelegation } from '../workflow/file-notes.js'
 import { genericCall } from './presentation.js'
+import { WorkflowError } from '../workflow/errors.js'
+import { staleDependencyReason } from '../workflow/graph.js'
 
 function runtimeOf(hostCtx: Context): AutoReportWorkflowRuntime | undefined {
   const getter = (hostCtx as { get?: (name: string) => unknown }).get
@@ -60,6 +62,7 @@ export function installWorkflowReportTool(childCtx: Context, hostCtx: Context, r
         render: (_args, value) => [{ type: 'text', text: `workflow report accepted as message ${value.messageId}` }],
       },
       async execute(args, exec) {
+        if (args.status === 'success' && args.block_type !== undefined && args.block_type !== null) throw new WorkflowError('WORKFLOW_INVALID_ARGUMENT', `block_type=${String(args.block_type)} is only valid when status="blocked". For status="success", omit block_type; no report was delivered.`, { field: 'block_type', actual: args.block_type, status: args.status, expected: 'omit block_type for success' })
         const parsed = parseWorkflowEnvelope({
           task_id: args.task_id,
           delegation_revision: args.delegation_revision,
@@ -68,7 +71,7 @@ export function installWorkflowReportTool(childCtx: Context, hostCtx: Context, r
           response: args.response,
           produced_files: args.produced_files ?? [],
         })
-        if (!parsed.ok) throw new Error(`invalid workflow report: ${parsed.reason}`)
+        if (!parsed.ok) throw new WorkflowError('WORKFLOW_INVALID_REPORT', `Invalid workflow report for task_id=${String(args.task_id)}, delegation_revision=${String(args.delegation_revision)}: ${parsed.reason}. Correct the named field and use the task ID/revision from your briefing.`, { task_id: args.task_id, delegation_revision: args.delegation_revision, validation_reason: parsed.reason })
         const runtime = runtimeOf(hostCtx)
         const owner = runtime?.workflowForChild((exec.agent as Agent).id)
         const attempt = owner?.runtime.state.delegationAt(parsed.value.task_id, parsed.value.delegation_revision)
@@ -76,8 +79,11 @@ export function installWorkflowReportTool(childCtx: Context, hostCtx: Context, r
           return { messageId: attempt.reportMessageId }
         }
         if (owner === undefined || attempt === undefined || attempt.childSessionId !== (exec.agent as Agent).id) {
-          throw new Error('unknown task_id/delegation_revision for this child')
+          throw new WorkflowError('WORKFLOW_UNKNOWN_REPORT_TARGET', `unknown task_id/delegation_revision for this child: task ${parsed.value.task_id}, revision ${parsed.value.delegation_revision}, child ${(exec.agent as Agent).id}. Use your current Main briefing; the task/revision must belong to this child.`,
+            { task_id: parsed.value.task_id, delegation_revision: parsed.value.delegation_revision, child_session_id: String((exec.agent as Agent).id), known_tasks: owner === undefined ? [] : [...owner.runtime.state.projection().tasks.values()].filter(task => owner.runtime.state.currentDelegation(task.taskId)?.childSessionId === (exec.agent as Agent).id).map(task => ({ task_id: task.taskId, delegation_revision: owner.runtime.state.currentDelegation(task.taskId)?.delegationRevision })) })
         }
+        const obsolete = staleDependencyReason(owner.runtime.state, attempt)
+        if (obsolete !== undefined || attempt.phase === 'stale' || attempt.phase === 'cancelled') throw new WorkflowError('WORKFLOW_STALE_REPORT', obsolete ?? `Task ${attempt.taskId} revision ${attempt.delegationRevision} is ${attempt.phase}: ${attempt.reason ?? 'this execution is no longer current'}. It cannot complete this task; MAIN must reopen/redispatch if work is still needed.`, { task_id: attempt.taskId, delegation_revision: attempt.delegationRevision, phase: attempt.phase, dependency_versions: attempt.dependencyVersions ?? {} })
         const canonical = {
           ...parsed.value,
           produced_files: observedProducedFilesForDelegation(owner.runtime.state.projection(), attempt),

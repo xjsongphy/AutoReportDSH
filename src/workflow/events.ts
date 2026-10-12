@@ -16,7 +16,7 @@ import type { SpecialistRoute } from '../config.js'
 import type { WorkflowSettingsSnapshot } from '../settings.js'
 
 /** Current schema version stamped on every snapshot; a field change bumps it. */
-export const AUTOREPORT_SCHEMA_VERSION = 4
+export const AUTOREPORT_SCHEMA_VERSION = 5
 
 /** Validated child-report envelope carried on delegation snapshots (PLAN.md §2.5). */
 export interface WorkflowReportEnvelope {
@@ -100,15 +100,24 @@ export interface TaskSnapshot {
   readonly scopes: readonly string[]
   /** Latest dispatched attempt, if any. */
   readonly latestDelegationRevision?: number
+  /** Saved plan instructions; absent only for legacy tasks. */
+  readonly prompt?: string
+  /** Explicit user constraints saved with the plan. */
+  readonly context?: string
+  /** Monotonic accepted scientific-result version; checklist edits do not change it. */
+  readonly resultVersion?: number
+  /** Why previous output is obsolete and requires rebuilding. */
+  readonly staleReason?: string
 }
 
-/** Durable delegation phase: WHY an attempt waits, never a serialized waiter (PLAN.md §2.6). */
+/** Durable execution phase. New caller wait timeouts leave waiting_for_child unchanged. */
 export type DelegationPhase =
   | 'dispatched'
   | 'waiting_for_child'
   | 'completed'
   | 'blocked'
   | 'failed'
+  /** Legacy caller wait expiry; execution remains open until report or cancellation. */
   | 'timed_out'
   | 'stale'
   | 'cancelled'
@@ -139,6 +148,8 @@ export interface DelegationSnapshot {
   readonly settledAt?: number
   /** Free-form reason for `blocked`/`failed`/`timed_out`/`cancelled`. */
   readonly reason?: string
+  /** Accepted upstream result versions used by this attempt; absent in legacy records. */
+  readonly dependencyVersions?: Readonly<Record<string, number>>
 }
 
 /**
@@ -227,6 +238,8 @@ export interface WorkflowMetaSnapshot {
    * defaults ONLY in that case.
    */
   readonly settings?: WorkflowSettingsSnapshot
+  /** Explicitly enabled graph scheduling scope; MAIN stop pauses it. */
+  readonly scheduler?: { readonly enabled: boolean; readonly taskIds: readonly string[] }
 }
 
 /**

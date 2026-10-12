@@ -5,15 +5,19 @@ import { Service, type Context } from '@deepseek-ai/cordis'
 import type { Agent, AgentHandle } from '@deepseek-ai/dsh-agent'
 import { PERSONA_PREFIX_SECTION } from '@deepseek-ai/dsh-system-prompt'
 import { boundContextSummary, createUserMessage } from '@deepseek-ai/dsh-llm'
-import type { ContentBlock, LlmFailure } from '@deepseek-ai/dsh-llm'
-import { SessionId, type Session, type SessionEvent } from '@deepseek-ai/dsh-session'
+import type { ContentBlock, LlmFailure, MessageId } from '@deepseek-ai/dsh-llm'
+import { SessionId, type AgentCancelCause, type Session, type SessionEvent } from '@deepseek-ai/dsh-session'
 import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
 import type { SettingsProvider } from '@deepseek-ai/dsh-settings'
 import {
   childSessionMeta,
   resolveChildAgentOptions,
   resolveChildDepth,
+  SubagentError,
+  type SubagentInterruptAuthority,
 } from '@deepseek-ai/dsh-subagent'
+import { installCancellationAdapters } from './cancellation.js'
+import { WorkflowCoordinator } from './workflow/coordinator.js'
 import { deliverSubagentPrompt, type HostPromptDeliverer } from '@deepseek-ai/dsh-subagent/internal'
 import {
   ensureSubagentDescriptor,
@@ -28,9 +32,10 @@ import {
   AUTOREPORT_SCHEMA_VERSION,
   type AutoReportRecordMap,
   type AutoReportRecordType,
+  type DelegationSnapshot,
   type WorkflowMetaSnapshot,
 } from './workflow/events.js'
-import { delegationKey } from './workflow/protocol.js'
+import { delegationKey, isOpenDelegation, parseWorkflowReportContent } from './workflow/protocol.js'
 import { installRoutedReportTool } from './tools/report-router.js'
 import { allSpecialistRoles, type AutoReportRole, type SpecialistRole } from './roles.js'
 import { loadSpecialistPersona } from './personas.js'
@@ -72,6 +77,8 @@ declare module '@deepseek-ai/cordis' {
 
 const DEFAULT_WAIT_MS = 600_000
 const DEFAULT_IDLE_TIMEOUT_MS = 60_000
+/** Distinguish task-scoped stops from whole specialist conversation stops. */
+const TASK_CANCEL_REASON = 'AutoReport task cancelled'
 
 const DEFAULT_CONFIG: Config = {
   defaultReportLanguage: 'latex',
@@ -213,6 +220,8 @@ export interface RuntimeOptions {
  * only synchronous authorization and optional in-process waiters.
  */
 export default class AutoReportWorkflowRuntime extends Service {
+  /** Dependency scheduling and independent task waits. */
+  readonly coordinator: WorkflowCoordinator
   /** Global child-id authorization used during unpublished child setup. */
   readonly roleRegistry = new RoleRegistry()
   /** Validated plugin configuration used by tools and first-turn initialization. */
@@ -231,6 +240,10 @@ export default class AutoReportWorkflowRuntime extends Service {
   private readonly residentHandles = new Map<string, Map<SpecialistRole, AgentHandle>>()
   /** Published agents indexed independently of the scoped Agent registry. */
   private readonly liveAgents = new Map<string, Agent>()
+  /** Stop background messages from waking MAIN until a new foreground input. */
+  private readonly stoppedParents = new Set<string>()
+  /** Cancels already accounted synchronously must not cancel a later redispatch at turn/end. */
+  private readonly accountedCancels = new WeakSet<Agent>()
   /** Coalesce first-dispatch provisioning for one role. */
   private readonly residentProvisioning = new Map<string, Map<SpecialistRole, Promise<Agent | undefined>>>()
   /** Current DSH-resolved user defaults; each new workflow snapshots this once. */
@@ -249,6 +262,7 @@ export default class AutoReportWorkflowRuntime extends Service {
   constructor(ctx: Context, config: Config = DEFAULT_CONFIG, options: RuntimeOptions = {}) {
     super(ctx, 'autoreportWorkflow')
     this.config = config
+    this.coordinator = new WorkflowCoordinator(ctx, this)
     this.settingsHome = options.settingsHome
     const dshHome = options.settingsHome ?? resolveDshHome()
     // Keep this as composition state: the settings card can show readiness,
@@ -304,6 +318,14 @@ export default class AutoReportWorkflowRuntime extends Service {
       if (event.type === 'turn/end' && event.data.reason?.kind === 'error') {
         void this.notifyChildTurnError(session, event.data.reason.error)
       }
+      if (event.type === 'turn/end' && event.data.reason?.kind === 'aborted') {
+        const cause = event.data.reason.reason
+        const agent = this.liveAgents.get(String(session.id))
+        const accounted = agent !== undefined && this.accountedCancels.delete(agent)
+        if (!accounted && (cause.kind !== 'hook' || cause.reason !== TASK_CANCEL_REASON)) {
+          this.cancelChildDelegations(session.id, 'subagent turn interrupted')
+        }
+      }
       // Continuable children have a parent; AutoReport workflow facts live only on Main.
       if (session.header.parentSession !== undefined) return
       // The workflow state is NOT folded from this stream: AutoReport records
@@ -328,6 +350,7 @@ export default class AutoReportWorkflowRuntime extends Service {
       const owner = this.workflowForChild(agent.id)
       if (owner === undefined) return
       owner.runtime.waiters.noteChildActivity(String(agent.id), status)
+      if (status === 'idle') void this.coordinator.requestPump(owner.session)
     }, { global: true })
     ctx.on('agent/created', ({ agent }) => {
       this.liveAgents.set(String(agent.id), agent)
@@ -339,16 +362,104 @@ export default class AutoReportWorkflowRuntime extends Service {
       return undefined
     }, { global: true })
     ctx.on('agent/disposed', ({ agent }) => {
+      this.coordinator.forgetParent(agent)
       this.liveAgents.delete(String(agent.id))
       this.forgetResidentAgent(agent)
     }, { global: true })
     ctx.effect(() => async () => {
+      await this.coordinator.dispose()
       await this.disposeResidentRoles()
     }, 'autoreport.residentRoles()')
     const existingAgents = ctx.get('agents') as { list?: () => Agent[] } | undefined
     for (const agent of existingAgents?.list?.() ?? []) {
       this.liveAgents.set(String(agent.id), agent)
       if (isAutoReportMainSession(agent.session)) this.forSession(agent.session)
+    }
+    installCancellationAdapters(ctx, {
+      owns: agent => isAutoReportMainSession(agent.session) || this.roleRegistry.lookup(agent.id) !== undefined,
+      cancelling: (agent, cause) => this.onAgentCancelling(agent, cause),
+      interrupt: (childId, authority) => this.interruptResident(childId, authority),
+    })
+    ctx.on('agent/pre-step', async ({ agent, messages }, next) => {
+      if (messages.some(message => message.source.kind === 'user')) this.stoppedParents.delete(String(agent.id))
+      return next()
+    }, { global: true })
+  }
+
+  private onAgentCancelling(agent: Agent, cause: AgentCancelCause): void {
+    this.accountedCancels.add(agent)
+    if (cause.kind === 'disposed') return
+    if (cause.kind === 'hook' && cause.reason === TASK_CANCEL_REASON) return
+    if (this.roleRegistry.lookup(agent.id) !== undefined) {
+      this.cancelChildDelegations(agent.id, `subagent interrupted by ${cause.kind}`)
+      return
+    }
+    if (!isAutoReportMainSession(agent.session)) return
+    this.coordinator.pause(agent.session)
+    this.stoppedParents.add(String(agent.id))
+    const live = this.forSession(agent.session)
+    const childIds = new Set<SessionId>()
+    for (const task of live.state.projection().tasks.values()) {
+      const attempt = live.state.currentDelegation(task.taskId)
+      if (isOpenDelegation(attempt)) childIds.add(attempt.childSessionId)
+    }
+    for (const handle of this.residentHandles.get(String(agent.id))?.values() ?? []) childIds.add(handle.agent.id)
+    for (const childId of childIds) this.stopChild(childId, { kind: 'parent' })
+  }
+
+  private interruptResident(childId: SessionId, authority: SubagentInterruptAuthority): boolean {
+    const child = this.residentChild(childId)
+    if (child === undefined) return false
+    const parentId = child.session.header.parentSession
+    const authorized = authority.kind === 'user'
+      ? parentId === authority.parentSessionId
+      : this.liveAgents.get(String(authority.agent.id)) === authority.agent && parentId === authority.agent.id
+    if (!authorized) throw new SubagentError('resident subagent does not belong to this caller', 'UNAUTHORIZED')
+    this.stopChild(childId, { kind: authority.kind === 'user' ? 'user' : 'parent' })
+    return true
+  }
+
+  /**
+   * Stop one bound specialist without releasing its Session or role binding.
+   * @param childId - bound specialist to stop.
+   * @param cause - cause recorded by the Agent loop.
+   */
+  stopChild(childId: SessionId, cause: AgentCancelCause = { kind: 'parent' }): void {
+    this.cancelChildDelegations(childId, `subagent interrupted by ${cause.kind}`)
+    const child = this.residentChild(childId)
+    if (child !== undefined) child.cancel(cause, { keepInbox: true })
+    else {
+      const parentId = this.roleRegistry.lookup(childId)?.binding.parentSessionId
+      if (parentId !== undefined) this.ctx.get('subagents')?.interrupt(childId, { kind: 'user', parentSessionId: parentId })
+    }
+  }
+
+  /**
+   * Stop an active task or remove its still-queued briefing without cancelling
+   * other tasks bound to the same specialist.
+   * @param attempt - task delegation whose durable state was just cancelled.
+   */
+  stopTaskExecution(attempt: DelegationSnapshot): void {
+    if (!isOpenDelegation(attempt)) return
+    const child = this.residentChild(attempt.childSessionId) ?? this.liveAgents.get(String(attempt.childSessionId))
+    if (child === undefined) {
+      this.stopChild(attempt.childSessionId)
+      return
+    }
+    if (attempt.acceptedMessageId !== undefined && child.inbox.remove(attempt.acceptedMessageId as MessageId)) return
+    child.cancel({ kind: 'hook', reason: TASK_CANCEL_REASON }, { keepInbox: true })
+  }
+
+  private cancelChildDelegations(childId: SessionId, reason: string): void {
+    const owner = this.workflowForChild(childId)
+    if (owner === undefined) return
+    for (const task of owner.runtime.state.projection().tasks.values()) {
+      const attempt = owner.runtime.state.currentDelegation(task.taskId)
+      if (!isOpenDelegation(attempt) || attempt.childSessionId !== childId) continue
+      this.commit(owner.session, 'autoreport/delegation', { ...attempt, phase: 'cancelled', reason, settledAt: Date.now() })
+      const { blockedReason: _blocked, failedReason: _failed, ...rest } = task
+      this.commit(owner.session, 'autoreport/task', { ...rest, status: 'cancelled', revision: task.revision + 1 })
+      owner.runtime.waiters.settle(delegationKey(task.taskId, attempt.delegationRevision), { status: 'cancelled' })
     }
   }
 
@@ -360,6 +471,11 @@ export default class AutoReportWorkflowRuntime extends Service {
       }
     }
     return undefined
+  }
+
+  /** Published Agent identity for execution diagnostics, including manager-owned children. */
+  liveAgent(sessionId: SessionId): Agent | undefined {
+    return this.liveAgents.get(String(sessionId))
   }
 
   /** Ensure one fixed role has a durable, idle child Session and live Agent. */
@@ -429,13 +545,13 @@ export default class AutoReportWorkflowRuntime extends Service {
   private agentsForParent(parent: Agent): {
     get?: (id: SessionId) => Agent | undefined
     create?: (options: object) => Promise<AgentHandle>
-    resume?: (options: { resumeSessionId: SessionId; agentOptions?: Agent['options']; setup?: (ctx: Context, agent: Agent) => unknown }) => Promise<AgentHandle>
+    resume?: (options: { resumeSessionId: SessionId; agentOptions?: Agent['options']; setup?: (ctx: Context, agent: Agent) => unknown; signal?: AbortSignal }) => Promise<AgentHandle>
     withInitiator?: <T>(agent: Agent, operation: () => T) => T
   } | undefined {
     return (parent.ctx?.get('agents') ?? this.ctx.get('agents')) as {
       get?: (id: SessionId) => Agent | undefined
       create?: (options: object) => Promise<AgentHandle>
-      resume?: (options: { resumeSessionId: SessionId; agentOptions?: Agent['options']; setup?: (ctx: Context, agent: Agent) => unknown }) => Promise<AgentHandle>
+      resume?: (options: { resumeSessionId: SessionId; agentOptions?: Agent['options']; setup?: (ctx: Context, agent: Agent) => unknown; signal?: AbortSignal }) => Promise<AgentHandle>
       withInitiator?: <T>(agent: Agent, operation: () => T) => T
     } | undefined
   }
@@ -480,7 +596,12 @@ export default class AutoReportWorkflowRuntime extends Service {
       } satisfies SubagentReportMessageSource,
     })
     if (parent !== undefined) {
-      parent.steer(message)
+      const report = parseWorkflowReportContent(content)
+      const attempt = report.ok
+        ? this.workflowForChild(child.id)?.runtime.state.delegationAt(report.value.task_id, report.value.delegation_revision)
+        : undefined
+      if (this.stoppedParents.has(String(parentId)) || attempt?.phase === 'cancelled') parent.inject(message)
+      else parent.steer(message)
     } else {
       const parentSession = this.mainSessions.get(String(parentId))
       if (parentSession === undefined) {
@@ -627,7 +748,7 @@ export default class AutoReportWorkflowRuntime extends Service {
         }
       }
       const createOrResume = (): Promise<AgentHandle> => persisted
-        ? agents.resume!({ resumeSessionId: binding.childSessionId, agentOptions, setup })
+        ? agents.resume!({ resumeSessionId: binding.childSessionId, agentOptions, setup, signal })
         : agents.create!({
             sessionId: binding.childSessionId,
             // The same metadata DSH's own driver stamps on a delegated child:
@@ -636,6 +757,7 @@ export default class AutoReportWorkflowRuntime extends Service {
             meta: childSessionMeta(parent, childDepth, false),
             agentOptions,
             setup,
+            signal,
           } as never)
       const handle = await (agents.withInitiator === undefined
         ? createOrResume()
@@ -757,7 +879,7 @@ export default class AutoReportWorkflowRuntime extends Service {
     for (const task of owner.runtime.state.projection().tasks.values()) {
       const current = owner.runtime.state.currentDelegation(task.taskId)
       if (current?.childSessionId !== childSessionId) continue
-      if (current.phase !== 'dispatched' && current.phase !== 'waiting_for_child') continue
+      if (!isOpenDelegation(current)) continue
       return { taskId: task.taskId, key: delegationKey(task.taskId, current.delegationRevision) }
     }
     return undefined
@@ -897,7 +1019,11 @@ export default class AutoReportWorkflowRuntime extends Service {
     // and updates the live projection. Nothing observes the session stream for
     // this, so a record can never be applied twice.
     const record = appendWorkflowEvent(session, type, data, this.workflowLocation(session))
-    this.forSession(session).state.apply(record)
+    const state = this.forSession(session).state
+    const fact: WorkflowRecord = record
+    const previous = fact.type === 'autoreport/task' ? state.getTask(fact.data.taskId) : undefined
+    state.apply(record)
+    this.coordinator.afterCommit(session, fact, previous)
     return record
   }
 
@@ -951,21 +1077,29 @@ export default class AutoReportWorkflowRuntime extends Service {
     }
     const key = String(session.id)
     const released: string[] = []
-    const live = this.parents.get(key)
-    if (live !== undefined) {
-      for (const binding of live.state.projection().bindingsByRole.values()) {
-        if (this.roleRegistry.revoke(binding.childSessionId)) released.push(String(binding.childSessionId))
+    await this.coordinator.resetSession(session)
+    try {
+      await Promise.allSettled([...(this.residentProvisioning.get(key)?.values() ?? [])])
+      const live = this.parents.get(key)
+      if (live !== undefined) {
+        for (const attempt of live.waiters.pendingDelegations()) live.waiters.abandon(attempt)
+        for (const binding of live.state.projection().bindingsByRole.values()) {
+          if (this.roleRegistry.revoke(binding.childSessionId)) released.push(String(binding.childSessionId))
+        }
       }
-    }
-    this.parents.delete(key)
-    this.artifactFolds.delete(key)
-    this.residentProvisioning.delete(key)
-    this.pendingPostCommitInitialization.delete(key)
-    await this.disposeResidentFor(session.id)
-    const location = this.workflowLocation(session)
-    if (location !== undefined) {
-      const path = workflowLogPath(location.settingsHome, location.workspaceRoot ?? '', key)
-      rmSync(dirname(path), { recursive: true, force: true })
+      await this.disposeResidentFor(session.id)
+      const location = this.workflowLocation(session)
+      if (location !== undefined) {
+        const path = workflowLogPath(location.settingsHome, location.workspaceRoot ?? '', key)
+        rmSync(dirname(path), { recursive: true, force: true })
+      }
+      this.parents.delete(key)
+      this.artifactFolds.delete(key)
+      this.residentProvisioning.delete(key)
+      this.stoppedParents.delete(key)
+      this.pendingPostCommitInitialization.delete(key)
+    } finally {
+      this.coordinator.finishReset(session)
     }
     return released
   }
@@ -1076,7 +1210,8 @@ export default class AutoReportWorkflowRuntime extends Service {
       return
     }
     const message = settlementNotice(child.id, summary)
-    if (parent.status === 'idle') parent.followup(message)
+    if (this.stoppedParents.has(String(parentSessionId))) parent.inject(message)
+    else if (parent.status === 'idle') parent.followup(message)
     else parent.steer(message)
   }
 

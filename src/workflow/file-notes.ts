@@ -11,7 +11,7 @@
 import type { SessionId } from '@deepseek-ai/dsh-session'
 import type { AutoReportRole, SpecialistRole } from '../roles.js'
 import type { ArtifactSnapshot, DelegationSnapshot, FileNoteSnapshot } from './events.js'
-import { delegationKey } from './protocol.js'
+import { delegationKey, isOpenDelegation } from './protocol.js'
 import type { WorkflowProjection } from './service.js'
 
 /** Maximum description length accepted by `manifest(action="update")`. */
@@ -41,8 +41,7 @@ export function openDelegationForChild(
     const delegation = projection.delegations.get(`${task.taskId}#${key}`)
     if (delegation === undefined) continue
     if (delegation.childSessionId !== childSessionId) continue
-    if (delegation.phase !== 'dispatched' && delegation.phase !== 'waiting_for_child') continue
-    if (delegation.report !== undefined) continue
+    if (!isOpenDelegation(delegation)) continue
     if (match === undefined || (delegation.dispatchedAt ?? 0) > (match.dispatchedAt ?? 0)) match = delegation
   }
   return match

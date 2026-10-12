@@ -51,7 +51,7 @@ function restoredMainSession(workspaceRoot: string, id: string): Session {
 }
 
 describe('workflow_task and durable redispatch', () => {
-  it('cancels, reopens, redispatches the same task, and rejects reopening completion', async () => {
+  it('cancels, reopens, redispatches the same task, and can reopen completion for a new result version', async () => {
     const assembled = await boot(tempDir('autoreport-task-workspace-'), tempDir('autoreport-task-home-'), 'task-transition-main')
     admitFirstTurn(assembled)
 
@@ -96,11 +96,11 @@ describe('workflow_task and durable redispatch', () => {
     })
     expect(complete.isError, complete.text).toBe(false)
 
-    const rejectedReopen = await execute(assembled.ctx, 'workflow_task', {
+    const revised = await execute(assembled.ctx, 'workflow_task', {
       action: 'reopen', task_id: taskId,
     }, assembled.mainAgent, assembled.mainSession)
-    expect(rejectedReopen.isError).toBe(true)
-    expect(assembled.runtime.forSession(assembled.mainSession).state.getTask(taskId)?.status).toBe('completed')
+    expect(revised.isError, revised.text).toBe(false)
+    expect(assembled.runtime.forSession(assembled.mainSession).state.getTask(taskId)).toMatchObject({ status: 'pending', resultVersion: 1 })
   })
 
   it('reloads blocked workflow records into a fresh runtime and redispatches the bound child', async () => {

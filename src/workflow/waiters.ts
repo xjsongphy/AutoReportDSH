@@ -27,6 +27,7 @@ interface PendingWaiter {
   readonly idleTimeoutMs: number | undefined
   idleTimer: ReturnType<typeof setTimeout> | undefined
   hardTimer: ReturnType<typeof setTimeout> | undefined
+  removeAbortListener: (() => void) | undefined
 }
 
 /** Liveness bounds for one `wait: true` delegation. */
@@ -53,11 +54,13 @@ export class WaiterRegistry {
    * Wait for one delegation attempt to settle.
    * @param key - composite `taskId#revision` key.
    * @param timeoutMs - bounded wait; elapsed time resolves `timed_out`.
+   * @param signal - optional caller cancellation; removes only this waiter and resolves `cancelled`.
    * @returns the terminal outcome (never a rejection).
    */
-  wait(key: string, timeoutMs: number): Promise<WaiterOutcome>
-  wait(key: string, options: WaiterLivenessOptions): Promise<WaiterOutcome>
-  wait(key: string, timeout: number | WaiterLivenessOptions): Promise<WaiterOutcome> {
+  wait(key: string, timeoutMs: number, signal?: AbortSignal): Promise<WaiterOutcome>
+  wait(key: string, options: WaiterLivenessOptions, signal?: AbortSignal): Promise<WaiterOutcome>
+  wait(key: string, timeout: number | WaiterLivenessOptions, signal?: AbortSignal): Promise<WaiterOutcome> {
+    if (signal?.aborted) return Promise.resolve({ status: 'cancelled' })
     let sink: (outcome: WaiterOutcome) => void = () => {}
     const promise = new Promise<WaiterOutcome>(resolve => {
       sink = resolve
@@ -76,6 +79,7 @@ export class WaiterRegistry {
       idleTimeoutMs: options?.idleTimeoutMs,
       idleTimer: undefined,
       hardTimer: undefined,
+      removeAbortListener: undefined,
     }
     let set = this.pending.get(key)
     if (set === undefined) {
@@ -83,6 +87,15 @@ export class WaiterRegistry {
       this.pending.set(key, set)
     }
     set.add(waiter)
+    if (signal !== undefined) {
+      const onAbort = (): void => {
+        this.remove(key, waiter)
+        this.clearTimers(waiter)
+        waiter.resolve({ status: 'cancelled' })
+      }
+      signal.addEventListener('abort', onAbort, { once: true })
+      waiter.removeAbortListener = () => signal.removeEventListener('abort', onAbort)
+    }
     if (options === undefined) {
       waiter.hardTimer = setTimeout(() => this.timeout(key, waiter), Math.max(1, timeout as number))
       return promise
@@ -159,6 +172,11 @@ export class WaiterRegistry {
     return this.pending.size
   }
 
+  /** Current attempt keys being awaited, for graph inspection; no promises are serialized. */
+  pendingDelegations(): string[] {
+    return [...this.pending.keys()]
+  }
+
   private remove(key: string, waiter: PendingWaiter): void {
     const set = this.pending.get(key)
     if (set === undefined) return
@@ -180,6 +198,8 @@ export class WaiterRegistry {
   }
 
   private clearTimers(waiter: PendingWaiter): void {
+    waiter.removeAbortListener?.()
+    waiter.removeAbortListener = undefined
     if (waiter.idleTimer !== undefined) clearTimeout(waiter.idleTimer)
     if (waiter.hardTimer !== undefined) clearTimeout(waiter.hardTimer)
     waiter.idleTimer = undefined

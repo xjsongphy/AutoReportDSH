@@ -373,7 +373,19 @@ describe('report_workflow', () => {
       delegation_revision: 1,
       status: 'blocked',
       response: 'need data',
-    }, { agent: child.agent, signal: new AbortController().signal })).rejects.toThrow(/invalid workflow report/)
+    }, { agent: child.agent, signal: new AbortController().signal })).rejects.toThrow(/task_id=task-3.*delegation_revision=1.*block_type/)
+    expect(host.sendMessage).not.toHaveBeenCalled()
+  })
+
+  it('rejects block_type on success instead of silently discarding the wrong parameter', async () => {
+    const child = childContext()
+    const host = hostContext()
+    installWorkflowReportTool(child.ctx, host.ctx, 'PLOTTING')
+    await expect(toolNamed(child.tools, 'report_workflow').execute({ task_id: 'task-3', delegation_revision: 1,
+      status: 'success', block_type: 'quality', response: 'done',
+    }, { agent: child.agent, signal: new AbortController().signal })).rejects.toMatchObject({
+      code: 'WORKFLOW_INVALID_ARGUMENT', message: expect.stringContaining('block_type=quality is only valid when status="blocked"'),
+    })
     expect(host.sendMessage).not.toHaveBeenCalled()
   })
 
