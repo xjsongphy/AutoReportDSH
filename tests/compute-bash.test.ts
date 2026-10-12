@@ -17,12 +17,12 @@ describe('compute bash', () => {
     const ctx = {
       get: (name: string) => name === 'shell' ? {
         sandboxMode: 'workspace-write', resolve: (request: unknown) => request,
-        run: async (request: { command: string }) => {
+        execute: async (request: { command: string }) => ({ result: async () => {
           const result = spawnSync('bash', ['-c', request.command], { cwd: root, encoding: 'utf8' })
           if (result.error) throw result.error
           return { exitCode: result.status, signal: result.signal, timedOut: false, aborted: false,
             stdout: { text: result.stdout }, stderr: { text: result.stderr }, sandbox: { enforcement: 'full' } }
-        },
+        } }),
       } : name === 'shellEnv' ? { collect: () => ({}) }
         : name === 'sandboxPolicy' ? { resolve: () => ({ mode: 'workspace-write', workspaceRoot: join(root, 'Data', 'Processed') }) }
           : name === 'sandbox' ? { confine: async () => ({ enforcement: 'full' }) } : undefined,
@@ -47,14 +47,14 @@ describe('compute bash', () => {
     const shell = {
       sandboxMode: 'workspace-write',
       resolve: (request: unknown) => request,
-      run: async (request: { command: string }) => {
+      execute: async (request: { command: string }) => ({ result: async () => {
         command = request.command
         return {
           exitCode: 0, signal: null, timedOut: false, aborted: false,
           stdout: { text: 'ok', truncated: false }, stderr: { text: '', truncated: false },
           sandbox: { mode: 'workspace-write', denied: false, enforcement: 'full' },
         }
-      },
+      } }),
     }
     const ctx = {
       get: (name: string) => name === 'shell' ? shell
@@ -92,7 +92,7 @@ describe('compute bash', () => {
     let tool: { execute: (args: unknown, exec: unknown) => Promise<unknown> } | undefined
     let ran = false
     const ctx = {
-      get: (name: string) => name === 'shell' ? { sandboxMode: 'workspace-write', resolve: (request: unknown) => request, run: async () => { ran = true; return {} } }
+      get: (name: string) => name === 'shell' ? { sandboxMode: 'workspace-write', resolve: (request: unknown) => request, execute: async () => { ran = true; return {} } }
         : name === 'shellEnv' ? { collect: () => ({}) }
           : name === 'sandboxPolicy'
         ? { resolve: () => ({ mode: 'workspace-write', workspaceRoot: join(root, 'Plots') }) }

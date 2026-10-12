@@ -32,7 +32,7 @@ export function installComputeBashTool(ctx: Context, role: SpecialistRole, works
   if (shellEnv === undefined) throw new Error('AutoReport compute bash requires the DSH shell environment service')
   const definition = defineTool({
     name: 'bash',
-    description: 'Run a foreground bash command for data analysis or plotting. Each call has a fresh shell with pipefail enabled, so filtering output with tail/head does not hide an upstream failure. Check exitCode and stderr; if sandbox denies an operation or a dependency is missing, report the blocker to MAIN. Writes are confined to your role directory. This tool has no sandbox escalation or background mode.',
+    description: 'Run a foreground bash command for data analysis or plotting. Each call has a fresh shell with pipefail enabled, so tail cannot hide an upstream failure. head may intentionally close the pipe early and make an upstream process exit with SIGPIPE (often code 141); use that only when truncation is deliberate, and check the command result before treating it as a calculation failure. Check exitCode and stderr; if sandbox denies an operation or a dependency is missing, report the blocker to MAIN. Writes are confined to your role directory. This tool has no sandbox escalation or background mode.',
     parameters: {
       command: { type: 'string', required: true, description: 'Bash command to run.' },
       description: { type: 'string', required: true, description: 'Short purpose of this command.' },
@@ -82,7 +82,8 @@ export function installComputeBashTool(ctx: Context, role: SpecialistRole, works
         signal: exec.signal,
         ...(args.timeoutMs === undefined ? {} : { timeoutMs: args.timeoutMs }),
       }
-      const result = await shell.run(shell.resolve(request))
+      const execution = await shell.execute(shell.resolve(request))
+      const result = await execution.result()
       if (result.aborted) throw new Error('bash call was aborted')
       if (result.sandbox?.enforcement !== 'full') throw new Error('bash lost full DSH file-sandbox enforcement')
       return {

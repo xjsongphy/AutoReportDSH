@@ -112,6 +112,26 @@ describe('extract_pdf', () => {
     expect(result).toMatchObject({ status: 'success', outputDir: 'References/教材讲义' })
   })
 
+  it('keeps same-named PDFs in separate nested References directories and reuses each output on repeat', async () => {
+    const workspace = makeWorkspace()
+    mkdirSync(join(workspace, 'References', 'PaperA'))
+    mkdirSync(join(workspace, 'References', 'PaperB'))
+    writeFileSync(join(workspace, 'References', 'PaperA', 'appendix.pdf'), '%PDF A')
+    writeFileSync(join(workspace, 'References', 'PaperB', 'appendix.pdf'), '%PDF B')
+    const outputs: string[] = []
+    const tool = install(makeCtx({ workspace, argv: args => { outputs.push(args.at(-1)!) } }))
+
+    await run(tool, workspace, 'References/PaperA/appendix.pdf')
+    await run(tool, workspace, 'References/PaperB/appendix.pdf')
+    await run(tool, workspace, 'References/PaperA/appendix.pdf')
+
+    expect(outputs).toEqual([
+      realpathSync(join(workspace, 'References', 'PaperA', 'appendix')),
+      realpathSync(join(workspace, 'References', 'PaperB', 'appendix')),
+      realpathSync(join(workspace, 'References', 'PaperA', 'appendix')),
+    ])
+  })
+
   it('rejects a missing file like the reference suite expects', async () => {
     const workspace = makeWorkspace()
     const tool = install(makeCtx({ workspace }))

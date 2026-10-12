@@ -38,7 +38,9 @@ export function installReferenceExtractTool(ctx: Context): () => void {
         throw new Error('extract_pdf expects a PDF file under References/')
       }
       const stem = parse(source.absolute).name.replace(/[<>:"\\|?*\u0000-\u001F]/gu, '_').trim() || 'reference'
-      const output = ensureOwnedDirectory(workspace, 'References', [stem])
+      const references = existingWorkspacePath(workspace, 'References').absolute
+      const sourceDirectory = relative(references, source.absolute).split(sep).slice(0, -1)
+      const output = ensureOwnedDirectory(workspace, 'References', [...sourceDirectory, stem])
       const sandbox = ctx.get('sandbox')
       const subprocess = ctx.get('subprocess')
       if (sandbox === undefined || subprocess === undefined) throw new Error('extract_pdf needs DSH sandbox and subprocess services')
