@@ -281,7 +281,7 @@ license, so its two vendored documents carry none.
 
 Referenced at runtime rather than vendored:
 
-- [MinerU](https://github.com/opendatalab/MinerU) — the `mineru-open-api` CLI called by `extract_pdf` to extract `References/` PDFs into `Outline/.cache/mineru/`
+- [MinerU](https://github.com/opendatalab/MinerU) — the `mineru-open-api` CLI called by `extract_pdf` to extract `References/` PDFs into `References/<stem>/`
 
 ## License
 

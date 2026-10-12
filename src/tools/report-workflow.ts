@@ -39,7 +39,7 @@ export function installWorkflowReportTool(childCtx: Context, hostCtx: Context, r
       description: [
         'Finish one Main-dispatched AutoReport task by returning its outcome to Main. Required before ending the turn on any Main dispatch; never used for ordinary conversation.',
         'Pass the exact task_id and delegation_revision from the task briefing; a mismatched or unknown delegation is rejected.',
-        'status="success" when the requested outcome is complete and self-checks pass; status="blocked" with block_type="missing_data" (required inputs absent, unreadable, or ambiguous), "quality" (requirements conflict or scope is unclear), or "missing_dependency" (a Python package or tool your selected environment lacks) otherwise.',
+        'status="success" when the requested outcome is complete and self-checks pass; status="blocked" with block_type="missing_data" (required inputs absent, unreadable, or ambiguous; a References/ PDF with no extracted markdown beside it is missing_data: report and stop; do not improvise substitutes such as rendering PDF pages to images), "quality" (requirements conflict or scope is unclear), or "missing_dependency" (a Python package or tool your selected environment lacks) otherwise.',
         'Never install or change Python packages yourself — MAIN owns the environment. For missing_dependency, name the package(s) in response and stop.',
         'response must be self-contained (up to 16384 chars); produced_files lists workspace-relative paths you wrote, at most 512, staying inside your role writable roots — absolute paths and ".." segments are rejected.',
         'Success is rejected while your manifest has stale file descriptions — update descriptions for changed files via manifest first.',
@@ -51,7 +51,7 @@ export function installWorkflowReportTool(childCtx: Context, hostCtx: Context, r
         task_id: { type: 'string', required: true, description: 'Exact task id from the task briefing.' },
         delegation_revision: { type: 'number', required: true, description: 'Exact delegation revision from the task briefing.' },
         status: { type: 'string', required: true, enum: ['success', 'blocked'], description: 'success completes the task; blocked returns the missing or unclear item to Main for rescheduling.' },
-        block_type: { type: 'string', enum: ['missing_data', 'quality', 'missing_dependency'], description: 'Required only for blocked status: missing_data for absent, unreadable, or ambiguous inputs; quality for conflicting requirements or unclear scope; missing_dependency for a Python package/tool the selected environment lacks (MAIN installs it).' },
+        block_type: { type: 'string', enum: ['missing_data', 'quality', 'missing_dependency'], description: 'Required only for blocked status: missing_data for absent, unreadable, or ambiguous inputs; a References/ PDF with no extracted markdown beside it is missing_data: report and stop; do not improvise substitutes such as rendering PDF pages to images; quality for conflicting requirements or unclear scope; missing_dependency for a Python package/tool the selected environment lacks (MAIN installs it).' },
         response: { type: 'string', required: true, description: 'Self-contained outcome summary: results, file paths, or what is missing/wrong (up to 16384 chars).' },
         produced_files: { type: 'array', items: { type: 'string' }, description: 'Workspace-relative paths you wrote for this task (at most 512), inside your role writable roots.' },
       },

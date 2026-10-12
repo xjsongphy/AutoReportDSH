@@ -83,10 +83,10 @@ describe('extract_pdf', () => {
       argv: args => { argv = args },
     }))
     const result = await run(tool, workspace) as { status: string; outputDir: string }
-    expect(result).toMatchObject({ status: 'success', outputDir: 'Outline/.cache/mineru/handout' })
+    expect(result).toMatchObject({ status: 'success', outputDir: 'References/handout' })
     expect(argv.slice(0, 2)).toEqual(['mineru-open-api', 'extract'])
     expect(argv.at(-2)).toBe('-o')
-    expect(argv.at(-1)).toBe(realpathSync(join(workspace, 'Outline', '.cache', 'mineru', 'handout')))
+    expect(argv.at(-1)).toBe(realpathSync(join(workspace, 'References', 'handout')))
   })
 
   it('passes the configured CLI timeout through to mineru before the -o flag', async () => {
@@ -109,7 +109,7 @@ describe('extract_pdf', () => {
     writeFileSync(join(workspace, 'References', '教材讲义.pdf'), '%PDF')
     const tool = install(makeCtx({ workspace }))
     const result = await run(tool, workspace, 'References/教材讲义.pdf') as { status: string; outputDir: string }
-    expect(result).toMatchObject({ status: 'success', outputDir: 'Outline/.cache/mineru/教材讲义' })
+    expect(result).toMatchObject({ status: 'success', outputDir: 'References/教材讲义' })
   })
 
   it('rejects a missing file like the reference suite expects', async () => {

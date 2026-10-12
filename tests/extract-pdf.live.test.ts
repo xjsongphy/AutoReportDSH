@@ -61,7 +61,7 @@ describe.skipIf(skipReason !== undefined)(`live extract_pdf${skipReason === unde
     expect(result.status, `diagnostics: ${result.diagnostics}`).toBe('success')
     const markdown = join(workspace, result.outputDir, 'template.md')
     expect(existsSync(markdown), `expected markdown at ${markdown}\ndiagnostics: ${result.diagnostics}`).toBe(true)
-    expect(result.outputDir).toBe('Outline/.cache/mineru/template')
+    expect(result.outputDir).toBe('References/template')
   })
 })
 

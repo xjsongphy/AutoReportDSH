@@ -19,7 +19,7 @@ export const EXTRACT_TIMEOUT_MS = (MINERU_TIMEOUT_SECONDS + 30) * 1000
 export function installReferenceExtractTool(ctx: Context): () => void {
   return ctx.tools.register(defineTool({
     name: 'extract_pdf',
-    description: 'When read cannot parse a needed References/ PDF, extract it into readable files under Outline/.cache/mineru/. Pass the workspace-relative PDF path; after success, read the produced markdown. Report missing credentials or extraction failure as a blocker without inventing PDF content.',
+    description: 'When read cannot parse a needed References/ PDF, extract it into readable files beside the source PDF under References/. Pass the workspace-relative PDF path; after success, read the produced markdown. Report missing credentials or extraction failure as a blocker without inventing PDF content.',
     parameters: { path: { type: 'string', required: true, description: 'PDF path relative to the experiment workspace, e.g. References/handout.pdf.' } },
     timeoutMs: EXTRACT_TIMEOUT_MS + 10_000,
     presentCall: args => genericCall('Extract reference PDF', args.path),
@@ -38,13 +38,13 @@ export function installReferenceExtractTool(ctx: Context): () => void {
         throw new Error('extract_pdf expects a PDF file under References/')
       }
       const stem = parse(source.absolute).name.replace(/[<>:"\\|?*\u0000-\u001F]/gu, '_').trim() || 'reference'
-      const output = ensureOwnedDirectory(workspace, 'Outline', ['.cache', 'mineru', stem])
+      const output = ensureOwnedDirectory(workspace, 'References', [stem])
       const sandbox = ctx.get('sandbox')
       const subprocess = ctx.get('subprocess')
       if (sandbox === undefined || subprocess === undefined) throw new Error('extract_pdf needs DSH sandbox and subprocess services')
       const confined = await sandbox.confine(
         ['mineru-open-api', 'extract', source.absolute, '--timeout', String(MINERU_TIMEOUT_SECONDS), '-o', output],
-        { mode: 'workspace-write', workspaceRoot: realpathSync(join(workspace, 'Outline')), sessionId: agent.session.id as SessionId },
+        { mode: 'workspace-write', workspaceRoot: realpathSync(join(workspace, 'References')), sessionId: agent.session.id as SessionId },
         exec.signal,
       )
       if (confined.enforcement !== 'full') throw new Error('extract_pdf requires full DSH file-sandbox enforcement')
