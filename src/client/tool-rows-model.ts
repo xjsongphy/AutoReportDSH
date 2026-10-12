@@ -192,6 +192,11 @@ export function workflowTaskTitle(argsRaw: string, t: ToolRowText): string {
     case 'update': return t('boardUpdateTitle')
     case 'cancel': return t('boardCancelTitle')
     case 'reopen': return t('boardReopenTitle')
+    case 'plan': return t('boardPlanTitle')
+    case 'graph': return t('boardGraphTitle')
+    case 'run': return t('boardRunTitle')
+    case 'pause': return t('boardPauseTitle')
+    case 'wait': return t('boardWaitTitle')
     default: return t('workflowTaskTitle')
   }
 }
@@ -217,6 +222,14 @@ export function workflowTaskSummary(
   if (args === undefined) return undefined
   const action = asString(args.action)
   const taskId = asString(args.task_id)
+  if (action === 'wait' || action === 'run') {
+    const ids = Array.isArray(args.task_ids) ? args.task_ids.filter((id): id is string => typeof id === 'string') : []
+    return ids.length > 0 ? ids.join(', ') : undefined
+  }
+  if (action === 'plan' || action === 'graph') {
+    const size = action === 'plan' && Array.isArray(args.tasks) ? args.tasks.length : boardSize(output)
+    return size === undefined ? undefined : `${size} ${t('tasks')}`
+  }
   if (action === 'read' && taskId === undefined) {
     const size = boardSize(output)
     return size === undefined ? undefined : `${size} ${t('tasks')}`

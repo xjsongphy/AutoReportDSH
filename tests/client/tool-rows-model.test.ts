@@ -388,3 +388,21 @@ describe('renderPageSummary', () => {
     expect(renderPageSummary('{"path":"Rep', null, en)).toBeUndefined()
   })
 })
+
+describe('workflow graph tool presentation', () => {
+  it.each([
+    ['plan', 'Plan task graph', '规划任务图'],
+    ['graph', 'Inspect dependency graph', '查看依赖图'],
+    ['run', 'Run task graph', '运行任务图'],
+    ['pause', 'Pause scheduling', '暂停调度'],
+    ['wait', 'Wait for task results', '等待任务结果'],
+  ])('labels %s in both languages', (action, english, chinese) => {
+    expect(workflowTaskTitle(JSON.stringify({ action }), en)).toBe(english)
+    expect(workflowTaskTitle(JSON.stringify({ action }), zh)).toBe(chinese)
+  })
+  it('shows plan size, graph size and exact wait targets', () => {
+    expect(workflowTaskSummary(JSON.stringify({ action: 'plan', tasks: [{ task_id: 'task-a' }, { task_id: 'task-b' }] }), null, zh)).toBe('2 个任务')
+    expect(workflowTaskSummary(JSON.stringify({ action: 'graph' }), JSON.stringify({ tasks: [{ task_id: 'task-a' }] }), en)).toBe('1 tasks')
+    expect(workflowTaskSummary(JSON.stringify({ action: 'wait', task_ids: ['task-a', 'task-b'] }), null, en)).toBe('task-a, task-b')
+  })
+})

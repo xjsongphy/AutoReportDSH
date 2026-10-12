@@ -137,6 +137,7 @@ export const zh: Record<AutoReportLocaleKey, string> = {
 export type ToolRowLocaleKey =
   | 'sendToAgentTitle' | 'workflowTaskTitle'
   | 'boardReadTitle' | 'boardUpdateTitle' | 'boardCancelTitle' | 'boardReopenTitle'
+  | 'boardPlanTitle' | 'boardGraphTitle' | 'boardRunTitle' | 'boardPauseTitle' | 'boardWaitTitle'
   | 'listTitle' | 'manifestReadTitle' | 'manifestUpdateTitle' | 'referenceExtractTitle' | 'reportWorkflowTitle'
   | 'installPackageTitle' | 'compileReportTitle' | 'renderPageTitle'
   | 'running' | 'failed' | 'stopped'
@@ -156,6 +157,11 @@ export const toolRowEn: Record<ToolRowLocaleKey, string> = {
   boardUpdateTitle: 'Update task board',
   boardCancelTitle: 'Cancel task',
   boardReopenTitle: 'Reopen task',
+  boardPlanTitle: 'Plan task graph',
+  boardGraphTitle: 'Inspect dependency graph',
+  boardRunTitle: 'Run task graph',
+  boardPauseTitle: 'Pause scheduling',
+  boardWaitTitle: 'Wait for task results',
   listTitle: 'Browse directory',
   manifestReadTitle: 'Read manifest',
   manifestUpdateTitle: 'Update manifest',
@@ -203,6 +209,11 @@ export const toolRowZh: Record<ToolRowLocaleKey, string> = {
   boardUpdateTitle: '更新任务板',
   boardCancelTitle: '取消任务',
   boardReopenTitle: '恢复任务',
+  boardPlanTitle: '规划任务图',
+  boardGraphTitle: '查看依赖图',
+  boardRunTitle: '运行任务图',
+  boardPauseTitle: '暂停调度',
+  boardWaitTitle: '等待任务结果',
   listTitle: '浏览目录',
   manifestReadTitle: '读取交付清单',
   manifestUpdateTitle: '修改交付清单',
