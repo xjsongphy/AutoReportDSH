@@ -30,7 +30,9 @@ for (const dependencies of [source.dependencies ?? {}, source.devDependencies ??
         : name === '@deepseek-ai/schemastery'
         ? '^3.18.1'
         : VERIFIED_DSH_VERSION
-    void version
+    if (!name.startsWith('@deepseek-ai/dsh-') && version.startsWith('link:')) {
+      packageDependencies[name] = JSON.parse(readFileSync(join(root, version.slice(5), 'package.json'), 'utf8')).version
+    }
   }
 }
 
