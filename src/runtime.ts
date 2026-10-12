@@ -59,6 +59,8 @@ import { detectPythonEnvironments, missingAnalysisPackages, type PythonDetectOpt
 import { detectMineruStatus } from './mineru-status.js'
 import {
   AUTOREPORT_SETTINGS_NAMESPACE,
+  AUTO_REPORT_USER_SETTINGS_SCHEMA,
+  validatePythonExecutableSetting,
   autoReportUserSettingsBase,
   childAgentOptions,
   resolveWorkflowSettings,
@@ -257,6 +259,15 @@ export default class AutoReportWorkflowRuntime extends Service {
       mineruStatus,
     )
     this.userSettingsSource = () => userSettingsBase
+    // RC2 validates persistent Config writes through the owning plugin fiber.
+    // Keep interpreter checks at this boundary before a profile patch is saved.
+    ctx.on('internal/config', function (_raw: unknown, next: () => unknown): unknown {
+      const candidate = next()
+      if (this !== ctx.fiber) return candidate
+      const values = AUTO_REPORT_USER_SETTINGS_SCHEMA(candidate as AutoReportUserSettings)
+      validatePythonExecutableSetting({ ...userSettingsBase, ...values }, dshHome)
+      return candidate
+    })
     ctx.inject(['settings'], sctx => {
       this.settingsService = sctx.settings
       sctx.effect(() => sctx.settings.configure({ auto: false }, ctx.fiber))
