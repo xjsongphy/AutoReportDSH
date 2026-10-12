@@ -350,6 +350,7 @@ describe('send_to_agent', () => {
     expect(roleRegistry.lookup('child-theory')).toBeUndefined()
     expect(state.bindingForRole('THEORY')?.provisioning).toBe('failed')
     expect(state.currentDelegation('task-1')?.phase).toBe('failed')
+    expect(state.getTask('task-1')).toMatchObject({ status: 'failed', failedReason: 'spawn failed' })
   })
 
   it('rebinds a failed role onto a new reserved child id', async () => {

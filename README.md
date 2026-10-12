@@ -167,7 +167,7 @@ Program state stays out of the experiment folder (`$DSH_HOME` defaults to `~/.ds
 
 ```text
 $DSH_HOME/
-├── .agent-presets/autoreport/     installed user preset
+├── profiles/web/cordis.patch.yml live plugin configuration
 ├── profiles/node_modules/dsh-autoreport
 └── autoreport/
     ├── venv/                      AutoReport-managed Python (optional)
@@ -223,7 +223,7 @@ AutoReportDSH/
 | `pnpm test` | runs the unit, integration, client, and eval suites with Vitest |
 | `pnpm run typecheck` | typechecks the host and client code without emitting files |
 | `pnpm run build` | cleans `dist/`, compiles TypeScript, copies resources, and builds the web client |
-| `pnpm run install:preset` | materializes the `autoreport` user preset and its overlay in the DSH home (the source installer runs it for you) |
+| `pnpm run install:preset` | renders an RC2 source-development overlay; installed profiles load the preset from the plugin bundle |
 | `pnpm run prepare:npm` | builds and assembles the publishable npm bundle under `dist/npm` |
 
 `tests/eval/workflow-eval.test.ts` asserts the assembled workflow traces: the full
@@ -282,7 +282,7 @@ license, so its two vendored documents carry none.
 
 Referenced at runtime rather than vendored:
 
-- [MinerU](https://github.com/opendatalab/MinerU) — the `mineru-open-api` CLI called by `extract_pdf` to extract `References/` PDFs into `References/<stem>/`
+- [MinerU](https://github.com/opendatalab/MinerU) — the `mineru-open-api` CLI called by `extract_pdf` to extract each PDF beside its source under `References/<relative-dir>/<stem>/`
 
 ## License
 

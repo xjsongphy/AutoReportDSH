@@ -40,9 +40,11 @@ function resultEvent(text: string, callId = 'call-1', isError = false): SessionE
       turn: 1,
       step: 1,
       message: {
-        role: 'user',
+        role: 'tool',
         id: `m-${callId}`,
-        content: [{ type: 'tool-result', toolCallId: callId, content: [{ type: 'text', text }], isError }],
+        toolCallId: callId,
+content: [{ type: 'text', text }],
+isError,
         source: { kind: 'tool', callId },
       },
     },

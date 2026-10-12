@@ -446,7 +446,7 @@ export function createSendToAgentTool(deps: SendToAgentDependencies): ToolDefini
             return String(accepted.messageId)
           }
           try {
-            const source: CoordinatorMessageSource = { kind: 'coordinator', form: 'relay', senderSessionId: parent.id }
+            const source: CoordinatorMessageSource = { kind: 'coordinator', form: 'relay', senderSessionId: parent.id, taskId, delegationRevision: revision }
             const residentMessage = await deps.resident?.deliver(
               parent,
               bound.childSessionId,
@@ -496,12 +496,26 @@ export function createSendToAgentTool(deps: SendToAgentDependencies): ToolDefini
           deps.workflow.roleRegistry.revoke(bound.childSessionId)
           deps.workflow.commit(parentSession, 'autoreport/role-binding', { ...bound, provisioning: 'failed' })
         }
-        deps.workflow.commit(parentSession, 'autoreport/delegation', {
-          ...dispatched,
+        const currentAttempt = live.state.delegationAt(taskId, revision)
+        if (isOpenDelegation(currentAttempt)) deps.workflow.commit(parentSession, 'autoreport/delegation', {
+          ...currentAttempt,
           phase: 'failed',
           reason: error instanceof Error ? error.message : String(error),
           settledAt: now(),
         })
+        const latestTask = live.state.getTask(taskId)
+        if (isOpenDelegation(currentAttempt)
+          && latestTask !== undefined
+          && (latestTask.latestDelegationRevision === revision || latestTask.latestDelegationRevision === undefined)) {
+          const { blockedReason: _blocked, failedReason: _failed, ...rest } = latestTask
+          deps.workflow.commit(parentSession, 'autoreport/task', {
+            ...rest,
+            status: 'failed',
+            revision: latestTask.revision + 1,
+            failedReason: error instanceof Error ? error.message : String(error),
+          })
+        }
+        if (isOpenDelegation(currentAttempt)) live.waiters.settle(delegationKey(taskId, revision), { status: 'failed', response: error instanceof Error ? error.message : String(error) })
         throw error
       }
 

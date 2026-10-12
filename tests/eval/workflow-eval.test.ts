@@ -216,8 +216,7 @@ describe('workflow eval', () => {
     expect(firstSteers).toHaveLength(1)
     expect(messageText(firstSteers[0])).toMatch(/blocked/i)
     expect(messageSource(firstSteers[0])).toMatchObject({
-      kind: 'plugin',
-      plugin: 'autoreport/turn-guard',
+      kind: 'autoreport-notice',
       form: 'notice',
       summary: MAIN_STEER_SUMMARY,
     })
@@ -281,8 +280,7 @@ describe('workflow eval', () => {
     expect(afterManifest).toHaveLength(1)
     expect(messageText(afterManifest[0])).toMatch(/manifest/)
     expect(messageSource(afterManifest[0])).toMatchObject({
-      kind: 'plugin',
-      plugin: 'autoreport/turn-guard',
+      kind: 'autoreport-notice',
       form: 'notice',
       summary: MANIFEST_STEER_SUMMARY,
     })

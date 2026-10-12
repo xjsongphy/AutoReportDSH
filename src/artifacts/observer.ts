@@ -246,9 +246,7 @@ export function foldArtifact(
   }
   if (event.type !== 'tool/result') return []
 
-  const data = event.data as {
-    message: { content: readonly [{ isError?: boolean }] | readonly never[] }
-  }
+  const data = event.data
   const callSeq = event.sourceEventSeqs?.[0]
   const pending = callSeq === undefined
     ? undefined
@@ -256,7 +254,7 @@ export function foldArtifact(
   if (pending === undefined) return []
   state.pending.delete(pending.callId)
 
-  const success = data.message?.content?.[0]?.isError === false
+  const success = data.message.isError !== true && data.error === undefined
   if (!success) return []
 
   const committed: ArtifactSnapshot[] = []

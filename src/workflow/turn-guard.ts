@@ -18,7 +18,6 @@ import {
   MAIN_STEER_SUMMARY,
   MANIFEST_STEER_SUMMARY,
   REPORT_STEER_SUMMARY,
-  TURN_GUARD_PLUGIN,
 } from './display.js'
 import { openDelegationForChild, staleDescribedPaths } from './file-notes.js'
 import type { RoleRegistry } from './role-registry.js'
@@ -54,8 +53,7 @@ const acknowledgedBlockedKeysByMain = new Map<string, Set<string>>()
 
 function noticeSource(summary: string) {
   return {
-    kind: 'plugin' as const,
-    plugin: TURN_GUARD_PLUGIN,
+    kind: 'autoreport-notice' as const,
     form: 'notice' as const,
     summary: boundContextSummary(summary),
   }

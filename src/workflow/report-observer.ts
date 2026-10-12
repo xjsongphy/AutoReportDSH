@@ -1,5 +1,4 @@
 import type { Session, SessionEvent, SessionId } from '@deepseek-ai/dsh-session'
-import type { SubagentSettledMessageSource } from '@deepseek-ai/dsh-subagent'
 import type { SubagentReportMessageSource } from '../messages.js'
 import type { DelegationSnapshot, TaskSnapshot } from './events.js'
 import { AUTOREPORT_SCHEMA_VERSION } from './events.js'
@@ -21,15 +20,13 @@ export interface WorkflowReportObserverDependencies {
 
 type DeliveredMessage = SessionEvent<'user/message'>['data']
 
-function currentForChild(state: WorkflowState, childId: SessionId): DelegationSnapshot | undefined {
-  let match: DelegationSnapshot | undefined
-  for (const task of state.projection().tasks.values()) {
-    const current = state.currentDelegation(task.taskId)
-    if (current?.childSessionId !== childId) continue
-    if (!isOpenDelegation(current)) continue
-    if (match === undefined || (current.dispatchedAt ?? 0) > (match.dispatchedAt ?? 0)) match = current
-  }
-  return match
+function attributableAttempt(
+  state: WorkflowState,
+  source: { readonly senderSessionId: SessionId; readonly taskId?: string; readonly delegationRevision?: number },
+): DelegationSnapshot | undefined {
+  if (source.taskId === undefined || source.delegationRevision === undefined) return undefined
+  const attempt = state.delegationAt(source.taskId, source.delegationRevision)
+  return attempt?.childSessionId === source.senderSessionId ? attempt : undefined
 }
 
 function settleOutcome(snapshot: DelegationSnapshot): WaiterOutcome {
@@ -130,8 +127,11 @@ function observeDeliveredMessage(message: DeliveredMessage, deps: WorkflowReport
       : source.senderSessionId
     const parsed = parseWorkflowReportContent(message.content)
     if (!parsed.ok) {
-      const current = currentForChild(deps.state, senderSessionId)
+      const current = source.kind === 'subagent-report'
+        ? attributableAttempt(deps.state, source as SubagentReportMessageSource)
+        : undefined
       if (current === undefined) return
+      if (!isOpenDelegation(current)) return
       const failed: DelegationSnapshot = {
         ...current,
         phase: 'failed',
@@ -146,6 +146,10 @@ function observeDeliveredMessage(message: DeliveredMessage, deps: WorkflowReport
     }
 
     const claimedReport = parsed.value
+    if (source.kind === 'subagent-report') {
+      const attributed = source as SubagentReportMessageSource
+      if (attributed.taskId !== undefined && (attributed.taskId !== claimedReport.task_id || attributed.delegationRevision !== claimedReport.delegation_revision)) return
+    }
     const attempt = deps.state.delegationAt(claimedReport.task_id, claimedReport.delegation_revision)
     if (attempt === undefined || attempt.childSessionId !== senderSessionId) return
     const reportMessageId = String(message.id)
@@ -159,6 +163,7 @@ function observeDeliveredMessage(message: DeliveredMessage, deps: WorkflowReport
       || current.delegationRevision !== claimedReport.delegation_revision
       || cancelled
       || attempt.phase === 'stale'
+      || attempt.phase === 'failed'
       || obsoleteInputs !== undefined
     // Deliver the canonical envelope MAIN received rather than recomputing it
     // from a later projection (which may include artifacts observed after the
@@ -196,10 +201,11 @@ function observeDeliveredMessage(message: DeliveredMessage, deps: WorkflowReport
     return
   }
 
-  if (source.kind === 'subagent-settled') {
-    const settledSource = source as SubagentSettledMessageSource
-    const current = currentForChild(deps.state, settledSource.senderSessionId)
+  if (source.kind === 'autoreport-settled') {
+    const settledSource = source as { senderSessionId: SessionId; taskId: string; delegationRevision: number; summary: string }
+    const current = attributableAttempt(deps.state, settledSource)
     if (current === undefined) return
+    if (!isOpenDelegation(current)) return
     const failed: DelegationSnapshot = {
       ...current,
       phase: 'failed',

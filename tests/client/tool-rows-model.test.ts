@@ -402,7 +402,14 @@ describe('workflow graph tool presentation', () => {
   })
   it('shows plan size, graph size and exact wait targets', () => {
     expect(workflowTaskSummary(JSON.stringify({ action: 'plan', tasks: [{ task_id: 'task-a' }, { task_id: 'task-b' }] }), null, zh)).toBe('2 个任务')
-    expect(workflowTaskSummary(JSON.stringify({ action: 'graph' }), JSON.stringify({ tasks: [{ task_id: 'task-a' }] }), en)).toBe('1 tasks')
+    expect(workflowTaskSummary(JSON.stringify({ action: 'graph' }), JSON.stringify({ tasks: [{ task_id: 'task-a' }] }), en)).toBe('1 task')
     expect(workflowTaskSummary(JSON.stringify({ action: 'wait', task_ids: ['task-a', 'task-b'] }), null, en)).toBe('task-a, task-b')
+  })
+  it('separates wait timeout from task completion and summarizes blocked results', () => {
+    expect(workflowTaskSummary(JSON.stringify({ action: 'wait', task_ids: ['task-a'] }), JSON.stringify({ status: 'timeout', pending_task_ids: ['task-a'] }), en))
+      .toBe('Wait timed out (execution is separate) · 1 task pending')
+    expect(workflowTaskSummary(JSON.stringify({ action: 'wait', task_ids: ['task-a', 'task-b'] }), JSON.stringify({ status: 'settled', results: [
+      { readiness: 'completed' }, { readiness: 'dependency_blocked' },
+    ] }), en)).toBe('1 completed · 1 blocked')
   })
 })

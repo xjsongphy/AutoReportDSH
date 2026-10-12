@@ -41,9 +41,11 @@ function resultEvent(callSeq: number, isError: boolean, resultId = 'call-1'): Se
       turn: 1,
       step: 1,
       message: {
-        role: 'user',
+        role: 'tool',
         id: 'm' + String(seq),
-        content: [{ type: 'tool-result', toolCallId: resultId, content: [{ type: 'text', text: 'ok' }], isError }],
+        toolCallId: resultId,
+content: [{ type: 'text', text: 'ok' }],
+isError,
         source: { kind: 'tool', callId: resultId },
       },
     },

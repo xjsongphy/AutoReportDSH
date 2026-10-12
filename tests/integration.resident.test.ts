@@ -167,7 +167,7 @@ async function boot(options: {
   await ctx.plugin(SystemPrompt, {})
   await ctx.plugin(ToolRuntime)
   await ctx.plugin(AgentRegistry)
-  await ctx.plugin(MemorySettings, { doc: { autoreport: {} } })
+  await ctx.plugin(MemorySettings, { doc: { 'autoreport-host': {} } })
   await ctx.plugin(AgentLoop, { agents: [] })
 
   // The resident path under test must never reach the legacy transport plane:
@@ -783,7 +783,7 @@ it.each(['task-1', 'task-2'])('task cancellation leaves legacy queued work on th
   // Older plugin versions admitted multiple tasks to a resident FIFO. Keep
   // recovery/cancellation coverage for those logs without admitting new queues.
   const messageId = await b.runtime.deliverResidentChild(b.mainAgent, child.id, [{ type: 'text', text: 'legacy queued task-2' }],
-    { kind: 'coordinator', form: 'relay', senderSessionId: b.mainAgent.id }, new AbortController().signal)
+    { kind: 'coordinator', form: 'relay', senderSessionId: b.mainAgent.id, taskId: 'task-2', delegationRevision: 2 }, new AbortController().signal)
   b.runtime.commit(b.mainSession, 'autoreport/task', { ...workflow.state.getTask('task-1')!, taskId: 'task-2', subject: 'legacy queued task' })
   b.runtime.commit(b.mainSession, 'autoreport/delegation', {
     ...workflow.state.currentDelegation('task-1')!, taskId: 'task-2', acceptedMessageId: messageId!,
@@ -839,9 +839,9 @@ it('an expired MAIN wait rejects overlapping dispatches and accepts the eventual
     expect(workflow.state.projection().delegations.size).toBe(1)
     expect(workflow.state.currentDelegation('task-1')?.phase).toBe('waiting_for_child')
     expect(workflow.waiters.pendingKeys()).toBe(0)
-    const results = b.mainSession.snapshotEvents().filter(e => e.type === 'tool/result').flatMap(e => e.data.message.content)
+    const results = b.mainSession.snapshotEvents().filter(e => e.type === 'tool/result').map(e => e.data.message)
     expect(JSON.stringify(results)).toContain('execution_pending')
-    expect(results.filter(block => block.type === 'tool-result' && block.isError)).toHaveLength(2)
+    expect(results.filter(block => block.role === 'tool' && block.isError)).toHaveLength(2)
     ready.resolve()
     await until(() => workflow.state.getTask('task-1')?.status === 'completed' && b.mainAgent.status === 'idle' && child.status === 'idle',
       'late structured report settles same revision', 3000)
@@ -864,7 +864,7 @@ function reportEachBriefing(booted: Booted): void {
     const taskId = match[1]!
     const revision = Number(match[2])
     const callId = `auto-${taskId}-${revision}`
-    const reported = options.messages.some(message => message.content.some(block => block.type === 'tool-result' && String(block.toolCallId) === callId))
+    const reported = options.messages.some(message => message.role === 'tool' && String(message.toolCallId) === callId)
     const chunks = reported ? textResponse('specialist done') : toolCallResponse(callId, 'report_workflow', {
       task_id: taskId, delegation_revision: revision, status: 'success', response: `Completed ${taskId}: {N, 1}`, produced_files: [],
     })

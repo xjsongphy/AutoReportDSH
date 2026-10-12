@@ -82,6 +82,12 @@ export function installWorkflowReportTool(childCtx: Context, hostCtx: Context, r
           throw new WorkflowError('WORKFLOW_UNKNOWN_REPORT_TARGET', `unknown task_id/delegation_revision for this child: task ${parsed.value.task_id}, revision ${parsed.value.delegation_revision}, child ${(exec.agent as Agent).id}. Use your current Main briefing; the task/revision must belong to this child.`,
             { task_id: parsed.value.task_id, delegation_revision: parsed.value.delegation_revision, child_session_id: String((exec.agent as Agent).id), known_tasks: owner === undefined ? [] : [...owner.runtime.state.projection().tasks.values()].filter(task => owner.runtime.state.currentDelegation(task.taskId)?.childSessionId === (exec.agent as Agent).id).map(task => ({ task_id: task.taskId, delegation_revision: owner.runtime.state.currentDelegation(task.taskId)?.delegationRevision })) })
         }
+        const activeExecution = typeof runtime?.executionForChild === 'function'
+          ? runtime.executionForChild((exec.agent as Agent).id)
+          : undefined
+        if (activeExecution !== undefined && (activeExecution.taskId !== parsed.value.task_id || activeExecution.delegationRevision !== parsed.value.delegation_revision)) {
+          throw new WorkflowError('WORKFLOW_STALE_REPORT', `This child is currently executing ${activeExecution.taskId} revision ${activeExecution.delegationRevision}; the report claims ${parsed.value.task_id} revision ${parsed.value.delegation_revision}. Use the task ID and revision from the current briefing. No report was delivered.`, { task_id: parsed.value.task_id, delegation_revision: parsed.value.delegation_revision, active_task_id: activeExecution.taskId, active_delegation_revision: activeExecution.delegationRevision })
+        }
         const obsolete = staleDependencyReason(owner.runtime.state, attempt)
         if (obsolete !== undefined || attempt.phase === 'stale' || attempt.phase === 'cancelled') throw new WorkflowError('WORKFLOW_STALE_REPORT', obsolete ?? `Task ${attempt.taskId} revision ${attempt.delegationRevision} is ${attempt.phase}: ${attempt.reason ?? 'this execution is no longer current'}. It cannot complete this task; MAIN must reopen/redispatch if work is still needed.`, { task_id: attempt.taskId, delegation_revision: attempt.delegationRevision, phase: attempt.phase, dependency_versions: attempt.dependencyVersions ?? {} })
         const canonical = {

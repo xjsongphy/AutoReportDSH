@@ -149,7 +149,7 @@ schema 默认值
 
 ```text
 $DSH_HOME/
-├── .agent-presets/autoreport/     已安装的 user preset
+├── profiles/web/cordis.patch.yml 插件的实时配置
 ├── profiles/node_modules/dsh-autoreport
 └── autoreport/
     ├── venv/                      AutoReport 托管的 Python（可选）
@@ -172,7 +172,7 @@ $DSH_HOME/
 ```text
 AutoReportDSH/
 ├── cordis.template.yml    host + report-router overlay
-├── presets/autoreport/    user preset（id = 目录名）
+├── presets/autoreport/    原生 preset 的插件组合源（id = autoreport）
 ├── resources/             捆绑的 persona、skills、LaTeX 模板
 ├── scripts/               preset 安装、资源同步、client 构建
 ├── src/

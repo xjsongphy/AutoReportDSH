@@ -239,7 +239,7 @@ export class WorkflowCoordinator {
         if (signal.aborted) return
         if (error instanceof WorkflowError && ['WORKFLOW_ROLE_BUSY', 'WORKFLOW_TASK_CHANGED', 'WORKFLOW_DEPENDENCY_NOT_READY'].includes(error.code)) continue
         const latest = requireTask(live.state, id)
-        this.runtime.commit(parent.session, 'autoreport/task', { ...latest, status: 'failed', failedReason: error instanceof Error ? error.message : String(error), revision: latest.revision + 1 })
+        if (latest.status !== 'failed') this.runtime.commit(parent.session, 'autoreport/task', { ...latest, status: 'failed', failedReason: error instanceof Error ? error.message : String(error), revision: latest.revision + 1 })
       }
     }
     const all = (live.state.projection().meta?.scheduler?.taskIds ?? []).map(id => requireTask(live.state, id))

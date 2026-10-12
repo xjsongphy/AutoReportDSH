@@ -399,11 +399,25 @@ describe('report observer', () => {
     seedWaiting(session, state)
     const event = session.append('user/message', createUserMessage({
       content: [{ type: 'text', text: 'not-json' }],
-      source: { kind: 'subagent-report', form: 'relay', senderSessionId: SessionId('child-da') },
+      source: { kind: 'subagent-report', form: 'relay', senderSessionId: SessionId('child-da'), taskId: 'task-7', delegationRevision: 1 },
     }), { surfaceOp: 'append' })
     observe(session, state, waiters, event)
     expect(state.getTask('task-7')?.status).toBe('failed')
     expect(state.getTask('task-7')?.failedReason).toMatch(/invalid workflow report/)
+  })
+
+  it('does not associate an unversioned malformed child message with the latest task', () => {
+    const session = sessionIn(WORKSPACE, 'parent')
+    const state = workflowState(session)
+    const waiters = new WaiterRegistry()
+    seedWaiting(session, state)
+    const event = session.append('user/message', createUserMessage({
+      content: [{ type: 'text', text: 'invalid late output' }],
+      source: { kind: 'subagent-report', form: 'relay', senderSessionId: SessionId('child-da') },
+    }), { surfaceOp: 'append' })
+    observe(session, state, waiters, event)
+    expect(state.currentDelegation('task-7')?.phase).toBe('waiting_for_child')
+    expect(state.getTask('task-7')?.status).toBe('running')
   })
 
   it('does not change the task when a stale report arrives', () => {
@@ -435,7 +449,7 @@ describe('report observer', () => {
     const pending = waiters.wait('task-7#1', 5_000)
     const event = session.append('user/message', createUserMessage({
       content: [{ type: 'text', text: 'not-json' }],
-      source: { kind: 'subagent-report', form: 'relay', senderSessionId: SessionId('child-da') },
+      source: { kind: 'subagent-report', form: 'relay', senderSessionId: SessionId('child-da'), taskId: 'task-7', delegationRevision: 1 },
     }), { surfaceOp: 'append' })
     observe(session, state, waiters, event)
     expect(state.currentDelegation('task-7')?.phase).toBe('failed')
@@ -452,16 +466,86 @@ describe('report observer', () => {
     const event = session.append('user/message', createUserMessage({
       content: [{ type: 'text', text: 'child ended' }],
       source: {
-        kind: 'subagent-settled',
+        kind: 'autoreport-settled',
         form: 'notice',
         summary: 'child cancelled',
         senderSessionId: SessionId('child-da'),
+        taskId: 'task-7',
+        delegationRevision: 1,
       },
     }), { surfaceOp: 'append' })
     observe(session, state, waiters, event)
     expect(state.currentDelegation('task-7')?.phase).toBe('failed')
     expect(state.currentDelegation('task-7')?.reason).toBe('child cancelled')
     await expect(pending).resolves.toMatchObject({ status: 'failed', response: 'child cancelled' })
+  })
+
+  it('ignores an unversioned upstream settlement notice for a reused child', () => {
+    const session = sessionIn(WORKSPACE, 'parent')
+    const state = workflowState(session)
+    const waiters = new WaiterRegistry()
+    seedWaiting(session, state, 2)
+    const event = session.append('user/message', createUserMessage({
+      content: [{ type: 'text', text: 'old turn ended' }],
+      source: { kind: 'subagent-settled', form: 'notice', summary: 'old turn failed', senderSessionId: SessionId('child-da') },
+    }), { surfaceOp: 'append' })
+    observe(session, state, waiters, event)
+    expect(state.currentDelegation('task-7')).toMatchObject({ delegationRevision: 2, phase: 'waiting_for_child' })
+    expect(state.getTask('task-7')?.status).toBe('running')
+  })
+
+  it('does not let a malformed old execution fail the next revision on its reused child', () => {
+    const session = sessionIn(WORKSPACE, 'parent')
+    const state = workflowState(session)
+    const waiters = new WaiterRegistry()
+    const first = seedWaiting(session, state, 1)
+    state.apply(appendWorkflowEvent(session, 'autoreport/delegation', { ...first, phase: 'cancelled', settledAt: 20 }))
+    state.apply(appendWorkflowEvent(session, 'autoreport/task', {
+      ...state.getTask('task-7')!, status: 'running', revision: 2, latestDelegationRevision: 2,
+    }))
+    state.apply(appendWorkflowEvent(session, 'autoreport/delegation', { ...first, delegationRevision: 2, phase: 'waiting_for_child', dispatchedAt: 21 }))
+    const event = session.append('user/message', createUserMessage({
+      content: [{ type: 'text', text: 'not-json' }],
+      source: { kind: 'subagent-report', form: 'relay', senderSessionId: SessionId('child-da'), taskId: 'task-7', delegationRevision: 1 },
+    }), { surfaceOp: 'append' })
+
+    observe(session, state, waiters, event)
+    expect(state.currentDelegation('task-7')).toMatchObject({ delegationRevision: 2, phase: 'waiting_for_child' })
+    expect(state.getTask('task-7')).toMatchObject({ status: 'running', latestDelegationRevision: 2 })
+  })
+
+  it('keeps a failed revision terminal when a valid success arrives late, but accepts the next revision', () => {
+    const session = sessionIn(WORKSPACE, 'parent')
+    const state = workflowState(session)
+    const waiters = new WaiterRegistry()
+    seedWaiting(session, state)
+    const invalid = session.append('user/message', createUserMessage({
+      content: [{ type: 'text', text: 'not-json' }],
+      source: { kind: 'subagent-report', form: 'relay', senderSessionId: SessionId('child-da'), taskId: 'task-7', delegationRevision: 1 },
+    }), { surfaceOp: 'append' })
+    observe(session, state, waiters, invalid)
+    const lateSuccess = session.append('user/message', createUserMessage({
+      content: [{ type: 'text', text: JSON.stringify({ task_id: 'task-7', delegation_revision: 1, status: 'success', block_type: null, response: 'late success', produced_files: [] }) }],
+      source: { kind: 'subagent-report', form: 'relay', senderSessionId: SessionId('child-da'), taskId: 'task-7', delegationRevision: 1 },
+    }), { surfaceOp: 'append' })
+    observe(session, state, waiters, lateSuccess)
+    expect(state.getTask('task-7')).toMatchObject({ status: 'failed', failedReason: expect.stringMatching(/invalid workflow report/) })
+    expect(state.currentDelegation('task-7')).toMatchObject({ phase: 'stale', report: { response: 'late success' } })
+
+    const failedTask = state.getTask('task-7')!
+    const { failedReason: _failed, ...retryBase } = failedTask
+    state.apply(appendWorkflowEvent(session, 'autoreport/task', {
+      ...retryBase, status: 'running', revision: failedTask.revision + 1, latestDelegationRevision: 2,
+    }))
+    const first = state.delegationAt('task-7', 1)!
+    state.apply(appendWorkflowEvent(session, 'autoreport/delegation', { ...first, delegationRevision: 2, phase: 'waiting_for_child', dispatchedAt: 22 }))
+    const retry = session.append('user/message', createUserMessage({
+      content: [{ type: 'text', text: JSON.stringify({ task_id: 'task-7', delegation_revision: 2, status: 'success', block_type: null, response: 'retry succeeded', produced_files: [] }) }],
+      source: { kind: 'subagent-report', form: 'relay', senderSessionId: SessionId('child-da'), taskId: 'task-7', delegationRevision: 2 },
+    }), { surfaceOp: 'append' })
+    observe(session, state, waiters, retry)
+    expect(state.currentDelegation('task-7')?.phase).toBe('completed')
+    expect(state.getTask('task-7')?.status).toBe('completed')
   })
 
   it('delivers the canonical produced_files sent to MAIN even when a later artifact lands before folding', async () => {

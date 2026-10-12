@@ -395,7 +395,7 @@ export async function assemble(options: AssembleOptions = {}): Promise<Assembled
   // A live host always serves the settings namespace; mounting one here keeps
   // the assembled path honest for `/init` (which records the choice) and for
   // every settings-driven behavior, without touching a developer's document.
-  await ctx.plugin(MemorySettings, { doc: { autoreport: {
+  await ctx.plugin(MemorySettings, { doc: { 'autoreport-host': {
     ...(options.workspaceLanguage === undefined ? {} : { workspaceLanguages: { [resolve(workspaceRoot)]: options.workspaceLanguage } }),
     ...(options.pythonExecutable === undefined ? {} : {
       pythonExecutable: options.pythonExecutable,
@@ -519,14 +519,11 @@ export async function execute(
       turn: 1,
       step: callCounter,
       message: {
-        role: 'user',
+        role: 'tool',
         id: `it-msg-${callCounter}`,
-        content: [{
-          type: 'tool-result',
-          toolCallId: String(callId),
-          content: result.content,
-          isError: result.isError ?? false,
-        }],
+        toolCallId: String(callId),
+content: result.content,
+isError: result.isError ?? false,
         source: { kind: 'tool', callId: String(callId) },
       },
     }, { surfaceOp: 'append', sourceEventSeqs: [callSeq] })
@@ -673,17 +670,14 @@ export function loadSkill(assembled: Assembled, child: { childSession: Session }
     turn,
     step,
     message: {
-      role: 'user',
+      role: 'tool',
       id: `m-${callId}`,
-      content: [{
-        type: 'tool-result',
-        toolCallId: callId,
-        content: [{
+      toolCallId: callId,
+content: [{
           type: 'text',
           text: renderSkillContent({ name: skill.name, provider: 'runtime', content: skill.content }),
         }],
-        isError: false,
-      }],
+isError: false,
       source: { kind: 'tool', callId },
     },
   }, { surfaceOp: 'append' })
@@ -731,7 +725,7 @@ export function userMessages(session: Session): UserMessage[] {
 export function turnGuardSteers(session: Session): UserMessage[] {
   return userMessages(session).filter(message => {
     const source = message.source
-    return source.kind === 'plugin' && source.plugin === TURN_GUARD_PLUGIN
+    return source.kind === 'autoreport-notice'
   })
 }
 

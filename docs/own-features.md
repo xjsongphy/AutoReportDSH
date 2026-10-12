@@ -57,7 +57,7 @@ platform.
   task cancellation, and search limits are tracked
   in [Role filesystem, delivery, and cancellation decisions](role-filesystem-decisions.md).
 - **Settings integration:** report language, wait limits, Python interpreter,
-  and specialist-model selection are stored in DSH's `autoreport` user-settings
+  and specialist-model selection are stored in DSH's `autoreport-host` configuration
   namespace; DSH retains ownership of provider credentials and model execution.
 - **Web settings UI:** the plugin contributes only its own configuration page,
   on its bundle's page in the Plugins page, and does not replace the DSH
@@ -264,7 +264,7 @@ is retired. Activation self-checks the wrap and fails loud rather than silently
 running a role on the unconfined root.
 
 The plugin is verified against one upstream DSH release rather than bound to it:
-the pin means "verified", not "exclusive", and other builds warn instead of
+the plugin supports only DSH 0.2.0-rc.2 and rejects other detected versions instead of
 refusing. The wiring, the retired seams, and the nightly upstream canary are in
 [`docs/dependencies.md`](dependencies.md).
 
@@ -308,9 +308,14 @@ rejected and concurrent dispatches do not create phantom tasks or revisions.
 Structured report JSON is parsed separately from its human summary; historical
 mixed-text relays also accept braces inside quoted response strings. The
 real-loop regression covers waiting expiry, rejected duplicate dispatches,
-and eventual successful settlement of the original revision. Compute bash
-enables `pipefail`, preserving an upstream failure when output is filtered
-through `head` or `tail`.
+and eventual successful settlement of the original revision. Every resident
+briefing and runtime settlement carries its task ID and delegation revision;
+malformed or end-of-turn messages without verifiable execution identity cannot
+settle whichever task happens to be newest on that child. Failed revisions stay
+terminal when a later success arrives; retrying uses a new revision. Compute
+bash enables `pipefail`, preserving an upstream failure when output is filtered
+through `tail`. `head` may close the pipe early and cause an upstream `SIGPIPE`
+(commonly exit code 141), so use it only for intentional truncation.
 
 ### Durable state lives in the plugin's own log
 
@@ -383,7 +388,7 @@ Agent driver to become idle before reusing that role.
 | `read` | Optional `task_id` | Inspect one task or all tasks, including result version and execution revision. |
 | `run` | Optional `task_ids` | Schedule that scope and its prerequisite closure; no IDs selects the whole plan. An enabled scope is extended; pause before replacing it. |
 | `pause` | None | Stop future admission, preserving admitted specialist executions. |
-| `wait` | Nonempty `task_ids`, optional `mode: any/all`, `timeout_ms` | Await results without dispatching; return settled/pending targets, per-target outcomes and `all_succeeded`. |
+| `wait` | Nonempty `task_ids`, optional `mode: any/all`, `timeout_ms` | Await results without dispatching; return settled/pending targets, per-target outcomes and `all_succeeded`. A wait timeout ends only the wait; execution state is reported separately. |
 | `update` | `task_id`, one or more of `steps`, `subject`, `prompt`, `context`, `dependencies`; optional `expected_revision` | Validate a complete edit before saving. Running/completed instructions cannot be changed; checklists can. |
 | `cancel` | `task_id`, optional `expected_revision` | Cancel an unfinished task and its active or queued execution. |
 | `reopen` | `task_id`, optional `expected_revision` | Make completed/blocked/failed/cancelled work pending, pause admission for edits, invalidate dependent results and stop obsolete attempts. |

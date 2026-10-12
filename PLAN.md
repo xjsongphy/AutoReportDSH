@@ -382,11 +382,16 @@ success. The tool validates path normalization and report size before serializin
 canonical envelope to `ctx.subagents.reportFrom()`.
 
 A parent observer validates the envelope, correlates it by `(task_id, delegation_revision)`,
-records its DSH `MessageId`, and folds it into the delegation state. A report for an older
-revision is retained as stale evidence and cannot complete the current revision. Duplicate
+records its DSH `MessageId`, and folds it into the delegation state. Resident briefings,
+structured report relays, and plugin-owned turn-settlement notices carry this execution
+identity. Unversioned malformed messages and upstream settlement notices are not associated
+with the newest task by child identity alone. A report for an older revision is retained as
+stale evidence and cannot complete the current revision. Duplicate
 transport delivery is idempotent by report message identity. The first valid terminal
 report (`success` → completed, `blocked` → blocked) wins; later deliveries for that
-attempt, including a different DSH message id, are ignored. New wait timeouts leave
+attempt, including a different DSH message id, are ignored. `failed`, `cancelled`, and
+`stale` attempts are terminal: late reports may be retained as stale evidence but cannot
+change task completion; recovery creates a new delegation revision. New wait timeouts leave
 `waiting_for_child` unchanged; legacy `timed_out` records also remain open and do
 not authorize redispatch. A late valid report may still complete that revision. A malformed
 report (`failed`) may be overwritten by a later valid envelope. Cold load replays
@@ -394,8 +399,9 @@ already-logged `user/message` / inbox-splice deliveries through
 `recoverWorkflowReports` so a crash after DSH persisted the parent message but before
 `autoreport/delegation` is repaired. `report_workflow` returns the existing
 `reportMessageId` without calling `reportFrom` again when that attempt already has an
-accepted report. Missing, malformed, or unrecognized reports become explicit quality
-failures, never success.
+accepted report. A malformed report becomes a quality failure only when its transport has
+verifiable execution identity; unassociated malformed messages remain in the session log
+without settling a task. Missing, malformed, or unrecognized reports never become success.
 
 The child report does not terminate the child turn. The child persona receives the
 AutoReport-specific instruction to report with the replacement tool before finishing.

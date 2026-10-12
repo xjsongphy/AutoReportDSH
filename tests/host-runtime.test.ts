@@ -82,7 +82,7 @@ describe('host workflow runtime', () => {
     const ctx = new Context()
     await ctx.plugin(MemorySettings, {
       doc: {
-        autoreport: {
+        'autoreport-host': {
           defaultReportLanguage: 'typst',
           specialistModel: { provider: 'specialist', model: 'reasoning-model', reasoningEffort: 'high' },
           delegationWaitTimeoutMs: 12_345,
@@ -91,7 +91,7 @@ describe('host workflow runtime', () => {
     })
     const runtime = createRuntime(ctx, { ...CONFIG, workspaceRoot: root }, { settingsHome: home })
     await vi.waitFor(() => {
-      const section = ctx.settings.describe().find(entry => entry.ns === 'autoreport')
+      const section = ctx.settings.describe().find(entry => entry.ns === 'autoreport-host')
       expect(section?.value).toMatchObject({ defaultReportLanguage: 'typst', delegationWaitTimeoutMs: 12_345 })
     })
     const session = rootSession('main-user-settings', AUTOREPORT_MAIN_PRESET)
@@ -109,10 +109,10 @@ describe('host workflow runtime', () => {
     const home = mkdtempSync(join(tmpdir(), 'autoreport-home-'))
     tempDirs.push(root, home)
     const ctx = new Context()
-    await ctx.plugin(MemorySettings, { doc: { autoreport: { workspaceLanguages: { [resolve(root)]: 'typst' } } } })
+    await ctx.plugin(MemorySettings, { doc: { 'autoreport-host': { workspaceLanguages: { [resolve(root)]: 'typst' } } } })
     const runtime = createRuntime(ctx, { ...CONFIG, workspaceRoot: root }, { settingsHome: home })
     await vi.waitFor(() => {
-      expect(ctx.settings.describe().some(entry => entry.ns === 'autoreport')).toBe(true)
+      expect(ctx.settings.describe().some(entry => entry.ns === 'autoreport-host')).toBe(true)
     })
     const session = rootSession('main', AUTOREPORT_MAIN_PRESET)
     runtime.maybeInitialize(session)
@@ -238,6 +238,10 @@ describe('host workflow runtime', () => {
       createdAt: Date.now(),
       parentSession: session.id,
     })
+    ctx.emit('session/event', child, child.append('user/message', createUserMessage({
+      content: [{ type: 'text', text: 'AutoReport task task-1, delegation revision 1\n\nGoal: theory' }],
+      source: { kind: 'coordinator', form: 'relay', senderSessionId: session.id, taskId: 'task-1', delegationRevision: 1 },
+    }), { surfaceOp: 'append' }))
     ctx.emit('session/event', child, child.append('turn/end', {
       turn: 1,
       reason: { kind: 'error', error: { message: 'malformed prompt variable reference', code: 'UNKNOWN' } },
@@ -513,13 +517,13 @@ describe('host workflow runtime', () => {
     const root = mkdtempSync(join(tmpdir(), 'autoreport-runtime-'))
     tempDirs.push(root)
     const ctx = new Context()
-    await ctx.plugin(MemorySettings, { doc: { autoreport: {} } })
+    await ctx.plugin(MemorySettings, { doc: { 'autoreport-host': {} } })
     const runtime = createRuntime(ctx, { ...CONFIG, workspaceRoot: root })
     // The section's inject is asynchronous, and the RUNTIME is what installs it:
     // production reads a settled source, so the phantom route is in force
     // before the child is provisioned.
     await vi.waitFor(() => {
-      expect(ctx.settings.describe().some(entry => entry.ns === 'autoreport')).toBe(true)
+      expect(ctx.settings.describe().some(entry => entry.ns === 'autoreport-host')).toBe(true)
     })
     const session = rootSession('resident-phantom-route-main', AUTOREPORT_MAIN_PRESET, root)
     const mainAgent = { id: session.id, session, options: {}, ctx: { get: () => undefined } } as unknown as Agent
@@ -548,7 +552,7 @@ describe('host workflow runtime', () => {
     } as never)
     await runtime.ensureResidentRole(mainAgent, 'THEORY')
 
-    expect(runtime.currentUserSettings().specialistModel).toEqual({})
+    expect(runtime.currentUserSettings().specialistModel).toBeUndefined()
     expect(created[0]?.agentOptions).toMatchObject({
       provider: 'deepseek-official',
       model: 'deepseek-flash',
@@ -648,9 +652,10 @@ describe('host workflow runtime', () => {
       data: {
         turn: 1, step: 1,
         message: {
-          role: 'user',
+          role: 'tool',
           id: 'm1',
-          content: [{ type: 'tool-result', toolCallId: 'c1', content: [{ type: 'text', text: marker }] }],
+          toolCallId: 'c1',
+content: [{ type: 'text', text: marker }],
           source: { kind: 'tool', callId: 'c1' },
         },
       },
@@ -764,7 +769,7 @@ describe('per-workspace language switching', () => {
   /** The runtime installs its settings section from an inject callback, as a live host does. */
   async function waitForSettingsSection(ctx: Context): Promise<void> {
     await vi.waitFor(() => {
-      expect(ctx.settings.describe().some(entry => entry.ns === 'autoreport')).toBe(true)
+      expect(ctx.settings.describe().some(entry => entry.ns === 'autoreport-host')).toBe(true)
     })
   }
 
@@ -773,7 +778,7 @@ describe('per-workspace language switching', () => {
     const home = mkdtempSync(join(tmpdir(), 'autoreport-home-'))
     tempDirs.push(root, home)
     const ctx = new Context()
-    await ctx.plugin(MemorySettings, { doc: { autoreport: { workspaceLanguages: { [resolve(root)]: 'typst' } } } })
+    await ctx.plugin(MemorySettings, { doc: { 'autoreport-host': { workspaceLanguages: { [resolve(root)]: 'typst' } } } })
     const runtime = createRuntime(ctx, { ...CONFIG, workspaceRoot: root }, { settingsHome: home })
     await waitForSettingsSection(ctx)
     const session = rootSession('main-adopt', AUTOREPORT_MAIN_PRESET)
@@ -788,7 +793,7 @@ describe('per-workspace language switching', () => {
     const home = mkdtempSync(join(tmpdir(), 'autoreport-home-'))
     tempDirs.push(root, home)
     const ctx = new Context()
-    await ctx.plugin(MemorySettings, { doc: { autoreport: {} } })
+    await ctx.plugin(MemorySettings, { doc: { 'autoreport-host': {} } })
     const runtime = createRuntime(ctx, { ...CONFIG, workspaceRoot: root }, { settingsHome: home })
     await waitForSettingsSection(ctx)
     const session = rootSession('main-switch', AUTOREPORT_MAIN_PRESET)

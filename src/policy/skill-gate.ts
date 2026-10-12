@@ -134,15 +134,15 @@ export class SkillLoadTracker {
     }
     if (event.type === 'tool/result') {
       const open = this.openSkillCalls.get(sessionId)
-      const block = event.data.message.content[0]
-      const callId = String(block.toolCallId)
+      const message = event.data.message
+      const callId = String(message.toolCallId)
       const name = open?.get(callId)
       if (name === undefined) return
       open?.delete(callId)
       // A denied or failed call is not a load; the rendered marker is what the
       // model actually received.
-      if (event.data.error !== undefined || block.isError === true) return
-      if (markedSkillNames(block.content).includes(name)) this.markLoaded(sessionId, name)
+      if (event.data.error !== undefined || message.isError === true) return
+      if (markedSkillNames(message.content).includes(name)) this.markLoaded(sessionId, name)
       return
     }
     if (event.type === 'user/message') {

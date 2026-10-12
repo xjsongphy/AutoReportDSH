@@ -5,10 +5,10 @@ import { Service, type Context } from '@deepseek-ai/cordis'
 import type { Agent, AgentHandle } from '@deepseek-ai/dsh-agent'
 import { PERSONA_PREFIX_SECTION } from '@deepseek-ai/dsh-system-prompt'
 import { boundContextSummary, createUserMessage } from '@deepseek-ai/dsh-llm'
-import type { ContentBlock, LlmFailure, MessageId } from '@deepseek-ai/dsh-llm'
+import type { ContentBlock, MessageId } from '@deepseek-ai/dsh-llm'
 import { SessionId, type AgentCancelCause, type Session, type SessionEvent } from '@deepseek-ai/dsh-session'
 import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
-import type { SettingsProvider } from '@deepseek-ai/dsh-settings'
+import type { SettingsForms } from '@deepseek-ai/dsh-settings'
 import {
   childSessionMeta,
   resolveChildAgentOptions,
@@ -58,12 +58,10 @@ import type { WorkspaceLanguageStore } from './workspace/command.js'
 import { detectPythonEnvironments, missingAnalysisPackages, type PythonDetectOptions } from './python-detect.js'
 import { detectMineruStatus } from './mineru-status.js'
 import {
-  AUTO_REPORT_USER_SETTINGS_SCHEMA,
   AUTOREPORT_SETTINGS_NAMESPACE,
   autoReportUserSettingsBase,
   childAgentOptions,
   resolveWorkflowSettings,
-  validatePythonExecutableSetting,
   type AutoReportUserSettings,
   type WorkflowSettingsSnapshot,
 } from './settings.js'
@@ -92,27 +90,6 @@ const DEFAULT_CONFIG: Config = {
 export interface ParentWorkflowRuntime {
   readonly state: WorkflowState
   readonly waiters: WaiterRegistry
-}
-
-/**
- * The runtime-owned notice a failed child turn produces. The `subagent-settled`
- * source is deliberate: the parent-message observer already folds that kind
- * into a failed delegation and settles waiters, so the error reaches Main
- * through one tested path instead of a second fold.
- * @param childId - the failed child session id.
- * @param summary - one-line account including the turn error message.
- * @returns the durable user-message representation.
- */
-function settlementNotice(childId: SessionId, summary: string): ReturnType<typeof createUserMessage> {
-  return createUserMessage({
-    content: [{ type: 'text', text: summary }],
-    source: {
-      kind: 'subagent-settled',
-      form: 'notice',
-      summary: boundContextSummary(summary),
-      senderSessionId: childId,
-    },
-  })
 }
 
 interface PlotterModelRoute {
@@ -240,6 +217,8 @@ export default class AutoReportWorkflowRuntime extends Service {
   private readonly residentHandles = new Map<string, Map<SpecialistRole, AgentHandle>>()
   /** Published agents indexed independently of the scoped Agent registry. */
   private readonly liveAgents = new Map<string, Agent>()
+  /** Execution identity captured from the exact coordinator message delivered to each resident. */
+  private readonly activeChildDelegations = new Map<string, { taskId: string; delegationRevision: number }>()
   /** Stop background messages from waking MAIN until a new foreground input. */
   private readonly stoppedParents = new Set<string>()
   /** Cancels already accounted synchronously must not cancel a later redispatch at turn/end. */
@@ -249,7 +228,7 @@ export default class AutoReportWorkflowRuntime extends Service {
   /** Current DSH-resolved user defaults; each new workflow snapshots this once. */
   private userSettingsSource: () => AutoReportUserSettings
   /** Settings provider when one is mounted; absent in settings-less test contexts. */
-  private settingsService: SettingsProvider | undefined
+  private settingsService: SettingsForms | undefined
   /** Last user settings this runtime observed, for diffing one change into a switch. */
   private previousUserSettings: AutoReportUserSettings | undefined
 
@@ -278,27 +257,64 @@ export default class AutoReportWorkflowRuntime extends Service {
       mineruStatus,
     )
     this.userSettingsSource = () => userSettingsBase
-    // Master dsh moved the section installer onto the settings service itself;
-    // the inject defers registration until a provider is mounted (pure test
-    // contexts without settings keep working).
     ctx.inject(['settings'], sctx => {
       this.settingsService = sctx.settings
-      sctx.settings.installSection(
-        ctx,
-        AUTOREPORT_SETTINGS_NAMESPACE,
-        AUTO_REPORT_USER_SETTINGS_SCHEMA,
-        userSettingsBase,
-        {
-          setSource: current => { this.userSettingsSource = current },
-          validate: value => validatePythonExecutableSetting(value, dshHome),
-          // Field values are still read only when a workflow is created; the
-          // one change that must reach the workspace on disk is a workspace's
-          // report language, which only the host can act on.
-          onChange: () => { this.observeUserSettingsChange() },
-        },
-      )
+      sctx.effect(() => sctx.settings.configure({ auto: false }, ctx.fiber))
+      this.userSettingsSource = () => {
+        const value = sctx.settings.describe().find(row => row.ns === AUTOREPORT_SETTINGS_NAMESPACE)?.value
+        return { ...userSettingsBase, ...(value as Partial<AutoReportUserSettings> | undefined) }
+      }
+      this.observeUserSettingsChange()
+      sctx.on('settings/document-updated', ns => {
+        if (ns === AUTOREPORT_SETTINGS_NAMESPACE) this.observeUserSettingsChange()
+      })
     })
     ctx.on('session/event', (session, event) => {
+      if (session.header.parentSession !== undefined) {
+        const recordDispatch = (message: { source: { kind: string }; content?: readonly ContentBlock[] }): void => {
+          if (this.roleRegistry.lookup(session.id) === undefined) return
+          let execution: { taskId: string; delegationRevision: number } | undefined
+          if (message.source.kind === 'coordinator') {
+            const source = message.source as CoordinatorMessageSource
+            execution = { taskId: source.taskId, delegationRevision: source.delegationRevision }
+          } else {
+            // The first resident prompt is created by DSH's startContinuable API,
+            // which owns its message source. Recover the explicit identity already
+            // present in the plugin-authored briefing, then verify it against the
+            // durable attempt before using it for any settlement.
+            const text = message.content?.filter((block): block is Extract<ContentBlock, { type: 'text' }> => block.type === 'text').map(block => block.text).join('\n') ?? ''
+            const match = /^AutoReport task (task-[A-Za-z0-9._-]{1,127}), delegation revision ([1-9][0-9]*)\s*$/mu.exec(text)
+            if (match?.[1] !== undefined && match[2] !== undefined && Number.isSafeInteger(Number(match[2]))) {
+              execution = { taskId: match[1], delegationRevision: Number(match[2]) }
+            }
+          }
+          if (execution === undefined) return
+          const attempt = this.workflowForChild(session.id)?.runtime.state.delegationAt(execution.taskId, execution.delegationRevision)
+          if (attempt?.childSessionId !== session.id || !isOpenDelegation(attempt)) return
+          this.activeChildDelegations.set(String(session.id), execution)
+        }
+        if (event.type === 'user/message') recordDispatch(event.data)
+        if (event.type === 'agent/inbox/spliced') {
+          for (const message of event.data.inserted) recordDispatch(message)
+        }
+        if (event.type === 'turn/end') {
+          const reason = event.data.reason
+          if (reason?.kind === 'aborted') {
+            const cause = reason.reason
+            const agent = this.liveAgents.get(String(session.id))
+            const accounted = agent !== undefined && this.accountedCancels.delete(agent)
+            if (!accounted && (cause.kind !== 'hook' || cause.reason !== TASK_CANCEL_REASON)) {
+              this.cancelChildDelegations(session.id, 'subagent turn interrupted')
+            }
+          } else {
+            const detail = reason?.kind === 'error'
+              ? `turn failed: ${reason.error.message}`
+              : 'turn ended without a valid workflow report'
+            this.notifyChildTurnFailure(session, detail)
+          }
+          this.activeChildDelegations.delete(String(session.id))
+        }
+      }
       // Coexistence gate (PLAN.md compatibility invariant): sessions that did
       // not select AutoReport stay stock — no state, no initialization, no
       // observation. "Unknown" means "not our session", never "invalid one".
@@ -315,17 +331,6 @@ export default class AutoReportWorkflowRuntime extends Service {
       // the owning parent; the observer's existing `subagent-settled` fold
       // turns it into a failed delegation, settles waiters, and surfaces the
       // error to Main in both wait modes.
-      if (event.type === 'turn/end' && event.data.reason?.kind === 'error') {
-        void this.notifyChildTurnError(session, event.data.reason.error)
-      }
-      if (event.type === 'turn/end' && event.data.reason?.kind === 'aborted') {
-        const cause = event.data.reason.reason
-        const agent = this.liveAgents.get(String(session.id))
-        const accounted = agent !== undefined && this.accountedCancels.delete(agent)
-        if (!accounted && (cause.kind !== 'hook' || cause.reason !== TASK_CANCEL_REASON)) {
-          this.cancelChildDelegations(session.id, 'subagent turn interrupted')
-        }
-      }
       // Continuable children have a parent; AutoReport workflow facts live only on Main.
       if (session.header.parentSession !== undefined) return
       // The workflow state is NOT folded from this stream: AutoReport records
@@ -363,6 +368,7 @@ export default class AutoReportWorkflowRuntime extends Service {
     }, { global: true })
     ctx.on('agent/disposed', ({ agent }) => {
       this.coordinator.forgetParent(agent)
+      this.activeChildDelegations.delete(String(agent.id))
       this.liveAgents.delete(String(agent.id))
       this.forgetResidentAgent(agent)
     }, { global: true })
@@ -584,6 +590,7 @@ export default class AutoReportWorkflowRuntime extends Service {
     const parentId = entry.binding.parentSessionId
     const agents = this.ctx.get('agents') as { get?: (id: SessionId) => Agent | undefined } | undefined
     const parent = agents?.get?.(parentId)
+    const execution = this.activeChildDelegations.get(String(child.id))
     const message = createUserMessage({
       content: [
         { type: 'text', text: `Background subagent ${child.id} reported:` },
@@ -593,6 +600,7 @@ export default class AutoReportWorkflowRuntime extends Service {
         kind: 'subagent-report',
         form: 'relay',
         senderSessionId: child.id,
+        ...(execution === undefined ? {} : execution),
       } satisfies SubagentReportMessageSource,
     })
     if (parent !== undefined) {
@@ -1139,6 +1147,12 @@ export default class AutoReportWorkflowRuntime extends Service {
     return { session, runtime: this.forSession(session) }
   }
 
+  /** Exact task/revision bound to the resident child's current dispatch, when known. */
+  executionForChild(childId: SessionId): { taskId: string; delegationRevision: number } | undefined {
+    const execution = this.activeChildDelegations.get(String(childId))
+    return execution === undefined ? undefined : { ...execution }
+  }
+
   /**
    * Workflow projection for a MAIN session id or a bound specialist child id.
    * Specialist lookups return the owning Main projection (tasks live there).
@@ -1193,23 +1207,37 @@ export default class AutoReportWorkflowRuntime extends Service {
    * @param child - the failed child session.
    * @param failure - the structured turn failure from its `turn/end`.
    */
-  private notifyChildTurnError(child: Session, failure: LlmFailure): void {
+  private notifyChildTurnFailure(child: Session, detail: string): void {
     const owned = this.roleRegistry.lookup(child.id)
     if (owned === undefined) return
+    const execution = this.activeChildDelegations.get(String(child.id))
+    if (execution === undefined) return
+    const owner = this.workflowForChild(child.id)
+    const attempt = owner?.runtime.state.delegationAt(execution.taskId, execution.delegationRevision)
+    if (attempt === undefined || !isOpenDelegation(attempt)) return
     const parentSessionId = owned.binding.parentSessionId
     const agents = this.ctx.get('agents') as { get?: (id: SessionId) => Agent | undefined } | undefined
     const parent = agents?.get?.(parentSessionId)
-    const summary = `AutoReport subagent ${child.id} turn failed: ${failure.message}`
+    const summary = `AutoReport subagent ${child.id} ${detail}`
+    const message = createUserMessage({
+      content: [{ type: 'text', text: summary }],
+      source: {
+        kind: 'autoreport-settled',
+        form: 'notice',
+        senderSessionId: child.id,
+        ...execution,
+        summary: boundContextSummary(summary),
+      },
+    })
     if (parent === undefined) {
       // Main is not live (crash recovery, closed UI): the notice must still
       // reach the durable log so a reload folds the failure. Steering onto
       // the parent session directly keeps the workflow log and session log
       // consistent without a live driver.
       const session = this.mainSessions.get(String(parentSessionId))
-      session?.append('user/message', settlementNotice(child.id, summary), { surfaceOp: 'append' })
+      session?.append('user/message', message, { surfaceOp: 'append' })
       return
     }
-    const message = settlementNotice(child.id, summary)
     if (this.stoppedParents.has(String(parentSessionId))) parent.inject(message)
     else if (parent.status === 'idle') parent.followup(message)
     else parent.steer(message)
