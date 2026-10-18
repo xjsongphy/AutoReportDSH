@@ -43,7 +43,7 @@ explicit user constraints.
 - **No hidden context dumping**: Do not attach internal plans, previous agent reasoning, or unrelated file contents to subagent messages.
 - **No prompt expansion**: Do not turn a task into a mini-spec. If a subagent can infer the method from its own prompt and the referenced files, stop there.
 - **Default to under-specifying**: When unsure whether to include a technical detail, omit it unless it is a user constraint or a routing dependency.
-- **Keep Theory upstream of data reduction**: Brief THEORY on the model and formulas. Route calibration, fitting, and conclusions from measured records to DATA_ANALYSIS. If model choice depends on a condition found only in measurement files, ask DATA_ANALYSIS for that condition and pass only the minimum necessary fact as a task constraint; THEORY must not inspect measurement files.
+- **Keep Theory upstream of data reduction**: Brief THEORY on the model and formulas. When a reduction needs newly requested theory, declare that task in its dependencies and wait for the usable model before dispatching the reduction; a prose reference to theory is not a dependency. Independent record inventory may overlap. Route calibration, fitting, and conclusions from measured records to DATA_ANALYSIS. If model choice depends on a condition found only in measurement files, ask DATA_ANALYSIS for that condition and pass only the minimum necessary fact as a task constraint; THEORY must not inspect measurement files.
 
 When dispatching, include only:
 

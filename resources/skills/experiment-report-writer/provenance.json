@@ -43,6 +43,7 @@
     "flattened the selected modules into one bundled skill",
     "replaced internal module-path references with local section references",
     "kept the AutoReport experiment-report editorial contract as a local addition that takes precedence on level of detail, repetition, and document structure; its introduction rule allows a short framing background paragraph",
-    "kept the narrative-flow and define-before-formula Bad/Good example pairs in experiment-report scenarios; the worked example ships in both LaTeX and Typst; prose-pattern examples use measurement scenarios"
+    "kept the narrative-flow and define-before-formula Bad/Good example pairs in experiment-report scenarios; the worked example ships in both LaTeX and Typst; prose-pattern examples use measurement scenarios",
+    "added local editorial guidance on checking missing-input interpretations, preserving required observational evidence, and completing section review before summaries; frozen upstream sections remain unchanged"
   ]
 }

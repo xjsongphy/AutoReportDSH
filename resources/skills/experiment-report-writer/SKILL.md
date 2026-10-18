@@ -49,7 +49,11 @@ a reported result, interpret a result or its uncertainty/limitation, or satisfy
 an explicit template or course requirement. Remove material from the body when
 it serves none of these purposes. Keep verification detail in an appendix or a
 linked artifact when it remains useful and the template permits it. This is an
-information-selection pass, not a word-count target.
+information-selection pass, not a word-count target. Review the sections against
+the required experimental outcomes before writing the abstract and conclusion.
+A repeated explanation that a quantity cannot be reported is not a substitute
+for resolving a required result. Keep a material limitation where it changes
+the interpretation, and carry only its consequence into the summary.
 
 Completeness applies to experimental coverage, not prose volume. Account for
 every required measurement, but do not give every dataset, fit, or generated
@@ -64,6 +68,15 @@ single lead-in and interpretation may cover a tightly connected equation
 sequence, figure group, or table group; do not wrap each element in repetitive
 prose. Keep enough local context for readers to understand what the grouped
 elements establish.
+
+### Evidence used in the report
+
+Distinguish measurements, source-provided parameters, and estimates under stated
+assumptions. An upstream statement that information is missing is an
+interpretation to check against the supplied records and references. Keep
+required observations, tables, and questions visible in the experimental
+argument. Resolve a conflict in the supporting analysis before presenting it
+as a scientific conclusion.
 
 ### Across the whole report
 
