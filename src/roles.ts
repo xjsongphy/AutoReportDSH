@@ -87,7 +87,7 @@ const DATA_ANALYSIS_POLICY: ReportRolePolicy = {
 const PLOTTING_POLICY: ReportRolePolicy = {
   writableRoot: 'Plots',
   hasProcessTool: true,
-  tools: [...BASE_TOOLS, SKILL_TOOL, ...SPECIALIST_PROTOCOL_TOOLS, ROLE_PROCESS_TOOL],
+  tools: [...BASE_TOOLS, ...SPECIALIST_PROTOCOL_TOOLS, ROLE_PROCESS_TOOL],
 }
 
 const REPORT_POLICY: ReportRolePolicy = {

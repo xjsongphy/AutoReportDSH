@@ -429,7 +429,7 @@ describe('integration: assembled host (real context)', () => {
     expect(plotter.toolNames.slice().sort()).toEqual(roleTools.slice().sort())
     const plotterShellDescriptions = ROLE_PROCESS_TOOL === 'bash' ? plotter.bashDescriptions : plotter.pwshDescriptions
     expect(plotterShellDescriptions[0]).toContain('AutoReport PLOTTING')
-    expect(plotter.skillNames).toEqual(['plotting-quality'])
+    expect(plotter.skillNames).toEqual([])
   }, 15_000)
 
   it('initializes the workspace once with the frozen settings snapshot on the workflow event', async () => {

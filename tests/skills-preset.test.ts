@@ -18,7 +18,7 @@ describe('AutoReport role-scoped domain skills', () => {
   it('keeps domain skills out of unrelated specialists', () => {
     expect(skillNamesForRole('THEORY', 'latex')).toEqual([])
     expect(skillNamesForRole('DATA_ANALYSIS', 'latex')).toEqual([])
-    expect(skillNamesForRole('PLOTTING', 'typst')).toEqual(['plotting-quality'])
+    expect(skillNamesForRole('PLOTTING', 'typst')).toEqual([])
   })
 
   it('does not give THEORY or REPORT MinerU — MAIN extracts PDFs', () => {
@@ -60,11 +60,10 @@ describe('AutoReport role-scoped domain skills', () => {
     ])
   })
 
-  it('registers only plotting guidance for the PLOTTING child', () => {
+  it('keeps PLOTTING guidance in its persona rather than a skill catalog', () => {
     const skills = recorder()
     registerRoleSkills({ skills } as never, 'PLOTTING', 'latex')
-    expect(skills.registrations.map(skill => skill.name)).toEqual(['plotting-quality'])
-    expect(skills.registrations[0]?.resourceBase).toBeUndefined()
+    expect(skills.registrations).toEqual([])
   })
 
   it('anchors the skills that ship sibling documents and only those', () => {

@@ -19,12 +19,9 @@ describe('fixed role table', () => {
         role === 'DATA_ANALYSIS' ? 'Data/Processed'
           : role === 'PLOTTING' ? 'Plots' : 'Report')
       expect(rolePolicy(role).hasProcessTool).toBe(true)
-      // Only PLOTTING carries a skill catalog (plotting-quality), so only
-      // PLOTTING keeps the skill loader.
+      // Both roles receive their domain instructions directly in the persona.
       expect(rolePolicy(role).tools).toEqual(
-        role === 'DATA_ANALYSIS'
-          ? ['read', 'list', 'grep', 'read_image', 'write', 'edit', 'manifest', 'report_workflow', ROLE_PROCESS_TOOL]
-          : ['read', 'list', 'grep', 'read_image', 'write', 'edit', 'skill', 'manifest', 'report_workflow', ROLE_PROCESS_TOOL])
+        ['read', 'list', 'grep', 'read_image', 'write', 'edit', 'manifest', 'report_workflow', ROLE_PROCESS_TOOL])
     }
     expect(rolePolicy('REPORT')).toEqual({
       writableRoot: 'Report',

@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "source": "autoreport/references/plotting-agent.md",
+  "sourceSha256": "16f9d6966c5767080ff8d62d5a78e2bd494f78b865959c24e27baa6faac01f6f",
+  "sourceSnapshot": "tests/fixtures/autoreport-plotting-original.md",
+  "adaptations": [
+    "The original plotting prose is embedded directly after the DSH role contract and workspace scope.",
+    "Main-dispatched final reporting uses report_workflow; questions and omissions are routed to MAIN through that tool.",
+    "The plotting shell tool is named bash in DSH.",
+    "Figure descriptions are recorded through manifest instead of the original unified template.",
+    "The core completion-protocol bullet and textual Issue reporting section are omitted because the DSH role contract and report_workflow tool already own those instructions."
+  ],
+  "policy": "Preserve original wording, emphasis, examples, numerical guidance, and self-check order. Make only necessary DSH interface adaptations.",
+  "target": "resources/personas/plotting_agent.md"
+}

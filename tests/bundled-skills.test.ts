@@ -28,7 +28,6 @@ describe('loadBundledSkills', () => {
     expect(skills.map(skill => skill.name)).toEqual([
       'experiment-report-writer',
       'latex-compile',
-      'plotting-quality',
       'typst',
       'typst-compile',
     ])

@@ -65,7 +65,7 @@ describe('residentDescriptor', () => {
     // only invite invented names (session 48970218's "data-analysis" error).
     expect(residentToolFilter('THEORY').deny).toContain('skill')
     expect(residentToolFilter('DATA_ANALYSIS').deny).toContain('skill')
-    expect(residentToolFilter('PLOTTING').deny).not.toContain('skill')
+    expect(residentToolFilter('PLOTTING').deny).toContain('skill')
     expect(residentToolFilter('REPORT').deny).not.toContain('skill')
   })
 })

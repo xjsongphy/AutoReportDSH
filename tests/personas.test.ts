@@ -180,7 +180,7 @@ describe('persona slimming', () => {
   })
 
   it('keeps the plotting unicode-minus requirement without claiming auto-validation', () => {
-    const text = readFileSync(join(REPO_PERSONAS, '../skills/plotting-quality.md'), 'utf8')
+    const text = loadSpecialistPersona('PLOTTING')
     expect(text).toContain('unicode_minus')
     expect(text).toContain('plt.close')
     expect(text).not.toContain('Auto-validated')
