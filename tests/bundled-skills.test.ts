@@ -89,6 +89,21 @@ describe('loadBundledSkills', () => {
     expect(writer?.content).not.toContain('REPORT role')
   })
 
+  it('delivers the student-author contract and the observed executor-voice regression example', () => {
+    const writer = skills.find(skill => skill.name === 'experiment-report-writer')
+    const body = writer?.content ?? ''
+    const start = body.indexOf('### Author voice in the report body')
+    const end = body.indexOf('### Default editorial selection pass', start)
+    expect(start).toBeGreaterThan(0)
+    expect(end).toBeGreaterThan(start)
+    const contract = body.slice(start, end).replace(/\s+/gu, ' ')
+    expect(contract).toContain('what was measured')
+    expect(contract).toContain('first-person pronouns are optional')
+    expect(contract).toContain('**Bad:** “报告的定量结果按原始读数')
+    expect(contract).toContain('**Good:** “本实验测量')
+    expect(contract).toContain('never invent personal experience or remove a material')
+  })
+
   it('keeps the frozen-writer provenance beside the skill that cites it', () => {
     const writer = skills.find(skill => skill.name === 'experiment-report-writer')
     expect(writer?.directory).toBe(join(resourcesRoot(), 'skills', 'experiment-report-writer'))

@@ -28,7 +28,8 @@ figure paths, citations, bibliography metadata, or other unsupported facts.
 
 ## AutoReport experiment-report editorial contract
 
-Write for a reader who knows the field but did not attend the experiment. Use
+Write as the student author of the experiment report, for a reader who knows
+the field but did not attend the experiment. Use
 the course or user template to decide required sections and deliverables. Treat
 upstream derivations, processed datasets, and figures as evidence and working
 materials; select from them rather than reproducing their full contents. Cover
@@ -38,6 +39,35 @@ question, observed behavior, analysis choice, and supported conclusion.
 For AutoReport experiment reports, this editorial contract takes precedence
 over the generic rules below when they conflict on level of detail, repetition,
 or document structure.
+
+### Author voice in the report body
+
+The body is the student's scientific account of the experiment: what was
+measured, how the measurement gives the result, and what the result means.
+Use the apparatus, observation, calculation, or physical inference as the
+subject of each sentence. “本实验”, “测得”, “由……得到”, or impersonal scientific
+prose can all express this perspective; first-person pronouns are optional.
+Describe only procedures and observations supported by the supplied evidence.
+
+Keep the assistant's execution, source auditing, and report-assembly decisions
+in working notes or the conversational handoff. An internal instruction to
+classify evidence is a check to perform, not a sentence to put in the report.
+State a relevant assumption with the calculation that uses it, and explain a
+limitation through its concrete effect on the inferred quantity. Review the
+introduction, abstract, and conclusion for this author perspective as well.
+
+**Bad:** “报告的定量结果按原始读数、实验记录中的报告值和基于明确假设的估算分别说明；电压定义或材料参数不充分之处保留其限制。”
+
+**Good:** “本实验测量两种检偏配置下的光功率随偏置电压的变化，并利用倍频法测量半波电压，研究晶体的纵向电光效应。”
+
+**Bad:** “为避免臆造，本文不补充未记录的读数误差。”
+
+**Good:** “功率扫描期间激光输出发生漂移，极值位置的确定因此受到限制。”
+
+The examples illustrate author perspective, not additional observations to
+copy into another experiment. Preserve scientific qualifications at the
+relevant result; never invent personal experience or remove a material
+uncertainty merely to make the prose sound confident.
 
 ### Default editorial selection pass
 
@@ -71,12 +101,12 @@ elements establish.
 
 ### Evidence used in the report
 
-Distinguish measurements, source-provided parameters, and estimates under stated
-assumptions. An upstream statement that information is missing is an
-interpretation to check against the supplied records and references. Keep
-required observations, tables, and questions visible in the experimental
-argument. Resolve a conflict in the supporting analysis before presenting it
-as a scientific conclusion.
+During evidence review, distinguish measurements, source-provided parameters,
+and estimates under stated assumptions in the analysis notes. Check upstream
+missing-input claims against the supplied records and references, and resolve
+conflicts in the supporting analysis. In the body, give the measurement, cited
+parameter, or assumption where it supports the calculation and interpretation;
+keep required observations, tables, and questions in the experimental argument.
 
 ### Across the whole report
 

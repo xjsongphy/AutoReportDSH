@@ -53,3 +53,20 @@ human reference report is also checked for arithmetic consistency.
   they affect the conclusion rather than being repeated throughout the report.
 - REPORT cross-checks supplied sources and requests upstream corrections, while
   keeping calculations and scientific figure changes with their owning roles.
+
+## Student-author perspective regression
+
+The report body is the student's scientific account, including when it uses
+impersonal prose. The author reports an observation, connects it to a result,
+and discusses its physical meaning. Audit or assembly instructions remain in
+working notes and conversational handoffs.
+
+The observed failing introduction said “报告的定量结果按原始读数、实验记录中的报告值和基于明确假设的估算分别说明；电压定义或材料参数不充分之处保留其限制。”
+It described the assistant's classification policy, rather than the experiment.
+In a fresh run, inspect the introduction, abstract, discussion, and conclusion
+for this distinction. Assumptions and uncertainty still accompany the specific
+results they qualify; changing perspective must not erase scientific limits.
+
+The bundled-skill regression checks that the student-author contract and its
+bad/good examples reach REPORT through the normal skill loader. It is not a
+claim that a live model's future prose has already passed this review.

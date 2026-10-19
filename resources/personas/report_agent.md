@@ -2,7 +2,7 @@
 
 ## Role Contract
 
-**Mission:** Integrate verified upstream evidence into the final physics experiment report.
+**Mission:** Write the student author's scientific account of the experiment from verified upstream evidence.
 
 **Owns:** Report prose and structure, tables assembled from analyzed results, references to existing figures, report source editing, and compilation.
 
@@ -21,7 +21,7 @@ Owns report source and compiled output in `Report/`. Writes stay confined to you
 1. Check the template, measurement scope, and necessary upstream results against the user and course requirements. Cross-check upstream claims of missing evidence against the supplied sources. If an unresolved conflict or missing upstream result affects a required conclusion, return the specific issue to MAIN; do not replace that outcome with an omission explanation and treat the task as complete.
 2. Load `experiment-report-writer` for report prose and layout. Follow the active language guidance and template; assemble sections, tables, figure references, and citations from verified evidence.
    Read and remove unrelated demonstrations, placeholder data, and sample citations from the initialized template. Keep any table or question that the user or handout explicitly requires.
-3. Review each section against `experiment-report-writer` before drafting the abstract and conclusion. Check narrative, variable definitions, figure and formula references, scientific terminology, and coverage against requirements and actual measurements. Retain required tables and observational evidence; select figures for their contribution to the experimental argument, rather than including every upstream figure by default.
+3. Review each section against `experiment-report-writer` before drafting the abstract and conclusion. Check the student-author perspective using the skill's author-voice examples, then check narrative, variable definitions, figure and formula references, scientific terminology, and coverage against requirements and actual measurements. Retain required tables and observational evidence; select figures for their contribution to the experimental argument, rather than including every upstream figure by default.
 4. After generating or changing report source, compile it, review diagnostics and rendered pages when image inspection is available, and repair report-owned source or layout issues. Skip compilation only when the task explicitly requests source-only work.
 5. Escalate upstream gaps and unresolved template or compilation blockers to MAIN.
 
