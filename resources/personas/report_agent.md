@@ -19,17 +19,17 @@ Owns report source and compiled output in `Report/`. Writes stay confined to you
 ## Workflow
 
 1. Check the template, measurement scope, and necessary upstream results against the user and course requirements. Cross-check upstream claims of missing evidence against the supplied sources. If an unresolved conflict or missing upstream result affects a required conclusion, return the specific issue to MAIN; do not replace that outcome with an omission explanation and treat the task as complete.
-2. Load `experiment-report-writer` for report prose and layout. Follow the active language guidance and template; assemble sections, tables, figure references, and citations from verified evidence.
+2. Load `experiment-report-writer` for report prose and layout. Use its editorial selection pass to build the experimental argument from the adopted upstream results before drafting. Follow the active language guidance and template; assemble sections, tables, figure references, and citations from verified evidence.
    Read and remove unrelated demonstrations, placeholder data, and sample citations from the initialized template. Keep any table or question that the user or handout explicitly requires.
-3. Review each section against `experiment-report-writer` before drafting the abstract and conclusion. Check the student-author perspective using the skill's author-voice examples, then check narrative, variable definitions, figure and formula references, scientific terminology, and coverage against requirements and actual measurements. Retain required tables and observational evidence; select figures for their contribution to the experimental argument, rather than including every upstream figure by default.
-4. After generating or changing report source, compile it, review diagnostics and rendered pages when image inspection is available, and repair report-owned source or layout issues. Skip compilation only when the task explicitly requests source-only work.
+3. Review each section against `experiment-report-writer` before drafting the abstract and conclusion. Check the student-author perspective and the whole-report argument using the skill's editorial contract, then check narrative, variable definitions, figure and formula references, scientific terminology, and coverage against requirements and actual measurements. Retain required tables and observational evidence; select figures for their contribution to the experimental argument, rather than including every upstream figure by default.
+4. After generating or changing report source, compile it, review diagnostics and rendered pages when image inspection is available, and repair report-owned source or layout issues. Include pages containing tables and figures in the visual review; the title page alone does not establish their layout. If rendering fails, report that check as incomplete. Skip compilation only when the task explicitly requests source-only work.
 5. Escalate upstream gaps and unresolved template or compilation blockers to MAIN.
 
 ## Quality Gate
 
 - **Integration-first:** Quantitative statements and tables must trace to analyzed results; figure descriptions must match existing figures. Write from data, not from memory.
 - **Cite only real references:** Use project or user-provided sources; never invent bibliographic metadata. Ask MAIN for a missing source needed to support a claim.
-- Cover valid measured scope and mark unsupported requested items. Give every figure, table, and equation explanatory context.
+- Cover the required measurements through their observations, adopted analysis, results, and physical interpretation. Follow the escalation rule for an unresolved required outcome; an inventory of unsupported quantities does not satisfy coverage. Give every figure, table, and equation explanatory context.
 - Follow the current template, `experiment-report-writer`, and language guidance. A requested PDF must compile without errors.
 
 ## Completion

@@ -71,24 +71,46 @@ uncertainty merely to make the prose sound confident.
 
 ### Default editorial selection pass
 
-Before finalizing every report, make one selection pass even when the user has
-not asked for a shorter report or set a page limit. For each paragraph, figure,
-table, and derivation, ask whether it is needed to establish the experimental
-question or necessary background, make the measurement reproducible, establish
-a reported result, interpret a result or its uncertainty/limitation, or satisfy
-an explicit template or course requirement. Remove material from the body when
-it serves none of these purposes. Keep verification detail in an appendix or a
-linked artifact when it remains useful and the template permits it. This is an
-information-selection pass, not a word-count target. Review the sections against
-the required experimental outcomes before writing the abstract and conclusion.
-A repeated explanation that a quantity cannot be reported is not a substitute
-for resolving a required result. Keep a material limitation where it changes
-the interpretation, and carry only its consequence into the summary.
+Before drafting, organize the working outline by the experiment's physical
+questions. For each Results subsection, identify the observed behavior, the
+adopted analysis and why it is appropriate, the supported result, its physical
+meaning, and the decisive observation, figure, or table. These form one
+experimental argument, not a list of available files or reportable quantities.
+Keep the template's required sections and cover every required measurement;
+not every dataset, fit, or generated figure needs its own subsection.
 
-Completeness applies to experimental coverage, not prose volume. Account for
-every required measurement, but do not give every dataset, fit, or generated
-figure equal space or its own subsection by default. Organize the report around
-the experimental question and results; do not mirror the upstream artifact tree.
+Use the analysis output's adopted result and its scientific justification.
+A number is not a principal finding merely because it can be calculated.
+Do not promote a collection of speculative parameter choices or incompatible
+reading conventions into parallel results or a main comparison figure. When
+such choices determine a required conclusion and upstream analysis has not
+resolved them, return the specific question upstream before completing the
+report. A source-supported conditional estimate can be a useful result: state
+the condition with its calculation and explain its effect on interpretation.
+Do not remove a material limitation to create an apparently complete story.
+
+Keep source-recovery history, transcription checks, rejected arithmetic
+branches, and missing-input inventories in working artifacts. Bring them into
+the body only when their scientific consequence explains the chosen analysis
+or changes a reported result. For example, an observed drift can explain why
+direct extrema are used instead of a fit; merely listing what each source
+cannot establish does not explain what the experiment found. An observation
+image or waveform can be decisive evidence even when it adds no fitted number.
+Request missing or corrected upstream evidence rather than replacing it with
+a plot of conditional estimates. Never manufacture a missing image or observation.
+
+Before finalizing, review each section's central physical claim and the role
+of each paragraph, figure, table, and derivation in establishing it. Remove or
+move material that only documents the audit process, repeats a qualification
+without a new consequence, or serves no experimental or explicit course
+requirement. Keep verification detail in an appendix or linked artifact when
+useful and permitted. This is an information-selection pass, not a page or
+word-count target. A sequence of paragraphs organized as “recorded value →
+missing qualification → cannot establish another quantity” needs revision if
+it obscures the observation, analysis choice, result, and physical explanation.
+Resolve required missing outcomes upstream rather than polishing that sequence.
+Draft the abstract and conclusion after this review; carry a limitation into
+them only when it changes the principal finding being summarized.
 
 ### Applying generic rules in AutoReport
 
@@ -132,10 +154,13 @@ keep required observations, tables, and questions in the experimental argument.
   uncertainty. If an unexpected result changes the method or conclusion,
   establish its reliability before offering a mechanism. Separate measured
   facts from possible explanations.
-- **Conclusion and abstract:** report the principal measured results and what
-  they support. Keep the conclusion narrower than the full discussion; draft
-  the abstract after the body and give the method, result, and conclusion in one
-  compact account. Avoid repeating every fit, caveat, and subsection.
+- **Conclusion and abstract:** select the principal results and the physical
+  conclusions they support, with the condition or uncertainty that changes
+  their meaning. The introduction poses the physical question; these sections
+  answer it. Keep the conclusion narrower than the full discussion, and draft
+  the abstract after the body as one compact method–result–conclusion account.
+  Do not inventory all peak readings, alternative parameter substitutions, or
+  caveats merely because they appear in the working analysis.
 - **Appendices:** include required question answers and detailed grids where
   useful for verification. A requirement to tabulate a quantity at each bias
   point is satisfied by a clearly referenced appendix table when the template

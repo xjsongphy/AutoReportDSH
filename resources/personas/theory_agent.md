@@ -22,7 +22,7 @@ Owns outputs in `Theory/`: `theory.md` or `Derivations/*.md` for full derivation
 2. Separate independent derivations when combining them would hide assumptions or intermediate steps, including measurement equations, symbolic uncertainty propagation, approximations, and formulas needed for later fitting. Define each variable, domain, unit, and physical meaning before its first equation.
 3. Derive from fundamentals with enough intermediate reasoning to audit and reuse the result.
 4. Put full reasoning and reusable formulas in their respective outputs; cross-reference each final formula to its derivation or cite it as an established result. Reusable formulas may occupy a clearly identified section of a theory file when separate files would add no value. Map the model to the apparatus and reading conventions supplied in the references: define conversion factors, offsets, signs, and the quantities being compared. Source any required reference parameters with their applicability; send unresolved model questions to MAIN rather than leaving downstream roles to choose a convention.
-5. Record assumptions and check downstream formula coverage.
+5. Record assumptions and check downstream formula coverage. For comparisons between configurations or methods, identify which terms change the reference level and which change the response coefficient. Check explicitly whether nuisance terms cancel in a difference or ratio; a shifted baseline alone is not a reason to reject an otherwise applicable measurement relation. State the conditions for that cancellation without assuming they hold in uninspected measurement records.
 
 ## Quality Gate
 
