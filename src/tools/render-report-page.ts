@@ -35,7 +35,7 @@ interface RouteLlm {
  * @param signal - the execution's abort signal.
  * @param requestedPath - the raw, not-yet-resolved path named in refusals.
  */
-async function assertImageCapableRoute(
+export async function assertImageCapableRoute(
   ctx: Context,
   route: { provider?: string | undefined; model?: string | undefined } | undefined,
   signal: AbortSignal | undefined,
@@ -55,22 +55,31 @@ async function assertImageCapableRoute(
 }
 
 export async function renderReportPage(
+  ctx: Context, agent: Agent, input: string, page: number,
+  signal: AbortSignal, workspaceRootOverride?: string,
+): ReturnType<typeof renderWorkspacePdfPage> {
+  return renderWorkspacePdfPage(ctx, agent, input, page, signal, workspaceRootOverride)
+}
+
+/** Shared bounded renderer; only trusted tool code selects roots and argv. */
+export async function renderWorkspacePdfPage(
   ctx: Context,
   agent: Agent,
   input: string,
   page: number,
   signal: AbortSignal,
   workspaceRootOverride?: string,
+  scope: { source: 'Report' | 'References'; output: 'Report' | 'Outline'; argv?: (pdf: string, image: string) => string[] } = { source: 'Report', output: 'Report' },
 ): Promise<{ status: 'success' | 'failed' | 'timeout'; page: number; image: string | null; diagnostics: string }> {
   if (!Number.isSafeInteger(page) || page < 1 || page > 10_000) throw new Error('page must be an integer from 1 to 10000')
   const workspace = workspaceRootOverride ?? agent.session?.header.cwd
   if (workspace === undefined) throw new Error('render_report_page requires a workspace-bound REPORT session')
   const pdf = existingWorkspacePath(workspace, input)
-  assertWorkspaceRoot(pdf, 'Report')
+  assertWorkspaceRoot(pdf, scope.source)
   if (extname(pdf.absolute).toLowerCase() !== '.pdf' || !statSync(pdf.absolute).isFile()) {
-    throw new Error('render_report_page expects a Report/ PDF file')
+    throw new Error(`page preview expects a ${scope.source}/ PDF file`)
   }
-  const previewDir = ensureOwnedDirectory(workspace, 'Report', ['.cache', 'preview'])
+  const previewDir = ensureOwnedDirectory(workspace, scope.output, ['.cache', scope.source === 'References' ? 'reference-preview' : 'preview'])
   const prefix = join(previewDir, randomUUID())
   const image = `${prefix}.png`
   const sandbox = ctx.get('sandbox')
@@ -79,8 +88,8 @@ export async function renderReportPage(
   const deadline = AbortSignal.timeout(RENDER_TIMEOUT_MS)
   const combinedSignal = AbortSignal.any([signal, deadline])
   const confined = await sandbox.confine(
-    ['pdftoppm', '-f', String(page), '-l', String(page), '-singlefile', '-png', '-r', '120', pdf.absolute, prefix],
-    { mode: 'workspace-write', workspaceRoot: ensureOwnedDirectory(workspace, 'Report', []), sessionId: agent.session.id as SessionId },
+    scope.argv?.(pdf.absolute, image) ?? ['pdftoppm', '-f', String(page), '-l', String(page), '-singlefile', '-png', '-r', '120', pdf.absolute, prefix],
+    { mode: 'workspace-write', workspaceRoot: ensureOwnedDirectory(workspace, scope.output, []), sessionId: agent.session.id as SessionId },
     combinedSignal,
   )
   if (confined.enforcement !== 'full') throw new Error('render_report_page requires full DSH file-sandbox enforcement')

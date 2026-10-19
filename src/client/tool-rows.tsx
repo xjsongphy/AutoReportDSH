@@ -275,7 +275,7 @@ export const ManifestRow = toolRow({
 
 /** One `extract_pdf` PDF extraction. */
 export const ReferenceExtractRow = toolRow({
-  title: 'referenceExtractTitle',
+  title: (args, t) => t(parseArgs(args)?.page === undefined ? 'referenceExtractTitle' : 'referencePreviewTitle'),
   icon: <IconPaperclipOutlineRegular />,
   summary: referenceExtractSummary,
 })

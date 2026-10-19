@@ -138,7 +138,7 @@ export type ToolRowLocaleKey =
   | 'sendToAgentTitle' | 'workflowTaskTitle'
   | 'boardReadTitle' | 'boardUpdateTitle' | 'boardCancelTitle' | 'boardReopenTitle'
   | 'boardPlanTitle' | 'boardGraphTitle' | 'boardRunTitle' | 'boardPauseTitle' | 'boardWaitTitle'
-  | 'listTitle' | 'manifestReadTitle' | 'manifestUpdateTitle' | 'referenceExtractTitle' | 'reportWorkflowTitle'
+  | 'listTitle' | 'manifestReadTitle' | 'manifestUpdateTitle' | 'referenceExtractTitle' | 'referencePreviewTitle' | 'reportWorkflowTitle'
   | 'installPackageTitle' | 'compileReportTitle' | 'renderPageTitle'
   | 'running' | 'failed' | 'stopped'
   | 'task' | 'tasks' | 'files' | 'levels' | 'entries' | 'workspaceRoot'
@@ -167,6 +167,7 @@ export const toolRowEn: Record<ToolRowLocaleKey, string> = {
   manifestReadTitle: 'Read manifest',
   manifestUpdateTitle: 'Update manifest',
   referenceExtractTitle: 'Extract reference',
+  referencePreviewTitle: 'Inspect reference page',
   reportWorkflowTitle: 'Report task outcome',
   installPackageTitle: 'Install Python package',
   compileReportTitle: 'Compile report',
@@ -227,6 +228,7 @@ export const toolRowZh: Record<ToolRowLocaleKey, string> = {
   manifestReadTitle: '读取交付清单',
   manifestUpdateTitle: '修改交付清单',
   referenceExtractTitle: '提取参考文献',
+  referencePreviewTitle: '查看参考原页',
   reportWorkflowTitle: '回报任务',
   installPackageTitle: '安装 Python 包',
   compileReportTitle: '编译报告',
