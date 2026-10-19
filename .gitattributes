@@ -1,0 +1,2 @@
+# Preserve Markdown provenance hashes and LF-based persona migration checks on Windows.
+*.md text eol=lf
