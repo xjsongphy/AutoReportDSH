@@ -357,3 +357,23 @@ describe('AutoReport role tool guard', () => {
     expect(guard(execution('write', { file_path: join(root, 'Report/main.tex') }, publishedChild))).toContain('Theory')
   })
 })
+
+// RC2's Team plugin contributes these tools in an Agent's own scope. Preset
+// masks do not hide own-scope tools; the execution backstop must still keep
+// AutoReport's role workflow authoritative and leave ordinary sessions alone.
+describe('official Team tool execution boundaries', () => {
+  it.each(['spawn_teammate', 'send_message', 'list_agents', 'wait_agent', 'interrupt_agent',
+    'team_task_create', 'team_task_list', 'team_task_get', 'team_task_update'])(
+    'does not let %s mutate a second workflow from an AutoReport role', name => {
+      const root = workspace()
+      const registry = new RoleRegistry()
+      const main = agent('main', root, { agentPreset: AUTOREPORT_MAIN_PRESET })
+      const theory = agent('theory', root)
+      registry.registerReserved(binding('THEORY', theory.id))
+      const guard = createRoleToolGuard({ registry })
+      expect(guard(execution(name, {}, main))).toBeTypeOf('string')
+      expect(guard(execution(name, {}, theory))).toBeTypeOf('string')
+      expect(guard(execution(name, {}, agent('ordinary', root)))).toBeUndefined()
+    },
+  )
+})

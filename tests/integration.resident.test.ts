@@ -296,6 +296,7 @@ async function boot(options: {
 describe('integration: resident subagent through the real agent loop', () => {
   it('wait=true: MAIN dispatches, the child runs its first turn on the routed provider, and the report settles the delegation', { timeout: 30_000 }, async () => {
     const booted = await boot({
+      realSubagents: true,
       mainCalls: [{
         name: 'send_to_agent',
         args: {
@@ -353,6 +354,19 @@ describe('integration: resident subagent through the real agent loop', () => {
     expect(descriptor?.['provider']).toBe('spawn')
     expect(descriptor?.['label']).toBe('AutoReport THEORY')
     expect(descriptor?.['mode']).toBe('continuable')
+    // A descriptor alone is not navigable: the browser reads the parent's
+    // native subagentCatalog projection, not AutoReport's role bindings.
+    expect(booted.mainSession.snapshotEvents().filter(event => event.type === 'subagent/catalog').map(event => event.data)).toContainEqual({
+      version: 0, childId: child!.id, childCreatedAt: child!.header.createdAt,
+      mode: 'continuable', label: 'AutoReport THEORY',
+    })
+    expect(booted.ctx.sessionProjections.snapshot(booted.mainSession, ['subagentCatalog']).values.subagentCatalog).toContainEqual({
+      id: child!.id, createdAt: child!.header.createdAt, mode: 'continuable', label: 'AutoReport THEORY',
+    })
+    const entries = booted.mainSession.snapshotEvents().filter(event => event.type === 'subagent/catalog').length
+    await booted.runtime.restoreResidentRoles(booted.mainAgent)
+    expect(booted.mainSession.snapshotEvents().filter(event => event.type === 'subagent/catalog')).toHaveLength(entries)
+
     // The frozen workflow route reached the child's durable identity…
     expect(descriptor?.['agentProvider']).toBe(SPECIALIST_PROVIDER)
     expect(descriptor?.['agentModel']).toBe(SPECIALIST_MODEL)

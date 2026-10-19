@@ -1,20 +1,8 @@
 /**
- * The resident child's durable identity in DSH's own subagent vocabulary.
- *
- * A child created through a `ctx.subagents` provider is classified by the
- * `subagent/descriptor` event that provider appends inside the child's initial
- * turn. AutoReport's resident roles are created directly — no provider runs —
- * so this module appends the same payload the continuation provider snapshots
- * (`@deepseek-ai/dsh-subagent`, `continuation.ts`). Without it DSH's catalog
- * cannot classify the child: `listChildren` drops a live child that carries no
- * identity, so the session header can only show disabled placeholder rows, and
- * a cold read of the child would rebuild it under the deployment default
- * composition instead of the one it actually ran (session log 70e9fb99 →
- * children 877b9437, 6e57e8d7).
- *
- * The append happens at creation rather than inside the first turn, because a
- * resident role is created idle and its first turn may be much later — or, for
- * a role the workflow never dispatches, never.
+ * Durable identity and parent-owned navigation for directly created residents.
+ * DSH providers publish both a child descriptor and a parent subagent/catalog
+ * fact. AutoReport creates residents through the agent factory, so it must
+ * publish both facts itself, including when restoring an older resident.
  * @module subagent-descriptor
  */
 
@@ -87,5 +75,25 @@ export function residentDescriptor(facts: ResidentDescriptorFacts): SubagentDesc
 export function ensureSubagentDescriptor(child: Session, descriptor: SubagentDescriptorData): boolean {
   if (child.snapshotEvents().some(event => event.type === 'subagent/descriptor')) return false
   child.append('subagent/descriptor', descriptor)
+  return true
+}
+
+/**
+ * Publish a resident in DSH's native parent-owned catalog once. The descriptor
+ * classifies the child; the catalog makes the header navigator discover it.
+ * Read the child's existing identity rather than overwriting provider facts.
+ */
+export function ensureSubagentCatalog(parent: Session, child: Session): boolean {
+  if (child.header.parentSession !== parent.id) return false
+  if (parent.snapshotEvents().some(event => event.type === 'subagent/catalog' && event.data.childId === child.id)) return false
+  const descriptor = child.snapshotEvents().find(event => event.type === 'subagent/descriptor')?.data
+  if (descriptor?.mode !== 'continuable') return false
+  parent.append('subagent/catalog', {
+    version: 0,
+    childId: child.id,
+    childCreatedAt: child.header.createdAt,
+    mode: 'continuable',
+    label: descriptor.label,
+  })
   return true
 }

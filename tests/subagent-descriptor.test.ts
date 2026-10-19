@@ -6,6 +6,7 @@
 import { describe, expect, it } from 'vitest'
 import { SESSION_FORMAT_VERSION, Session, SessionId } from '@deepseek-ai/dsh-session'
 import {
+  ensureSubagentCatalog,
   ensureSubagentDescriptor,
   residentDescriptor,
   residentToolFilter,
@@ -99,5 +100,54 @@ describe('ensureSubagentDescriptor', () => {
     expect(appended).toHaveLength(1)
     // The first descriptor is authoritative, so the provider's label survives.
     expect(appended[0]?.data).toMatchObject({ label: 'AutoReport PLOTTING' })
+  })
+})
+
+describe('ensureSubagentCatalog', () => {
+  function resident(parent: Session, id = 'catalog-child'): Session {
+    const child = Session.create(SessionId(id), undefined, {
+      version: SESSION_FORMAT_VERSION, isSeeded: false,
+      id: SessionId(id), createdAt: 2, parentSession: parent.id,
+    })
+    ensureSubagentDescriptor(child, residentDescriptor(FACTS))
+    return child
+  }
+
+  it('publishes the exact address and identity the native header navigator reads', () => {
+    const parent = childSession('catalog-parent')
+    const child = resident(parent)
+    expect(ensureSubagentCatalog(parent, child)).toBe(true)
+    expect(parent.snapshotEvents().filter(event => event.type === 'subagent/catalog').map(event => event.data)).toEqual([{
+      version: 0, childId: child.id, childCreatedAt: 2,
+      mode: 'continuable', label: 'AutoReport THEORY',
+    }])
+  })
+
+  it('backfills an existing resident and does not duplicate it on later restores', () => {
+    const parent = childSession('catalog-parent')
+    const child = resident(parent)
+    expect(ensureSubagentCatalog(parent, child)).toBe(true)
+    expect(ensureSubagentCatalog(parent, child)).toBe(false)
+    expect(parent.snapshotEvents().filter(event => event.type === 'subagent/catalog')).toHaveLength(1)
+  })
+
+  it('preserves an existing provider catalog entry', () => {
+    const parent = childSession('catalog-parent')
+    const child = resident(parent)
+    parent.append('subagent/catalog', { version: 0, childId: child.id, childCreatedAt: 2, mode: 'continuable', label: 'Provider label' })
+    expect(ensureSubagentCatalog(parent, child)).toBe(false)
+    expect(parent.snapshotEvents().filter(event => event.type === 'subagent/catalog')).toHaveLength(1)
+  })
+
+  it('does not attach a foreign child or an unclassified session', () => {
+    const parent = childSession('catalog-parent')
+    const foreign = resident(childSession('other-parent'))
+    expect(ensureSubagentCatalog(parent, foreign)).toBe(false)
+    const unclassified = Session.create(SessionId('unclassified'), undefined, {
+      version: SESSION_FORMAT_VERSION, isSeeded: false,
+      id: SessionId('unclassified'), createdAt: 2, parentSession: parent.id,
+    })
+    expect(ensureSubagentCatalog(parent, unclassified)).toBe(false)
+    expect(parent.snapshotEvents().some(event => event.type === 'subagent/catalog')).toBe(false)
   })
 })

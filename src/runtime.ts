@@ -20,6 +20,7 @@ import { installCancellationAdapters } from './cancellation.js'
 import { WorkflowCoordinator } from './workflow/coordinator.js'
 import { deliverSubagentPrompt, type HostPromptDeliverer } from '@deepseek-ai/dsh-subagent/internal'
 import {
+  ensureSubagentCatalog,
   ensureSubagentDescriptor,
   residentDescriptor,
   residentToolFilter,
@@ -690,6 +691,7 @@ export default class AutoReportWorkflowRuntime extends Service {
     const alreadyLive = agents.get(binding.childSessionId)
     if (alreadyLive !== undefined) {
       this.markResidentActive(parentSession, binding, role, alreadyLive)
+      ensureSubagentCatalog(parentSession, alreadyLive.session)
       // A live child that this runtime did not create belongs to the DSH
       // continuation manager (or another owner); leave delivery on its
       // official followup/report path instead of bypassing its inbox manager.
@@ -795,6 +797,7 @@ export default class AutoReportWorkflowRuntime extends Service {
           ...(descriptorToolFilter === undefined ? {} : { toolFilter: descriptorToolFilter }),
         }),
       )
+      ensureSubagentCatalog(parentSession, handle.agent.session)
       return handle.agent
     } catch (error: unknown) {
       if (createdReservation && this.roleRegistry.lookup(binding.childSessionId) !== undefined) {
