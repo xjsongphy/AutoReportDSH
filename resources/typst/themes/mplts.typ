@@ -102,29 +102,6 @@
   }
 }
 
-// 双横线 (ruledtabular 首尾双横线): 两条平行细线, 间距 2.5pt
-#let _double-rule = block(width: 100%, spacing: 0pt)[
-  #stack(
-    dir: ttb,
-    spacing: 2.5pt,
-    line(length: 100%, stroke: 0.5pt),
-    line(length: 100%, stroke: 0.5pt),
-  )
-]
-
-// ruled-table: 包裹一个标准 Typst table, 生成首尾双横线 (对应 ruledtabular 环境).
-// 兼容旧用法: ruled-table(table(...)). 普通 table 由 mplts 自动应用此样式.
-// 表内中部横线请在 table 中用 table.hline(stroke: 0.4pt) 给出.
-#let ruled-table(it) = block(width: 100%, spacing: 0pt)[
-  #_double-rule
-  #v(3pt)
-  #set text(size: 11pt)
-  #set table(stroke: none)
-  #it
-  #v(3pt)
-  #_double-rule
-]
-
 // ========== 文档级 setup (对应 \documentclass{mpltx} 的全局设置) ==========
 // 用法: #show: mplts.with(font: "macos")
 #let mplts(doc, font: "macos", quanjiao: false) = {
@@ -258,21 +235,25 @@
     ]
   }
 
-  // ----- 普通 table 默认采用 ruledtabular 风格 -----
-  // show 收到的是已解析元素, 仅在包装内 set table(stroke: none) 不会移除
-  // 原表的网格; 保留全部字段与子元素, 以无网格的表重建后交给同一包装。
-  // 显式 ruled-table 已设 stroke:none, 因此不会重复包装; 单表可同样退出。
+  // ----- 原生 table 统一采用首尾双横线 -----
+  set table(stroke: none)
   set table.hline(stroke: 0.4pt)
-  show table: it => {
-    if it.stroke == none {
-      it
-    } else {
-      let fields = it.fields()
-      let children = fields.remove("children")
-      fields.insert("stroke", none)
-      ruled-table(table(..fields, ..children))
-    }
-  }
+  show table: set text(size: 11pt)
+  let double-rule = block(width: 100%, spacing: 0pt)[
+    #stack(
+      dir: ttb,
+      spacing: 2.5pt,
+      line(length: 100%, stroke: 0.5pt),
+      line(length: 100%, stroke: 0.5pt),
+    )
+  ]
+  show table: it => block(width: 100%, spacing: 0pt)[
+    #double-rule
+    #v(3pt)
+    #it
+    #v(3pt)
+    #double-rule
+  ]
 
   // ----- 参考文献标题本地化 (由 template 中 #bibliography 给出 title:"参考文献") -----
 

@@ -86,7 +86,7 @@
 === 表格
 
 表是被一系列横线隔开的有序排列的数据, 报告格式要求最上和最下两条横线为双横线.
-#note[加载 `mplts` 后, 普通 `table` 默认使用此双横线格式; 原有 `ruled-table` 包装仍可使用.]
+#note[加载 `mplts` 后, 普通 `table` 默认使用此双横线格式.]
 例表为 @tab:table_eg.
 
 #figure(
@@ -198,17 +198,15 @@ Typst 中对 dash 有所区分, 连字符用单个 `-` (如 `co-operate` → co-
 #figure(
   kind: table,
   caption: none,
-  ruled-table(
-    table(
-      columns: (1fr, 1fr, 1fr),
-      align: center,
-      [*类型*], [*输入*], [*输出*],
-      table.hline(stroke: 0.4pt),
-      [连字符 hyphen], [`co-operate`], [co-operate],
-      [连接号 en-dash], [`14--19`], [14--19],
-      [英文破折号 em-dash], [`Yes---or no?`], [Yes---or no?],
-      [减号], [`$-1$`], [$-1$],
-    )
+  table(
+    columns: (1fr, 1fr, 1fr),
+    align: center,
+    [*类型*], [*输入*], [*输出*],
+    table.hline(stroke: 0.4pt),
+    [连字符 hyphen], [`co-operate`], [co-operate],
+    [连接号 en-dash], [`14--19`], [14--19],
+    [英文破折号 em-dash], [`Yes---or no?`], [Yes---or no?],
+    [减号], [`$-1$`], [$-1$],
   )
 )
 
