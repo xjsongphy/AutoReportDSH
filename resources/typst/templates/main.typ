@@ -86,30 +86,28 @@
 === 表格
 
 表是被一系列横线隔开的有序排列的数据, 报告格式要求最上和最下两条横线为双横线.
-#note[此双横线格式可以通过 `ruled-table` 函数实现.]
+#note[加载 `mplts` 后, 普通 `table` 默认使用此双横线格式; 原有 `ruled-table` 包装仍可使用.]
 例表为 @tab:table_eg.
 
 #figure(
   kind: table,
   caption: [表格示例.],
   block(width: 100%)[
-    #ruled-table(
-      table(
-        columns: (1fr, 1fr, 1fr, 1fr),
-        align: (center, center, left, right),
-        [居中], [数值], [靠左], [靠右],
-        table.hline(stroke: 0.4pt),
-        [a], [0.12], [a], [a],
-        [bbb], [-100], [bbb], [bbb],
-        [ccccc], [50.8], [ccccc], [ccccc],
-      )
+    #table(
+      columns: (1fr, 1fr, 1fr, 1fr),
+      align: (center, center, left, right),
+      [居中], [数值], [靠左], [靠右],
+      table.hline(stroke: 0.4pt),
+      [a], [0.12], [a], [a],
+      [bbb], [-100], [bbb], [bbb],
+      [ccccc], [50.8], [ccccc], [ccccc],
     )
     #v(6pt)
     #block(width: 100%)[
       #align(left)[
         #set par(first-line-indent: 0em, spacing: 0pt)
         #text(size: 11pt)[
-        ᵃ 表格标题要简明扼要; 注意使用 `ruled-table` 生成首尾双横线的表格. 表格中的脚注应作为表格的一部分放在表后. 为方便, 提供了 `mc` 作为兼容别名. #link("https://www.tablesgenerator.com")[Tables Generator 网站]可以方便地生成 Typst 表格. \
+        ᵃ 表格标题要简明扼要; 普通 `table` 自动生成首尾双横线, 表头下的横线用 `table.hline` 指定. 表格中的脚注应作为表格的一部分放在表后. 为方便, 提供了 `mc` 作为兼容别名. #link("https://www.tablesgenerator.com")[Tables Generator 网站]可以方便地生成 Typst 表格. \
         ᵇ 数值列应根据数据特点选择合适的对齐方式; 如需按小数点对齐, 可以手工设置各单元格的对齐方式. 若需更复杂的小数点对齐, 请参考相关工具文档.
         ]
       ]

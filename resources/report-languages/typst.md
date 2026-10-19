@@ -5,6 +5,13 @@ theme. Load `typst` for authoring.
 
 ## Typst layout rules
 
+- Activate the imported theme with `#show: mplts.with(...)`. The bundled theme
+  styles native `table` elements with top and bottom double rules and no cell
+  grid; use `table.hline()` for header separators. Preserve this template style.
+  If an existing workspace has an older theme without the automatic table rule,
+  use its `ruled-table(table(...))` helper. Wrapped tables need
+  `figure(kind: table, ...)` for table captions and references.
+
 - Combine the panels of one measurement into one multi-panel figure (a `grid`
   inside `#figure`, panels labelled `(a)`, `(b)`) with a shared caption; a
   standalone figure only for a standalone conclusion. Panel width 0.3–0.8 of
