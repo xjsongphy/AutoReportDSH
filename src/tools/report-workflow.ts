@@ -13,6 +13,12 @@ import { genericCall } from './presentation.js'
 import { WorkflowError } from '../workflow/errors.js'
 import { staleDependencyReason } from '../workflow/graph.js'
 
+/** Host-owned recovery guidance returned with a missing-input report to MAIN. */
+export const MISSING_INPUT_RECOVERY = `AutoReport recovery guidance for MAIN:
+Before asking the user for more data, route a focused source check to the responsible specialist. Check the supplied References/ documents, extracted tables, captions, units, corrections, and prior answers. Distinguish absent data from ambiguous or incompletely extracted data. If MinerU could not adequately recognize a needed page, use extract_pdf with path, page, and extraction_issue to preview that page, then point the specialist to the returned image.
+For a source lookup or interpretation check, create a narrowly scoped audit task without reopening completed scientific tasks. Reuse current artifacts. Keep completed scientific artifacts unchanged during the audit; return source locations and remaining ambiguities. Reopen an original task only when its scientific output actually needs revision; reopening completed upstream work invalidates dependent results and can cause downstream reruns. Run only the required scope after the audit identifies it. Never bypass dependency freshness when an output has changed.
+Ask the user only about the specific ambiguity still unresolved after this internal check, stating the source and candidate readings. Do not ask again for data already found or for an answer the user has already given unless new evidence changes the question. A justified conditional estimate is different from an unsupported precise value.`
+
 function runtimeOf(hostCtx: Context): AutoReportWorkflowRuntime | undefined {
   const getter = (hostCtx as { get?: (name: string) => unknown }).get
   if (typeof getter === 'function') {
@@ -41,7 +47,7 @@ export function installWorkflowReportTool(childCtx: Context, hostCtx: Context, r
       description: [
         'Finish one Main-dispatched AutoReport task by returning its outcome to Main. Required before ending the turn on any Main dispatch; never used for ordinary conversation.',
         'Pass the exact task_id and delegation_revision from the task briefing; a mismatched or unknown delegation is rejected.',
-        'status="success" when the requested outcome is complete and self-checks pass; status="blocked" with block_type="missing_data" (required inputs absent, unreadable, or ambiguous; a References/ PDF with no extracted markdown beside it is missing_data: report and stop; do not improvise substitutes such as rendering PDF pages to images), "quality" (requirements conflict or scope is unclear), or "missing_dependency" (a Python package or tool your selected environment lacks) otherwise.',
+        'status="success" when the requested outcome is complete and self-checks pass; status="blocked" with block_type="missing_data" (required inputs absent, unreadable, or ambiguous; a References/ PDF with no extracted markdown beside it is missing_data: report and stop; MAIN may request a bounded original-page preview through extract_pdf only when MinerU failed or its output is insufficient), "quality" (requirements conflict or scope is unclear), or "missing_dependency" (a Python package or tool your selected environment lacks) otherwise.',
         'Never install or change Python packages yourself — MAIN owns the environment. For missing_dependency, name the package(s) in response and stop.',
         'response must be self-contained (up to 16384 chars); produced_files lists workspace-relative paths you wrote, at most 512, staying inside your role writable roots — absolute paths and ".." segments are rejected.',
         'Success is rejected while your manifest has stale file descriptions — update descriptions for changed files via manifest first.',
@@ -53,7 +59,7 @@ export function installWorkflowReportTool(childCtx: Context, hostCtx: Context, r
         task_id: { type: 'string', required: true, description: 'Exact task id from the task briefing.' },
         delegation_revision: { type: 'number', required: true, description: 'Exact delegation revision from the task briefing.' },
         status: { type: 'string', required: true, enum: ['success', 'blocked'], description: 'success completes the task; blocked returns the missing or unclear item to Main for rescheduling.' },
-        block_type: { type: 'string', enum: ['missing_data', 'quality', 'missing_dependency'], description: 'Required only for blocked status: missing_data for absent, unreadable, or ambiguous inputs; a References/ PDF with no extracted markdown beside it is missing_data: report and stop; do not improvise substitutes such as rendering PDF pages to images; quality for conflicting requirements or unclear scope; missing_dependency for a Python package/tool the selected environment lacks (MAIN installs it).' },
+        block_type: { type: 'string', enum: ['missing_data', 'quality', 'missing_dependency'], description: 'Required only for blocked status: missing_data for absent, unreadable, or ambiguous inputs; a References/ PDF with no extracted markdown beside it is missing_data: report and stop; MAIN may request a bounded original-page preview through extract_pdf only when MinerU failed or its output is insufficient; quality for conflicting requirements or unclear scope; missing_dependency for a Python package/tool the selected environment lacks (MAIN installs it).' },
         response: { type: 'string', required: true, description: 'Self-contained outcome summary: results, file paths, or what is missing/wrong (up to 16384 chars).' },
         produced_files: { type: 'array', items: { type: 'string' }, description: 'Workspace-relative paths you wrote for this task (at most 512), inside your role writable roots.' },
       },
@@ -106,6 +112,9 @@ export function installWorkflowReportTool(childCtx: Context, hostCtx: Context, r
           { type: 'text', text: `${formatWorkflowRelay(role, canonical)}\n\nDetails\n` },
           { type: 'text', text: JSON.stringify(canonical) },
         ]
+        if (canonical.status === 'blocked' && canonical.block_type === 'missing_data') {
+          content.push({ type: 'text', text: MISSING_INPUT_RECOVERY })
+        }
         const residentReport = typeof runtime?.reportFromResident === 'function'
           ? runtime.reportFromResident(exec.agent as Agent, content, exec.signal)
           : undefined

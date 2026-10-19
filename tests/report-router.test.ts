@@ -572,5 +572,10 @@ describe('report_workflow', () => {
     }, { agent: child.agent, signal: new AbortController().signal }))
       .resolves.toEqual({ messageId: 'report-msg' })
     expect(host.sendMessage).toHaveBeenCalledOnce()
+    const relay = host.sendMessage.mock.calls[0]?.[2] as Array<{ type: string; text?: string }>
+    const guidance = relay.find(block => block.text?.startsWith('AutoReport recovery guidance for MAIN:'))?.text
+    expect(guidance).toContain('Before asking the user')
+    expect(guidance).toContain('without reopening completed scientific tasks')
+    expect(guidance).toContain('extract_pdf with path, page, and extraction_issue')
   })
 })
