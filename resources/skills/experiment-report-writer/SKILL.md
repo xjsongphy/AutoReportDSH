@@ -37,24 +37,47 @@ every required measurement while keeping the body centered on the experimental
 question, observed behavior, analysis choice, and supported conclusion.
 
 For AutoReport experiment reports, this editorial contract takes precedence
-over the generic rules below when they conflict on level of detail, repetition,
-or document structure.
+over the generic rules below when they conflict on reader-facing evidence
+selection, author voice, level of detail, repetition, or document structure.
+In particular, instructions below to mark unsupported items or preserve
+source-silence boundaries apply to internal evidence notes and handoffs, not
+to paragraphs announcing missing material in the experiment report.
 
 ### Author voice in the report body
 
-The body is the student's scientific account of the experiment: what was
-measured, how the measurement gives the result, and what the result means.
-Use the apparatus, observation, calculation, or physical inference as the
-subject of each sentence. “本实验”, “测得”, “由……得到”, or impersonal scientific
-prose can all express this perspective; first-person pronouns are optional.
-Describe only procedures and observations supported by the supplied evidence.
+The body is the student's scientific account: what was measured, how the
+measurement gives the result, and what the result means. Use the apparatus,
+observation, calculation, or physical inference as the subject of each
+sentence. “本实验”, “测得”, “由……得到”, or impersonal scientific prose can all
+express this perspective; first-person pronouns are optional. Describe only
+procedures and observations supported by the supplied evidence.
 
-Keep the assistant's execution, source auditing, and report-assembly decisions
-in working notes or the conversational handoff. An internal instruction to
-classify evidence is a check to perform, not a sentence to put in the report.
-State a relevant assumption with the calculation that uses it, and explain a
-limitation through its concrete effect on the inferred quantity. Review the
-introduction, abstract, and conclusion for this author perspective as well.
+**Missing information is omitted, not narrated.** When a quantity, condition,
+uncertainty, phase label, or reproducible calculation is unavailable, leave out
+that unsupported statement or calculation. Do not add a sentence explaining
+what the records lack, which result could not be verified, why no uncertainty
+was assigned, or why the writer chose not to report a value. If nothing
+supported remains in a subsection, omit that subsection. This applies to the
+abstract, body, conclusion, captions, figure text, footnotes, and appendices.
+Do not replace the omission with an apologetic limitation paragraph.
+
+Source checking, conflicting transcriptions, missing fields, rejected values,
+and decisions about what can be written belong in internal evidence notes or
+the conversational handoff. If a missing result is required by the user or
+course, resolve or flag it internally before claiming task completion; that
+requirement does not turn a source-audit finding into report prose. Answer
+required thought questions with the supported physical reasoning; do not pad
+an unavailable numerical answer with a missing-data inventory.
+
+A real experimental limitation is different: an observed drift, saturation,
+alignment error, or measured discrepancy may explain a result or analysis
+choice. State the observed phenomenon and its effect directly. Do not frame it
+as “记录注明”, “资料显示”, “现有数据不支持”, or an account of inspecting supplied
+files. Never turn a tentative source note into a confirmed observation. Keep
+an assumption that is necessary to understand a retained calculation, but do
+not enumerate absent assumptions or speculative calculation branches.
+
+Apply these edit examples literally as operations, not as wording to paraphrase:
 
 **Bad:** “报告的定量结果按原始读数、实验记录中的报告值和基于明确假设的估算分别说明；电压定义或材料参数不充分之处保留其限制。”
 
@@ -62,12 +85,36 @@ introduction, abstract, and conclusion for this author perspective as well.
 
 **Bad:** “为避免臆造，本文不补充未记录的读数误差。”
 
-**Good:** “功率扫描期间激光输出发生漂移，极值位置的确定因此受到限制。”
+**Action:** Delete this sentence. Do not replace it with a differently worded
+explanation of why an uncertainty is absent.
 
-The examples illustrate author perspective, not additional observations to
-copy into another experiment. Preserve scientific qualifications at the
-relevant result; never invent personal experience or remove a material
-uncertainty merely to make the prose sound confident.
+**Bad:** “云母片放在晶体与检偏器之间；现存记录未给出各补偿点完整的偏振态、相位分支和零点标签。”
+
+**Good:** “云母片置于晶体与检偏器之间。” Keep the supported apparatus description;
+delete the source-inventory clause without a replacement.
+
+**Bad:** “且记录注明激光功率发生波动。”
+
+**Good:** “扫描过程中激光功率发生波动。” Use this only when the upstream evidence
+establishes that observation; a note of suspected overheating does not establish
+overheating or any other unobserved cause.
+
+**Bad:** “读数以整数伏记录，原始表未提供此组的读数不确定度，因此结果报告为约 5.50 kV，不附加推测的不确定度。”
+
+**Good:** “倍频法测得器件半波电压约为 5.50 kV。” Retain the verified result and its
+justified precision; delete the account of choosing how to report it. Do not
+invent a ± value or treat integer recording resolution as measured uncertainty.
+
+**Bad:** “记录所报 51° 与 Δn = 2.8 × 10⁻⁶ 也未形成可复核的计算链；现有数据不支持将其作为实验结果。”
+
+**Action:** Omit both unverified values and this entire rejection explanation.
+Keep the verification problem in internal notes. Do not restate the values as
+measurements, and do not replace the sentence with “无法确定” or “有待补充”.
+
+These examples illustrate editing operations, not data to copy into another
+experiment; never invent personal experience or remove a material experimental
+uncertainty merely to sound confident. A missing source field is not itself an
+experimental observation or a result to discuss.
 
 ### Default editorial selection pass
 
@@ -90,27 +137,45 @@ the condition with its calculation and explain its effect on interpretation.
 Do not remove a material limitation to create an apparently complete story.
 
 Keep source-recovery history, transcription checks, rejected arithmetic
-branches, and missing-input inventories in working artifacts. Bring them into
-the body only when their scientific consequence explains the chosen analysis
-or changes a reported result. For example, an observed drift can explain why
-direct extrema are used instead of a fit; merely listing what each source
-cannot establish does not explain what the experiment found. An observation
-image or waveform can be decisive evidence even when it adds no fitted number.
-Request missing or corrected upstream evidence rather than replacing it with
-a plot of conditional estimates. Never manufacture a missing image or observation.
+branches, and missing-input inventories in internal working artifacts. Apply
+the omission rule above before composing the experimental argument. An actual
+observed drift can explain a choice of estimator; absence of a field in a
+supplied document is not a result to introduce, summarize, or turn into a
+limitation subsection. An observation image or waveform can be decisive
+evidence even when it adds no fitted number. Request missing or corrected
+upstream evidence rather than replacing it with a plot of conditional estimates.
+Never manufacture a missing image or observation.
 
-Before finalizing, review each section's central physical claim and the role
-of each paragraph, figure, table, and derivation in establishing it. Remove or
-move material that only documents the audit process, repeats a qualification
-without a new consequence, or serves no experimental or explicit course
-requirement. Keep verification detail in an appendix or linked artifact when
-useful and permitted. This is an information-selection pass, not a page or
-word-count target. A sequence of paragraphs organized as “recorded value →
-missing qualification → cannot establish another quantity” needs revision if
-it obscures the observation, analysis choice, result, and physical explanation.
-Resolve required missing outcomes upstream rather than polishing that sequence.
-Draft the abstract and conclusion after this review; carry a limitation into
-them only when it changes the principal finding being summarized.
+Before finalizing, review the central physical claim of each section and the
+role of every paragraph, figure, table, and derivation. Delete sentences that
+only report source availability, verification status, or the author's decision
+to include or exclude a result. Changing “记录未提供” to “无法确定” does not fix
+such a sentence: remove it. Retain detailed measured data and derivations in
+an appendix when useful and permitted; do not move an audit inventory there.
+This is an information-selection pass, not a page or word-count target.
+Check required coverage internally and route unresolved required outcomes
+upstream. Draft the abstract and conclusion from the supported results after
+this review, without a closing list of missing quantities or desired inputs.
+
+### Mathematical presentation
+
+Keep short symbols, values, and simple relations inline. Prefer display math
+for long formulas, chained equalities or substitutions, large fractions, and
+multi-term model relations. Introduce the relation in prose, put it on its own
+line, and interpret it afterward. Split an overlong expression at a meaningful
+equality or operation; do not squeeze it into a paragraph or shrink the font.
+A formula need not be referenced later to deserve display math. Label equations
+that are referenced; follow the active language guidance for the syntax.
+
+### Figure captions
+
+Identify the measured quantity and panel conditions concisely. Do not explain
+why the writer kept a run separate, omitted a fit, or selected a data source.
+Do not copy an internal plotting audit or repeat text already in the legend.
+
+**Bad:** “输出光功率随直流偏置电压的变化。(a) 主扫描；(b) 补测，单独保留以显示其测量轮次与主扫描不同。”
+
+**Good:** “光功率随偏置电压的变化。(a) 主扫描；(b) 补测。”
 
 ### Applying generic rules in AutoReport
 
@@ -129,6 +194,8 @@ missing-input claims against the supplied records and references, and resolve
 conflicts in the supporting analysis. In the body, give the measurement, cited
 parameter, or assumption where it supports the calculation and interpretation;
 keep required observations, tables, and questions in the experimental argument.
+Do not copy missing-input findings or rejected source values into the report,
+including a paragraph explaining their exclusion.
 
 ### Across the whole report
 

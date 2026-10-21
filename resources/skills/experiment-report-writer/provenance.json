@@ -46,6 +46,7 @@
     "kept the narrative-flow and define-before-formula Bad/Good example pairs in experiment-report scenarios; the worked example ships in both LaTeX and Typst; prose-pattern examples use measurement scenarios",
     "added local editorial guidance on checking missing-input interpretations, preserving required observational evidence, and completing section review before summaries; frozen upstream sections remain unchanged",
     "made student-author perspective explicit in the local editorial contract, with negative/positive examples separating internal evidence review from report-body narrative",
-    "strengthened the local editorial selection pass around physical questions, adopted analysis decisions, decisive observational evidence, and a whole-report argument review; source-audit inventories and speculative calculation branches remain working material"
+    "strengthened the local editorial selection pass around physical questions, adopted analysis decisions, decisive observational evidence, and a whole-report argument review; source-audit inventories and speculative calculation branches remain working material",
+    "made missing-source and unverified-result handling an explicit omission rule across the whole report, with exact deletion and rewrite examples from the observed failure; added display-math selection guidance without changing the frozen upstream modules"
   ]
 }

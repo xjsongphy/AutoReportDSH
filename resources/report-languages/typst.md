@@ -21,17 +21,28 @@ theme. Load `typst` for authoring.
   new report, set one document-wide convention before drafting: use one symbol
   for each quantity, one bias-voltage sign convention, upright units and named
   operators, and the same derivative notation in equations, captions, and
-  tables. Use a labelled display equation for a relation cited later; leave
-  short substitutions inline. Treat every displayed equation as part of its
-  surrounding sentence and punctuate it accordingly. Check notation and units
+  tables. Use a labelled display equation for a relation cited later; display long
+  formulas, chains of substitutions, and bulky fractions even when they are not
+  referenced. Keep short symbols and values inline. Treat every displayed
+  equation as part of its surrounding sentence and punctuate it accordingly. Check notation and units
   across Theory, Results, captions, and Conclusion after compiling; a successful
   Typst build does not perform this check.
 - Inline math carries no spaces inside the delimiters (`$C_0$`). Spaced
   delimiters (`$ C_0 = 5000 "pF" $`) switch Typst to display mode: the formula
-  breaks out of the paragraph and floats as a separate block. Reserve spaced
-  math for labelled display equations only.
+  breaks out of the paragraph and floats as a separate block. Use spaced
+  math for display equations; a long formula can be displayed without a label
+  when it is not referenced later.
 - Read the theme's `#set math.equation(...)` before writing references. The
   local theme sets the equation supplement to 式, so `@eq:name` already renders
   as 式 (n); never write the supplement word in front of a reference, and
   likewise never prefix figure or table references with a word the theme's
   supplement already provides.
+
+For example, introduce the quantities in prose and display a substantial relation:
+
+```typst
+设激光波长为 $lambda$、寻常折射率为 $n_o$、电光系数为 $r_63$，半波电压
+$V_pi$ 满足
+
+$ V_pi = lambda / (2 n_o^3 r_63). $ <eq:half-wave>
+```
