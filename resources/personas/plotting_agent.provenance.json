@@ -8,7 +8,8 @@
     "Main-dispatched final reporting uses report_workflow; questions and omissions are routed to MAIN through that tool.",
     "The plotting shell tool is named bash in DSH.",
     "Figure descriptions are recorded through manifest instead of the original unified template.",
-    "The core completion-protocol bullet and textual Issue reporting section are omitted because the DSH role contract and report_workflow tool already own those instructions."
+    "The core completion-protocol bullet and textual Issue reporting section are omitted because the DSH role contract and report_workflow tool already own those instructions.",
+    "Appended a separate local figure-text policy for compact legends, feature-only annotations, and internal handling of unavailable theory overlays; the embedded original prose and its self-check order remain unchanged."
   ],
   "policy": "Preserve original wording, emphasis, examples, numerical guidance, and self-check order. Make only necessary DSH interface adaptations.",
   "target": "resources/personas/plotting_agent.md"
