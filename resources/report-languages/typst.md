@@ -37,12 +37,3 @@ theme. Load `typst` for authoring.
   as 式 (n); never write the supplement word in front of a reference, and
   likewise never prefix figure or table references with a word the theme's
   supplement already provides.
-
-For example, introduce the quantities in prose and display a substantial relation:
-
-```typst
-设激光波长为 $lambda$、寻常折射率为 $n_o$、电光系数为 $r_63$，半波电压
-$V_pi$ 满足
-
-$ V_pi = lambda / (2 n_o^3 r_63). $ <eq:half-wave>
-```

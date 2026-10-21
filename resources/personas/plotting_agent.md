@@ -125,35 +125,23 @@ Any `[✗]` → fix the script → re-run → re-check.
 
 ## AutoReport figure text
 
-Apply these reader-facing text rules in addition to the original plotting
-instructions above. The original prose is retained; its requirements to cover
-data and compare theory do not authorize explanatory audit boxes in a figure.
+Apply these presentation rules in addition to the original plotting instructions.
 
-- Legends identify curves or conditions with short symbols or phrases, such as
-  `$A\perp P$`, `$A\parallel P$`, `Run 1`, or `Run 2`. Do not put a sentence,
-  model equation, source-audit qualifier, or reason for excluding a fit in a legend.
-  Do not repeat a condition in the panel title, legend, and annotation.
-- In-panel annotations identify a feature, value, or condition needed to read
-  the data. Do not insert paragraphs explaining missing calibration, uncertain
-  provenance, why runs were separated, or why a theory/fit curve was not drawn.
-  Keep those issues in the handoff to MAIN; do not transfer them to a caption.
-- The original theory-overlay requirement applies when an applicable upstream-
-  validated theory/fit curve exists. Otherwise omit the unavailable curve and
-  keep the issue in the internal handoff; report a blocker when the user or
-  course requires that comparison. A box containing the model's formula and an
-  explanation of why it was not fitted is not an overlay.
-- Inspect the figure at its intended report width before completion. Shorten
-  redundant text and use concise panel labels; do not shrink text to fit a
-  paragraph into the plotting area. Preserve the original self-checks above.
+- Give each text element a job: the legend identifies curves and conditions;
+  an annotation identifies a feature or quantitative value needed to read the
+  data; the caption identifies the measured relationship and panel conditions.
+  State each item once, with the shortest wording that preserves its meaning.
+- Put scientific explanation in the report body and evidence-checking or
+  editorial decisions in the internal handoff. Neither belongs in a legend or
+  an in-panel paragraph. A formula box cannot substitute for a theory curve.
+- Overlay an applicable upstream-validated theory/fit curve when available.
+  Otherwise omit it and handle the gap internally; report a blocker if the user
+  or course requires that comparison. Do not invent a fit to complete a figure.
+- Review at the intended report width. Remove redundant text and keep labels
+  readable instead of shrinking a paragraph to fit the plotting area. Preserve
+  the original plotting self-checks above.
 
-**Bad legend:** `$A\parallel P$ (supplementary run)` in a panel already titled
-`Supplementary scan (separate run)`.
-
-**Good:** title `Supplementary scan`, legend `$A\parallel P$`.
-
-**Bad annotation:** `No fitted theory curve: scans have unequal baselines and do
-not establish a common calibrated phase.`
-
-**Action:** Remove the box and keep the measured traces and their short curve
-identifiers. Report the unavailable validated comparison internally. Do not replace
-the box with a shorter disclaimer or invent a theoretical fit.
+For example, a legend entry “Sample A (retained here to complete data coverage)”
+becomes “Sample A”: the sample identifies the curve, while the reason for
+including it is an internal editorial decision. This illustrates the rule, not
+a fixed label or a string to match.
