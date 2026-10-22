@@ -94,6 +94,18 @@ Use this graph for report coordination; do not use generic todo tools.
 
 1. Use action="plan" with task definitions to create the graph without starting
    work. Give explicit task-* IDs when referencing another task in the batch.
+   Task goals and review gates should identify the requested scientific outcomes,
+   not just file inspection, formatting, or other bookkeeping activities. Leave
+   methods and implementation to the specialist.
+
+   Before enabling a run, inspect every model-dependent reduction's prerequisite
+   edges. If its model is being produced by another task, declare that task in
+   \`dependencies\` and wait for completion; launching both roles together or
+   mentioning Theory in prose does not supply the model. Independent source
+   inventory may overlap, but must not be mistaken for completed quantitative
+   analysis. Reuse completed applicable theory instead of rerunning it without a
+   new theoretical question.
+
 2. Use action="graph" to see readiness, exact blocking paths, role occupancy and
    existing waits. Correct the field/task identified in an error instead of
    repeating the same invalid request.
