@@ -28,115 +28,159 @@ figure paths, citations, bibliography metadata, or other unsupported facts.
 
 ## AutoReport experiment-report editorial contract
 
-Write as the student author of the experiment report, for a reader who knows
-the field but did not attend the experiment. Use
-the course or user template to decide required sections and deliverables. Treat
-upstream derivations, processed datasets, and figures as evidence and working
-materials; select from them rather than reproducing their full contents. Cover
-every required measurement while keeping the body centered on the experimental
-question, observed behavior, analysis choice, and supported conclusion.
+This is a physics laboratory report submitted for course assessment. Use the
+experiment requirements, course conventions, and supplied template to determine
+its scope, depth, and required deliverables. Demonstrate understanding of the
+physical principles, measurement method, data reduction, and experimental
+findings through a coherent scientific argument. Develop the required analysis
+and interpretation at the level expected by the course.
 
-For AutoReport experiment reports, this editorial contract takes precedence
-over the generic rules below when they conflict on reader-facing evidence
-selection, author voice, level of detail, repetition, or document structure.
-In particular, instructions below to mark unsupported items or preserve
-source-silence boundaries apply to internal evidence notes and handoffs, not
-to paragraphs announcing missing material in the experiment report.
+This contract governs experimental inference, author voice, evidence selection,
+and report structure when the generic modules below differ. Their evidence and
+citation rules still require truthful measurements, conditions, and attribution.
+Instructions to mark unsupported items or retain a source's silence belong to
+internal evidence review; they do not require missing-material paragraphs in the
+submitted report. A course requirement to discuss experimental limitations is
+met through the effects on the measured results and their interpretation.
 
 ### Author voice in the report body
 
-The report is a scientific account of what was measured, how the measurement
-supports a result, and what that result means. First-person pronouns are optional;
-student-author perspective comes from the subject matter and reasoning, not a
-preferred pronoun or a list of allowed expressions.
+Write as the author of the course experiment report. Develop the account from
+what was measured, how the measurements were analyzed, and what the results
+mean. First-person pronouns are optional. Describe apparatus, controls,
+observations, calculations, and physical reasoning directly, with evidence for
+any claimed operation or experience. Never invent personal experience or remove
+a material experimental uncertainty to make the account sound complete.
 
-**Narrate the experiment.** Describe the apparatus, actions, observations,
-analysis choices, results, and physical interpretation. Explain a methodological
-choice through the experimental fact that motivates it. Checking documents,
-reconciling transcriptions, deciding which supplied values can be used, and
-assembling the report are internal work, not experimental events to narrate.
+**Organize around physical questions.** Give each Results subsection a question
+from the experiment's objectives. Choose theory, methods, figures, and tables
+for their contribution to answering that question. Preserve the course's
+required measurements, analyses, tables, and questions.
 
-**Select supported content.** Include claims whose evidence and reasoning are
-established. Omit an unsupported claim or calculation without adding an account
-of why it could not be written. If a subsection has no supported scientific
-content, omit it. Keep unresolved evidence questions in internal notes; escalate
-missing mandatory outcomes before claiming completion. This boundary applies
-to the whole report, including summaries, captions, figure text, and appendices.
+**Develop the experimental argument.** Identify the observed trend, feature, or
+difference; explain the adopted reduction and its physical basis; present the
+result; connect it to the model or the experimental question. Arrange these
+parts naturally across paragraphs and figures. They are reasoning functions,
+not a mandatory sentence order or a five-part paragraph template.
 
-**Retain scientific conditions and limitations.** State an assumption needed to
-interpret a retained calculation, a supported measurement uncertainty, or an
-observed experimental effect that changes a result. Describe the phenomenon
-and its consequence directly. A gap in the supplied documentation is not itself
-an observed experimental limitation. Never invent personal experience or remove
-a material experimental uncertainty merely to sound confident.
+**Use analysis to produce knowledge.** Observations provide measurements and
+references provide models and applicable constants. Fitted parameters, widths,
+calibration relations, and propagated uncertainties are ordinarily derived
+results. A result need not already be printed in the raw record to be supported
+by a valid calculation. Use verified upstream analysis for those results;
+resolve unfinished essential calculations upstream before finalizing the report.
 
-**Judge a sentence by its purpose.** Keep it if it advances the experimental
-question, reproducibility, evidence, or physical explanation. Remove it if its
-only contribution is to describe source availability, verification status, or
-an editorial decision. This is a content-selection rule, not a word blacklist:
-legitimate citations and descriptions of recording measurements remain useful.
-Do not turn a tentative note into a confirmed observation while revising prose.
+**Make discussion explain the findings.** Explain why a measured trend occurs,
+why conditions produce different responses, or how a deviation affects the
+adopted analysis. Separate an established observation from a proposed mechanism.
+Match the strength of the interpretation to its evidence. An unexpected result
+may be a central finding when its reliability has been checked.
 
-The following examples illustrate the rules; they are not prescribed wording
-or experimental facts to reuse in another report.
+**Attach qualifications to the results they change.** State the assumptions,
+assessed uncertainty, and observed experimental effects needed to interpret a
+retained result. Explain their specific consequence for the number, comparison,
+or physical inference. A statistical error estimate can be reported with its
+meaningful scope. Select material effects instead of listing every conceivable
+error source. Observed ambiguity, an unsuccessful measurement, or disagreement
+with a model can itself be a supported experimental finding.
 
-**Observation:**
+Source reconciliation, file consistency checks, and decisions about which
+supplied material to use stay in internal notes. Optional unsupported content
+is omitted. Unresolved required outcomes return upstream for analysis or scope
+resolution; an omission explanation does not fulfill them. Keep evidence that
+is necessary to understand a retained claim, even when it limits the conclusion.
 
-- **Bad:** “资料中注明扫描过程中光强发生漂移。”
-- **Good:** “扫描过程中光强发生漂移。”
+### Positive examples of experimental reasoning
 
-Both refer to the same established observation; the latter narrates it directly.
+These are illustrative prose patterns, not facts, results, or apparatus details
+to reuse. Every observation, diagnostic, and causal claim in an actual report
+must be established for that experiment. Supply verified values, uncertainty,
+and figure references where appropriate; adapt the reasoning rather than
+copying the sentences.
 
-**Supported result:**
+**A measured relation supports a result:**
 
-- **Bad:** “原始表未给出读数不确定度，因此本文只报告拟合得到的电阻。”
-- **Good:** “由伏安曲线的拟合斜率得到电阻。”
+> 样品两端的电压随电流近似线性增加，伏安曲线如图所示。采用
+> $U=RI+U_0$ 拟合，其中斜率 $R$ 表示样品电阻，截距 $U_0$
+> 描述电压零点偏移。由拟合斜率得到样品电阻，结果见表。
+> 残差在测量范围内未呈现明显的系统趋势，说明线性模型能够描述本次测量结果。
 
-Retain the supported reduction; do not invent an uncertainty or narrate its
-absence. A value and uncertainty may be included when independently supported.
+The relation, reduction, result, and model check form one argument. The actual
+report supplies the measured value and the diagnostics that justify the check.
 
-**Unsupported result:**
+**An observed effect motivates a methodological choice:**
 
-- **Bad:** “缺少样品厚度，无法计算电阻率。”
-- **Treatment:** Omit the unsupported calculation and this missing-input
-  explanation. Keep the supported resistance result; handle any required
-  resistivity outcome in the internal handoff.
+> 改变加热功率后，样品温度逐渐趋于稳定，热电压随之变化。
+> 为比较不同温度下的响应，取每次温度稳定后的电压进行拟合。
+> 所得热电压随温差近似线性增加，由斜率求得该温度范围内的塞贝克系数。
+> 升温与降温测量的差异反映了温度滞后对结果的影响。
+
+Use this pattern only when the time dependence, selected stable measurements,
+and heating/cooling comparison have actually been established. It explains a
+choice through the measured phenomenon and its effect on the result.
+
+**An assumption defines the interpretation of a result:**
+
+> 固定样品电流时，霍尔电压随磁场近似线性变化，反向磁场下电压符号改变。
+> 取正、反磁场电压的反对称分量消除与磁场方向无关的电压偏置，
+> 由其磁场依赖求得霍尔系数。在单一载流子近似下，进一步得到载流子浓度；
+> 该浓度表征这一近似下的有效载流子密度。
+
+The assumption accompanies the inference it enables. Its applicability must be
+justified by the supplied model and analysis, not invented during prose editing.
 
 ### Default editorial selection pass
 
-Before drafting, organize the working outline by the experiment's physical
-questions. For each Results subsection, identify the observed behavior, the
-adopted analysis and why it is appropriate, the supported result, its physical
-meaning, and the decisive observation, figure, or table. These form one
-experimental argument, not a list of available files or reportable quantities.
-Keep the template's required sections and cover every required measurement;
-not every dataset, fit, or generated figure needs its own subsection.
+Before drafting, map the required experimental questions to adopted upstream
+results and decisive observations, figures, or tables. Resolve a missing
+required result with its owner. Choose the scientific result that answers each
+question; an easily computed proxy or an input inventory does not automatically
+answer it. Keep detailed provenance and unresolved source questions in working
+notes, separate from the adopted scientific account.
 
-Use the analysis output's adopted result and its scientific justification.
-A number is not a principal finding merely because it can be calculated.
-Do not promote a collection of speculative parameter choices or incompatible
-reading conventions into parallel results or a main comparison figure. When
-such choices determine a required conclusion and upstream analysis has not
-resolved them, return the specific question upstream before completing the
-report. A source-supported conditional estimate can be a useful result: state
-the condition with its calculation and explain its effect on interpretation.
-Do not remove a material limitation to create an apparently complete story.
+Build Results and Discussion first. Present the observation, explain the
+analysis choice, give the verified result, and develop its physical meaning
+with enough method detail to follow the inference. A waveform, qualitative
+observation, or measured anomaly can be decisive evidence without a fitted
+number. Include actual assumptions and limitations where they change the
+interpretation. Select between supported analysis alternatives on scientific
+grounds; refer unresolved choices that change a required conclusion upstream.
 
-Apply the narrative and evidence-selection rules above to the working outline.
-An observation image or waveform can be decisive evidence even without a fitted
-number. Request missing or corrected upstream evidence when it is necessary;
-do not manufacture observations or substitute speculative estimates.
+Review each section using three questions:
 
-Before finalizing, review the central physical claim of each section and the
-role of every paragraph, figure, table, and derivation. Delete sentences that
-only report source availability, verification status, or the author's decision
-to include or exclude a result. Changing the wording does not change that
-purpose. Retain detailed measured data and derivations in
-an appendix when useful and permitted; do not move an audit inventory there.
-This is an information-selection pass, not a page or word-count target.
-Check required coverage internally and route unresolved required outcomes
-upstream. Draft the abstract and conclusion from the supported results after
-this review, without a closing list of missing quantities or desired inputs.
+1. What experimental question does this section answer?
+2. Which observation and analysis support its conclusion?
+3. What physical understanding does each paragraph add?
+
+Retain the methods and conditions needed to understand or reproduce the
+measurement. Keep source availability and report-assembly decisions in internal
+feedback. Apply this selection to captions and appendices as well as the body.
+Review the whole argument before drafting the abstract and conclusion from the
+principal findings. These summaries answer the experimental objectives at the
+strength supported by the results.
+
+### Sections and course requirements
+
+- **Introduction:** state the physical system, experimental objectives, and
+  approach. Use brief background to motivate those objectives at the course's
+  level; keep required theory and results central.
+- **Theory:** develop the relations needed to obtain or interpret the reported
+  quantities, with variables, assumptions, and conventions introduced before
+  use. Keep derivation steps that demonstrate the required understanding;
+  place lengthy independent derivations in an appendix when permitted.
+- **Apparatus and method:** describe the setup, controlled conditions, and how
+  measurements were acquired and calibrated, with sufficient detail to reproduce
+  the experiment. Include observed departures that affect the analysis.
+- **Results and discussion:** connect measured behavior, adopted analysis,
+  quantitative or qualitative findings, and physical interpretation. Explain
+  discrepancies through relevant evidence and distinguish possible mechanisms
+  from demonstrated causes.
+- **Abstract and conclusion:** answer the experimental objectives through the
+  principal findings and their meaning, retaining a condition or uncertainty
+  when it changes that answer. Write them after the body.
+- **Appendices:** retain course-required tables, question answers, and detailed
+  data or derivations useful for verification. Reference them where they support
+  the main argument; avoid duplicating the same grid in several places.
 
 ### Mathematical presentation
 
@@ -147,6 +191,9 @@ line, and interpret it afterward. Split an overlong expression at a meaningful
 equality or operation; do not squeeze it into a paragraph or shrink the font.
 A formula need not be referenced later to deserve display math. Label equations
 that are referenced; follow the active language guidance for the syntax.
+Define variables and units before their first substantive use; unchanged
+variables need not be redefined around every equation. A connected sequence may
+share a lead-in and interpretation when its meaning remains clear.
 
 ### Figure captions
 
@@ -155,92 +202,6 @@ concisely. Leave analysis and interpretation to the body unless one short
 sentence is necessary to establish the figure's scientific meaning. Avoid
 repeating information already carried by axes or legends. Source checking and
 editorial decisions follow the same internal-work boundary as the report body.
-
-### Applying generic rules in AutoReport
-
-Define each variable and unit in narrative before its first substantive use.
-When a later equation reuses an unchanged variable, do not redefine it. A
-single lead-in and interpretation may cover a tightly connected equation
-sequence, figure group, or table group; do not wrap each element in repetitive
-prose. Keep enough local context for readers to understand what the grouped
-elements establish.
-
-### Evidence used in the report
-
-During evidence review, distinguish measurements, source-provided parameters,
-and estimates under stated assumptions in the analysis notes. Check upstream
-missing-input claims against the supplied records and references, and resolve
-conflicts in the supporting analysis. In the body, give the measurement, cited
-parameter, or assumption where it supports the calculation and interpretation;
-keep required observations, tables, and questions in the experimental argument.
-
-### Across the whole report
-
-- **Introduction:** name the sample or system, what was measured, the question
-  the measurement answers, and the approach. A short opening paragraph of
-  field background is welcome when it frames that question; do not retell the
-  handout's history at length or list every later subsection.
-- **Theory:** present the measurement chain and the few relations used to turn
-  readings into reported quantities. State assumptions, sign conventions, and
-  applicability before using a relation. Keep a derivation step when it explains
-  an analysis choice, a limiting condition, or a comparison in Results; place
-  independent, lengthy derivations in an appendix or a linked theory artifact
-  when the template permits. A complete Theory-agent derivation is not by itself
-  a reason to print every intermediate equation in the report.
-- **Apparatus and method:** describe what was connected or controlled, the
-  settings that affect interpretation, how readings were acquired and
-  calibrated, and any observed deviation from the intended procedure. Give
-  enough detail to reproduce the measurement without transcribing an operating
-  manual or inventing unrecorded conditions.
-- **Results and discussion:** for each measurement, state the observation, show
-  the decisive figure or table, explain the reduction or fit needed to obtain
-  the reported quantity, then compare it with the relevant model and its
-  uncertainty. If an unexpected result changes the method or conclusion,
-  establish its reliability before offering a mechanism. Separate measured
-  facts from possible explanations.
-- **Conclusion and abstract:** select the principal results and the physical
-  conclusions they support, with the condition or uncertainty that changes
-  their meaning. The introduction poses the physical question; these sections
-  answer it. Keep the conclusion narrower than the full discussion, and draft
-  the abstract after the body as one compact method–result–conclusion account.
-  Do not inventory all peak readings, alternative parameter substitutions, or
-  caveats merely because they appear in the working analysis.
-- **Appendices:** include required question answers and detailed grids where
-  useful for verification. A requirement to tabulate a quantity at each bias
-  point is satisfied by a clearly referenced appendix table when the template
-  allows it; do not also reproduce the same grid in the body and a raw-data
-  appendix. Preserve links to the full source data when the table is sampled.
-
-### Human-report examples (adapted; illustrative values are not report data)
-
-These examples paraphrase the local modern-physics reports on the electro-optic
-effect and the Hall coefficient of silicon. Reuse the *reasoning pattern*, never
-their measurements, apparatus settings, or conclusions in another experiment.
-
-**A measurement problem changes the analysis.** An electro-optic report noted
-that laser power drift left one bias sweep incomplete and that fitted extrema
-disagreed with directly read extrema. It then used the directly read values for
-the half-wave voltage. In a new report, give the actual observation and its
-effect on the chosen estimator instead of adding a generic paragraph on all
-possible sources of error.
-
-**A condition explains why a reading is usable.** A silicon Hall report
-recorded voltage only after the sample temperature settled, and rejected a run
-if temperature changed substantially during current and field reversal. State
-the analogous recorded control condition when it determines whether data may
-be compared or fitted; omit routine switch-by-switch instructions.
-
-**Theory stops at the reported inference.** In the electro-optic report, the
-half-wave voltage relation connected the measured voltage to the electro-optic
-coefficient used later. The report did not need every algebraic expansion again
-at the point of fitting. In an experiment report, retain the equation, its
-assumptions, and the step the reader needs to understand the reported value;
-keep the full independent derivation in the theory working file.
-
-**A conclusion selects.** A Hall report summarized the observed temperature
-regimes and the derived quantities in two paragraphs. A conclusion should not
-repeat every figure caption, fitting window, alternate model, and uncertainty
-component after those have been discussed where they affect a result.
 
 ## Report contract (upstream `types/report.md`)
 

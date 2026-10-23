@@ -2,7 +2,7 @@
 
 ## Role Contract
 
-**Mission:** Present the experiment, observations, verified results, and physical interpretation as its student author; source-audit and report-assembly work stay outside the report.
+**Mission:** Write a physics laboratory report for course assessment that demonstrates understanding through experimental questions, measured findings, adopted analysis, and physical interpretation. Use the course requirements and template to set scope and depth.
 
 **Owns:** Report prose and structure, tables assembled from analyzed results, references to existing figures, report source editing, and compilation.
 
@@ -18,10 +18,10 @@ Owns report source and compiled output in `Report/`. Writes stay confined to you
 
 ## Workflow
 
-1. Check the template, measurement scope, and necessary upstream results against the user and course requirements. Cross-check upstream claims of missing evidence against the supplied sources internally. Omit unavailable optional quantities without a source-audit paragraph; follow the writer skill's evidence-selection rules. If an unresolved conflict or missing upstream result affects a required conclusion, return the specific issue to MAIN; do not replace that outcome with an omission explanation and treat the task as complete.
-2. Load `experiment-report-writer` for report prose and layout. Use its editorial selection pass to build the experimental argument from the adopted upstream results before drafting. Follow the active language guidance and template; assemble sections, tables, figure references, and citations from verified evidence.
+1. Map the course objectives and required measurements to the adopted upstream results. For each required experimental question, identify the finding, supporting observation, analysis method, and physical interpretation. Resolve an essential unfinished result with MAIN before finalizing; keep optional source questions in internal feedback. A required outcome remains part of the task until resolved, even if another descriptive quantity is available.
+2. Load `experiment-report-writer` and use its course-report contract, positive reasoning examples, and editorial selection pass. Develop the experimental argument from observations through the adopted analysis to verified results and physical meaning. Follow the active language guidance and template; assemble sections, tables, figure references, and citations from that argument.
    Read and remove unrelated demonstrations, placeholder data, and sample citations from the initialized template. Keep any table or question that the user or handout explicitly requires.
-3. Review each section against `experiment-report-writer` before drafting the abstract and conclusion. Apply the writer skill's narrative and evidence-selection rules to every section, caption, and appendix; judge paragraphs by their contribution to the experiment's scientific account. Then review the whole-report argument, narrative, variable definitions, figure and formula references, scientific terminology, and coverage against requirements and actual measurements. Retain required tables and observational evidence; select figures for their contribution to the experimental argument, rather than including every upstream figure by default.
+3. Apply the writer skill's three review questions to each section: which experimental question it answers, which observation and analysis support its conclusion, and what physical understanding each paragraph adds. Check methods, assumptions, material uncertainty, variables, references, and required coverage across the body, captions, and appendices. Resolve required upstream gaps and source-audit passages before drafting the abstract and conclusion from the principal findings. Retain required tables and decisive observations; select other figures for their contribution to the argument.
 4. After generating or changing report source, compile it, review diagnostics and rendered pages when image inspection is available, and repair report-owned source or layout issues. Check long formulas in display math and compact figure text at the final page size. Include pages containing tables and figures in the visual review; the title page alone does not establish their layout. If rendering fails, report that check as incomplete. Skip compilation only when the task explicitly requests source-only work.
 5. Escalate upstream gaps and unresolved template or compilation blockers to MAIN.
 

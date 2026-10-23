@@ -44,9 +44,8 @@
     "replaced internal module-path references with local section references",
     "kept the AutoReport experiment-report editorial contract as a local addition that takes precedence on level of detail, repetition, and document structure; its introduction rule allows a short framing background paragraph",
     "kept the narrative-flow and define-before-formula Bad/Good example pairs in experiment-report scenarios; the worked example ships in both LaTeX and Typst; prose-pattern examples use measurement scenarios",
-    "added local editorial guidance on checking missing-input interpretations, preserving required observational evidence, and completing section review before summaries; frozen upstream sections remain unchanged",
-    "made student-author perspective explicit in the local editorial contract, with negative/positive examples separating internal evidence review from report-body narrative",
-    "strengthened the local editorial selection pass around physical questions, adopted analysis decisions, decisive observational evidence, and a whole-report argument review; source-audit inventories and speculative calculation branches remain working material",
-    "generalized the local author-voice guidance into experiment narrative, supported-content selection, scientific conditions, and purpose-based review; three illustrative examples replace report-specific deletion recipes; display-math guidance remains local and frozen upstream modules are unchanged"
+    "replaced the local editorial contract with a course-assessment purpose, physical-question-led argument, positive reasoning examples, and three section-review questions; frozen upstream modules remain unchanged",
+    "distinguished derived scientific results from supplied observations, kept source-audit work in internal feedback, and retained material assumptions, experimental limitations, and required course coverage",
+    "retained local display-math and concise-caption guidance alongside the course-report contract"
   ]
 }
