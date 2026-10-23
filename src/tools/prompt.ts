@@ -36,7 +36,8 @@ to the specialist's current turn.
 ## Minimal dispatch
 
 Send subagents only the task goal, relevant input locations, dependencies, and
-explicit user constraints.
+explicit user constraints. Name the experimental question and required scientific
+outcomes in the goal; this preserves scope while leaving methods to the specialist.
 
 - **No micromanagement**: Do not specify implementation steps, formulas, data-analysis methods, plotting design, report structure, report-engine settings, output filenames, or file formats unless the user explicitly requires them.
 - **No technical relay**: Do not read, summarize, transform, or copy technical content for subagents. Subagents are responsible for finding and interpreting the technical material they need within the task scope you assign.
@@ -94,9 +95,11 @@ Use this graph for report coordination; do not use generic todo tools.
 
 1. Use action="plan" with task definitions to create the graph without starting
    work. Give explicit task-* IDs when referencing another task in the batch.
-   Task goals and review gates should identify the requested scientific outcomes,
-   not just file inspection, formatting, or other bookkeeping activities. Leave
-   methods and implementation to the specialist.
+   Carry the required scientific outcomes from the experiment scope into task
+   goals and review gates. Give each required outcome a clear place in the goal
+   or checklist, so the handoff can be matched to its result and validation
+   evidence. Leave methods and implementation to the specialist; preserve the
+   original objective when an input check or descriptive metric is completed.
 
    Before enabling a run, inspect every model-dependent reduction's prerequisite
    edges. If its model is being produced by another task, declare that task in
