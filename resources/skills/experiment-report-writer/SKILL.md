@@ -52,10 +52,15 @@ observations, calculations, and physical reasoning directly, with evidence for
 any claimed operation or experience. Never invent personal experience or remove
 a material experimental uncertainty to make the account sound complete.
 
-**Organize around physical questions.** Give each Results subsection a question
-from the experiment's objectives. Choose theory, methods, figures, and tables
-for their contribution to answering that question. Preserve the course's
-required measurements, analyses, tables, and questions.
+**Organize content around physical questions; write headings as statements.**
+Let the experiment's objectives decide which theory, methods, figures, and
+tables each section carries. Express that organization in declarative
+noun-phrase headings that name the measurement, quantity, or topic, in the
+course report's own language (能谱与定标, 多道分析器测量结果), never as
+questions (不写 能谱能否由记录确定？). Subdivide Theory by physics topic
+(康普顿散射, 能量分辨率) and Apparatus and method by measurement stage or
+component (实验装置, 测量过程) whenever the course material covers several.
+Preserve the course's required measurements, analyses, tables, and questions.
 
 **Develop the experimental argument.** Identify the observed trend, feature, or
 difference; explain the adopted reduction and its physical basis; present the
@@ -161,16 +166,25 @@ strength supported by the results.
 
 ### Sections and course requirements
 
+Follow the supplied template's section skeleton and keep its heading wording
+when it is usable; rename a section only when the course material demands a
+different scope. Write subsection headings in the same declarative style
+described in the editorial contract. Sections that span several independent
+topics or measurement stages get named subsections rather than one flat block.
+
 - **Introduction:** state the physical system, experimental objectives, and
   approach. Use brief background to motivate those objectives at the course's
   level; keep required theory and results central.
 - **Theory:** develop the relations needed to obtain or interpret the reported
   quantities, with variables, assumptions, and conventions introduced before
-  use. Keep derivation steps that demonstrate the required understanding;
+  use. Give each physics topic its own subsection (光电效应, 康普顿散射,
+  能量分辨率). Keep derivation steps that demonstrate the required understanding;
   place lengthy independent derivations in an appendix when permitted.
 - **Apparatus and method:** describe the setup, controlled conditions, and how
   measurements were acquired and calibrated, with sufficient detail to reproduce
-  the experiment. Include observed departures that affect the analysis.
+  the experiment. Organize by component or measurement stage (实验装置,
+  实验过程) when several are involved. Include observed departures that affect
+  the analysis.
 - **Results and discussion:** connect measured behavior, adopted analysis,
   quantitative or qualitative findings, and physical interpretation. Explain
   discrepancies through relevant evidence and distinguish possible mechanisms

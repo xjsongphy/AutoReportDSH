@@ -45,6 +45,7 @@
     "kept the AutoReport experiment-report editorial contract as a local addition that takes precedence on level of detail, repetition, and document structure; its introduction rule allows a short framing background paragraph",
     "kept the narrative-flow and define-before-formula Bad/Good example pairs in experiment-report scenarios; the worked example ships in both LaTeX and Typst; prose-pattern examples use measurement scenarios",
     "replaced the local editorial contract with a course-assessment purpose, physical-question-led argument, positive reasoning examples, and three section-review questions; frozen upstream modules remain unchanged",
+    "expressed the physical-question organization as content selection with declarative noun-phrase headings and named theory/method subsections after question-form headings leaked into a course report",
     "distinguished derived scientific results from supplied observations, kept source-audit work in internal feedback, and retained material assumptions, experimental limitations, and required course coverage",
     "retained local display-math and concise-caption guidance alongside the course-report contract"
   ]
