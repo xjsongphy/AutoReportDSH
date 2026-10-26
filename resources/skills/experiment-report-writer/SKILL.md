@@ -168,7 +168,9 @@ strength supported by the results.
 
 Follow the supplied template's section skeleton and keep its heading wording
 when it is usable; rename a section only when the course material demands a
-different scope. Write subsection headings in the same declarative style
+different scope. When the user supplies an expert sample report, its section
+skeleton, subsection scheme, and narrative conventions take the place of the
+generic defaults below. Write subsection headings in the same declarative style
 described in the editorial contract. Sections that span several independent
 topics or measurement stages get named subsections rather than one flat block.
 
