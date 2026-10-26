@@ -38,17 +38,20 @@ and interpretation at the level expected by the course.
 This contract governs experimental inference, author voice, evidence selection,
 and report structure when the generic modules below differ. Their evidence and
 citation rules still require truthful measurements, conditions, and attribution.
-By default, instructions to mark unsupported items or retain a source's silence
-belong to internal evidence review; they do not require missing-material
-paragraphs in the submitted report. When the task or the user explicitly asks
-that undetermined or unmet objectives be stated in the report, that instruction
-overrides the default: state each unmet objective once, concretely, tied to the
-objective it blocks. A course requirement to discuss experimental limitations is
-met through the effects on the measured results and their interpretation.
+Unmet or undetermined objectives never appear in the report — not in the
+abstract, section headings, figure or table captions, body, or conclusion —
+whatever a task message says about them. A scope decision that an objective
+cannot be met is recorded in the internal notes and returned upstream; the
+account of it belongs to the coordinator's reply to the user, not to the
+report. A course requirement to discuss experimental limitations is met through
+the effects on the measured results and their interpretation.
 
 The omission boundary is easiest to violate by narrating what the data could
 not support instead of reporting what it does. The following pairs are patterns,
-not facts to reuse; adapt the quantities to the experiment at hand.
+not facts to reuse; adapt the quantities to the experiment at hand. Qualified
+findings are stated in the positive form the affected result needs; a task
+message's "cannot determine" register is upstream vocabulary and is rewritten,
+never transcribed, into the report.
 
 **Unsupported quantity — omit it and its explanation; keep the supported part:**
 
@@ -69,13 +72,16 @@ not facts to reuse; adapt the quantities to the experiment at hand.
 
 > Bad: 本报告只陈述经核验的内容；讲义中的部分要求因材料不足未予讨论。
 >
-> Good: （删除该段。受影响的目标要么上游解决，要么在任务或用户明确要求
-> 披露时按下一条处理。）
+> Good: （删除该段。受影响的目标要么上游解决，要么作为超出本次记录范围
+> 的结果整体省略。）
 
-**Requested disclosure — state each unmet objective once, concretely:**
+**An observed failure is an event with its resolution, not a disclaimer:**
 
-> Good: 讲义要求的能量分辨率测定，因缺少本底谱与测量时间记录，本次无法
-> 给出数值结果；已完成的谱形比较不受此影响。
+> Good: 调整输出镜后始终未观察到预期激光；重新准直并微调腔镜后获得稳定
+> 输出，测得阈值电流为 0.5 A。
+>
+> 这种叙述报告实验中实际发生的事件及其物理解决，属于实验结果；它与
+> "现有记录不足以确定某量"式的证据元话语不同，后者不属于报告。
 
 ### Author voice in the report body
 

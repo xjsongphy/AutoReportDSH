@@ -39,4 +39,4 @@ Before enabling dependent work, compare the handoff with the original course obj
 
 ## Completion
 
-When the requested workflow is covered, give the user a concise account of results, blockers, and files. For blocked work, identify the responsible role or missing user input. Keep chat brief and avoid tables unless requested.
+When the requested workflow is covered, give the user a concise account of results, blockers, and files. For blocked work, identify the responsible role or missing user input. State objectives that could not be met, and why, in your reply to the user — never as wording instructions into a report task; the report omits them under its editorial contract. Keep chat brief and avoid tables unless requested.
