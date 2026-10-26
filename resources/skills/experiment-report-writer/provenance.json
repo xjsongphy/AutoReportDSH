@@ -47,6 +47,9 @@
     "replaced the local editorial contract with a course-assessment purpose, physical-question-led argument, positive reasoning examples, and three section-review questions; frozen upstream modules remain unchanged",
     "expressed the physical-question organization as content selection with declarative noun-phrase headings and named theory/method subsections after question-form headings leaked into a course report",
     "distinguished derived scientific results from supplied observations, kept source-audit work in internal feedback, and retained material assumptions, experimental limitations, and required course coverage",
-    "retained local display-math and concise-caption guidance alongside the course-report contract"
+    "retained local display-math and concise-caption guidance alongside the course-report contract",
+    "pruned the frozen projection to lab-report-relevant content: removed the divergent structure skeleton, todo breakdown, progressive-depth, length-revision, and code-explanation modules, upstream heading markers, and dangling contract references (active object policy, lens, audience-contract fields)",
+    "aligned duplicated rules with the editorial contract (disclosure default, define-before-formula, caption content and length, abstract-after-body wording, internal-notes naming) and repaired the worked example's captions, equation labels, and element stacking",
+    "moved multi-panel figure sizing to the per-language report guidance"
   ]
 }

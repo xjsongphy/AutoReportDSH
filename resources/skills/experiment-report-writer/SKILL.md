@@ -86,7 +86,8 @@ observations, calculations, and physical reasoning directly, with evidence for
 any claimed operation or experience. Never invent personal experience or remove
 a material experimental uncertainty to make the account sound complete.
 
-**Organize content around physical questions; write headings as statements.**
+**Organize content around physical questions; write headings as declarative
+noun phrases.**
 Let the experiment's objectives decide which theory, methods, figures, and
 tables each section carries. Express that organization in declarative
 noun-phrase headings that name the measurement, quantity, or topic, in the
@@ -174,7 +175,7 @@ Before drafting, map the required experimental questions to adopted upstream
 results and decisive observations, figures, or tables. Resolve a missing
 required result with its owner. Choose the scientific result that answers each
 question; an easily computed proxy or an input inventory does not automatically
-answer it. Keep detailed provenance and unresolved source questions in working
+answer it. Keep detailed provenance and unresolved source questions in internal
 notes, separate from the adopted scientific account.
 
 Build Results and Discussion first. Present the observation, explain the
@@ -193,7 +194,7 @@ Review each section using three questions:
 
 Retain the methods and conditions needed to understand or reproduce the
 measurement. Keep source availability and report-assembly decisions in internal
-feedback. Apply this selection to captions and appendices as well as the body.
+notes. Apply this selection to captions and appendices as well as the body.
 Review the whole argument before drafting the abstract and conclusion from the
 principal findings. These summaries answer the experimental objectives at the
 strength supported by the results.
@@ -246,29 +247,22 @@ share a lead-in and interpretation when its meaning remains clear.
 ### Figure captions
 
 State the measured relationship and the conditions needed to read the panels
-concisely. Leave analysis and interpretation to the body unless one short
-sentence is necessary to establish the figure's scientific meaning. Avoid
-repeating information already carried by axes or legends. Source checking and
-editorial decisions follow the same internal-work boundary as the report body.
+concisely; stay within one or two sentences. Leave analysis and interpretation
+to the body unless one short sentence is necessary to establish the figure's
+scientific meaning. Do not restate selection criteria, data file names, or
+conclusions established elsewhere, and avoid repeating information already
+carried by axes or legends. Source checking and editorial decisions follow the
+same internal-work boundary as the report body.
 
 ## Report contract (upstream `types/report.md`)
 
-*Frozen from upstream heading: Report.*
-
-Use this language-neutral module for technical, scientific, analytical, and
-business reports. Apply the user or organization template first.
+Use this language-neutral module for technical and scientific reports. Apply
+the user or organization template first.
 
 Give the document a clear title and scope statement. Keep raw records,
 exhaustive grids, and long derivations in appendices or linked artifacts when
 they would hide the main argument. Apply the shared technical-exposition rules
 for placing and interpreting document elements.
-
-## Structure
-
-Use a purpose-driven shape: title and scope; context and question; method or
-approach; results and analysis; limitations; conclusion; references; appendices
-only when they support verification. Draft the abstract and executive summary
-after the body. Keep conclusions within evidence established earlier.
 
 ## Argument
 
@@ -324,14 +318,14 @@ interpretation is unacceptable.
 
 ## Physics and engineering experiment add-on (upstream `type-addons/report-experiment.md`)
 
-*Frozen from upstream heading: Experiment report.*
-
-This frozen projection already includes the report contract immediately above; apply both sections for physics and engineering laboratory reports.
+Apply this add-on together with the report contract above for physics and
+engineering laboratory reports.
 
 State the measured scope, apparatus or setup, controlled conditions, analysis
 method, and traceable source of every quantitative result. Let actual measured
-data and supplied requirements define scope; mark unsupported requested items
-instead of fabricating them.
+data and supplied requirements define scope; report an unsupported requested
+item as an unresolved upstream question instead of fabricating it or narrating
+it in the report body.
 
 ## Structure and proportions
 
@@ -343,25 +337,17 @@ acknowledgments (optional); references; appendix.
   theory within a quarter to a third.
 - Results and discussion form the main body — more than half of the text —
   because they connect measurement, uncertainty, theory, and interpretation.
-- Write the main sections first and draft the abstract (and keywords) last, so
-  it summarizes what was actually written.
-
-## Writing breakdown
-
-Break a multi-section report into one todo per major section before writing,
-and complete the sections one at a time; never draft the whole report in a
-single pass. Place summary sections such as the abstract at the end of the
-list. Split an oversized section further — data-table interpretation, figure
-interpretation, theory–experiment comparison, systematic-error analysis,
-limitations and improvements — rather than writing it in one burst. Mark a
-todo complete only after its section is fully written and checked.
+- Write the main sections first and draft the abstract (and keywords) after
+  the body, so it summarizes what was actually written.
 
 ## Professional tone
 
 - Use complete sentences and state facts directly. Say what you know, flag
   what you do not know, and never fake confidence.
-- Do not use conversational filler such as “我们将探索”, “我们可以看到”,
-  “值得注意的是”, "we will explore", "we can see", or "it is worth noting".
+- Do not use conversational filler openers such as “我们将探索”, “我们可以
+  看到”, “值得注意的是”, "we will explore", "we can see", or "it is worth
+  noting". This bans the filler phrase, not the pronoun 我们 itself; the
+  first-person rule in the editorial contract still applies.
 
 ## Reader-relevance filter
 
@@ -379,8 +365,8 @@ An expert reader wants the argument, not the transcript of the measurement
 session. Concretely:
 
 - The abstract and the conclusion are mostly qualitative. Include a number
-  only when the number itself is the headline result; do not enumerate ten
-  values in an abstract.
+  only when the number itself is the headline result, and then with its
+  uncertainty; do not enumerate ten values in an abstract.
 - State each measured or fitted value once, where it is interpreted. Reuse it
   by cross-reference instead of restating the same number in theory, results,
   discussion, and appendix.
@@ -407,9 +393,6 @@ session. Concretely:
   limitation in one paragraph; longer alternative-exclusion chains (competing
   models, frequency scans, control samples) belong in the analysis artifact —
   the report keeps their conclusion and the strongest single counter-evidence.
-- Figure and table captions stay within one or two sentences: what is shown
-  and its decisive reading. Captions do not restate selection criteria, data
-  file names, or conclusions established elsewhere.
 - Answer appended thought questions in a few sentences each; they are not
   mini-essays and must not restate the body.
 
@@ -420,27 +403,27 @@ and a reference point — threshold, theoretical expectation, nominal value, or
 an independent measurement — together with what the comparison supports or
 rules out. Do not list numbers for archival alone.
 
-**Bad:** 「拟合斜率为 -1.3，截距 13.3，$x$ = 1.3，$A$ = 6.0×10⁵。」
+**Bad:** “拟合斜率为 -1.3，截距 13.3，$x$ = 1.3，$A$ = 6.0×10⁵。”
 
-**Good:** 「拟合得 $b = 2.08 plus.minus 0.05$，与杂质电离饱和区预期 $b approx 2$
-相符，排除了明显的迁移率退化。」
+**Good:** “拟合得 $b = 2.08 \pm 0.05$，与杂质电离饱和区预期 $b \approx 2$
+相符，排除了明显的迁移率退化。”
 
 **Hedges carry their scale.** 约、可能、相容、一致 are followed immediately by
 the quantity that justifies them — an uncertainty, a ratio, a bound, or a
 deviation from expectation.
 
-**Bad:** 「误差可能较大。」
+**Bad:** “误差可能较大。”
 
-**Good:** 「该点残差 0.54%, 接近 0.55% 的剔除阈值, 予以保留并计入系统项.」
+**Good:** “该点残差 0.54%, 接近 0.55% 的剔除阈值, 予以保留并计入系统项.”
 
 **Captions stay short.** One or two sentences: what is shown and its decisive
 reading.
 
-**Bad:** 「图 3. 相位随反偏压的变化。测量在 1133 Hz 与 1633 Hz 两个频率下进行,
+**Bad:** “图 3. 相位随反偏压的变化。测量在 1133 Hz 与 1633 Hz 两个频率下进行,
 数据取自 D_1–D_5 的 0–10 V 扫描 (文件 phase_1133.csv 与 phase_1633.csv), 判据
-见 4.1 节……」
+见 4.1 节……”
 
-**Good:** 「图 3. 相位偏离随反偏压增大, 与串联损耗角模型 (式 11) 不符.」
+**Good:** “图 3. 相位偏离随反偏压增大, 与串联损耗角模型 (式 11) 不符.”
 
 **Anomalies close in one paragraph.** Observation, decisive check, limitation.
 
@@ -448,15 +431,15 @@ reading.
 leakage, one excluding deep levels, each with a reverse check and a numeric
 bound — four paragraphs in total.
 
-**Good:** 「相位偏离与 $C_x$ 强线性相关, 但其频率标度与串联、并联模型均不符
+**Good:** “相位偏离与 $C_x$ 强线性相关, 但其频率标度与串联、并联模型均不符
 (摆幅在频率增大 75% 时反降 13%), 列为未解释系统项; 对电容幅值的影响不超过
-2.3%。」
+2.3%。”
 
 ## Define before formula
 
-**EVERY variable and unit must be defined in the narrative before it appears
-in a formula.** Never introduce variables inside parentheses after a formula
-as their first definition.
+Define every variable and unit in the narrative before its first substantive
+use; a connected derivation sequence may share a lead-in and interpretation.
+Never leave a symbol used by a formula undefined.
 
 **Bad** (undefined variables):
 
@@ -476,14 +459,6 @@ Avoid `itemize` and `enumerate` in the main text; an experiment report reads
 as continuous prose. Use a list only when the template requires it, for
 appendix data, or for genuinely parallel procedural steps.
 
-## Figures
-
-Combine the panels of one measurement into a single multi-panel figure with a
-shared caption — LaTeX `subcaption`/`subfigure`, Typst a `grid` inside
-`#figure`. Give a measurement condition its own figure only when it carries a
-standalone conclusion. Size panels so labels stay legible at final width,
-about 0.3–0.8 of the text width per panel.
-
 ## Worked example
 
 A good section introduces its elements in prose, defines every variable, and
@@ -492,20 +467,22 @@ interprets each result (LaTeX):
 ```latex
 \subsection{倍频法}
 
-实验中观察到的倍频曲线如\autoref{double-frequency}所示。未加样品以及在电光
-晶体后放置云母片时，利用倍频法测量得到的结果如\autoref{double-frequency-table}
-所示。
+实验中观察到的倍频曲线如\autoref{double-frequency}所示，透射率随所加直流
+电压周期变化。
 
 \begin{figure}[H]
   \centering
   \includegraphics[width=0.5\linewidth]{fig/倍频}
-  \caption{倍频曲线}
+  \caption{未加样品与在电光晶体后放置云母片两种光路的倍频曲线；透射率极小值的间隔给出半波电压。}
   \label{double-frequency}
 \end{figure}
 
+未加样品以及在电光晶体后放置云母片时，由透射率极小值读出的直流偏压
+$V_\text{D0}$ 与峰值电压 $V_\text{DP}$ 列于\autoref{double-frequency-table}。
+
 \begin{table}[H]
   \centering
-  \caption{倍频法测量结果}
+  \caption{两种光路的 $V_\text{D0}$ 与 $V_\text{DP}$ 测量值；两者之差给出半波电压。}
   \setlength{\tabcolsep}{0.4cm}{
     \begin{tabular}{ccc}
       \hline
@@ -522,12 +499,14 @@ interprets each result (LaTeX):
 
 \begin{equation}
   V_{\pi}= V_\text{DP}-V_\text{D0}=1375\text{ V}
+  \label{eq:half-wave}
 \end{equation}
 
-由\autoref{r63}，晶体的电光系数为
+由\autoref{eq:half-wave}，晶体的电光系数为
 
 \begin{equation}
   r_{63} = \frac{\lambda}{2 n_\text{o}^3 V_{\pi 2}} = 16.8\times10^{-10}\,\mathrm{cm/V}
+  \label{eq:r63}
 \end{equation}
 
 其中 $V_{\pi 2} = 4V_\pi$ 为四块串联晶体的总半波电压，$\lambda = 632.8~\mathrm{nm}$
@@ -537,10 +516,11 @@ interprets each result (LaTeX):
 Points to note:
 
 1. **Narrative first**: explanatory text introduces the figure and table
-   before they appear.
+   before they appear, and prose separates the two elements.
 2. **Variables defined before use**: $V_{\pi 2}$, $\lambda$, $n_\text{o}$ are
    defined where the formula that uses them is interpreted.
-3. **Proper cross-references**: `\autoref{}` for figures, tables, equations.
+3. **Proper cross-references**: labelled equations referenced with
+   `\autoref{}`; figures and tables likewise.
 4. **Complete captions**: figure and table captions are self-explanatory.
 5. **Results explained**: each numerical result is interpreted in context,
    once.
@@ -551,13 +531,16 @@ differs):
 ```typst
 === 倍频法
 
-实验中观察到的倍频曲线如 @double-frequency 所示。未加样品以及在电光晶体后
-放置云母片时，利用倍频法测量得到的结果如 @double-frequency-table 所示。
+实验中观察到的倍频曲线如 @double-frequency 所示，透射率随所加直流电压周期
+变化。
 
 #figure(
   image("fig/倍频.png", width: 50%),
-  caption: [倍频曲线],
+  caption: [未加样品与在电光晶体后放置云母片两种光路的倍频曲线；透射率极小值的间隔给出半波电压。],
 ) <double-frequency>
+
+未加样品以及在电光晶体后放置云母片时，由透射率极小值读出的直流偏压
+$V_"D0"$ 与峰值电压 $V_"DP"$ 列于 @double-frequency-table。
 
 #figure(
   table(
@@ -569,33 +552,25 @@ differs):
     [加入云母片], [$-619 plus.minus 5$], [$996 plus.minus 5$],
     table.hline(),
   ),
-  caption: [倍频法测量结果],
+  caption: [两种光路的 $V_"D0"$ 与 $V_"DP"$ 测量值；两者之差给出半波电压。],
 ) <double-frequency-table>
 
 因此，半波电压为
 
-$ V_pi = V_"DP" - V_"D0" = 1375 "V" $
+$ V_pi = V_"DP" - V_"D0" = 1375 "V" $ <eq:half-wave>
 
-由 @r63，晶体的电光系数为
+由 @eq:half-wave，晶体的电光系数为
 
-$ r_63 = lambda / (2 n_o^3 V_(pi2)) = 16.8 times 10^(-10) "cm/V" $
+$ r_63 = lambda / (2 n_o^3 V_(pi2)) = 16.8 times 10^(-10) "cm/V" $ <eq:r63>
 
 其中 $V_(pi2) = 4 V_pi$ 为四块串联晶体的总半波电压，$lambda = 632.8 "nm"$ 为
 激光波长，$n_o$ 为晶体寻常光折射率。
 ```
 
-Discuss systematic and random uncertainty only to the extent the data or
-method supports it. Compare theory with measurement where the design permits
-it, and state which conclusions are limited by measurement scope, data
-coverage, or uncontrolled conditions.
-
 ## Shared technical writing rules (upstream `common/writing.md`)
 
-*Frozen from upstream heading: Shared writing rules.*
-
-This frozen projection includes the shared narrative and cross-type technical exposition rules. Three sections are conditional:
-progressive depth, topic sentences for substantial artifacts, and length
-revision. Do not apply those sections to a brief chat answer or local lookup.
+The topic-sentences section below applies to substantial persistent document
+artifacts; brief chat answers and local lookups skip it.
 
 ## Narrative requirements
 
@@ -788,24 +763,6 @@ definitions into one:
 器。管内是逐级升压的倍增结构；分压器是为各倍增极供电的电阻链，其分压比决定
 增益和线性范围。”
 
-## Selective code and artifact explanation
-
-- Give code or pseudocode context before the block and its behavioral takeaway
-  after it. Short code needs only a concise before/after explanation.
-- Explain line-level details only for non-obvious control flow, hidden
-  assumptions, state changes, or decisive APIs. Do not use long code or comments
-  as a substitute for conceptual explanation.
-- Mark illustrative pseudocode and reconstructions explicitly. Source-faithful
-  excerpts must follow the active object policy and include a path/line or other
-  precise location when available.
-
-**Bad:** paste the full 200-line instrument-control script and expect the
-inline comments to explain the measurement procedure.
-
-**Good:** show the few behavior-determining lines — the range switch and the
-wait for trigger — identify their location in the script, and explain the
-input, state change, and recorded output around them.
-
 ## Representation choice
 
 Choose the smallest representation that makes the structure recoverable:
@@ -829,62 +786,6 @@ the top of Results and explain them in a later “Curve discussion” paragraph.
 supports, and give its decisive reading — the threshold voltage shift —
 immediately afterward.
 
-## Progressive technical depth
-
-Use this conditional sequence when a survey, paper explanation, or technical
-teaching document must move from a readable map to operational detail and then
-to the research or implementation-specific layer. It is not mandatory for
-every report or textbook.
-
-1. **Reader map**: state the problem, contribution, major objects, and the
-   shortest complete end-to-end picture.
-2. **Mechanism layer**: expose the representations, transformations, choices,
-   state updates, interfaces, and consumers needed to trace one complete run.
-3. **Research layer**: explain the design rationale, assumptions, comparison
-   points, limitations, and evidence that distinguish this work from a generic
-   mechanism.
-
-Do not jump to implementation detail before the reader can place it in the map.
-Do not stop at a slogan when the omitted mechanism determines the conclusion.
-When source objects are active, use their policies to distinguish which layer is
-source-established and which is inference or simplification. When the mechanism
-layer contains retrieval, memory, agents, compilers, or another structured
-system, use the active mechanism-analysis contract rather than defining a second
-system-specific checklist here.
-
-## Length revision
-
-Use this section only when the user asks to shorten, compress, or meet a page
-or word limit. Do not run it after every draft. Do not target a percentage
-reduction.
-
-Write the full argument first. Then ask of every paragraph: does this serve
-one of the section's topic sentences? If not, delete it. Do not pad to fill a
-page or word limit. A short document that preserves the argument is better than
-a padded one that reaches a quota.
-
-Allowed operations, in order:
-
-1. **Shorten sentences.** Remove a clause that can go without losing meaning,
-   needed context, or recoverability.
-2. **Merge paragraphs** that make the same point with different examples; keep
-   the strongest example.
-3. **Replace generic adjectives** with a number, a named mechanism, or nothing.
-   Keep a term that is standard in the active field.
-4. **Delete tutorial material** only when it is in `assumed_known` or the
-   audience contract says the reader already has it. Explanations and textbooks
-   keep the smallest bridge listed in `explain_in_draft`.
-5. **Promote dense numerical comparisons** to a table or figure and leave a
-   local interpretation in prose. This applies the representation-choice rule
-   as a revision; it does not add a new policy.
-6. **Delete a closing sentence** whose only job is to restate the paragraph
-   without a new fact, limitation, or next step.
-
-Refuse deletion that would break an input/output, condition, state-update,
-derivation, evidence chain, or a `not specified` boundary. After compression,
-the topic-sentence chain must still read as a complete argument. Re-run the
-document prose gate.
-
 ## Final prose check
 
 Before returning a document, search for and remove sentences whose only purpose
@@ -897,10 +798,8 @@ keep-vs-cut test to every retained contrast.
 
 ## Evidence and citation contract (upstream `common/evidence-and-citations.md`)
 
-*Frozen from upstream heading: Evidence and citations.*
-
-This file is the single canonical owner of source identity, claim-ledger, and
-citation policy. Narrative style belongs to the shared technical writing rules above.
+These rules own source identity, claim-ledger, and citation policy for the
+report; narrative style belongs to the shared technical writing rules above.
 
 ## Claim ledger contract
 
@@ -911,11 +810,9 @@ with one row per substantive claim:
 claim → evidence source → source location → evidence kind → confidence/boundary
 ```
 
-The ledger is object-independent infrastructure. Active object policies define
-the allowed evidence kinds, source locations, version scope, and unknown
-boundary; a lens may ask a question but does not define source categories. The
-ledger supports source review and claim checks, but is not copied into
-reader-facing prose.
+The ledger records the allowed evidence kinds, source locations, version
+scope, and unknown boundary decided for this report. It supports source review
+and claim checks, but is not copied into reader-facing prose.
 
 Use the strongest available primary source. Keep these identities distinct:
 
@@ -924,10 +821,10 @@ Use the strongest available primary source. Keep these identities distinct:
 3. a clearly labeled explanatory inference or simplification.
 
 Third-party material may provide background or a comparison point when the
-active object policy permits it. It does not upgrade an interpretation into a
-claim made by the active primary source. Official project material is also a
-separate source record unless the active object policy explicitly treats it as
-part of the source scope.
+report's scope permits it; it does not upgrade an interpretation into a claim
+made by the primary source. Official project material is a separate source
+record unless the report's scope explicitly treats it as part of the source
+scope.
 
 Do not let a later code revision silently redefine a paper's evaluated method.
 Do not create citations, bibliographic fields, data values, results, or source
@@ -936,9 +833,9 @@ state the narrowest useful `not specified` boundary.
 
 Treat source-specific operational disclosure as closed-world. A diagram arrow
 or high-level verb establishes only the relation shown. Do not infer schemas,
-defaults, state lifetimes, prompt fields, ranking operations, filters, or failure
-paths. When a central question matters but the active sources are silent, retain
-the smallest useful `not specified` boundary.
+defaults, state lifetimes, or failure paths. When a central question matters
+but the sources are silent, retain the smallest useful `not specified`
+boundary.
 
 Place citations beside the claim they support. A citation must support the
 nearest claim's scope, comparator, conditions, and strength; a broad method
@@ -950,8 +847,6 @@ or implementation behavior. When source material is incomplete, use only its
 disclosed algorithms, figures, appendices, and clearly labeled pseudocode.
 
 ## LaTeX format contract (upstream `formats/latex.md`)
-
-*Frozen from upstream heading: LaTeX format.*
 
 Use the supplied class and template before generic guidance. Keep document
 semantics in sections, environments, labels, captions, and bibliography entries;
@@ -968,10 +863,6 @@ do not force presentation choices into prose.
   when the class provides it). Give each figure and table a complete caption
   and stable label. Keep table width appropriate to content rather than
   filling a line by default.
-- Build multi-panel figures with `subcaption`/`subfigure`: each panel gets a
-  label and a one-line caption, the shared caption states the decisive
-  reading. Size each panel between 0.3 and 0.8 `\linewidth` so its labels
-  stay legible.
 - Use theorem-like environments consistently for textbook material. State
   language and font settings explicitly for CJK documents.
 - Keep source files modular when a project has several chapters or sections;
@@ -980,8 +871,6 @@ do not force presentation choices into prose.
 Inspect the rendered output when layout matters.
 
 ## Typst format contract (upstream `formats/typst.md`)
-
-*Frozen from upstream heading: Typst syntax (report-relevant rules).*
 
 Do not write LaTeX commands in Typst markup. The report-relevant mechanics:
 
@@ -999,26 +888,21 @@ Do not write LaTeX commands in Typst markup. The report-relevant mechanics:
   header row, and a fixed number of decimal places in each numeric column so
   values stay comparable. Put units in the column header (`T (°C)`,
   `$V_"D0"$ / V`), not in every cell.
-- Build multi-panel figures as a `grid` of panels inside one `#figure` with a
-  shared caption; label each panel `(a)`, `(b)` in its top-left corner or
-  caption line. Size each panel between 0.3 and 0.8 of the text width so its
-  labels stay legible.
 - Keep reusable style in scoped `#set`/`#show` rules. For Chinese body text,
   use `#set par(first-line-indent: (amount: 2em, all: true), justify: true)`
   and turn the indent off for outlines, bibliographies, lists, and tables.
 
 ## Document release gates (upstream `checks/document.md`)
 
-*Frozen from upstream heading: Document checks.*
-
 These are deterministic release gates, not isolated reviewer roles. Run only
-the sections whose trigger is active; brief chat answers and local lookups do
-not require this document gate. Do not use this file to create a second writing
-or evidence policy. The prose scan below detects violations of the shared technical writing rules above; it does not add new style rules.
+the sections whose trigger is active. The prose scan below detects violations
+of the shared technical writing rules above; it does not add new style rules.
 
 ## For document artifacts: prose
 
-Apply the shared technical writing rules above together with the active report and language contracts as a pass/fail gate. Pass only when sections have clear purposes, paragraphs have
+Apply the shared technical writing rules above together with the editorial
+contract and the active language guidance as a pass/fail gate. Pass only when
+sections have clear purposes, paragraphs have
 one principal job, and formulas, code, figures, tables, and lists have
 contextual prose and local interpretation. Confirm that required definitions
 precede use and that conclusions follow the established evidence without
@@ -1045,7 +929,7 @@ is to announce writing, importance, or a section change:
 
 | English | Chinese |
 |---|---|
-| It is important/worth noting that | 需要注意的是 / 值得一提的是 |
+| It is important/worth noting that | 需要注意的是 / 值得一提的是 / 值得注意的是 |
 | In this section we will discuss | 本节将讨论 / 接下来我们将 |
 | We now turn our attention to | 下面我们来看 |
 | In today's rapidly evolving | 在当今快速发展的 |
@@ -1091,13 +975,13 @@ reports, textbooks, and derivations.
 
 For each substantive claim, confirm its source, conditions, comparator, and
 strength. Verify every cited source exists and supports the nearest claim. Keep
-claims from different active objects and explanatory inferences visibly
+claims from different primary sources and explanatory inferences visibly
 separate. Remove invented results, citations, interfaces, state transitions,
 defaults, formulas, and numerical details.
 
 For experiments, trace every quantitative statement to measured or supplied
 data. When the claim ledger is non-empty, use it to preserve source locations,
-version scope, and uncertainty boundaries where active sources omit a behavior
+version scope, and uncertainty boundaries where the sources omit a behavior
 needed to interpret the subject.
 
 ## If a rendered artifact exists: rendered document
