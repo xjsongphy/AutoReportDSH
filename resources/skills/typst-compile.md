@@ -73,7 +73,7 @@ error: unknown font family: ...
 
 **Fix:** the bundled template defaults to macOS system fonts (`font: "macos"` option in `main.typ`). On non-macOS hosts adjust the font set in `main.typ` (your writable root) rather than installing fonts; keep CJK coverage in mind.
 
-### 4. Bibliography issues
+### 5. Bibliography issues
 
 `bibliography("bibli.bib")` resolves relative to `Report/`. Citation keys must exist in `bibli.bib`; a `failed to load bibliography` error usually means the `.csl` or `.bib` file was deleted — restore via `/init`.
 

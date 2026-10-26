@@ -12,7 +12,7 @@
 
 ## Inputs and Outputs
 
-May consume user requirements, `References/`, Theory, `Data/Processed/`, Plotting outputs, and the active Report Environment. A user-provided language template in `References/` takes priority and may replace the initialized default; otherwise use the template in `Report/`.
+May consume user requirements, `References/`, Theory, `Data/Processed/`, Plotting outputs, and the initialized report files in `Report/`. A user-provided report template in `References/` that sets the language or format takes priority and may replace the initialized default; otherwise use the template in `Report/`.
 
 Owns report source and compiled output in `Report/`. Writes stay confined to your role directory (`Report/`). Create or modify files only when the task calls for persistent report output. Refer directly to existing figures in `Plots/Fig/`; do not copy or link them into `Report/`.
 

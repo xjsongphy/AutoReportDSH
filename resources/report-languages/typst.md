@@ -15,18 +15,15 @@ theme. Load `typst` for authoring.
   standalone figure only for a standalone conclusion. Panel width 0.3–0.8 of
   the text width.
 
-- Use Typst `figure`, `table`, `grid`, `tablex`, and local theme functions; do not use LaTeX commands, packages, `[H]`, `\linewidth`, or LaTeX column syntax.
+- Use Typst `figure`, `table`, `grid`, and local theme functions; do not use LaTeX commands, packages, `[H]`, `\linewidth`, or LaTeX column syntax.
 - Reference figures from `../Plots/Fig/` with Typst paths and use `bibliography("bibli.bib")` or the project's configured CSL/BibLaTeX-compatible workflow.
-- Follow the math notation already established by the supplied template. For a
-  new report, set one document-wide convention before drafting: use one symbol
-  for each quantity, one bias-voltage sign convention, upright units and named
-  operators, and the same derivative notation in equations, captions, and
-  tables. Use a labelled display equation for a relation cited later; display long
-  formulas, chains of substitutions, and bulky fractions even when they are not
-  referenced. Keep short symbols and values inline. Treat every displayed
-  equation as part of its surrounding sentence and punctuate it accordingly. Check notation and units
-  across Theory, Results, captions, and Conclusion after compiling; a successful
-  Typst build does not perform this check.
+- Follow the math notation established by the supplied template; for a new
+  report set one document-wide convention before drafting (one symbol per
+  quantity, upright units and named operators, consistent derivative notation).
+  The writer skill owns display, labelling, and punctuation rules for
+  equations; apply them in Typst syntax. Check notation and units across
+  Theory, Results, captions, and Conclusion after compiling; a successful Typst
+  build does not perform this check.
 - Inline math carries no spaces inside the delimiters (`$C_0$`). Spaced
   delimiters (`$ C_0 = 5000 "pF" $`) switch Typst to display mode: the formula
   breaks out of the paragraph and floats as a separate block. Use spaced
