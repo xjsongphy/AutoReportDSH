@@ -38,10 +38,44 @@ and interpretation at the level expected by the course.
 This contract governs experimental inference, author voice, evidence selection,
 and report structure when the generic modules below differ. Their evidence and
 citation rules still require truthful measurements, conditions, and attribution.
-Instructions to mark unsupported items or retain a source's silence belong to
-internal evidence review; they do not require missing-material paragraphs in the
-submitted report. A course requirement to discuss experimental limitations is
+By default, instructions to mark unsupported items or retain a source's silence
+belong to internal evidence review; they do not require missing-material
+paragraphs in the submitted report. When the task or the user explicitly asks
+that undetermined or unmet objectives be stated in the report, that instruction
+overrides the default: state each unmet objective once, concretely, tied to the
+objective it blocks. A course requirement to discuss experimental limitations is
 met through the effects on the measured results and their interpretation.
+
+The omission boundary is easiest to violate by narrating what the data could
+not support instead of reporting what it does. The following pairs are patterns,
+not facts to reuse; adapt the quantities to the experiment at hand.
+
+**Unsupported quantity — omit it and its explanation; keep the supported part:**
+
+> Bad: 因缺少样品厚度，本实验无法完成电阻率的计算，该目标未能实现。
+>
+> Good: （报告保留由测量直接支持的伏安特性及拟合电阻；电阻率需要样品
+> 几何参数，超出本次记录范围，正文不出现该目标。）
+
+**Unverified condition — attach the qualification to the result it changes:**
+
+> Bad: 各次测量的环境温度均未记录，温度效应无法评估，结果的可靠性
+> 不能确定。
+>
+> Good: 因未记录环境温度，所得电阻率不作温度修正，仅在该近似下使用；
+> 两次测量的差异仍在拟合残差范围内。
+
+**Meta-discourse about sources — keep in internal notes, not the report:**
+
+> Bad: 本报告只陈述经核验的内容；讲义中的部分要求因材料不足未予讨论。
+>
+> Good: （删除该段。受影响的目标要么上游解决，要么在任务或用户明确要求
+> 披露时按下一条处理。）
+
+**Requested disclosure — state each unmet objective once, concretely:**
+
+> Good: 讲义要求的能量分辨率测定，因缺少本底谱与测量时间记录，本次无法
+> 给出数值结果；已完成的谱形比较不受此影响。
 
 ### Author voice in the report body
 
