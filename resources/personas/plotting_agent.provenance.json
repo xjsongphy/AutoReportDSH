@@ -9,7 +9,9 @@
     "The plotting shell tool is named bash in DSH.",
     "Figure descriptions are recorded through manifest instead of the original unified template.",
     "The core completion-protocol bullet and textual Issue reporting section are omitted because the DSH role contract and report_workflow tool already own those instructions.",
-    "Appended a separate general figure-text policy defining the roles of legends, annotations, and captions, with one illustrative example; embedded original prose and self-check order remain unchanged."
+    "Appended a separate general figure-text policy defining the roles of legends, annotations, and captions, with one illustrative example; embedded original prose and self-check order remain unchanged.",
+    "Unified the three DPI statements to the most specific standard in the original (graphs 600-1000, photos 300-600); the migration test records the same replacements.",
+    "The appended figure-text section states caption content (including symbol and line-style meanings), its precedence over the original caption wording, and report-language handling for visible figure text."
   ],
   "policy": "Preserve original wording, emphasis, examples, numerical guidance, and self-check order. Make only necessary DSH interface adaptations.",
   "target": "resources/personas/plotting_agent.md"

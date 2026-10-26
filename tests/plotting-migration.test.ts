@@ -25,6 +25,12 @@ describe('original AutoReport plotting instructions', () => {
       .replaceAll('`blocked: quality`', '`report_workflow` with `block_type="quality"`')
       .replaceAll('with the unified template', 'through `manifest`')
       .replaceAll('using the unified template', 'through `manifest`')
+      // DPI statements are unified to the most specific standard in the
+      // original (graphs 600-1000, photos 300-600); see
+      // plotting_agent.provenance.json.
+      .replaceAll('300-1000 DPI', '600-1000 DPI for graphs, 300-600 DPI for photos')
+      .replaceAll('Resolution 300+ DPI', 'Resolution: 600-1000 DPI for graphs, 300-600 DPI for photos')
+      .replaceAll('Generated PNG images (300+ DPI)', 'Generated PNG images (600-1000 DPI for graphs, 300-600 DPI for photos)')
     body = body.split('\n').filter(line => !line.startsWith('- **You MUST end your turn')).join('\n')
     const issue = body.indexOf('**Issue reporting**:')
     body = body.slice(0, issue) + body.slice(body.indexOf('## Quality', issue))

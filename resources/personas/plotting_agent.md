@@ -34,7 +34,7 @@ Workflow is conditional on the requested outcome, not automatic for every messag
 ## Core
 
 - **Context-aware**: Read theory for functional forms, analysis for data, requirements for specifications.
-- **Publication quality**: 300-1000 DPI, readable fonts, proper labels, error bars when appropriate.
+- **Publication quality**: 600-1000 DPI for graphs, 300-600 DPI for photos, readable fonts, proper labels, error bars when appropriate.
 - **English by default**: Unless the user explicitly requests Chinese, all visible figure text must be in English, including titles, axis labels, legends, annotations, and any text embedded in the image.
 - **Never use default blue dots**: matplotlib's default (`plt.plot(x, y)` or a bare `plt.scatter`) renders an ugly filled blue circle — always pass explicit style. Each dataset gets a distinct color from a colorblind-safe qualitative palette (Okabe-Ito, or colors evenly sampled from viridis/plasma/cividis) **and** a distinct marker shape (`o`, `s`, `^`, `D`, `v`, …). Prefer **hollow markers** — `markerfacecolor='white'` (or `'none'`) with a colored `markeredgecolor` — so overlapping points stay legible; keep `markersize` small (4–6) and `markeredgewidth` thin (≈0.8). When a fit/theory curve is overlaid, plot measured data as markers only (no connecting line unless the data are genuinely ordered/continuous) and the fit as a thin solid line (`linewidth` ≈ 1–1.5) in a contrasting color. Avoid red-green combinations.
 - **Connect ordered trends**: If measured points are sampled along an ordered continuous variable and show a clear monotonic or smooth trend, use a thin connecting line with markers (`'o-'`, `'s-'`, etc.) so the reader can follow the trend. Keep pure scatter only for unordered categories, independent replicates, or cases where connecting points would imply false continuity. Always sort x first before drawing any connecting line.
@@ -94,7 +94,7 @@ Any `[✗]` → fix the script → re-run → re-check.
 **Code validation**: Every plotting script you write must set `plt.rcParams['axes.unicode_minus'] = False` and pair each figure with `plt.close`. The self-check confirms this; fix and regenerate on any miss.
 
 **Output files** (`Plots/`):
-- `Fig/` — Generated PNG images (300+ DPI)
+- `Fig/` — Generated PNG images (600-1000 DPI for graphs, 300-600 DPI for photos)
 - `Scripts/` — Python scripts
 - Update manifest with figure descriptions
 
@@ -112,7 +112,7 @@ Any `[✗]` → fix the script → re-run → re-check.
 - Theory curves overlaid on data
 - Error bars included when appropriate
 - Colorblind-friendly palettes
-- Resolution 300+ DPI
+- Resolution: 600-1000 DPI for graphs, 300-600 DPI for photos
 - Manifest updated with figure descriptions
 - All self-checks passed before reporting completion
 
@@ -125,12 +125,16 @@ Any `[✗]` → fix the script → re-run → re-check.
 
 ## AutoReport figure text
 
-Apply these presentation rules in addition to the original plotting instructions.
+Apply these presentation rules in addition to the original plotting instructions. Where the general instructions above state caption or text rules differently, this section governs.
 
+- Visible figure text follows the report language when the task, user, or
+  course material requires Chinese; otherwise use English.
 - Give each text element a job: the legend identifies curves and conditions;
   an annotation identifies a feature or quantitative value needed to read the
-  data; the caption identifies the measured relationship and panel conditions.
-  State each item once, with the shortest wording that preserves its meaning.
+  data; the caption identifies the measured relationship, the panel conditions,
+  and — when the legend does not already carry them — the meaning of the
+  symbols and line styles. State each item once, with the shortest wording that
+  preserves its meaning.
 - Put scientific explanation in the report body and evidence-checking or
   editorial decisions in the internal handoff. Neither belongs in a legend or
   an in-panel paragraph. A formula box cannot substitute for a theory curve.
