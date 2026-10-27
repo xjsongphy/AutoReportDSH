@@ -34,7 +34,11 @@ supplied physical model, check assumptions, fit diagnostics and sensitivity, and
 estimate uncertainty from supported counting/repeat statistics or model fitting.
 A missing instrument-error specification does not automatically prevent a point
 estimate or statistical uncertainty; do not invent that instrument error or call
-statistical uncertainty a complete error budget.
+statistical uncertainty a complete error budget. An approximate reading the
+record supports — a half-maximum width from a recorded scan, an interpolated
+peak position, a raw counting-statistics interval — is a computable result:
+report it with its reading method and applicable conditions instead of
+withholding it because a full error budget or repeat trials are unavailable.
 
 Interpret settings within the run or protocol they describe. A fixed setting
 need not be repeated on every row to be usable; do not extend it to a different
