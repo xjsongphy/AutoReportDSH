@@ -65,7 +65,7 @@ never transcribed, into the report.
 > Bad: 各次测量的环境温度均未记录，温度效应无法评估，结果的可靠性
 > 不能确定。
 >
-> Good: 因未记录环境温度，所得电阻率不作温度修正，仅在该近似下使用；
+> Good: 所得电阻率为室温下的近似值，适用范围为室温附近未控温的条件；
 > 两次测量的差异仍在拟合残差范围内。
 
 **Meta-discourse about sources — keep in internal notes, not the report:**
@@ -82,6 +82,15 @@ never transcribed, into the report.
 >
 > 这种叙述报告实验中实际发生的事件及其物理解决，属于实验结果；它与
 > "现有记录不足以确定某量"式的证据元话语不同，后者不属于报告。
+
+**Write qualifications as scope statements, not as negations.** A qualification
+the result needs is the model, coordinate, or condition the result holds under.
+Write it that way at the point of drafting; do not produce the negative form and
+leave it to a later cleanup. Typical forms: “不作为精密刻度” → “刻度系数适用
+于同一增益下本组峰位的线性描述”; “不能作为峰面积占比” → “该峰高比对应未扣
+背景的离散单点高度”; “未用于比较源强” → “总计数按各保存谱的累计计数解释”。
+The only 不能/无法/未/不 sentence the report contains reports an observed
+experimental event.
 
 ### Author voice in the report body
 
@@ -972,6 +981,12 @@ load-bearing points beat three padded ones.
 **Rhythm (warn only).** If five or more consecutive sentences fall in a
 narrow length band, vary them. Methods, procedures, and proof steps may stay
 even. Do not fail the gate on rhythm alone.
+
+**Negative-assurance tails.** Flag sentences ending a finding with what it is
+not — “不作…”, “不代表…”, “不构成…”, “不能据此…”, “不用于…” — and rewrite
+them as the positive condition the result carries (the model, coordinate
+system, sample, or conditions it holds under). An observed experimental event
+(“始终未观察到预期激光”) is a result, not an assurance, and stays.
 
 Do not ban hedging, passive voice, or em-dashes as such. Uncertainty,
 conditions, and constructions such as “is given by” remain legitimate in
