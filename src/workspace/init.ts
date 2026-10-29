@@ -60,6 +60,7 @@ const LATEX_FILES: readonly ResourceFile[] = Object.freeze([
 const TYPST_FILES: readonly ResourceFile[] = Object.freeze([
   { destination: 'Report/main.typ', resourcePath: 'typst/templates/main.typ' },
   { destination: 'Report/mplts.typ', resourcePath: 'typst/themes/mplts.typ' },
+  { destination: 'Report/模板使用说明.md', resourcePath: 'typst/templates/模板使用说明.md' },
   { destination: 'Report/american-physics-society.csl', resourcePath: 'typst/templates/american-physics-society.csl' },
   { destination: 'Report/bibli.bib', resourcePath: 'typst/templates/bibli.bib' },
   { destination: 'Report/fig/instruments.png', resourcePath: 'typst/templates/fig/instruments.png' },
