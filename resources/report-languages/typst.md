@@ -1,14 +1,16 @@
 # Active report language: Typst
 
 Write the report entry point as `Report/main.typ`. Import the local `mplts.typ`
-theme. Load `typst` for authoring.
+theme. Load `typst` for authoring. Read `Report/模板使用说明.md`, copied
+alongside the template, for this theme's element-level rules before drafting.
 
 ## Typst layout rules
 
 - Activate the imported theme with `#show: mplts.with(...)`. Use native `table`
   elements: the theme supplies top and bottom double rules and removes the cell
-  grid. Use `table.hline()` for header separators and
-  `figure(table(...), caption: [...])` for table captions and references.
+  grid. Use `table.hline()` for header separators. A table must be written as
+  `#figure(kind: table, table(...), caption: [...]) <tab:name>` — without
+  `kind: table` it is numbered and captioned as a figure.
 
 - Combine the panels of one measurement into one multi-panel figure (a `grid`
   inside `#figure`, panels labelled `(a)`, `(b)`) with a shared caption; a

@@ -24,6 +24,26 @@ errors when coming from LaTeX (all verified against typst 0.15):
   `times`, `approx`, `dif` — and `\varphi` is an error (the backslash eats
   itself and leaves `arphi`).
 
+## General report conventions
+
+These apply to any Typst report in this workspace, independent of the theme:
+
+- Superscripts are markup, not Unicode characters: write `#super[137]Cs`, not
+  `¹³⁷Cs`; the Unicode superscript glyphs break baseline and search.
+- Every display equation is part of a sentence: punctuate it at the end and
+  keep inline math free of inner spaces (`$C_0$`). See the writer skill for
+  when a formula deserves display.
+- Reference every numbered element through its label (`@fig:...`, `@tab:...`,
+  `@eq:...`); place the `<label>` immediately after the element and never type
+  the number by hand.
+- Heading levels follow the template's outline: `=` for major sections, `==`
+  for subsections. A major section never becomes a subsection of another.
+- Bibliography keys and citations stay one-to-one: every `#cite(<key>)`
+  resolves in `bibli.bib`, and no listed entry stays uncited.
+
+Theme-specific rules (table `kind`, caption positions, appendix commands) live
+in the template notes copied beside `main.typ`.
+
 The workspace already ships `mplts.typ`. This skill keeps only the
 reference docs used when writing a physics or engineering report, and they sit
 beside this file:
