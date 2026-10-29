@@ -134,10 +134,13 @@ may be a central finding when its reliability has been checked.
 **Attach qualifications to the results they change.** State the assumptions,
 assessed uncertainty, and observed experimental effects needed to interpret a
 retained result. Explain their specific consequence for the number, comparison,
-or physical inference. A statistical error estimate can be reported with its
-meaningful scope. Select material effects instead of listing every conceivable
-error source. Observed ambiguity, an unsuccessful measurement, or disagreement
-with a model can itself be a supported experimental finding.
+or physical inference. Each reported result carries at most one qualification
+clause, placed in the sentence that carries the number; omit qualifications
+that do not change how the result is read. A statistical error estimate can be
+reported with its meaningful scope. Select material effects instead of listing
+every conceivable error source. Observed ambiguity, an unsuccessful
+measurement, or disagreement with a model can itself be a supported
+experimental finding.
 
 Source reconciliation, file consistency checks, and decisions about which
 supplied material to use stay in internal notes. Optional unsupported content
@@ -183,6 +186,44 @@ choice through the measured phenomenon and its effect on the result.
 
 The assumption accompanies the inference it enables. Its applicability must be
 justified by the supplied model and analysis, not invented during prose editing.
+
+### Report-register baseline for Chinese prose
+
+A course report is an experimental account, not a summary of a data-processing
+file. The following adapted paragraph shows the register; it is illustrative,
+not facts to copy:
+
+> 将恒温腔设定在 25 °C 至 80 °C 的十个温度点，每点待温度稳定 5 min 后记录
+> 电压与电流。各温度下的伏安曲线近似线性，斜率随温度升高而增大。对十组
+> 数据作最小二乘拟合，得到电阻随温度的变化关系如表所示。25 °C 时电阻为
+> 1.24 ± 0.02 kΩ，比标称值 1.2 kΩ 高 3%，处于样品容差范围内。70 °C 以上的
+> 残差偏离线性趋势，与接触电阻随温度上升相符。
+
+Why this reads as a report:
+
+- Concrete nouns carry the subject — 电压、斜率、电阻、残差 — not 该值、上述结果、
+  此关系、上述内容.
+- Measurement verbs carry the action — 设定、记录、拟合、得到、测得 — where
+  描述、表征、呈现、说明 would say nothing new.
+- A number travels with its uncertainty and comparator in the same sentence.
+- One qualification sits with the number it changes; the paragraph has no
+  separate scope statement.
+- No sentence describes the report itself (“报告以…呈现…”, “本文…说明…”).
+
+### Rewrite a handoff paragraph in three steps
+
+Upstream handoff files are internal evidence records; their sentences are not
+report prose. Convert them before drafting:
+
+1. Extract each result as measurement verb + object + value + condition, and
+   replace back-reference subjects (该值、上述结果、此关系、上述定量内容) with
+   the quantity's own name.
+2. Delete report self-description and meta-verbs used in place of measurement
+   verbs; keep at most one qualification per result and move it into the
+   sentence that carries the number.
+3. Order the paragraph as operation → pointer to the figure, table, or
+   equation → result → one sentence of interpretation. The pointer sentence
+   says what the reader will see, not why the element was chosen.
 
 ### Default editorial selection pass
 
@@ -382,6 +423,8 @@ session. Concretely:
 - The abstract and the conclusion are mostly qualitative. Include a number
   only when the number itself is the headline result, and then with its
   uncertainty; do not enumerate ten values in an abstract.
+- The abstract states what was measured and the principal results or patterns
+  obtained; it never describes the report's organization or conventions.
 - State each measured or fitted value once, where it is interpreted. Reuse it
   by cross-reference instead of restating the same number in theory, results,
   discussion, and appendix.
@@ -971,6 +1014,11 @@ paradigm in philosophy of science), it is exempt.
 **Label-colon paragraph openers.** Flag openings like `**核心思想**：…`,
 `**关键问题**：…`, or a bold label followed by a colon that replaces the first
 sentence; rewrite the label into the sentence it introduces.
+
+**Back-reference subjects and meta-verbs.** Flag sentences whose subject is
+该值、上述结果、此关系 or 上述内容, and sentences where 描述、表征、呈现 or
+说明 replaces a measurement verb. Name the quantity and use the measurement
+verb (测得、拟合、得到、对应).
 
 **Synonym cycling.** If one paragraph uses three or more near-synonyms for
 the same concept, converge on the established term.
