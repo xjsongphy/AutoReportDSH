@@ -74,7 +74,7 @@ describe('materializeResources', () => {
       'Report/fig/instruments.png',
       'Report/main.typ',
       'Report/mplts.typ',
-      'Report/模板使用说明.md',
+      'Report/README.md',
     ])
     expect(skipped).toEqual([])
     expect(readFileSync(join(root, 'Report/main.typ'), 'utf8')).toContain('#import "mplts.typ": *')
@@ -123,7 +123,7 @@ describe('switchReportLanguage', () => {
     const result = switchReportLanguage(root, 'latex', 'typst')
     expect(result.deleted).toEqual(['Report/main.tex', 'Report/mpltx.cls'])
     expect(result.written).toEqual([
-      'Report/main.typ', 'Report/mplts.typ', 'Report/模板使用说明.md', 'Report/american-physics-society.csl',
+      'Report/main.typ', 'Report/mplts.typ', 'Report/README.md', 'Report/american-physics-society.csl',
       'Report/bibli.bib', 'Report/fig/instruments.png', 'Report/fig/figsample.pdf',
     ])
     expect(existsSync(join(root, 'Report/main.tex'))).toBe(false)
@@ -158,7 +158,7 @@ describe('switchReportLanguage', () => {
     expect(again.deleted).toEqual([])
     expect(again.written).toEqual([])
     expect(again.kept).toEqual([
-      'Report/main.typ', 'Report/mplts.typ', 'Report/模板使用说明.md', 'Report/american-physics-society.csl',
+      'Report/main.typ', 'Report/mplts.typ', 'Report/README.md', 'Report/american-physics-society.csl',
       'Report/bibli.bib', 'Report/fig/instruments.png', 'Report/fig/figsample.pdf',
     ])
     expect(readFileSync(join(root, 'Report/custom.typ'), 'utf8')).toBe('not a template\n')

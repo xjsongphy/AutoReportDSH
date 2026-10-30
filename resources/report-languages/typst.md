@@ -1,7 +1,7 @@
 # Active report language: Typst
 
 Write the report entry point as `Report/main.typ`. Import the local `mplts.typ`
-theme. Load `typst` for authoring. Read `Report/模板使用说明.md`, copied
+theme. Load `typst` for authoring. Read `Report/README.md`, copied
 alongside the template, for this theme's element-level rules before drafting.
 
 ## Typst layout rules
