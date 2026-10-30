@@ -68,13 +68,13 @@ describe('materializeResources', () => {
     const root = tempRoot()
     const { written, skipped } = materializeResources(root, 'typst')
     expect(written.sort()).toEqual([
+      'Report/README.md',
       'Report/american-physics-society.csl',
       'Report/bibli.bib',
       'Report/fig/figsample.pdf',
       'Report/fig/instruments.png',
       'Report/main.typ',
       'Report/mplts.typ',
-      'Report/README.md',
     ])
     expect(skipped).toEqual([])
     expect(readFileSync(join(root, 'Report/main.typ'), 'utf8')).toContain('#import "mplts.typ": *')
